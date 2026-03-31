@@ -4,6 +4,7 @@ import { useAgentListStore } from "../../stores/agent-list-store";
 import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText, Check } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
 import rehypeRaw from "rehype-raw";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -133,7 +134,7 @@ function ChatMessage({ message, isLastAssistant, isStreaming }: { message: Messa
         )}
         {message.content ? (
           <div className={`prose prose-sm max-w-none ${isUser ? "prose-invert" : ""}`}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>{message.content}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeRaw]} components={mdComponents}>{message.content}</ReactMarkdown>
             {showTypingIndicator && (
               <span className="inline-flex items-center gap-1 text-gray-400 text-xs mt-2">
                 <Loader2 className="w-3 h-3 animate-spin" /> Working...
