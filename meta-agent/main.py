@@ -13,7 +13,7 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from config import MODEL_ID
 from tools.create_agent import create_agent, list_prompt_templates
 from tools.list_agents import list_agents
-from tools.delete_agent import delete_agent
+from tools.delete_agent import delete_agent, restore_agent, purge_agent
 from tools.invoke_agent import invoke_agent
 from tools.get_agent_detail import get_agent_detail
 from tools.update_agent import update_agent
@@ -123,6 +123,8 @@ ALL_TOOLS = [
     get_agent_detail,
     update_agent,
     delete_agent,
+    restore_agent,
+    purge_agent,
     invoke_agent,
     check_agent_logs,
     create_skill,

@@ -2,14 +2,15 @@ import { useEffect, useState, useCallback } from "react";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { useChatStore } from "../../stores/chat-store";
 import { useAgentEditStore } from "../../stores/agent-edit-store";
-import { Bot, RefreshCw, Loader2, MessageSquare, Settings2 } from "lucide-react";
+import { Bot, RefreshCw, Loader2, MessageSquare, Settings2, Archive, ChevronDown } from "lucide-react";
 import ConfirmDialog from "../ui/ConfirmDialog";
 
 export default function AgentList({ collapsed = false }: { collapsed?: boolean }) {
-  const { agents, loading, fetchAgents } = useAgentListStore();
+  const { agents, archivedAgents, loading, fetchAgents } = useAgentListStore();
   const { targetAgentId, setTarget } = useChatStore();
   const { editingAgentId, openEdit, closeEdit, hasChanges } = useAgentEditStore();
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     fetchAgents();
@@ -162,14 +163,11 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
                   <Settings2 className="w-3.5 h-3.5" />
                 </button>
                 <span
-                  className={`text-xs px-1.5 py-0.5 rounded ${
-                    agent.status === "READY"
-                      ? "bg-green-100 text-green-700"
-                      : "bg-yellow-100 text-yellow-700"
+                  className={`w-2 h-2 rounded-full ${
+                    agent.status === "READY" ? "bg-green-500" : "bg-yellow-500"
                   }`}
-                >
-                  {agent.status}
-                </span>
+                  title={agent.status}
+                />
               </div>
             </div>
             {agent.description && (
@@ -185,6 +183,28 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
             <Bot className="w-6 h-6 mx-auto mb-1 opacity-30" />
             <p>No agents yet</p>
           </div>
+        )}
+
+        {/* Archived agents */}
+        {archivedAgents.length > 0 && (
+          <>
+            <button
+              onClick={() => setShowArchived(!showArchived)}
+              className="flex items-center gap-1 text-xs text-gray-400 px-1 pt-3 hover:text-gray-600"
+            >
+              <ChevronDown className={`w-3 h-3 transition-transform ${showArchived ? "" : "-rotate-90"}`} />
+              <Archive className="w-3 h-3" />
+              Archived ({archivedAgents.length})
+            </button>
+            {showArchived && archivedAgents.map((agent) => (
+              <div key={agent.id} className="w-full text-left p-2.5 rounded-lg border border-dashed border-gray-200 opacity-60">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500 truncate">{agent.displayName}</span>
+                  <span className="text-[10px] text-gray-400">archived</span>
+                </div>
+              </div>
+            ))}
+          </>
         )}
       </div>
 

@@ -13,12 +13,13 @@ export interface AgentInfo {
 
 interface AgentListState {
   agents: AgentInfo[];
+  archivedAgents: AgentInfo[];
   loading: boolean;
   fetchAgents: () => Promise<void>;
 }
 
 /** Query DynamoDB owner-index to get agent IDs and display names owned by current user */
-async function queryOwnedAgents(): Promise<Map<string, string>> {
+async function queryOwnedAgents(): Promise<Map<string, { displayName: string; status: string; description: string }>> {
   try {
     const { credentials } = await fetchAuthSession();
     if (!credentials) return new Set();
@@ -69,10 +70,14 @@ async function queryOwnedAgents(): Promise<Map<string, string>> {
 
     if (!response.ok) return new Map();
     const data = await response.json();
-    const agents = new Map<string, string>();
+    const agents = new Map<string, { displayName: string; status: string; description: string }>();
     for (const item of data.Items || []) {
       if (item.agentId?.S) {
-        agents.set(item.agentId.S, item.displayName?.S || "");
+        agents.set(item.agentId.S, {
+          displayName: item.displayName?.S || "",
+          status: item.status?.S || "active",
+          description: item.description?.S || "",
+        });
       }
     }
     return agents;
@@ -125,6 +130,7 @@ async function listAgentRuntimes() {
 
 export const useAgentListStore = create<AgentListState>((set) => ({
   agents: [],
+  archivedAgents: [],
   loading: false,
 
   fetchAgents: async () => {
@@ -136,25 +142,44 @@ export const useAgentListStore = create<AgentListState>((set) => ({
       ]);
 
       const runtimes = data.agentRuntimes || data.agentRuntimeSummaries || [];
+      const runtimeIds = new Set(runtimes.map((rt: Record<string, string>) => rt.agentRuntimeId));
 
+      // Active agents: in both control plane and DynamoDB
       const agents: AgentInfo[] = runtimes
         .filter((rt: Record<string, string>) => {
           if (rt.agentRuntimeName === "agentStudioMeta") return false;
           if (ownedAgents.size > 0) return ownedAgents.has(rt.agentRuntimeId);
           return true;
         })
-        .map((rt: Record<string, string>) => ({
-          name: rt.agentRuntimeName,
-          displayName: ownedAgents.get(rt.agentRuntimeId) || rt.agentRuntimeName,
-          id: rt.agentRuntimeId,
-          status: rt.status,
-          description: rt.description || "",
-        }));
+        .map((rt: Record<string, string>) => {
+          const info = ownedAgents.get(rt.agentRuntimeId);
+          return {
+            name: rt.agentRuntimeName,
+            displayName: info?.displayName || rt.agentRuntimeName,
+            id: rt.agentRuntimeId,
+            status: rt.status,
+            description: info?.description || rt.description || "",
+          };
+        });
 
-      set({ agents, loading: false });
+      // Archived agents: in DynamoDB with status=archived, not in control plane
+      const archivedAgents: AgentInfo[] = [];
+      for (const [agentId, info] of ownedAgents) {
+        if (info.status === "archived") {
+          archivedAgents.push({
+            name: agentId,
+            displayName: info.displayName || agentId,
+            id: agentId,
+            status: "ARCHIVED",
+            description: "",
+          });
+        }
+      }
+
+      set({ agents, archivedAgents, loading: false });
     } catch (err) {
       console.error("Failed to fetch agents:", err);
-      set({ agents: [], loading: false });
+      set({ agents: [], archivedAgents: [], loading: false });
     }
   },
 }));

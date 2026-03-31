@@ -15,6 +15,7 @@ export interface ChatSession {
   agentKey: string; // agentId or "meta"
   title: string;
   messages: Message[];
+  modelId?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -27,9 +28,11 @@ interface ChatState {
   statusText: string | null;
   sessionId: string | undefined;
   activeSessionId: string | null;
+  selectedModelId: string | null;
   sessions: ChatSession[];
 
   setTarget: (agentId: string | null, agentName: string | null) => void;
+  setSelectedModel: (modelId: string) => void;
   sendMessage: (content: string, images?: string[], modelId?: string) => Promise<void>;
   cancelStreaming: () => void;
   clearMessages: () => void;
@@ -64,6 +67,7 @@ export const useChatStore = create<ChatState>()(
       statusText: null,
       sessionId: undefined,
       activeSessionId: null,
+      selectedModelId: null,
       sessions: [],
 
       getAgentSessions: () => {
@@ -119,13 +123,13 @@ export const useChatStore = create<ChatState>()(
 
       loadSession: (sessionId: string) => {
         const state = get();
-        // Save current session first
         _saveCurrentSession(state, set);
         const session = state.sessions.find((s) => s.id === sessionId);
         if (session) {
           set({
             messages: session.messages,
             activeSessionId: session.id,
+            selectedModelId: session.modelId || null,
             statusText: null,
           });
         }
@@ -140,6 +144,8 @@ export const useChatStore = create<ChatState>()(
             : {}),
         }));
       },
+
+      setSelectedModel: (modelId: string) => set({ selectedModelId: modelId }),
 
       sendMessage: async (content: string, images?: string[], modelId?: string) => {
         _abortController = new AbortController();
@@ -232,6 +238,7 @@ export const useChatStore = create<ChatState>()(
         messages: state.messages,
         sessionId: state.sessionId,
         activeSessionId: state.activeSessionId,
+        selectedModelId: state.selectedModelId,
         targetAgentId: state.targetAgentId,
         targetAgentName: state.targetAgentName,
         sessions: state.sessions,
@@ -256,7 +263,7 @@ function _saveCurrentSession(
     set((s) => ({
       sessions: s.sessions.map((sess) =>
         sess.id === state.activeSessionId
-          ? { ...sess, messages: msgs, title: deriveTitle(msgs), updatedAt: now }
+          ? { ...sess, messages: msgs, title: deriveTitle(msgs), modelId: state.selectedModelId || undefined, updatedAt: now }
           : sess
       ),
     }));
@@ -267,6 +274,7 @@ function _saveCurrentSession(
       agentKey: key,
       title: deriveTitle(msgs),
       messages: msgs,
+      modelId: state.selectedModelId || undefined,
       createdAt: now,
       updatedAt: now,
     };

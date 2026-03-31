@@ -123,6 +123,7 @@ def create_agent(
         "agentId": agent_id,
         "agentName": agent_name,
         "displayName": agent_name,
+        "description": description,
         "owner": owner,
         "visibility": "private",
         "permissionTier": tier,

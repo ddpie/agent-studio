@@ -4,6 +4,7 @@ import { useAgentListStore } from "../../stores/agent-list-store";
 import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText, Check } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { fetchAgentMetadata, type AgentMetadata } from "../../lib/agent-metadata";
@@ -80,22 +81,6 @@ const MODEL_GROUPS = [
       { id: "us.anthropic.claude-3-5-haiku-20241022-v1:0", label: "3.5 Haiku (US)" },
     ],
   },
-  {
-    label: "Meta Llama",
-    models: [
-      { id: "us.meta.llama4-maverick-17b-instruct-v1:0", label: "Llama 4 Maverick 17B" },
-      { id: "us.meta.llama4-scout-17b-instruct-v1:0", label: "Llama 4 Scout 17B" },
-      { id: "us.meta.llama3-3-70b-instruct-v1:0", label: "Llama 3.3 70B" },
-      { id: "us.meta.llama3-2-90b-instruct-v1:0", label: "Llama 3.2 90B" },
-    ],
-  },
-  {
-    label: "Other",
-    models: [
-      { id: "us.deepseek.r1-v1:0", label: "DeepSeek R1" },
-      { id: "us.mistral.pixtral-large-2502-v1:0", label: "Mistral Pixtral Large" },
-    ],
-  },
 ];
 
 const DEFAULT_MODEL_ID = MODEL_GROUPS[0].models[0].id;
@@ -147,7 +132,7 @@ function ChatMessage({ message, isLastAssistant, isStreaming }: { message: Messa
         )}
         {message.content ? (
           <div className={`prose prose-sm max-w-none ${isUser ? "prose-invert" : ""}`}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{message.content}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>{message.content}</ReactMarkdown>
             {showTypingIndicator && (
               <span className="inline-flex items-center gap-1 text-gray-400 text-xs mt-2">
                 <Loader2 className="w-3 h-3 animate-spin" /> Working...
@@ -168,18 +153,21 @@ export default function ChatPanel() {
   const {
     messages, isStreaming, statusText, sendMessage, cancelStreaming, clearMessages,
     targetAgentId, targetAgentName, newSession, loadSession, deleteSession,
-    getAgentSessions, activeSessionId,
+    getAgentSessions, activeSessionId, selectedModelId, setSelectedModel: storeSetModel,
   } = useChatStore();
   const { fetchAgents } = useAgentListStore();
   const [input, setInput] = useState("");
   const [pastedImages, setPastedImages] = useState<string[]>([]);
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
+  const selectedModel = selectedModelId || DEFAULT_MODEL_ID;
+  const setSelectedModel = (id: string) => storeSetModel(id);
   const [metadata, setMetadata] = useState<AgentMetadata | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [showModelPicker, setShowModelPicker] = useState(false);
   const [historyIdx, setHistoryIdx] = useState(-1);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const historyRef = useRef<HTMLDivElement>(null);
+  const modelPickerRef = useRef<HTMLDivElement>(null);
   const prevStreamingRef = useRef(false);
   const savedInputRef = useRef("");
 
@@ -192,17 +180,18 @@ export default function ChatPanel() {
     .filter((m) => m.role === "user" && m.content)
     .map((m) => m.content);
 
-  // Close history dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
-    if (!showHistory) return;
+    if (!showHistory && !showModelPicker) return;
     const handler = (e: MouseEvent) => {
-      if (historyRef.current && !historyRef.current.contains(e.target as Node)) {
-        setShowHistory(false);
-      }
+      if (showHistory && historyRef.current && !historyRef.current.contains(e.target as Node)) setShowHistory(false);
+      if (showModelPicker && modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) setShowModelPicker(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [showHistory]);
+  }, [showHistory, showModelPicker]);
+
+  const selectedModelLabel = MODEL_GROUPS.flatMap((g) => g.models).find((m) => m.id === selectedModel)?.label || "Select";
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -319,20 +308,34 @@ export default function ChatPanel() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Model selector */}
-          <select
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            className="text-xs px-2 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-600"
-          >
-            {MODEL_GROUPS.map((group) => (
-              <optgroup key={group.label} label={group.label}>
-                {group.models.map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
+          {/* Model selector (custom dropdown) */}
+          <div className="relative" ref={modelPickerRef}>
+            <button
+              onClick={() => setShowModelPicker(!showModelPicker)}
+              className="text-[10px] px-1.5 py-0.5 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 flex items-center gap-1"
+            >
+              {selectedModelLabel}
+              <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {showModelPicker && (
+              <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-80 overflow-y-auto">
+                {MODEL_GROUPS.map((group) => (
+                  <div key={group.label}>
+                    <div className="px-2 py-1 text-[9px] font-medium text-gray-400 uppercase tracking-wide bg-gray-50">{group.label}</div>
+                    {group.models.map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => { setSelectedModel(m.id); setShowModelPicker(false); }}
+                        className={`w-full text-left px-3 py-1 text-[10px] hover:bg-blue-50 ${selectedModel === m.id ? "text-blue-600 bg-blue-50/50" : "text-gray-700"}`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
                 ))}
-              </optgroup>
-            ))}
-          </select>
+              </div>
+            )}
+          </div>
           {/* Session history */}
           <div className="relative" ref={historyRef}>
             <button
