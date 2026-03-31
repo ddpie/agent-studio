@@ -68,7 +68,10 @@ export default function App() {
         <div className="h-screen flex flex-col bg-white">
           {/* Top bar */}
           <header className="flex items-center justify-between px-4 py-2 bg-gray-900 text-white">
-            <span className="font-semibold text-sm">Agent Studio</span>
+            <div className="flex items-center gap-2">
+              <img src="/logo.svg" alt="Agent Studio" className="w-5 h-5" />
+              <span className="font-semibold text-sm">Agent Studio</span>
+            </div>
             <div className="flex items-center gap-3 text-xs">
               <span className="text-gray-400">{user?.signInDetails?.loginId}</span>
               <button
