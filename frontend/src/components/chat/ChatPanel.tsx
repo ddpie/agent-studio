@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { useChatStore, type Message, type ChatSession } from "../../stores/chat-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText, Check } from "lucide-react";
@@ -112,7 +112,7 @@ function CopyButtons({ content }: { content: string }) {
   );
 }
 
-function ChatMessage({ message, isLastAssistant, isStreaming }: { message: Message; isLastAssistant: boolean; isStreaming: boolean }) {
+const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStreaming }: { message: Message; isLastAssistant: boolean; isStreaming: boolean }) {
   const isUser = message.role === "user";
   const showTypingIndicator = isLastAssistant && isStreaming && message.role === "assistant";
   const showCopy = !isUser && message.content && !showTypingIndicator;
@@ -152,7 +152,7 @@ function ChatMessage({ message, isLastAssistant, isStreaming }: { message: Messa
       </div>
     </div>
   );
-}
+});
 
 export default function ChatPanel() {
   const {
@@ -441,17 +441,17 @@ export default function ChatPanel() {
             </div>
           </div>
         )}
-        {messages.map((msg, idx) => {
+        {(() => {
           const lastAssistantIdx = messages.findLastIndex((m) => m.role === "assistant");
-          return (
+          return messages.map((msg, idx) => (
             <ChatMessage
               key={msg.id}
               message={msg}
               isLastAssistant={idx === lastAssistantIdx}
               isStreaming={isStreaming}
             />
-          );
-        })}
+          ));
+        })()}
         {statusText && (
           <div className="flex justify-start mb-4">
             <div className="rounded-2xl px-4 py-3 bg-amber-50 border border-amber-200 text-amber-800">
