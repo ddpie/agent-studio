@@ -194,8 +194,11 @@ export default function ChatPanel() {
   const selectedModelLabel = MODEL_GROUPS.flatMap((g) => g.models).find((m) => m.id === selectedModel)?.label || "Select";
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
+    const el = scrollRef.current;
+    if (!el) return;
+    // Instant scroll during streaming to avoid jitter, smooth otherwise
+    el.scrollTo({ top: el.scrollHeight, behavior: isStreaming ? "instant" : "smooth" });
+  }, [messages, isStreaming]);
 
   // Refresh agent list when streaming finishes
   useEffect(() => {
@@ -219,7 +222,7 @@ export default function ChatPanel() {
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + "px";
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 240) + "px";
     }
   }, [input]);
 
@@ -472,7 +475,7 @@ export default function ChatPanel() {
             onPaste={handlePaste}
             placeholder={imagesAllowed ? "Type a message... (Shift+Enter for new line, paste images)" : "Type a message... (Shift+Enter for new line)"}
             rows={1}
-            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none overflow-hidden"
+            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-y overflow-auto max-h-60"
             disabled={isStreaming}
           />
           {isStreaming ? (
