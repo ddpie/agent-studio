@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+credentials.json
+
+# Build output
+dist/
+build/
+*.zip
+
+# AgentCore CLI
+.bedrock_agentcore/
+.bedrock_agentcore.yaml
+
+# AI IDE files
+.claude/
+CLAUDE.md
+.cursor/
+.copilot/
+.aider*
+.codeium/
+.continue/
+.windsurf/
+.tabby/
+.kiro/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Logs
+*.log
+uv.lock
