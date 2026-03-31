@@ -8,6 +8,7 @@ import rehypeRaw from "rehype-raw";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { fetchAgentMetadata, type AgentMetadata } from "../../lib/agent-metadata";
+import { useUISettings } from "../../stores/ui-settings-store";
 import ImageLightbox from "../ui/ImageLightbox";
 
 const mdComponents: Components = {
@@ -170,6 +171,23 @@ export default function ChatPanel() {
   const modelPickerRef = useRef<HTMLDivElement>(null);
   const prevStreamingRef = useRef(false);
   const savedInputRef = useRef("");
+  const { inputHeight, setInputHeight } = useUISettings();
+
+  const onInputDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = inputHeight;
+    const onMove = (ev: MouseEvent) => {
+      const newH = Math.min(Math.max(startH - (ev.clientY - startY), 44), 400);
+      setInputHeight(newH);
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [inputHeight, setInputHeight]);
 
   // Meta-Agent always supports images; sub-agents depend on metadata
   const imagesAllowed = !targetAgentId || metadata?.supports_images === true;
@@ -218,13 +236,7 @@ export default function ChatPanel() {
     }
   }, [targetAgentId, targetAgentName]);
 
-  // Auto-resize textarea
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 240) + "px";
-    }
-  }, [input]);
+
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     if (!imagesAllowed) return;
@@ -449,7 +461,15 @@ export default function ChatPanel() {
       </div>
 
       {/* Input */}
-      <div className="px-4 py-3 border-t border-gray-200">
+      <div>
+        {/* Drag handle to resize input area upward */}
+        <div
+          onMouseDown={onInputDragStart}
+          onDoubleClick={() => setInputHeight(inputHeight > 60 ? 44 : 160)}
+          className="h-1 cursor-row-resize bg-transparent hover:bg-blue-400/30 active:bg-blue-400/50 border-t border-gray-200 transition-colors"
+          title="Drag up to expand, double-click to toggle"
+        />
+        <div className="px-4 py-2">
         {/* Pasted image previews */}
         {pastedImages.length > 0 && (
           <div className="flex gap-2 mb-2 flex-wrap">
@@ -475,7 +495,8 @@ export default function ChatPanel() {
             onPaste={handlePaste}
             placeholder={imagesAllowed ? "Type a message... (Shift+Enter for new line, paste images)" : "Type a message... (Shift+Enter for new line)"}
             rows={1}
-            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-y overflow-auto max-h-60"
+            style={{ height: inputHeight }}
+            className="flex-1 px-4 py-2.5 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none overflow-auto"
             disabled={isStreaming}
           />
           {isStreaming ? (
@@ -497,6 +518,7 @@ export default function ChatPanel() {
             </button>
           )}
         </form>
+        </div>
       </div>
     </div>
   );

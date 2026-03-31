@@ -9,7 +9,8 @@ import McpPage from "./components/pages/McpPage";
 import SettingsPage from "./components/pages/SettingsPage";
 import { useNavStore } from "./stores/nav-store";
 import { useAgentEditStore } from "./stores/agent-edit-store";
-import { useState, useCallback, useRef } from "react";
+import { useUISettings } from "./stores/ui-settings-store";
+import { useCallback, useRef } from "react";
 
 function MainContent() {
   const { activeSection } = useNavStore();
@@ -20,7 +21,7 @@ function MainContent() {
   if (activeSection === "settings") return <SettingsPage />;
 
   // agents section: resizable sidebar + (edit form or chat)
-  const [sidebarWidth, setSidebarWidth] = useState(224);
+  const { sidebarWidth, setSidebarWidth } = useUISettings();
   const dragging = useRef(false);
 
   const onDragStart = useCallback((e: React.MouseEvent) => {
