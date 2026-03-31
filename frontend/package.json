@@ -16,14 +16,17 @@
     "@tanstack/react-query": "^5.95.2",
     "@types/react-syntax-highlighter": "^15.5.13",
     "aws-amplify": "^6.16.3",
+    "katex": "^0.16.44",
     "lucide-react": "^1.7.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
     "react-router": "^7.13.2",
     "react-syntax-highlighter": "^16.1.1",
+    "rehype-katex": "^7.0.1",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
     "zustand": "^5.0.12"
   },
   "devDependencies": {

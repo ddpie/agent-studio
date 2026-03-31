@@ -5,7 +5,10 @@ import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText,
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
+import remarkMath from "remark-math";
 import rehypeRaw from "rehype-raw";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { fetchAgentMetadata, type AgentMetadata } from "../../lib/agent-metadata";
@@ -134,7 +137,7 @@ function ChatMessage({ message, isLastAssistant, isStreaming }: { message: Messa
         )}
         {message.content ? (
           <div className={`prose prose-sm max-w-none ${isUser ? "prose-invert" : ""}`}>
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeRaw]} components={mdComponents}>{message.content}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]} components={mdComponents}>{message.content}</ReactMarkdown>
             {showTypingIndicator && (
               <span className="inline-flex items-center gap-1 text-gray-400 text-xs mt-2">
                 <Loader2 className="w-3 h-3 animate-spin" /> Working...
