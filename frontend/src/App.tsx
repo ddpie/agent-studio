@@ -68,16 +68,26 @@ export default function App() {
       components={{
         Header() {
           return (
-            <div className="flex flex-col items-center pt-12 pb-6">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg animate-[fadeSlideIn_0.5s_ease-out]">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                  <path d="M2 17l10 5 10-5" />
-                  <path d="M2 12l10 5 10-5" />
-                </svg>
+            <div className="flex flex-col items-center pt-10 pb-6">
+              <div className="relative mb-6 animate-[fadeSlideIn_0.6s_ease-out]">
+                <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-blue-500 to-purple-600 p-0.5 shadow-xl shadow-blue-500/20">
+                  <div className="w-full h-full rounded-3xl bg-white flex items-center justify-center">
+                    <img src="/logo.svg" alt="Agent Studio" className="w-16 h-16" />
+                  </div>
+                </div>
+                {/* Animated orbit dots */}
+                <div className="absolute -inset-3 animate-[spin_8s_linear_infinite]">
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2 h-2 bg-blue-400 rounded-full shadow-lg shadow-blue-400/50" />
+                </div>
+                <div className="absolute -inset-5 animate-[spin_12s_linear_infinite_reverse]">
+                  <div className="absolute bottom-0 right-0 w-1.5 h-1.5 bg-purple-400 rounded-full shadow-lg shadow-purple-400/50" />
+                </div>
+                <div className="absolute -inset-4 animate-[spin_10s_linear_infinite]">
+                  <div className="absolute top-1/2 right-0 w-1.5 h-1.5 bg-indigo-400 rounded-full shadow-lg shadow-indigo-400/50" />
+                </div>
               </div>
-              <h1 className="text-2xl font-bold text-gray-900 animate-[fadeSlideIn_0.5s_ease-out_0.1s_both]">Agent Studio</h1>
-              <p className="text-sm text-gray-500 mt-1 animate-[fadeSlideIn_0.5s_ease-out_0.2s_both]">Build and manage AI agents</p>
+              <h1 className="text-2xl font-bold text-gray-900 animate-[fadeSlideIn_0.6s_ease-out_0.15s_both]">Agent Studio</h1>
+              <p className="text-sm text-gray-500 mt-1 animate-[fadeSlideIn_0.6s_ease-out_0.25s_both]">Build and orchestrate AI agents on AWS</p>
             </div>
           );
         },

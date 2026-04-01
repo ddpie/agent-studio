@@ -181,18 +181,16 @@ After the JSON block, briefly explain what you changed in 1-2 sentences. Do not 
         }));
       };
 
-      /** Try to extract ALL {"__update": {...}} from accumulated text using brace balancing */
+      /** Extract {"__update": {...}} from text, properly handling JSON string escaping.
+       *  Braces inside JSON string values (e.g., Python code) are ignored. */
       const tryExtractUpdate = (): boolean => {
         let found = false;
 
-        // Loop to handle multiple consecutive __update blocks
         while (true) {
           const marker = '{"__update"';
           const idx = fullText.indexOf(marker);
 
-          // Hold if pending text contains { that could be start of __update
           if (idx === -1) {
-            // Check if there's a partial JSON starting
             const pendingTrimmed = pendingText.trimStart();
             if (pendingTrimmed.startsWith("{") || pendingTrimmed.startsWith('{"')) {
               holdFlush = true;
@@ -206,30 +204,36 @@ After the JSON block, briefly explain what you changed in 1-2 sentences. Do not 
           holdFlush = true;
           showGenerating();
 
-          // Find balanced braces starting from idx
+          // Proper JSON-aware brace matching: skip braces inside strings
           let depth = 0;
+          let inString = false;
+          let escape = false;
           let endIdx = -1;
+
           for (let i = idx; i < fullText.length; i++) {
-            if (fullText[i] === "{") depth++;
-            else if (fullText[i] === "}") {
+            const ch = fullText[i];
+            if (escape) { escape = false; continue; }
+            if (ch === "\\") { escape = true; continue; }
+            if (ch === '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (ch === "{") depth++;
+            else if (ch === "}") {
               depth--;
               if (depth === 0) { endIdx = i + 1; break; }
             }
           }
-          if (endIdx === -1) return found; // Not complete yet, keep holding
+
+          if (endIdx === -1) return found; // Not complete yet
 
           const jsonStr = fullText.slice(idx, endIdx);
           try {
             const parsed = JSON.parse(jsonStr);
             if (parsed.__update && typeof parsed.__update === "object") {
               onUpdate(parsed.__update);
-
               const fields = Object.keys(parsed.__update);
 
-              // Remove JSON from pendingText
               pendingText = pendingText.replace(jsonStr, "");
 
-              // Remove "Applying changes..." and add result
               set((s) => ({
                 messages: s.messages.map((m) =>
                   m.id === assistantMsg.id
@@ -238,13 +242,17 @@ After the JSON block, briefly explain what you changed in 1-2 sentences. Do not 
                 ),
               }));
 
-              // Clean fullText and continue looking for more
               fullText = fullText.slice(0, idx) + fullText.slice(endIdx);
               showedGenerating = false;
               found = true;
-              continue; // Check for more __update blocks
+              set({ previewContent: null });
+              continue;
             }
-          } catch { /* incomplete JSON */ }
+          } catch {
+            // JSON.parse failed — might still be incomplete despite balanced braces
+            // (e.g., truncated string value). Keep holding.
+            return found;
+          }
           return found;
         }
       };
