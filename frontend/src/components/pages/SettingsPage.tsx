@@ -1,52 +1,115 @@
-import { Settings, Moon, Sun, User, Download } from "lucide-react";
+import { Settings, User, Download, Trash2, Database, Shield } from "lucide-react";
+import { useUISettings } from "../../stores/ui-settings-store";
 
 export default function SettingsPage() {
+  const { sidebarWidth, inputHeight, setSidebarWidth, setInputHeight } = useUISettings();
+
+  const clearLocalStorage = () => {
+    if (window.confirm("Clear all local data? This will reset chat history, sessions, and UI settings.")) {
+      localStorage.clear();
+      window.location.reload();
+    }
+  };
+
+  const exportAgents = () => {
+    // Export all agent configs from localStorage sessions
+    const chatData = localStorage.getItem("agent-studio-chat");
+    const uiData = localStorage.getItem("agent-studio-ui");
+    const blob = new Blob([JSON.stringify({ chat: chatData, ui: uiData }, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `agent-studio-export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div className="max-w-2xl mx-auto p-8">
-      <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2 mb-6">
-        <Settings className="w-5 h-5" /> Settings
+    <div className="max-w-2xl mx-auto p-6">
+      <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2 mb-5">
+        <Settings className="w-4 h-4" /> Settings
       </h2>
 
-      <div className="space-y-6">
-        {/* Default Model */}
+      <div className="space-y-4">
+        {/* UI Preferences */}
         <section className="border border-gray-200 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Default Model</h3>
-          <select className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm">
-            <option value="us.anthropic.claude-sonnet-4-20250514-v1:0">Claude Sonnet 4</option>
-            <option value="us.anthropic.claude-haiku-4-5-20251001-v1:0">Claude Haiku 4.5</option>
-            <option value="us.amazon.nova-pro-v1:0">Amazon Nova Pro</option>
-          </select>
-        </section>
-
-        {/* Theme */}
-        <section className="border border-gray-200 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Theme</h3>
-          <div className="flex gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-500 bg-blue-50 text-sm text-blue-700">
-              <Sun className="w-4 h-4" /> Light
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
-              <Moon className="w-4 h-4" /> Dark
-            </button>
+          <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">Interface</h3>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-700">Sidebar width</p>
+                <p className="text-[10px] text-gray-400">Current: {sidebarWidth}px</p>
+              </div>
+              <button
+                onClick={() => setSidebarWidth(224)}
+                className="text-[10px] px-2 py-1 border border-gray-200 rounded text-gray-500 hover:bg-gray-50"
+              >
+                Reset to default
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-700">Input area height</p>
+                <p className="text-[10px] text-gray-400">Current: {inputHeight}px</p>
+              </div>
+              <button
+                onClick={() => setInputHeight(44)}
+                className="text-[10px] px-2 py-1 border border-gray-200 rounded text-gray-500 hover:bg-gray-50"
+              >
+                Reset to default
+              </button>
+            </div>
           </div>
         </section>
 
         {/* Profile */}
         <section className="border border-gray-200 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-            <User className="w-4 h-4" /> Profile
+          <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5" /> Account
           </h3>
-          <p className="text-sm text-gray-500">Managed by Cognito. Sign out and sign in to switch accounts.</p>
+          <p className="text-xs text-gray-500">Managed by Amazon Cognito. Sign out from the top bar to switch accounts.</p>
         </section>
 
-        {/* Export */}
+        {/* Infrastructure Info */}
         <section className="border border-gray-200 rounded-lg p-4">
-          <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-            <Download className="w-4 h-4" /> Export
+          <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+            <Database className="w-3.5 h-3.5" /> Infrastructure
           </h3>
-          <button className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50">
-            Export All Agent Configs
-          </button>
+          <div className="space-y-1.5 text-xs text-gray-500">
+            <div className="flex justify-between">
+              <span>Region</span>
+              <span className="font-mono text-gray-700">{import.meta.env.VITE_AGENTCORE_REGION || "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Storage</span>
+              <span className="font-mono text-gray-700">S3 + DynamoDB</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Auth</span>
+              <span className="font-mono text-gray-700">Cognito</span>
+            </div>
+          </div>
+        </section>
+
+        {/* Data */}
+        <section className="border border-gray-200 rounded-lg p-4">
+          <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+            <Shield className="w-3.5 h-3.5" /> Data
+          </h3>
+          <div className="flex gap-2">
+            <button
+              onClick={exportAgents}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
+            >
+              <Download className="w-3.5 h-3.5" /> Export local data
+            </button>
+            <button
+              onClick={clearLocalStorage}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-red-200 rounded-lg text-red-600 hover:bg-red-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Clear local data
+            </button>
+          </div>
         </section>
       </div>
     </div>
