@@ -194,7 +194,7 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
     setStatus(null);
     try {
       const draftKey = isCreateMode
-        ? `drafts/${formData.name || "untitled"}/metadata.json`
+        ? `agents/_drafts/${formData.name || "untitled"}/metadata.json`
         : `agents/${editingAgentId}/draft.json`;
       const draftData = {
         ...formData,

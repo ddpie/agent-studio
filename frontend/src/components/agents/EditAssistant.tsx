@@ -136,9 +136,17 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
         )}
         {/* Streaming indicator on last assistant message */}
         {!isUser && isLastAssistant && isStreaming && msg.content && (
-          <div className="flex items-center gap-2 mt-2 pt-1.5 border-t border-gray-200 text-[11px] text-blue-500 animate-pulse">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            Generating...
+          <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-gray-200 text-[11px] text-blue-500 animate-pulse">
+            <span className="flex items-center gap-2">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Generating...
+            </span>
+            <button
+              onClick={() => onShowPreview?.()}
+              className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 hover:bg-blue-200 rounded text-[10px] font-medium transition-colors animate-none text-blue-600"
+            >
+              <Eye className="w-3 h-3" /> View
+            </button>
           </div>
         )}
       </div>
