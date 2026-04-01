@@ -126,29 +126,33 @@ Current agent config:
 - Display Name: ${formContext.display_name || ""}
 - Description: ${formContext.description || ""}
 - Template: ${formContext.template_id || ""}
-- System Prompt:
-${formContext.system_prompt || "(empty)"}
-- Tool Definitions:
-${formContext.tool_definitions || "(none)"}
+- System Prompt (first 500 chars):
+${(formContext.system_prompt as string || "").slice(0, 500)}${(formContext.system_prompt as string || "").length > 500 ? "..." : ""}
 - Tool Names: ${formContext.tool_names || ""}
 - Welcome Message: ${formContext.welcome_message || ""}
-- Suggestions: ${Array.isArray(formContext.suggestions) ? formContext.suggestions.join(", ") : ""}
+- Suggestions: ${Array.isArray(formContext.suggestions) ? formContext.suggestions.join(", ") : formContext.suggestions || ""}
 - Supports Images: ${formContext.supports_images || false}
+
+Note: Tool definitions are NOT shown here to save tokens. The user can see them in the editor.
 
 User request: ${content}
 
-IMPORTANT: If you need to modify any config field, you MUST output the JSON block FIRST, before any explanation text.
-Output EXACTLY one JSON block per response on its own line:
-{"__update": {"field_name": "new_value"}}
-If updating multiple fields, include ALL of them in a SINGLE __update block:
-{"__update": {"tool_definitions": "...", "tool_names": "...", "suggestions": [...]}}
-Valid field names: name, display_name, description, system_prompt, tool_definitions, tool_names, welcome_message, suggestions, template_id, supports_images
-After the JSON block, briefly explain what you changed in 1-2 sentences. Do not use emojis. Do not repeat the code in your explanation.`;
+RULES:
+1. Output the __update JSON block FIRST, before any explanation.
+2. Use EXACTLY one JSON block: {"__update": {"field_name": "new_value"}}
+3. For tool_definitions: if adding a NEW tool, output ONLY the new @tool function code. If modifying existing tools, output ALL tool code (existing + modified).
+4. Include ALL changed fields in a SINGLE __update block.
+5. After the JSON, explain in 1-2 sentences. No emojis. No code in explanation.
+6. Keep tool code concise — avoid overly long implementations.
+7. Valid fields: name, display_name, description, system_prompt, tool_definitions, tool_names, welcome_message, suggestions, template_id, supports_images`;
 
-    // Build history for context
+    // Build history (exclude tool_definitions from context to save tokens)
     const history = get()
       .messages.filter((m) => m.id !== assistantMsg.id && m.content)
-      .map(({ role, content: c }) => ({ role: role as "user" | "assistant", content: c }));
+      .map(({ role, content: c }) => ({
+        role: role as "user" | "assistant",
+        content: c.length > 1000 ? c.slice(0, 1000) + "..." : c,
+      }));
 
     try {
       const stream = invokeMetaAgent(contextPrompt, history, undefined, undefined, undefined, get().selectedModelId || undefined);
