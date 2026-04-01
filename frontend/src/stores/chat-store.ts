@@ -196,30 +196,94 @@ export const useChatStore = create<ChatState>()(
             stream = invokeMetaAgent(content, history, get().sessionId, onStatus, images, modelId);
           }
 
-          for await (const chunk of stream) {
-            if (signal.aborted) break;
+          // Batch chunks to reduce re-renders: accumulate text, flush every 80ms
+          let pendingText = "";
+          let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
-            // Detect tool-use markers from agent stream
-            if (chunk.startsWith('{"__tool"')) {
-              try {
-                const toolEvent = JSON.parse(chunk);
-                if (toolEvent.__tool === "start") {
-                  set({ activeTool: toolEvent.name });
-                } else if (toolEvent.__tool === "end") {
-                  set({ activeTool: null });
-                }
-                continue; // Don't append JSON marker to message content
-              } catch { /* not valid JSON, treat as text */ }
-            }
-
+          const flushPending = () => {
+            if (!pendingText) return;
+            const text = pendingText;
+            pendingText = "";
             set((s) => ({
               messages: s.messages.map((m) =>
                 m.id === assistantMsg.id
-                  ? { ...m, content: m.content + chunk }
+                  ? { ...m, content: m.content + text }
                   : m
               ),
             }));
+          };
+
+          const scheduleFlush = () => {
+            if (!flushTimer) {
+              flushTimer = setTimeout(() => {
+                flushTimer = null;
+                flushPending();
+              }, 50);
+            }
+          };
+
+          for await (const chunk of stream) {
+            if (signal.aborted) break;
+
+            // Tool markers are JSON with __tool key. Base64-encoded values have no braces.
+            const toolJsonRe = /\{"__tool"[^}]*\}/g;
+            let remaining = chunk;
+            const markers: { type: string; name: string; input?: string; output?: string }[] = [];
+
+            let jsonMatch: RegExpExecArray | null;
+            while ((jsonMatch = toolJsonRe.exec(chunk)) !== null) {
+              try {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed.__tool && parsed.name) {
+                  markers.push({ type: parsed.__tool, name: parsed.name, input: parsed.input, output: parsed.output });
+                }
+              } catch { /* skip */ }
+            }
+
+            if (markers.length > 0) {
+              remaining = chunk.replace(toolJsonRe, "").trim();
+
+              // Flush any pending text before inserting tool markers
+              flushPending();
+
+              for (const m of markers) {
+                if (m.type === "start") {
+                  set({ activeTool: m.name });
+                  set((s) => ({
+                    messages: s.messages.map((msg) =>
+                      msg.id === assistantMsg.id
+                        ? { ...msg, content: msg.content + `\n\n<details class="tool-call"><summary>Called <strong>${m.name}</strong></summary>\n\n` }
+                        : msg
+                    ),
+                  }));
+                } else if (m.type === "result") {
+                  const inp = m.input ? atob(m.input) : "";
+                  const out = m.output ? atob(m.output) : "";
+                  let detailContent = "";
+                  if (inp) detailContent += `**Input:**\n\`\`\`json\n${inp}\n\`\`\`\n`;
+                  if (out) detailContent += `**Output:**\n\`\`\`\n${out}\n\`\`\`\n`;
+                  set((s) => ({
+                    messages: s.messages.map((msg) =>
+                      msg.id === assistantMsg.id
+                        ? { ...msg, content: msg.content + detailContent + `\n</details>\n\n` }
+                        : msg
+                    ),
+                  }));
+                } else if (m.type === "end") {
+                  set({ activeTool: null });
+                }
+              }
+
+              if (!remaining) continue;
+            }
+
+            pendingText += remaining;
+            scheduleFlush();
           }
+
+          // Final flush
+          if (flushTimer) clearTimeout(flushTimer);
+          flushPending();
         } catch (err) {
           if (!signal.aborted) {
             set((s) => ({

@@ -19,12 +19,22 @@ import ImageLightbox from "../ui/ImageLightbox";
 import { useAgentEditStore } from "../../stores/agent-edit-store";
 
 function AgentProposalCard({ json }: { json: string }) {
-  const { openEdit } = useAgentEditStore();
-  let proposal: Record<string, unknown>;
+  const { openNewWithData } = useAgentEditStore();
+  let proposal: Record<string, unknown> | null = null;
   try {
     proposal = JSON.parse(json);
   } catch {
-    return <pre className="text-xs text-red-500">Invalid proposal JSON</pre>;
+    // JSON incomplete (still streaming) — show skeleton
+    return (
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 my-2 text-xs not-prose animate-pulse">
+        <div className="h-4 bg-gray-200 rounded w-1/3 mb-2" />
+        <div className="h-3 bg-gray-200 rounded w-2/3 mb-2" />
+        <div className="h-3 bg-gray-200 rounded w-1/2 mb-2" />
+        <div className="text-[11px] text-gray-500 flex items-center gap-1">
+          <Loader2 className="w-3 h-3 animate-spin" /> Generating proposal...
+        </div>
+      </div>
+    );
   }
 
   const name = String(proposal.agent_name || "");
@@ -35,20 +45,22 @@ function AgentProposalCard({ json }: { json: string }) {
   const toolNames = String(proposal.tool_names || "").split(",").filter(Boolean);
   const tier = String(proposal.permission_tier || "readonly");
   const supportsImages = Boolean(proposal.supports_images);
+  const systemPrompt = String(proposal.system_prompt || "");
+  const toolDefs = String(proposal.tool_definitions || "");
 
   const handleEditAndCreate = () => {
-    openEdit("__new__", name);
-    setTimeout(() => {
-      const store = useAgentEditStore.getState();
-      store.updateField("name", name);
-      store.updateField("display_name", name);
-      store.updateField("description", desc);
-      store.updateField("template_id", template);
-      store.updateField("system_prompt", String(proposal.system_prompt || ""));
-      store.updateField("welcome_message", welcome);
-      store.updateField("suggestions", suggestions);
-      store.updateField("supports_images", supportsImages);
-    }, 100);
+    openNewWithData({
+      name,
+      display_name: name,
+      description: desc,
+      template_id: template,
+      system_prompt: systemPrompt,
+      tool_definitions: toolDefs,
+      tool_names: toolNames.join(","),
+      welcome_message: welcome,
+      suggestions,
+      supports_images: supportsImages,
+    } as Partial<AgentMetadata>);
   };
 
   return (
@@ -71,6 +83,18 @@ function AgentProposalCard({ json }: { json: string }) {
         <div className="text-[10px] text-gray-400 mb-2">
           Suggestions: {suggestions.join(" / ")}
         </div>
+      )}
+      {systemPrompt && (
+        <details className="mb-2">
+          <summary className="text-[11px] text-gray-500 cursor-pointer select-none">System Prompt</summary>
+          <pre className="mt-1 p-2 bg-white border border-gray-200 rounded text-[11px] text-gray-700 whitespace-pre-wrap max-h-48 overflow-y-auto">{systemPrompt}</pre>
+        </details>
+      )}
+      {toolDefs && (
+        <details className="mb-2">
+          <summary className="text-[11px] text-gray-500 cursor-pointer select-none">Tool Definitions</summary>
+          <pre className="mt-1 p-2 bg-gray-900 text-green-300 rounded text-[11px] whitespace-pre-wrap max-h-48 overflow-y-auto">{toolDefs}</pre>
+        </details>
       )}
       <button
         onClick={handleEditAndCreate}
@@ -118,53 +142,21 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   );
 }
 
-const MODEL_GROUPS = [
-  {
-    label: "Claude 4.6",
-    models: [
-      { id: "us.anthropic.claude-opus-4-6-v1", label: "Opus 4.6 (US)" },
-      { id: "global.anthropic.claude-opus-4-6-v1", label: "Opus 4.6 (Global)" },
-      { id: "us.anthropic.claude-sonnet-4-6", label: "Sonnet 4.6 (US)" },
-      { id: "global.anthropic.claude-sonnet-4-6", label: "Sonnet 4.6 (Global)" },
-    ],
-  },
-  {
-    label: "Claude 4.5",
-    models: [
-      { id: "us.anthropic.claude-opus-4-5-20251101-v1:0", label: "Opus 4.5 (US)" },
-      { id: "global.anthropic.claude-opus-4-5-20251101-v1:0", label: "Opus 4.5 (Global)" },
-      { id: "us.anthropic.claude-sonnet-4-5-20250929-v1:0", label: "Sonnet 4.5 (US)" },
-      { id: "global.anthropic.claude-sonnet-4-5-20250929-v1:0", label: "Sonnet 4.5 (Global)" },
-      { id: "us.anthropic.claude-haiku-4-5-20251001-v1:0", label: "Haiku 4.5 (US)" },
-      { id: "global.anthropic.claude-haiku-4-5-20251001-v1:0", label: "Haiku 4.5 (Global)" },
-    ],
-  },
-  {
-    label: "Claude 4",
-    models: [
-      { id: "us.anthropic.claude-opus-4-1-20250805-v1:0", label: "Opus 4.1 (US)" },
-      { id: "us.anthropic.claude-opus-4-20250514-v1:0", label: "Opus 4 (US)" },
-      { id: "us.anthropic.claude-sonnet-4-20250514-v1:0", label: "Sonnet 4 (US)" },
-      { id: "global.anthropic.claude-sonnet-4-20250514-v1:0", label: "Sonnet 4 (Global)" },
-    ],
-  },
-  {
-    label: "Claude 3.x",
-    models: [
-      { id: "us.anthropic.claude-3-7-sonnet-20250219-v1:0", label: "3.7 Sonnet (US)" },
-      { id: "us.anthropic.claude-3-5-sonnet-20241022-v2:0", label: "3.5 Sonnet v2 (US)" },
-      { id: "us.anthropic.claude-3-5-haiku-20241022-v1:0", label: "3.5 Haiku (US)" },
-    ],
-  },
-];
-
-const DEFAULT_MODEL_ID = MODEL_GROUPS[0].models[0].id;
+import { MODEL_GROUPS, DEFAULT_MODEL_ID, findModelLabel } from "../../lib/models";
 
 function CopyButtons({ content }: { content: string }) {
   const [copied, setCopied] = useState<"text" | "md" | null>(null);
 
+  // Strip tool-call <details> blocks and agent-proposal code blocks before copying
+  const clean = (s: string) => s
+    .replace(/<details class="tool-call">[\s\S]*?<\/details>/g, "")
+    .replace(/```agent-proposal\n[\s\S]*?```/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
   const copyAs = async (mode: "text" | "md") => {
-    const text = mode === "md" ? content : content.replace(/[#*`_~\[\]()>|\\-]/g, "").replace(/\n{3,}/g, "\n\n");
+    const cleaned = clean(content);
+    const text = mode === "md" ? cleaned : cleaned.replace(/[#*`_~\[\]()>|\\-]/g, "").replace(/\n{3,}/g, "\n\n");
     await navigator.clipboard.writeText(text);
     setCopied(mode);
     setTimeout(() => setCopied(null), 1500);
@@ -336,7 +328,7 @@ export default function ChatPanel() {
     return () => document.removeEventListener("mousedown", handler);
   }, [showHistory, showModelPicker]);
 
-  const selectedModelLabel = MODEL_GROUPS.flatMap((g) => g.models).find((m) => m.id === selectedModel)?.label || "Select";
+  const selectedModelLabel = findModelLabel(selectedModel);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -357,7 +349,13 @@ export default function ChatPanel() {
   // Load agent metadata when target changes
   useEffect(() => {
     if (targetAgentName && targetAgentId) {
-      fetchAgentMetadata(targetAgentId).then(setMetadata);
+      fetchAgentMetadata(targetAgentId).then((m) => {
+        setMetadata(m);
+        // Auto-select agent's default model if set
+        if (m?.default_model_id) {
+          setSelectedModel(m.default_model_id);
+        }
+      });
     } else {
       setMetadata(null);
     }

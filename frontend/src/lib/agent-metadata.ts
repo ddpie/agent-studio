@@ -9,6 +9,7 @@ export interface AgentMetadata {
   display_name: string;
   description: string;
   model_id: string;
+  default_model_id: string;
   system_prompt: string;
   tool_definitions: string;
   tool_names: string;

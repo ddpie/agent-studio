@@ -38,7 +38,7 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     Always use multi-turn conversation to clarify requirements first.
 
     ## Workflow for Creating an Agent
-    Follow these steps IN ORDER. Do NOT skip steps or call tools until Step 5.
+    Follow these steps IN ORDER. Do NOT skip steps or call tools until Step 4.
 
     **Step 1 — Understand the Need**
     Ask the user what they want the agent to do. Clarify:
@@ -46,21 +46,10 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     - Who will use it?
     - What specific tasks should it handle?
 
-    **Step 2 — Design the Agent**
-    Based on the conversation, propose a design:
-    - Agent name (alphanumeric only, no hyphens/underscores, max 36 chars)
-    - Recommend a prompt template (general/expert/customer_service/data_analyst/creative_writer)
-    - System prompt with specific instructions for this agent
-    - Tools the agent will have (list each with description)
-    - Welcome message and 3 suggested prompts for the agent's chat page
-    - Whether image input is needed (supports_images=true if the agent analyzes images)
-    - Permission tier: basic (model only), readonly (AWS read, default), data-access (AWS read+write)
-    - Any MCP integrations needed
-
-    Present this as a clear summary.
-
-    **Step 3 — Output Structured Proposal**
-    Output the complete design as a JSON code block with language tag `agent-proposal`.
+    **Step 2 — Design & Present as Editable Card**
+    Based on the conversation, design the agent and DIRECTLY output the complete design
+    as a JSON code block with language tag `agent-proposal`.
+    Do NOT output a Markdown summary or table first — go straight to the card.
     The frontend will render this as an editable card for the user to review and modify.
     Format:
     ```agent-proposal
@@ -77,14 +66,14 @@ SYSTEM_PROMPT = textwrap.dedent("""\
       "permission_tier": "readonly"
     }
     ```
-    After the code block, briefly explain the design and ask if they want to edit anything
-    before creating. The user can edit directly in the card or ask you to change things.
+    After the code block, add a brief one-line explanation and ask if they want to edit
+    anything before creating. The user can edit directly in the card or ask you to change things.
 
-    **Step 4 — Wait for Confirmation**
+    **Step 3 — Wait for Confirmation**
     Do NOT proceed until the user explicitly confirms (e.g., "yes", "go ahead", "looks good").
-    If the user wants changes, go back to Step 2 or 3.
+    If the user wants changes, update the card and output a new `agent-proposal` block.
 
-    **Step 5 — Execute**
+    **Step 4 — Execute**
     Only after confirmation, call create_agent with all parameters including:
     - welcome_message: A brief intro message for the agent's chat page
     - suggestions: Three recommended prompts separated by |
@@ -243,20 +232,64 @@ async def invoke(payload, context):
     else:
         input_data = prompt
 
-    # Stream with tool-use markers
+    # Stream with tool-use markers (input/output are base64-encoded to avoid nested JSON issues)
+    import base64 as _b64
     current_tool = None
+    tool_input_buf = ""
+    tool_use_id_map = {}  # toolUseId -> tool_name
     stream = agent.stream_async(input_data)
     async for event in stream:
         if "current_tool_use" in event:
             tool_info = event["current_tool_use"]
             tool_name = tool_info.get("name", "")
+            tool_use_id = tool_info.get("toolUseId", "")
             if tool_name and tool_name != current_tool:
                 current_tool = tool_name
+                tool_input_buf = ""
+                if tool_use_id:
+                    tool_use_id_map[tool_use_id] = tool_name
                 yield json.dumps({"__tool": "start", "name": tool_name})
+            # Accumulate tool input
+            raw_input = tool_info.get("input", "")
+            if raw_input:
+                tool_input_buf = raw_input
+
+        # Tool result message — extract output
+        if "message" in event:
+            msg = event["message"]
+            if isinstance(msg, dict) and msg.get("role") == "user":
+                for block in msg.get("content", []):
+                    tr = block.get("toolResult")
+                    if not tr:
+                        continue
+                    t_id = tr.get("toolUseId", "")
+                    t_name = tool_use_id_map.get(t_id, "unknown")
+                    # Collect text from result content
+                    output_parts = []
+                    for c in tr.get("content", []):
+                        if "text" in c:
+                            output_parts.append(c["text"])
+                    output_text = "\n".join(output_parts)
+                    # Encode input & output as base64
+                    inp_str = ""
+                    try:
+                        parsed_inp = json.loads(tool_input_buf) if isinstance(tool_input_buf, str) and tool_input_buf.strip() else tool_input_buf
+                        if isinstance(parsed_inp, dict) and parsed_inp:
+                            inp_str = json.dumps(parsed_inp, ensure_ascii=False, indent=2)
+                    except Exception:
+                        inp_str = str(tool_input_buf) if tool_input_buf else ""
+                    inp_b64 = _b64.b64encode(inp_str.encode()).decode() if inp_str else ""
+                    # Truncate output if too long (keep first 2000 chars)
+                    if len(output_text) > 2000:
+                        output_text = output_text[:2000] + "\n... (truncated)"
+                    out_b64 = _b64.b64encode(output_text.encode()).decode() if output_text else ""
+                    yield json.dumps({"__tool": "result", "name": t_name, "input": inp_b64, "output": out_b64})
+
         if "data" in event and isinstance(event["data"], str):
             if current_tool:
                 yield json.dumps({"__tool": "end", "name": current_tool})
                 current_tool = None
+                tool_input_buf = ""
             yield event["data"]
 
 

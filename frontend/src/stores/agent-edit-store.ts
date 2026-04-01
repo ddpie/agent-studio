@@ -12,6 +12,7 @@ interface AgentEditState {
   saving: boolean;
 
   openEdit: (agentId: string, agentName: string) => Promise<void>;
+  openNewWithData: (data: Partial<AgentMetadata>) => void;
   closeEdit: () => void;
   updateField: <K extends keyof AgentMetadata>(key: K, value: AgentMetadata[K]) => void;
   setSaving: (saving: boolean) => void;
@@ -104,6 +105,16 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   },
 
   closeEdit: () => set({ editingAgentId: null, editingAgentName: null, formData: null, originalData: null }),
+
+  openNewWithData: (data: Partial<AgentMetadata>) => {
+    set({
+      editingAgentId: "__new__",
+      editingAgentName: (data.display_name || data.name || "New Agent") as string,
+      formData: data,
+      originalData: JSON.parse(JSON.stringify(data)),
+      loading: false,
+    });
+  },
 
   updateField: (key, value) => {
     const { formData } = get();
