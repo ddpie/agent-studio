@@ -249,46 +249,22 @@ export const useChatStore = create<ChatState>()(
               for (const m of markers) {
                 if (m.type === "start") {
                   set({ activeTool: m.name });
-                  set((s) => ({
-                    messages: s.messages.map((msg) =>
-                      msg.id === assistantMsg.id
-                        ? { ...msg, content: msg.content + `\n\n<details class="tool-call"><summary>Called <strong>${m.name}</strong></summary>\n\n` }
-                        : msg
-                    ),
-                  }));
                 } else if (m.type === "result") {
                   const inp = m.input ? atob(m.input) : "";
                   const out = m.output ? atob(m.output) : "";
-                  let detailContent = "";
+                  let detailContent = `\n\n<details class="tool-call"><summary>Called <strong>${m.name}</strong></summary>\n\n`;
                   if (inp) detailContent += `**Input:**\n\`\`\`json\n${inp}\n\`\`\`\n`;
                   if (out) detailContent += `**Output:**\n\`\`\`\n${out}\n\`\`\`\n`;
+                  detailContent += `\n</details>\n\n`;
                   set((s) => ({
                     messages: s.messages.map((msg) =>
                       msg.id === assistantMsg.id
-                        ? { ...msg, content: msg.content + detailContent + `\n</details>\n\n` }
+                        ? { ...msg, content: msg.content + detailContent }
                         : msg
                     ),
                   }));
                 } else if (m.type === "end") {
-                  // Close any open <details> that wasn't closed by a result marker
-                  set((s) => {
-                    const msg = s.messages.find((msg) => msg.id === assistantMsg.id);
-                    const content = msg?.content || "";
-                    // Check if there's an unclosed <details>
-                    const opens = (content.match(/<details/g) || []).length;
-                    const closes = (content.match(/<\/details>/g) || []).length;
-                    if (opens > closes) {
-                      return {
-                        activeTool: null,
-                        messages: s.messages.map((msg) =>
-                          msg.id === assistantMsg.id
-                            ? { ...msg, content: msg.content + `\n</details>\n\n` }
-                            : msg
-                        ),
-                      };
-                    }
-                    return { activeTool: null };
-                  });
+                  set({ activeTool: null });
                 }
               }
 
