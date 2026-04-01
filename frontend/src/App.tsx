@@ -1,4 +1,4 @@
-import { Authenticator } from "@aws-amplify/ui-react";
+import { Authenticator, useAuthenticator } from "@aws-amplify/ui-react";
 import "@aws-amplify/ui-react/styles.css";
 import IconNav from "./components/layout/IconNav";
 import AgentList from "./components/agents/AgentList";
@@ -64,7 +64,32 @@ function MainContent() {
 
 export default function App() {
   return (
-    <Authenticator>
+    <Authenticator
+      components={{
+        Header() {
+          return (
+            <div className="flex flex-col items-center pt-12 pb-6">
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mb-4 shadow-lg animate-[fadeSlideIn_0.5s_ease-out]">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                  <path d="M2 17l10 5 10-5" />
+                  <path d="M2 12l10 5 10-5" />
+                </svg>
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900 animate-[fadeSlideIn_0.5s_ease-out_0.1s_both]">Agent Studio</h1>
+              <p className="text-sm text-gray-500 mt-1 animate-[fadeSlideIn_0.5s_ease-out_0.2s_both]">Build and manage AI agents</p>
+            </div>
+          );
+        },
+        Footer() {
+          return (
+            <div className="text-center py-4 text-[11px] text-gray-400">
+              Powered by AWS Bedrock AgentCore
+            </div>
+          );
+        },
+      }}
+    >
       {({ signOut, user }) => (
         <div className="h-screen flex flex-col bg-white dark:bg-gray-950">
           {/* Top bar */}

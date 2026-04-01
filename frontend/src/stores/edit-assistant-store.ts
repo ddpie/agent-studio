@@ -283,6 +283,63 @@ After the JSON block, briefly explain what you changed in 1-2 sentences. Do not 
       }
 
       if (flushTimer) clearTimeout(flushTimer);
+
+      // Final attempt: try to extract __update from complete fullText
+      // The JSON may have been split across chunks and only now is complete
+      if (holdFlush && fullText.includes('"__update"')) {
+        const marker = '{"__update"';
+        const idx = fullText.indexOf(marker);
+        if (idx !== -1) {
+          let depth = 0;
+          let endIdx = -1;
+          for (let i = idx; i < fullText.length; i++) {
+            if (fullText[i] === "{") depth++;
+            else if (fullText[i] === "}") { depth--; if (depth === 0) { endIdx = i + 1; break; } }
+          }
+          if (endIdx !== -1) {
+            try {
+              const parsed = JSON.parse(fullText.slice(idx, endIdx));
+              if (parsed.__update) {
+                onUpdate(parsed.__update);
+                const fields = Object.keys(parsed.__update);
+                // Replace applying marker with updated
+                set((s) => ({
+                  messages: s.messages.map((m) =>
+                    m.id === assistantMsg.id
+                      ? { ...m, content: m.content.replace(/\n\n---applying-changes---\n\n/g, "") + `\n\n---updated:${fields.join(",")}---\n\n` }
+                      : m
+                  ),
+                }));
+                // Flush remaining text after JSON
+                const afterJson = fullText.slice(endIdx).trim();
+                if (afterJson) {
+                  set((s) => ({
+                    messages: s.messages.map((m) =>
+                      m.id === assistantMsg.id ? { ...m, content: m.content + afterJson } : m
+                    ),
+                  }));
+                }
+                holdFlush = false;
+                pendingText = "";
+              }
+            } catch { /* still can't parse */ }
+          }
+        }
+      }
+
+      // Force cleanup: remove any leftover applying-changes markers
+      if (holdFlush) {
+        set((s) => ({
+          messages: s.messages.map((m) =>
+            m.id === assistantMsg.id
+              ? { ...m, content: m.content.replace(/\n\n---applying-changes---\n\n/g, "\n\n---updated:changes applied---\n\n") }
+              : m
+          ),
+        }));
+      }
+
+      // Flush any remaining non-JSON text
+      holdFlush = false;
       flushPending();
     } catch (err) {
       if (!signal.aborted) {

@@ -20,6 +20,22 @@ function CodePreviewModal({ onClose }: { onClose: () => void }) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [previewContent]);
 
+  // Try to extract readable content from the raw JSON stream
+  const displayContent = (() => {
+    if (!previewContent) return "Waiting for content...";
+    // Try to find tool_definitions value in the JSON
+    const tdMatch = previewContent.match(/"tool_definitions"\s*:\s*"([\s\S]*?)(?:"\s*[,}]|$)/);
+    if (tdMatch) {
+      return tdMatch[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+    }
+    // Try to find system_prompt value
+    const spMatch = previewContent.match(/"system_prompt"\s*:\s*"([\s\S]*?)(?:"\s*[,}]|$)/);
+    if (spMatch) {
+      return spMatch[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+    }
+    return previewContent;
+  })();
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center animate-[fadeSlideIn_0.15s_ease-out]" onClick={onClose}>
       <div className="bg-gray-900 rounded-xl w-[80vw] h-[70vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -31,7 +47,7 @@ function CodePreviewModal({ onClose }: { onClose: () => void }) {
         </div>
         <div ref={scrollRef} className="flex-1 overflow-auto p-4">
           <pre className="text-[12px] font-mono text-green-300 whitespace-pre-wrap leading-relaxed">
-            {previewContent || "Waiting for content..."}
+            {displayContent}
             <span className="animate-pulse">|</span>
           </pre>
         </div>
