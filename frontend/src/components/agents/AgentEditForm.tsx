@@ -135,7 +135,7 @@ export default function AgentEditForm() {
     try {
       const suggestions = Array.isArray(formData.suggestions)
         ? formData.suggestions.join("|")
-        : "";
+        : (formData.suggestions || "");
 
       const prompt = isCreateMode
         ? `Execute create_agent with these exact parameters:
@@ -303,7 +303,7 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
           </Field>
           <Field label="Suggested Prompts" hint="One per line, shown as quick-start buttons">
             <textarea
-              value={(formData.suggestions || []).join("\n")}
+              value={(Array.isArray(formData.suggestions) ? formData.suggestions : (formData.suggestions || "").split("|").filter(Boolean)).join("\n")}
               onChange={(e) => updateField("suggestions", e.target.value.split("\n").filter(Boolean))}
               rows={3}
               className={inputClass + " resize-none"}

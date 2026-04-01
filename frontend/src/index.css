@@ -115,3 +115,15 @@ body {
   from { opacity: 0; transform: translateX(20px); }
   to { opacity: 1; transform: translateX(0); }
 }
+
+/* Override Amplify Authenticator styles to match app theme */
+[data-amplify-authenticator] {
+  --amplify-components-button-primary-background-color: #2563eb;
+  --amplify-components-button-primary-hover-background-color: #1d4ed8;
+  --amplify-components-button-primary-active-background-color: #1e40af;
+  --amplify-components-tabs-item-active-color: #2563eb;
+  --amplify-components-tabs-item-active-border-color: #2563eb;
+  --amplify-components-button-link-color: #2563eb;
+  --amplify-components-button-link-hover-color: #1d4ed8;
+  --amplify-components-fieldcontrol-focus-border-color: #2563eb;
+}
