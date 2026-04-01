@@ -270,7 +270,25 @@ export const useChatStore = create<ChatState>()(
                     ),
                   }));
                 } else if (m.type === "end") {
-                  set({ activeTool: null });
+                  // Close any open <details> that wasn't closed by a result marker
+                  set((s) => {
+                    const msg = s.messages.find((msg) => msg.id === assistantMsg.id);
+                    const content = msg?.content || "";
+                    // Check if there's an unclosed <details>
+                    const opens = (content.match(/<details/g) || []).length;
+                    const closes = (content.match(/<\/details>/g) || []).length;
+                    if (opens > closes) {
+                      return {
+                        activeTool: null,
+                        messages: s.messages.map((msg) =>
+                          msg.id === assistantMsg.id
+                            ? { ...msg, content: msg.content + `\n</details>\n\n` }
+                            : msg
+                        ),
+                      };
+                    }
+                    return { activeTool: null };
+                  });
                 }
               }
 

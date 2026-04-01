@@ -133,7 +133,7 @@ export default function AgentEditForm() {
 
   if (!formData) return null;
 
-  const isCreateMode = editingAgentId === "__new__";
+  const isCreateMode = editingAgentId?.startsWith("draft-") || editingAgentId === "__new__";
 
   const handleSave = async () => {
     setSaving(true);
@@ -413,9 +413,22 @@ function extractDocstring(code: string): string {
 /** Split combined tool_definitions into individual tool blocks */
 function splitTools(defs: string): string[] {
   if (!defs.trim()) return [];
-  // Split on @tool that starts a new block (look-ahead)
   const parts = defs.split(/\n(?=@tool\b)/);
-  return parts.map(p => p.trim()).filter(Boolean);
+  const result: string[] = [];
+  let prefix = "";
+  for (const p of parts) {
+    const trimmed = p.trim();
+    if (!trimmed) continue;
+    // If this block doesn't start with @tool, it's a preamble (imports etc.)
+    // Prepend it to the next tool block
+    if (!trimmed.startsWith("@tool")) {
+      prefix = trimmed + "\n\n";
+    } else {
+      result.push(prefix + trimmed);
+      prefix = "";
+    }
+  }
+  return result;
 }
 
 /** Combine individual tool blocks into one string */

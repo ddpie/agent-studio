@@ -107,8 +107,9 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   closeEdit: () => set({ editingAgentId: null, editingAgentName: null, formData: null, originalData: null }),
 
   openNewWithData: (data: Partial<AgentMetadata>) => {
+    const draftId = `draft-${crypto.randomUUID().slice(0, 8)}`;
     set({
-      editingAgentId: "__new__",
+      editingAgentId: draftId,
       editingAgentName: (data.display_name || data.name || "New Agent") as string,
       formData: data,
       originalData: JSON.parse(JSON.stringify(data)),
