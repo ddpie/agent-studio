@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { useChatStore, type Message, type ChatSession } from "../../stores/chat-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
-import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText, Check, RefreshCw } from "lucide-react";
+import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText, Check, RefreshCw, Download } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -403,6 +403,35 @@ export default function ChatPanel() {
               </div>
             )}
           </div>
+          {/* Export conversation */}
+          {messages.length > 0 && (
+            <button
+              onClick={() => {
+                const agentName = targetAgentName || "Meta Agent";
+                const lines = [`# ${agentName}\n`];
+                for (const msg of messages) {
+                  if (!msg.content) continue;
+                  if (msg.role === "user") {
+                    lines.push(`**User:**\n${msg.content}\n`);
+                  } else if (msg.role === "assistant") {
+                    lines.push(`**${agentName}:**\n${msg.content}\n`);
+                  }
+                }
+                const md = lines.join("\n");
+                const blob = new Blob([md], { type: "text/markdown" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${agentName}-${new Date().toISOString().slice(0, 10)}.md`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50"
+              title="Export as Markdown"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          )}
           {/* New session */}
           <button
             onClick={newSession}
