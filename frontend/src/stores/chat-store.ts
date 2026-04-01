@@ -36,6 +36,7 @@ interface ChatState {
   setSelectedModel: (modelId: string) => void;
   sendMessage: (content: string, images?: string[], modelId?: string) => Promise<void>;
   regenerateLastMessage: () => Promise<void>;
+  editAndResend: (messageId: string, newContent: string) => Promise<void>;
   cancelStreaming: () => void;
   clearMessages: () => void;
   newSession: () => void;
@@ -268,6 +269,22 @@ export const useChatStore = create<ChatState>()(
         // Re-send using the current model
         const modelId = get().selectedModelId || undefined;
         await get().sendMessage(content, images, modelId);
+      },
+
+      editAndResend: async (messageId: string, newContent: string) => {
+        const { messages, isStreaming } = get();
+        if (isStreaming) return;
+
+        const msgIdx = messages.findIndex((m) => m.id === messageId);
+        if (msgIdx === -1) return;
+
+        // Truncate everything from this message onward
+        const trimmed = messages.slice(0, msgIdx);
+        const images = messages[msgIdx].images;
+        set({ messages: trimmed });
+
+        const modelId = get().selectedModelId || undefined;
+        await get().sendMessage(newContent, images, modelId);
       },
     }),
     {

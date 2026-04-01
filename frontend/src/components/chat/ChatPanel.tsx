@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { useChatStore, type Message, type ChatSession } from "../../stores/chat-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
-import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText, Check, RefreshCw, Download } from "lucide-react";
+import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText, Check, RefreshCw, Download, Pencil } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -116,6 +116,45 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
   const isUser = message.role === "user";
   const showTypingIndicator = isLastAssistant && isStreaming && message.role === "assistant";
   const showCopy = !isUser && message.content && !showTypingIndicator;
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState("");
+  const { editAndResend } = useChatStore();
+
+  const startEdit = () => {
+    setEditText(message.content);
+    setEditing(true);
+  };
+
+  const submitEdit = () => {
+    if (editText.trim() && editText !== message.content) {
+      editAndResend(message.id, editText.trim());
+    }
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="flex justify-end mb-4">
+        <div className="max-w-[80%] w-full">
+          <textarea
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submitEdit(); }
+              if (e.key === "Escape") setEditing(false);
+            }}
+            autoFocus
+            rows={3}
+            className="w-full px-4 py-3 rounded-2xl border-2 border-blue-400 text-sm focus:outline-none resize-none"
+          />
+          <div className="flex justify-end gap-1.5 mt-1">
+            <button onClick={() => setEditing(false)} className="text-[11px] px-2 py-0.5 text-gray-500 hover:bg-gray-100 rounded">Cancel</button>
+            <button onClick={submitEdit} className="text-[11px] px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700">Send</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-4`}>
@@ -127,6 +166,16 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
         }`}
       >
         {showCopy && <CopyButtons content={message.content} />}
+        {/* Edit button for user messages */}
+        {isUser && message.content && !isStreaming && (
+          <button
+            onClick={startEdit}
+            className="absolute -bottom-1 -left-1 w-5 h-5 bg-white border border-gray-200 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+            title="Edit message"
+          >
+            <Pencil className="w-2.5 h-2.5 text-gray-400" />
+          </button>
+        )}
         {/* Show attached images */}
         {message.images && message.images.length > 0 && (
           <div className="flex gap-2 flex-wrap mb-2">
