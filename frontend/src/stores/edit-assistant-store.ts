@@ -159,12 +159,10 @@ RULES:
 
       let pendingText = "";
       let flushTimer: ReturnType<typeof setTimeout> | null = null;
-      let fullText = ""; // Accumulate full response to detect __update
-      let holdFlush = false; // Hold flushing when we detect partial __update
-      let showedGenerating = false;
+      let fullText = "";
 
       const flushPending = () => {
-        if (!pendingText || holdFlush) return;
+        if (!pendingText) return;
         const text = pendingText;
         pendingText = "";
         set((s) => ({
@@ -172,93 +170,6 @@ RULES:
             m.id === assistantMsg.id ? { ...m, content: m.content + text } : m
           ),
         }));
-      };
-
-      const showGenerating = () => {
-        if (showedGenerating) return;
-        showedGenerating = true;
-        set({ previewContent: "" });
-        set((s) => ({
-          messages: s.messages.map((m) =>
-            m.id === assistantMsg.id ? { ...m, content: m.content + "\n\n---applying-changes---\n\n" } : m
-          ),
-        }));
-      };
-
-      /** Extract {"__update": {...}} from text, properly handling JSON string escaping.
-       *  Braces inside JSON string values (e.g., Python code) are ignored. */
-      const tryExtractUpdate = (): boolean => {
-        let found = false;
-
-        while (true) {
-          const marker = '{"__update"';
-          const idx = fullText.indexOf(marker);
-
-          if (idx === -1) {
-            const pendingTrimmed = pendingText.trimStart();
-            if (pendingTrimmed.startsWith("{") || pendingTrimmed.startsWith('{"')) {
-              holdFlush = true;
-              showGenerating();
-              return found;
-            }
-            holdFlush = false;
-            return found;
-          }
-
-          holdFlush = true;
-          showGenerating();
-
-          // Proper JSON-aware brace matching: skip braces inside strings
-          let depth = 0;
-          let inString = false;
-          let escape = false;
-          let endIdx = -1;
-
-          for (let i = idx; i < fullText.length; i++) {
-            const ch = fullText[i];
-            if (escape) { escape = false; continue; }
-            if (ch === "\\") { escape = true; continue; }
-            if (ch === '"') { inString = !inString; continue; }
-            if (inString) continue;
-            if (ch === "{") depth++;
-            else if (ch === "}") {
-              depth--;
-              if (depth === 0) { endIdx = i + 1; break; }
-            }
-          }
-
-          if (endIdx === -1) return found; // Not complete yet
-
-          const jsonStr = fullText.slice(idx, endIdx);
-          try {
-            const parsed = JSON.parse(jsonStr);
-            if (parsed.__update && typeof parsed.__update === "object") {
-              onUpdate(parsed.__update);
-              const fields = Object.keys(parsed.__update);
-
-              pendingText = pendingText.replace(jsonStr, "");
-
-              set((s) => ({
-                messages: s.messages.map((m) =>
-                  m.id === assistantMsg.id
-                    ? { ...m, content: m.content.replace("\n\n---applying-changes---\n\n", "") + `\n\n---updated:${fields.join(",")}---\n\n` }
-                    : m
-                ),
-              }));
-
-              fullText = fullText.slice(0, idx) + fullText.slice(endIdx);
-              showedGenerating = false;
-              found = true;
-              set({ previewContent: null });
-              continue;
-            }
-          } catch {
-            // JSON.parse failed — might still be incomplete despite balanced braces
-            // (e.g., truncated string value). Keep holding.
-            return found;
-          }
-          return found;
-        }
       };
 
       for await (const chunk of stream) {
@@ -271,95 +182,52 @@ RULES:
         if (cleaned) {
           fullText += cleaned;
           pendingText += cleaned;
-
-          // Update preview content when holding
-          if (holdFlush) {
-            set({ previewContent: pendingText });
-          }
-
-          // Check for __update — may extract multiple
-          tryExtractUpdate();
-
-          // Only flush if not holding (i.e., no pending JSON detection)
-          if (!holdFlush) {
-            if (!flushTimer) {
-              flushTimer = setTimeout(() => {
-                flushTimer = null;
-                // Re-check before flushing in case new chunks arrived
-                tryExtractUpdate();
-                if (!holdFlush) flushPending();
-              }, 100);
-            }
+          if (!flushTimer) {
+            flushTimer = setTimeout(() => {
+              flushTimer = null;
+              flushPending();
+            }, 50);
           }
         }
       }
 
       if (flushTimer) clearTimeout(flushTimer);
+      flushPending();
 
-      // Final attempt: try to extract __update from complete fullText
-      // Uses same JSON-aware string/escape tracking as tryExtractUpdate
-      if (holdFlush && fullText.includes('"__update"')) {
-        const marker = '{"__update"';
-        const idx = fullText.indexOf(marker);
-        if (idx !== -1) {
-          let depth = 0;
-          let inStr = false;
-          let esc = false;
-          let endIdx = -1;
-          for (let i = idx; i < fullText.length; i++) {
-            const ch = fullText[i];
-            if (esc) { esc = false; continue; }
-            if (ch === "\\") { esc = true; continue; }
-            if (ch === '"') { inStr = !inStr; continue; }
-            if (inStr) continue;
-            if (ch === "{") depth++;
-            else if (ch === "}") { depth--; if (depth === 0) { endIdx = i + 1; break; } }
-          }
-          if (endIdx !== -1) {
-            try {
-              const parsed = JSON.parse(fullText.slice(idx, endIdx));
-              if (parsed.__update) {
-                onUpdate(parsed.__update);
-                const fields = Object.keys(parsed.__update);
-                // Replace applying marker with updated
-                set((s) => ({
-                  messages: s.messages.map((m) =>
-                    m.id === assistantMsg.id
-                      ? { ...m, content: m.content.replace(/\n\n---applying-changes---\n\n/g, "") + `\n\n---updated:${fields.join(",")}---\n\n` }
-                      : m
-                  ),
-                }));
-                // Flush remaining text after JSON
-                const afterJson = fullText.slice(endIdx).trim();
-                if (afterJson) {
-                  set((s) => ({
-                    messages: s.messages.map((m) =>
-                      m.id === assistantMsg.id ? { ...m, content: m.content + afterJson } : m
-                    ),
-                  }));
-                }
-                holdFlush = false;
-                pendingText = "";
-              }
-            } catch { /* still can't parse */ }
-          }
+      // Post-stream: extract __update JSON from the complete response
+      const updateMarker = '{"__update"';
+      const updateIdx = fullText.indexOf(updateMarker);
+      if (updateIdx !== -1) {
+        // JSON-aware brace matching
+        let depth = 0, inStr = false, esc = false, endIdx = -1;
+        for (let i = updateIdx; i < fullText.length; i++) {
+          const ch = fullText[i];
+          if (esc) { esc = false; continue; }
+          if (ch === "\\") { esc = true; continue; }
+          if (ch === '"') { inStr = !inStr; continue; }
+          if (inStr) continue;
+          if (ch === "{") depth++;
+          else if (ch === "}") { depth--; if (depth === 0) { endIdx = i + 1; break; } }
+        }
+        if (endIdx !== -1) {
+          const jsonStr = fullText.slice(updateIdx, endIdx);
+          try {
+            const parsed = JSON.parse(jsonStr);
+            if (parsed.__update && typeof parsed.__update === "object") {
+              onUpdate(parsed.__update);
+              const fields = Object.keys(parsed.__update);
+              // Clean the message: remove JSON, add update indicator
+              set((s) => ({
+                messages: s.messages.map((m) =>
+                  m.id === assistantMsg.id
+                    ? { ...m, content: m.content.replace(jsonStr, "").replace(/\n{3,}/g, "\n\n").trim() + `\n\n---updated:${fields.join(",")}---\n\n` }
+                    : m
+                ),
+              }));
+            }
+          } catch { /* JSON parse failed */ }
         }
       }
-
-      // Force cleanup: remove any leftover applying-changes markers
-      if (holdFlush) {
-        set((s) => ({
-          messages: s.messages.map((m) =>
-            m.id === assistantMsg.id
-              ? { ...m, content: m.content.replace(/\n\n---applying-changes---\n\n/g, "\n\n---updated:changes applied---\n\n") }
-              : m
-          ),
-        }));
-      }
-
-      // Flush any remaining non-JSON text
-      holdFlush = false;
-      flushPending();
     } catch (err) {
       if (!signal.aborted) {
         set((s) => ({
