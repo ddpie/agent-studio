@@ -46,7 +46,7 @@ function MainContent() {
 
   return (
     <div className="flex flex-1 overflow-hidden">
-      <aside style={{ width: sidebarWidth }} className="border-r border-gray-200 bg-gray-50 flex-shrink-0 overflow-hidden">
+      <aside style={{ width: sidebarWidth }} className="border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 flex-shrink-0 overflow-hidden">
         <AgentList collapsed={sidebarWidth < 100} />
       </aside>
       <div
@@ -66,7 +66,7 @@ export default function App() {
   return (
     <Authenticator>
       {({ signOut, user }) => (
-        <div className="h-screen flex flex-col bg-white">
+        <div className="h-screen flex flex-col bg-white dark:bg-gray-950">
           {/* Top bar */}
           <header className="flex items-center justify-between px-4 py-2 bg-gray-900 text-white">
             <div className="flex items-center gap-2">

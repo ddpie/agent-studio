@@ -101,7 +101,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-        <h3 className="text-sm font-semibold text-gray-700">My Agents</h3>
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">My Agents</h3>
         <button
           onClick={fetchAgents}
           disabled={loading}

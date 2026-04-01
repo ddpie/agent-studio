@@ -1,8 +1,8 @@
-import { Settings, User, Download, Trash2, Database, Shield } from "lucide-react";
+import { Settings, User, Download, Trash2, Database, Shield, Sun, Moon, Monitor } from "lucide-react";
 import { useUISettings } from "../../stores/ui-settings-store";
 
 export default function SettingsPage() {
-  const { sidebarWidth, inputHeight, setSidebarWidth, setInputHeight } = useUISettings();
+  const { sidebarWidth, inputHeight, theme, setSidebarWidth, setInputHeight, setTheme } = useUISettings();
 
   const clearLocalStorage = () => {
     if (window.confirm("Clear all local data? This will reset chat history, sessions, and UI settings.")) {
@@ -62,8 +62,32 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        {/* Theme */}
+        <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+          <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3">Theme</h3>
+          <div className="flex gap-2">
+            {([
+              { id: "light" as const, icon: Sun, label: "Light" },
+              { id: "dark" as const, icon: Moon, label: "Dark" },
+              { id: "system" as const, icon: Monitor, label: "System" },
+            ]).map(({ id, icon: Icon, label }) => (
+              <button
+                key={id}
+                onClick={() => setTheme(id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-colors ${
+                  theme === id
+                    ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                    : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" /> {label}
+              </button>
+            ))}
+          </div>
+        </section>
+
         {/* Profile */}
-        <section className="border border-gray-200 rounded-lg p-4">
+        <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
             <User className="w-3.5 h-3.5" /> Account
           </h3>
