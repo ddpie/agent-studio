@@ -182,6 +182,8 @@ RULES:
         if (cleaned) {
           fullText += cleaned;
           pendingText += cleaned;
+          // Update preview content for the preview modal
+          set({ previewContent: fullText });
           if (!flushTimer) {
             flushTimer = setTimeout(() => {
               flushTimer = null;
