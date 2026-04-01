@@ -58,14 +58,29 @@ def _build_input(payload):
     if not images:
         return prompt
     import base64
+    import urllib.request
     blocks = [{{"text": prompt}}]
     for img_url in images:
         if ";base64," in img_url:
+            # Data URL: data:image/png;base64,...
             header, b64 = img_url.split(";base64,", 1)
             fmt = header.split("/")[-1].replace("jpg", "jpeg")
             if fmt not in ("png", "jpeg", "gif", "webp"):
                 fmt = "png"
             blocks.append({{"image": {{"format": fmt, "source": {{"bytes": base64.b64decode(b64)}}}}}})
+        elif img_url.startswith("http"):
+            # S3 URL: download image bytes
+            try:
+                req = urllib.request.Request(img_url)
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    img_bytes = resp.read()
+                    content_type = resp.headers.get("Content-Type", "image/png")
+                    fmt = content_type.split("/")[-1].replace("jpg", "jpeg")
+                    if fmt not in ("png", "jpeg", "gif", "webp"):
+                        fmt = "png"
+                    blocks.append({{"image": {{"format": fmt, "source": {{"bytes": img_bytes}}}}}})
+            except Exception:
+                pass
     return blocks
 '''
 

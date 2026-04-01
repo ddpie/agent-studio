@@ -202,11 +202,12 @@ async def invoke(payload, context):
     # Build multimodal content if images are present
     if images:
         import base64
+        import urllib.request
         content_blocks = [{"text": prompt}]
-        for img_data_url in images:
-            if ";base64," in img_data_url:
-                header, b64data = img_data_url.split(";base64,", 1)
-                fmt = header.split("/")[-1].replace("jpeg", "jpeg").replace("jpg", "jpeg")
+        for img_url in images:
+            if ";base64," in img_url:
+                header, b64data = img_url.split(";base64,", 1)
+                fmt = header.split("/")[-1].replace("jpg", "jpeg")
                 if fmt not in ("png", "jpeg", "gif", "webp"):
                     fmt = "png"
                 content_blocks.append({
@@ -215,6 +216,23 @@ async def invoke(payload, context):
                         "source": {"bytes": base64.b64decode(b64data)},
                     }
                 })
+            elif img_url.startswith("http"):
+                try:
+                    req = urllib.request.Request(img_url)
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        img_bytes = resp.read()
+                        content_type = resp.headers.get("Content-Type", "image/png")
+                        fmt = content_type.split("/")[-1].replace("jpg", "jpeg")
+                        if fmt not in ("png", "jpeg", "gif", "webp"):
+                            fmt = "png"
+                        content_blocks.append({
+                            "image": {
+                                "format": fmt,
+                                "source": {"bytes": img_bytes},
+                            }
+                        })
+                except Exception:
+                    pass
         input_data = content_blocks
     else:
         input_data = prompt

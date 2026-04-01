@@ -13,6 +13,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { fetchAgentMetadata, type AgentMetadata } from "../../lib/agent-metadata";
 import { useUISettings } from "../../stores/ui-settings-store";
+import { uploadImageToS3 } from "../../lib/image-upload";
 import ImageLightbox from "../ui/ImageLightbox";
 
 import { useAgentEditStore } from "../../stores/agent-edit-store";
@@ -281,7 +282,8 @@ export default function ChatPanel() {
   } = useChatStore();
   const { fetchAgents } = useAgentListStore();
   const [input, setInput] = useState("");
-  const [pastedImages, setPastedImages] = useState<string[]>([]);
+  const [pastedImages, setPastedImages] = useState<string[]>([]); // base64 for preview
+  const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]); // S3 URLs for sending
   const selectedModel = selectedModelId || DEFAULT_MODEL_ID;
   const setSelectedModel = (id: string) => storeSetModel(id);
   const [metadata, setMetadata] = useState<AgentMetadata | null>(null);
@@ -371,8 +373,18 @@ export default function ChatPanel() {
         const file = item.getAsFile();
         if (!file) continue;
         const reader = new FileReader();
-        reader.onload = () => {
-          setPastedImages((prev) => [...prev, reader.result as string]);
+        reader.onload = async () => {
+          const dataUrl = reader.result as string;
+          setPastedImages((prev) => [...prev, dataUrl]);
+          // Upload to S3 in background
+          try {
+            const s3Url = await uploadImageToS3(dataUrl);
+            setUploadedImageUrls((prev) => [...prev, s3Url]);
+          } catch (err) {
+            console.error("Image upload failed:", err);
+            // Fallback: keep base64 data URL
+            setUploadedImageUrls((prev) => [...prev, dataUrl]);
+          }
         };
         reader.readAsDataURL(file);
       }
@@ -381,14 +393,18 @@ export default function ChatPanel() {
 
   const removeImage = (idx: number) => {
     setPastedImages((prev) => prev.filter((_, i) => i !== idx));
+    setUploadedImageUrls((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isStreaming) return;
-    sendMessage(input.trim(), pastedImages.length > 0 ? pastedImages : undefined, selectedModel);
+    // Send S3 URLs (or fallback base64) for images, but store base64 in message for display
+    const imageUrlsToSend = uploadedImageUrls.length > 0 ? uploadedImageUrls : (pastedImages.length > 0 ? pastedImages : undefined);
+    sendMessage(input.trim(), imageUrlsToSend, selectedModel);
     setInput("");
     setPastedImages([]);
+    setUploadedImageUrls([]);
     setHistoryIdx(-1);
     savedInputRef.current = "";
   };
