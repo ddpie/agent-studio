@@ -4,6 +4,7 @@ The Meta-Agent is an AI that creates and manages other AI agents.
 It runs on AgentCore Runtime and uses boto3 to orchestrate sub-agents.
 """
 
+import json
 import textwrap
 
 from strands import Agent
@@ -186,7 +187,6 @@ async def invoke(payload, context):
         import base64
         content_blocks = [{"text": prompt}]
         for img_data_url in images:
-            # Parse data URL: "data:image/png;base64,<data>"
             if ";base64," in img_data_url:
                 header, b64data = img_data_url.split(";base64,", 1)
                 fmt = header.split("/")[-1].replace("jpeg", "jpeg").replace("jpg", "jpeg")
@@ -198,12 +198,24 @@ async def invoke(payload, context):
                         "source": {"bytes": base64.b64decode(b64data)},
                     }
                 })
-        stream = agent.stream_async(content_blocks)
+        input_data = content_blocks
     else:
-        stream = agent.stream_async(prompt)
+        input_data = prompt
 
+    # Stream with tool-use markers
+    current_tool = None
+    stream = agent.stream_async(input_data)
     async for event in stream:
+        if "current_tool_use" in event:
+            tool_info = event["current_tool_use"]
+            tool_name = tool_info.get("name", "")
+            if tool_name and tool_name != current_tool:
+                current_tool = tool_name
+                yield json.dumps({"__tool": "start", "name": tool_name})
         if "data" in event and isinstance(event["data"], str):
+            if current_tool:
+                yield json.dumps({"__tool": "end", "name": current_tool})
+                current_tool = None
             yield event["data"]
 
 

@@ -159,7 +159,7 @@ export default function ChatPanel() {
     messages, isStreaming, statusText, sendMessage, cancelStreaming, clearMessages,
     targetAgentId, targetAgentName, newSession, loadSession, deleteSession,
     getAgentSessions, activeSessionId, selectedModelId, setSelectedModel: storeSetModel,
-    regenerateLastMessage,
+    regenerateLastMessage, activeTool,
   } = useChatStore();
   const { fetchAgents } = useAgentListStore();
   const [input, setInput] = useState("");
@@ -501,6 +501,16 @@ export default function ChatPanel() {
               <div className="flex items-center gap-2 text-sm">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>{statusText}</span>
+              </div>
+            </div>
+          </div>
+        )}
+        {activeTool && !statusText && (
+          <div className="flex justify-start mb-4">
+            <div className="rounded-xl px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700">
+              <div className="flex items-center gap-2 text-xs">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>Calling <strong>{activeTool}</strong></span>
               </div>
             </div>
           </div>

@@ -9,6 +9,29 @@ containing triple quotes.
 """
 
 # Shared helper function for building input with history + images
+_STREAM_HANDLER_CODE = '''
+import json as _json
+
+async def _stream_with_tools(agent, input_data):
+    """Stream agent response, yielding both text and tool-use markers."""
+    _current_tool = None
+    stream = agent.stream_async(input_data)
+    async for event in stream:
+        # Tool use start
+        if "current_tool_use" in event:
+            tool_info = event["current_tool_use"]
+            tool_name = tool_info.get("name", "")
+            if tool_name and tool_name != _current_tool:
+                _current_tool = tool_name
+                yield _json.dumps({{"__tool": "start", "name": tool_name}})
+        # Tool result / end
+        if "data" in event and isinstance(event["data"], str):
+            if _current_tool:
+                yield _json.dumps({{"__tool": "end", "name": _current_tool}})
+                _current_tool = None
+            yield event["data"]
+'''
+
 _BUILD_INPUT_CODE = '''
 def _build_input(payload):
     prompt = payload.get("prompt", "Hello!")
@@ -57,7 +80,7 @@ MODEL_ID = "{model_id}"
 SYSTEM_PROMPT = {system_prompt_repr}
 
 {tool_definitions}
-''' + _BUILD_INPUT_CODE + '''
+''' + _STREAM_HANDLER_CODE + _BUILD_INPUT_CODE + '''
 @app.entrypoint
 async def invoke(payload, context):
     model_id = payload.get("model_id", MODEL_ID)
@@ -66,10 +89,8 @@ async def invoke(payload, context):
         system_prompt=SYSTEM_PROMPT,
         tools=[{tool_names}],
     )
-    stream = agent.stream_async(_build_input(payload))
-    async for event in stream:
-        if "data" in event and isinstance(event["data"], str):
-            yield event["data"]
+    async for chunk in _stream_with_tools(agent, _build_input(payload)):
+        yield chunk
 
 if __name__ == "__main__":
     app.run()
@@ -118,7 +139,7 @@ mcp_client = MCPClient(lambda: streamablehttp_client(
 ))
 
 {tool_definitions}
-''' + _BUILD_INPUT_CODE + '''
+''' + _STREAM_HANDLER_CODE + _BUILD_INPUT_CODE + '''
 @app.entrypoint
 async def invoke(payload, context):
     model_id = payload.get("model_id", MODEL_ID)
@@ -129,10 +150,8 @@ async def invoke(payload, context):
             system_prompt=SYSTEM_PROMPT,
             tools=[{tool_names}] + mcp_tools,
         )
-        stream = agent.stream_async(_build_input(payload))
-        async for event in stream:
-            if "data" in event and isinstance(event["data"], str):
-                yield event["data"]
+        async for chunk in _stream_with_tools(agent, _build_input(payload)):
+            yield chunk
 
 if __name__ == "__main__":
     app.run()

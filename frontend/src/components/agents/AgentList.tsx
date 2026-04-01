@@ -45,17 +45,20 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
 
         {agents.map((agent) => (
           <div key={agent.id} className="relative group flex flex-col items-center">
-            <button
-              onClick={() => handleSwitch(() => { closeEdit(); setTarget(agent.id, agent.displayName); })}
-              className={`w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold transition-colors ${
-                (targetAgentId === agent.id && !editingAgentId) || editingAgentId === agent.id
-                  ? "bg-blue-100 text-blue-600"
-                  : "text-gray-400 hover:bg-gray-200 hover:text-gray-600"
-              }`}
-              title={agent.displayName}
-            >
-              {agent.displayName.charAt(0).toUpperCase()}
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => handleSwitch(() => { closeEdit(); setTarget(agent.id, agent.displayName); })}
+                className={`w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold transition-colors ${
+                  (targetAgentId === agent.id && !editingAgentId) || editingAgentId === agent.id
+                    ? "bg-blue-100 text-blue-600"
+                    : "text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+                }`}
+                title={agent.displayName}
+              >
+                {agent.displayName.charAt(0).toUpperCase()}
+              </button>
+              <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white ${agent.status === "READY" ? "bg-green-500" : "bg-yellow-500"}`} />
+            </div>
             <span className="text-[9px] text-gray-400 leading-tight text-center w-12 mt-0.5 line-clamp-2 break-all">
               {agent.displayName}
             </span>

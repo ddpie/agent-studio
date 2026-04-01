@@ -26,6 +26,7 @@ interface ChatState {
   messages: Message[];
   isStreaming: boolean;
   statusText: string | null;
+  activeTool: string | null;
   sessionId: string | undefined;
   activeSessionId: string | null;
   selectedModelId: string | null;
@@ -66,6 +67,7 @@ export const useChatStore = create<ChatState>()(
       messages: [],
       isStreaming: false,
       statusText: null,
+      activeTool: null,
       sessionId: undefined,
       activeSessionId: null,
       selectedModelId: null,
@@ -195,6 +197,20 @@ export const useChatStore = create<ChatState>()(
 
           for await (const chunk of stream) {
             if (signal.aborted) break;
+
+            // Detect tool-use markers from agent stream
+            if (chunk.startsWith('{"__tool"')) {
+              try {
+                const toolEvent = JSON.parse(chunk);
+                if (toolEvent.__tool === "start") {
+                  set({ activeTool: toolEvent.name });
+                } else if (toolEvent.__tool === "end") {
+                  set({ activeTool: null });
+                }
+                continue; // Don't append JSON marker to message content
+              } catch { /* not valid JSON, treat as text */ }
+            }
+
             set((s) => ({
               messages: s.messages.map((m) =>
                 m.id === assistantMsg.id
@@ -215,7 +231,7 @@ export const useChatStore = create<ChatState>()(
           }
         } finally {
           _abortController = null;
-          set({ isStreaming: false, statusText: null });
+          set({ isStreaming: false, statusText: null, activeTool: null });
         }
       },
 
