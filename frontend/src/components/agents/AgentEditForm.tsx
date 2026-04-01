@@ -181,6 +181,13 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
 
       setStatus(result.includes("error") ? (isCreateMode ? "Create failed" : "Update failed") : (isCreateMode ? "Created successfully" : "Updated successfully"));
       fetchAgents();
+
+      // Backfill tool_definitions into metadata.json so future edits skip zip download
+      if (!result.includes("error") && editingAgentId && formData.tool_definitions) {
+        const metaKey = `agents/${editingAgentId}/metadata.json`;
+        writeJsonToS3(metaKey, { ...formData, agent_id: editingAgentId });
+      }
+
       if (isCreateMode && !result.includes("error")) closeEdit();
     } catch (err) {
       setStatus(`Error: ${err instanceof Error ? err.message : "Unknown error"}`);

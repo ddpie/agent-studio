@@ -86,6 +86,33 @@ export async function writeJsonToS3(key: string, data: unknown): Promise<boolean
   }
 }
 
+/** Read a binary object from S3. Returns null if not found. */
+export async function readBinaryFromS3(key: string): Promise<ArrayBuffer | null> {
+  try {
+    const signer = await getSigner();
+    const url = new URL(`${S3_ENDPOINT}/${BUCKET}/${key}`);
+
+    const signed = await signer.sign({
+      method: "GET",
+      protocol: url.protocol,
+      hostname: url.hostname,
+      path: url.pathname,
+      query: {},
+      headers: { Host: url.host },
+    });
+
+    const resp = await fetch(url.toString(), {
+      method: "GET",
+      headers: signed.headers as Record<string, string>,
+    });
+
+    if (!resp.ok) return null;
+    return resp.arrayBuffer();
+  } catch {
+    return null;
+  }
+}
+
 /** Delete an object from S3. */
 export async function deleteFromS3(key: string): Promise<boolean> {
   try {

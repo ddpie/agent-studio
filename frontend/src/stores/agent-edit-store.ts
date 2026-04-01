@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { fetchAgentMetadata, type AgentMetadata } from "../lib/agent-metadata";
+import { extractToolsFromDeployment } from "../lib/tool-extractor";
 import { fetchAuthSession } from "aws-amplify/auth";
 import { agentConfig } from "../config";
 
@@ -100,7 +101,20 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
       console.warn(`Control plane fallback also failed for ${agentId}`);
     }
 
-    const data = metadata || { name: agentName };
+    const data: Partial<AgentMetadata> = metadata || { name: agentName };
+
+    // If metadata has no tool_definitions, extract from deployment.zip
+    if (!data.tool_definitions) {
+      const name = data.name || agentName || "";
+      if (name) {
+        const extracted = await extractToolsFromDeployment(name);
+        if (extracted) {
+          data.tool_definitions = extracted.tool_definitions;
+          if (!data.tool_names) data.tool_names = extracted.tool_names;
+        }
+      }
+    }
+
     set({ formData: data, originalData: JSON.parse(JSON.stringify(data)), loading: false });
   },
 
