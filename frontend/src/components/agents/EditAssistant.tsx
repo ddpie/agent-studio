@@ -9,6 +9,18 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MODEL_GROUPS, findModelLabel } from "../../lib/models";
 
+/** Split tool_definitions string into individual @tool blocks */
+function splitToolBlocks(defs: string): string[] {
+  if (!defs.trim()) return [];
+  return defs.split(/\n(?=@tool\b)/).map(s => s.trim()).filter(Boolean);
+}
+
+/** Extract function name from a tool block */
+function getFuncName(block: string): string {
+  const m = block.match(/def\s+(\w+)\s*\(/);
+  return m ? m[1] : block.slice(0, 30);
+}
+
 /** Preview modal for streaming code generation */
 function CodePreviewModal({ onClose }: { onClose: () => void }) {
   const { previewContent, isStreaming: assistantStreaming } = useEditAssistantStore();
@@ -208,7 +220,28 @@ export default function EditAssistant() {
 
   const onUpdateHandler = (updates: Record<string, unknown>) => {
     for (const [key, value] of Object.entries(updates)) {
-      updateField(key as keyof typeof formData, value as never);
+      if (key === "tool_definitions" && typeof value === "string" && formData?.tool_definitions) {
+        // Smart merge: match by function name, replace existing or append new
+        const existingBlocks = splitToolBlocks(formData.tool_definitions);
+        const newBlocks = splitToolBlocks(value);
+
+        const merged = new Map<string, string>();
+        // Add all existing tools
+        for (const block of existingBlocks) {
+          const name = getFuncName(block);
+          merged.set(name, block);
+        }
+        // Overlay new/modified tools
+        for (const block of newBlocks) {
+          const name = getFuncName(block);
+          merged.set(name, block);
+        }
+
+        const mergedCode = Array.from(merged.values()).join("\n\n\n");
+        updateField("tool_definitions" as keyof typeof formData, mergedCode as never);
+      } else {
+        updateField(key as keyof typeof formData, value as never);
+      }
     }
   };
 

@@ -140,11 +140,12 @@ User request: ${content}
 RULES:
 1. Output the __update JSON block FIRST, before any explanation.
 2. Use EXACTLY one JSON block: {"__update": {"field_name": "new_value"}}
-3. For tool_definitions: if adding a NEW tool, output ONLY the new @tool function code. If modifying existing tools, output ALL tool code (existing + modified).
-4. Include ALL changed fields in a SINGLE __update block.
-5. After the JSON, explain in 1-2 sentences. No emojis. No code in explanation.
-6. Keep tool code concise — avoid overly long implementations.
-7. Valid fields: name, display_name, description, system_prompt, tool_definitions, tool_names, welcome_message, suggestions, template_id, supports_images`;
+3. For tool_definitions: output ONLY the new or modified @tool functions. Do NOT repeat unchanged tools. The frontend will merge automatically.
+4. For tool_names: output the COMPLETE comma-separated list (existing + new).
+5. Include ALL changed fields in a SINGLE __update block.
+6. After the JSON, explain in 1-2 sentences. No emojis. No code in explanation.
+7. Keep tool code concise — avoid overly long implementations.
+8. Valid fields: name, display_name, description, system_prompt, tool_definitions, tool_names, welcome_message, suggestions, template_id, supports_images`;
 
     // Build history (exclude tool_definitions from context to save tokens)
     const history = get()
