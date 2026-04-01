@@ -86,6 +86,8 @@ Do NOT ask for confirmation. Execute create_agent immediately with these paramet
 - display_name: ${formData.display_name || editingAgentName}
 - description: ${formData.description || ""}
 - system_prompt: ${formData.system_prompt || ""}
+- tool_definitions: ${formData.tool_definitions || ""}
+- tool_names: ${formData.tool_names || (formData.tools || []).join(",") || ""}
 - welcome_message: ${formData.welcome_message || ""}
 - suggestions: ${suggestions}
 - template_id: ${formData.template_id || ""}
@@ -234,16 +236,36 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
         </Section>
 
         {/* Tools */}
-        {formData.tools && formData.tools.length > 0 && (
-          <Section title="Tools">
-            <div className="flex flex-wrap gap-2">
-              {formData.tools.map((t) => (
-                <span key={t} className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md text-xs font-medium">{t}</span>
+        <Section title="Tools">
+          {formData.tools && formData.tools.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {formData.tools.filter(Boolean).map((t) => (
+                <span key={t} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-medium">{t}</span>
               ))}
             </div>
-            <p className="text-xs text-gray-400">Tool editing coming soon</p>
-          </Section>
-        )}
+          )}
+          <Field label="Tool Function Names" hint="Comma-separated names matching @tool functions below">
+            <input
+              type="text"
+              value={formData.tool_names || (formData.tools || []).join(",") || ""}
+              onChange={(e) => {
+                updateField("tool_names", e.target.value);
+                updateField("tools", e.target.value.split(",").map(s => s.trim()).filter(Boolean));
+              }}
+              placeholder="web_search,fetch_webpage"
+              className={inputClass}
+            />
+          </Field>
+          <Field label="Tool Definitions" hint="Python code with @tool decorator. Each function needs docstring + type hints.">
+            <textarea
+              value={formData.tool_definitions || ""}
+              onChange={(e) => updateField("tool_definitions", e.target.value)}
+              rows={12}
+              placeholder={"@tool\ndef my_tool(query: str) -> str:\n    \"\"\"Description of what this tool does.\n\n    Args:\n        query: The search query.\n\n    Returns:\n        Result as string.\n    \"\"\"\n    import requests\n    resp = requests.get(f\"https://api.example.com?q={query}\")\n    return resp.text"}
+              className={inputClass + " font-mono resize-y text-[11px] leading-relaxed"}
+            />
+          </Field>
+        </Section>
       </div>
     </div>
   );
