@@ -293,16 +293,23 @@ After the JSON block, briefly explain what you changed in 1-2 sentences. Do not 
       if (flushTimer) clearTimeout(flushTimer);
 
       // Final attempt: try to extract __update from complete fullText
-      // The JSON may have been split across chunks and only now is complete
+      // Uses same JSON-aware string/escape tracking as tryExtractUpdate
       if (holdFlush && fullText.includes('"__update"')) {
         const marker = '{"__update"';
         const idx = fullText.indexOf(marker);
         if (idx !== -1) {
           let depth = 0;
+          let inStr = false;
+          let esc = false;
           let endIdx = -1;
           for (let i = idx; i < fullText.length; i++) {
-            if (fullText[i] === "{") depth++;
-            else if (fullText[i] === "}") { depth--; if (depth === 0) { endIdx = i + 1; break; } }
+            const ch = fullText[i];
+            if (esc) { esc = false; continue; }
+            if (ch === "\\") { esc = true; continue; }
+            if (ch === '"') { inStr = !inStr; continue; }
+            if (inStr) continue;
+            if (ch === "{") depth++;
+            else if (ch === "}") { depth--; if (depth === 0) { endIdx = i + 1; break; } }
           }
           if (endIdx !== -1) {
             try {

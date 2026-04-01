@@ -11,7 +11,7 @@ import { MODEL_GROUPS, findModelLabel } from "../../lib/models";
 
 /** Preview modal for streaming code generation */
 function CodePreviewModal({ onClose }: { onClose: () => void }) {
-  const { previewContent } = useEditAssistantStore();
+  const { previewContent, isStreaming: assistantStreaming } = useEditAssistantStore();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom
@@ -20,9 +20,17 @@ function CodePreviewModal({ onClose }: { onClose: () => void }) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [previewContent]);
 
+  // Close automatically when preview becomes null (update completed)
+  useEffect(() => {
+    if (previewContent === null && !assistantStreaming) {
+      onClose();
+    }
+  }, [previewContent, assistantStreaming]);
+
   // Try to extract readable content from the raw JSON stream
   const displayContent = (() => {
-    if (!previewContent) return "Waiting for content...";
+    if (!previewContent && !assistantStreaming) return null; // Will auto-close
+    if (!previewContent) return "";
     // Try to find tool_definitions value in the JSON
     const tdMatch = previewContent.match(/"tool_definitions"\s*:\s*"([\s\S]*?)(?:"\s*[,}]|$)/);
     if (tdMatch) {
@@ -36,11 +44,13 @@ function CodePreviewModal({ onClose }: { onClose: () => void }) {
     return previewContent;
   })();
 
+  if (displayContent === null) return null;
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center animate-[fadeSlideIn_0.15s_ease-out]" onClick={onClose}>
       <div className="bg-gray-900 rounded-xl w-[80vw] h-[70vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
-          <span className="text-xs text-gray-400">Generating code...</span>
+          <span className="text-xs text-gray-400">Generating...</span>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
             <X className="w-4 h-4" />
           </button>

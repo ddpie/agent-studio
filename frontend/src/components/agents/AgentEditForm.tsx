@@ -116,6 +116,13 @@ export default function AgentEditForm() {
   const [status, setStatus] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
 
+  // Auto-open AI assistant panel when editing
+  useEffect(() => {
+    if (editingAgentId && !panelOpen) {
+      openPanel(editingAgentId);
+    }
+  }, [editingAgentId]);
+
   if (!editingAgentId || loading) {
     return (
       <div className="flex items-center justify-center h-full text-gray-400">
