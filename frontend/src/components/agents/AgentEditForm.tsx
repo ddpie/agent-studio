@@ -440,8 +440,15 @@ function ToolsEditor({ value, onChange }: {
   });
 
   // Sync blocks when value changes externally (e.g., from AI assistant __update)
+  // Compare by splitting — avoids false triggers from whitespace differences
   const prevValueRef = useRef(value);
+  const internalUpdateRef = useRef(false);
   useEffect(() => {
+    if (internalUpdateRef.current) {
+      internalUpdateRef.current = false;
+      prevValueRef.current = value;
+      return;
+    }
     if (value !== prevValueRef.current) {
       prevValueRef.current = value;
       const newBlocks = splitTools(value);
@@ -452,6 +459,7 @@ function ToolsEditor({ value, onChange }: {
   const sync = (updated: string[]) => {
     setBlocks(updated);
     const { defs, names } = joinTools(updated);
+    internalUpdateRef.current = true; // Mark as internal update to skip useEffect
     onChange(defs, names);
   };
 

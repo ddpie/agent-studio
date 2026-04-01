@@ -173,7 +173,7 @@ After the JSON block, briefly explain what you changed in 1-2 sentences. Do not 
         showedGenerating = true;
         set((s) => ({
           messages: s.messages.map((m) =>
-            m.id === assistantMsg.id ? { ...m, content: m.content + "\n> Applying changes..." } : m
+            m.id === assistantMsg.id ? { ...m, content: m.content + "\n\n---applying-changes---\n\n" } : m
           ),
         }));
       };
@@ -230,7 +230,7 @@ After the JSON block, briefly explain what you changed in 1-2 sentences. Do not 
               set((s) => ({
                 messages: s.messages.map((m) =>
                   m.id === assistantMsg.id
-                    ? { ...m, content: m.content.replace("\n> Applying changes...", "") + `\n> Updated: ${fields.join(", ")}\n` }
+                    ? { ...m, content: m.content.replace("\n\n---applying-changes---\n\n", "") + `\n\n---updated:${fields.join(",")}---\n\n` }
                     : m
                 ),
               }));

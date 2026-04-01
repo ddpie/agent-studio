@@ -4,7 +4,7 @@
 import { useState, useRef, useEffect, memo, useCallback } from "react";
 import { useEditAssistantStore, type AssistantMessage } from "../../stores/edit-assistant-store";
 import { useAgentEditStore } from "../../stores/agent-edit-store";
-import { Loader2, Send, Trash2, X, Square, RefreshCw, Pencil } from "lucide-react";
+import { Loader2, Send, Trash2, X, Square, RefreshCw, Pencil, Check } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MODEL_GROUPS, findModelLabel } from "../../lib/models";
@@ -17,7 +17,7 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
 }) {
   const isUser = msg.role === "user";
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-2 group`}>
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-2 group animate-[fadeSlideIn_0.2s_ease-out]`}>
       <div
         className={`relative max-w-[90%] rounded-xl px-3 py-2 text-xs leading-relaxed ${
           isUser
@@ -39,7 +39,29 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
           <span>{msg.content}</span>
         ) : msg.content ? (
           <div className="prose prose-sm max-w-none [&_p]:my-1 [&_pre]:my-1 [&_pre]:text-[11px] [&_code]:text-[11px] [&_h1]:text-sm [&_h2]:text-[13px] [&_h3]:text-xs [&_li]:my-0.5 [&_ul]:my-1 [&_ol]:my-1">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+            {/* Render special markers as UI elements */}
+            {msg.content.split(/(\n\n---(?:applying-changes|updated:[^-]+)---\n\n)/).map((part, i) => {
+              if (part.includes("---applying-changes---")) {
+                return (
+                  <div key={i} className="flex items-center gap-2 my-2 px-2 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-blue-600 text-[11px] animate-pulse">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Applying changes...
+                  </div>
+                );
+              }
+              const updatedMatch = part.match(/---updated:(.+)---/);
+              if (updatedMatch) {
+                const fields = updatedMatch[1].split(",");
+                return (
+                  <div key={i} className="flex items-center gap-2 my-2 px-2 py-1.5 bg-green-50 border border-green-200 rounded-lg text-green-600 text-[11px]">
+                    <Check className="w-3 h-3" />
+                    Updated: {fields.join(", ")}
+                  </div>
+                );
+              }
+              if (!part.trim()) return null;
+              return <ReactMarkdown key={i} remarkPlugins={[remarkGfm]}>{part}</ReactMarkdown>;
+            })}
           </div>
         ) : (
           <span className="text-gray-400 flex items-center gap-1">
@@ -139,7 +161,7 @@ export default function EditAssistant() {
   };
 
   return (
-    <div className="flex flex-col h-full border-l border-gray-200 bg-white relative" style={{ width: panelWidth, minWidth: 250 }}>
+    <div className="flex flex-col h-full border-l border-gray-200 bg-white relative animate-[slideInRight_0.2s_ease-out]" style={{ width: panelWidth, minWidth: 250 }}>
       {/* Drag handle on left edge */}
       <div
         onMouseDown={onDragStart}
