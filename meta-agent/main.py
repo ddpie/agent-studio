@@ -21,6 +21,7 @@ from tools.check_agent_logs import check_agent_logs
 from tools.create_skill import create_skill
 from tools.list_skills import list_skills
 from tools.list_mcp_servers import list_mcp_servers
+from tools_library.registry import list_tool_library
 from tools.analyze_trace import analyze_trace
 from tools.create_schedule import create_schedule
 
@@ -79,8 +80,13 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     ## Workflow for Creating a Skill
     Same pattern: understand → design → confirm → execute.
 
+    ## Tool Library
+    Use list_tool_library to show users available pre-built tools.
+    When a user needs common capabilities (web search, fetch page, S3, SQL, charts, translation),
+    recommend pre-built tools from the library instead of writing code from scratch.
+
     ## Tool Definition Rules
-    When writing tool_definitions for create_agent:
+    When writing custom tool_definitions for create_agent:
     - Valid Python with @tool decorator
     - Each function needs a docstring and type hints
     - tool_names: comma-separated function names matching the definitions
@@ -132,6 +138,7 @@ ALL_TOOLS = [
     list_mcp_servers,
     analyze_trace,
     create_schedule,
+    list_tool_library,
 ]
 
 
