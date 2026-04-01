@@ -55,6 +55,8 @@ export default function AgentEditForm() {
 
   if (!formData) return null;
 
+  const isCreateMode = editingAgentId === "__new__";
+
   const handleSave = async () => {
     setSaving(true);
     setStatus(null);
@@ -64,7 +66,21 @@ export default function AgentEditForm() {
         ? formData.suggestions.join("|")
         : "";
 
-      const prompt = `Execute update_agent with these exact parameters:
+      const prompt = isCreateMode
+        ? `Execute create_agent with these exact parameters:
+- agent_name: ${formData.name || editingAgentName}
+- description: ${formData.description || ""}
+- system_prompt: ${formData.system_prompt || ""}
+- tool_definitions: ${formData.tool_definitions || ""}
+- tool_names: ${formData.tool_names || ""}
+- welcome_message: ${formData.welcome_message || ""}
+- suggestions: ${suggestions}
+- template_id: ${formData.template_id || ""}
+- supports_images: ${formData.supports_images || false}
+- permission_tier: readonly
+
+Do NOT ask for confirmation. Execute create_agent immediately with these parameters.`
+        : `Execute update_agent with these exact parameters:
 - agent_id: ${editingAgentId}
 - agent_name: ${formData.name || editingAgentName}
 - display_name: ${formData.display_name || editingAgentName}
@@ -83,8 +99,9 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
         result += chunk;
       }
 
-      setStatus(result.includes("error") ? "Update failed" : "Updated successfully");
+      setStatus(result.includes("error") ? (isCreateMode ? "Create failed" : "Update failed") : (isCreateMode ? "Created successfully" : "Updated successfully"));
       fetchAgents();
+      if (isCreateMode && !result.includes("error")) closeEdit();
     } catch (err) {
       setStatus(`Error: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
@@ -98,9 +115,9 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-white">
         <div>
           <h2 className="text-base font-semibold text-gray-900">
-            {formData.display_name || editingAgentName}
+            {isCreateMode ? "Create Agent" : (formData.display_name || editingAgentName)}
           </h2>
-          <p className="text-xs text-gray-500">Edit agent configuration</p>
+          <p className="text-xs text-gray-500">{isCreateMode ? "Review and create agent" : "Edit agent configuration"}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -115,7 +132,7 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
             className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-            Update
+            {isCreateMode ? "Create" : "Update"}
           </button>
         </div>
       </div>
@@ -131,8 +148,14 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
         {/* Basic Info */}
         <Section title="Basic Info">
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Name" hint="Cannot be changed after creation">
-              <input type="text" value={formData.name || editingAgentName || ""} disabled className={disabledClass} />
+            <Field label="Name" hint={isCreateMode ? "Alphanumeric only, max 36 chars" : "Cannot be changed after creation"}>
+              <input
+                type="text"
+                value={formData.name || editingAgentName || ""}
+                onChange={isCreateMode ? (e) => updateField("name", e.target.value) : undefined}
+                disabled={!isCreateMode}
+                className={isCreateMode ? inputClass : disabledClass}
+              />
             </Field>
             <Field label="Display Name" hint="Shown in sidebar and chat header">
               <input

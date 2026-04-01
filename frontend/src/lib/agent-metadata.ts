@@ -10,6 +10,8 @@ export interface AgentMetadata {
   description: string;
   model_id: string;
   system_prompt: string;
+  tool_definitions: string;
+  tool_names: string;
   welcome_message: string;
   suggestions: string[];
   tools: string[];

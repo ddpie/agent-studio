@@ -15,11 +15,80 @@ import { fetchAgentMetadata, type AgentMetadata } from "../../lib/agent-metadata
 import { useUISettings } from "../../stores/ui-settings-store";
 import ImageLightbox from "../ui/ImageLightbox";
 
+import { useAgentEditStore } from "../../stores/agent-edit-store";
+
+function AgentProposalCard({ json }: { json: string }) {
+  const { openEdit } = useAgentEditStore();
+  let proposal: Record<string, unknown>;
+  try {
+    proposal = JSON.parse(json);
+  } catch {
+    return <pre className="text-xs text-red-500">Invalid proposal JSON</pre>;
+  }
+
+  const name = String(proposal.agent_name || "");
+  const desc = String(proposal.description || "");
+  const template = String(proposal.template_id || "");
+  const welcome = String(proposal.welcome_message || "");
+  const suggestions = String(proposal.suggestions || "").split("|").filter(Boolean);
+  const toolNames = String(proposal.tool_names || "").split(",").filter(Boolean);
+  const tier = String(proposal.permission_tier || "readonly");
+  const supportsImages = Boolean(proposal.supports_images);
+
+  const handleEditAndCreate = () => {
+    openEdit("__new__", name);
+    setTimeout(() => {
+      const store = useAgentEditStore.getState();
+      store.updateField("name", name);
+      store.updateField("display_name", name);
+      store.updateField("description", desc);
+      store.updateField("template_id", template);
+      store.updateField("system_prompt", String(proposal.system_prompt || ""));
+      store.updateField("welcome_message", welcome);
+      store.updateField("suggestions", suggestions);
+      store.updateField("supports_images", supportsImages);
+    }, 100);
+  };
+
+  return (
+    <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 my-2 text-xs not-prose">
+      <div className="flex items-center justify-between mb-2">
+        <span className="font-semibold text-blue-900">{name}</span>
+        <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">{tier}</span>
+      </div>
+      {desc && <p className="text-gray-600 mb-2">{desc}</p>}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-gray-500 mb-2">
+        {template && <div>Template: <span className="text-gray-700">{template}</span></div>}
+        <div>Images: <span className="text-gray-700">{supportsImages ? "Yes" : "No"}</span></div>
+        {toolNames.length > 0 && (
+          <div className="col-span-2">Tools: {toolNames.map(t => (
+            <span key={t} className="inline-block px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[10px] mr-1">{t.trim()}</span>
+          ))}</div>
+        )}
+      </div>
+      {suggestions.length > 0 && (
+        <div className="text-[10px] text-gray-400 mb-2">
+          Suggestions: {suggestions.join(" / ")}
+        </div>
+      )}
+      <button
+        onClick={handleEditAndCreate}
+        className="w-full mt-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+      >
+        Edit & Create
+      </button>
+    </div>
+  );
+}
+
 const mdComponents: Components = {
   code({ className, children, ...props }) {
-    const match = /language-(\w+)/.exec(className || "");
+    const match = /language-([\w-]+)/.exec(className || "");
     const code = String(children).replace(/\n$/, "");
     if (match) {
+      if (match[1] === "agent-proposal") {
+        return <AgentProposalCard json={code} />;
+      }
       return <CodeBlock language={match[1]} code={code} />;
     }
     return <code className={className} {...props}>{children}</code>;

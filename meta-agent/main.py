@@ -58,9 +58,26 @@ SYSTEM_PROMPT = textwrap.dedent("""\
 
     Present this as a clear summary.
 
-    **Step 3 — Show System Prompt for Review**
-    Show the full system prompt to the user and ask them to review it.
-    Say: "Here is the system prompt I'll use. Want to adjust anything?"
+    **Step 3 — Output Structured Proposal**
+    Output the complete design as a JSON code block with language tag `agent-proposal`.
+    The frontend will render this as an editable card for the user to review and modify.
+    Format:
+    ```agent-proposal
+    {
+      "agent_name": "MyAgent",
+      "description": "Brief description",
+      "template_id": "expert",
+      "system_prompt": "Full system prompt text...",
+      "tool_definitions": "@tool decorated Python functions...",
+      "tool_names": "func1,func2",
+      "welcome_message": "Hello, I am...",
+      "suggestions": "Suggestion 1|Suggestion 2|Suggestion 3",
+      "supports_images": false,
+      "permission_tier": "readonly"
+    }
+    ```
+    After the code block, briefly explain the design and ask if they want to edit anything
+    before creating. The user can edit directly in the card or ask you to change things.
 
     **Step 4 — Wait for Confirmation**
     Do NOT proceed until the user explicitly confirms (e.g., "yes", "go ahead", "looks good").
