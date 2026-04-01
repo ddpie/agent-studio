@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { useChatStore, type Message, type ChatSession } from "../../stores/chat-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
-import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText, Check, RefreshCw, Download, Pencil } from "lucide-react";
+import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText, Check, RefreshCw, Download, Pencil, Paperclip } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -284,6 +284,8 @@ export default function ChatPanel() {
   const [input, setInput] = useState("");
   const [pastedImages, setPastedImages] = useState<string[]>([]); // base64 for preview
   const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]); // S3 URLs for sending
+  const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; content: string }>>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const selectedModel = selectedModelId || DEFAULT_MODEL_ID;
   const setSelectedModel = (id: string) => storeSetModel(id);
   const [metadata, setMetadata] = useState<AgentMetadata | null>(null);
@@ -396,15 +398,41 @@ export default function ChatPanel() {
     setUploadedImageUrls((prev) => prev.filter((_, i) => i !== idx));
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    for (const file of files) {
+      if (file.size > 100 * 1024) {
+        alert(`File ${file.name} is too large (max 100KB)`);
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachedFiles((prev) => [...prev, { name: file.name, content: reader.result as string }]);
+      };
+      reader.readAsText(file);
+    }
+    e.target.value = "";
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isStreaming) return;
-    // Send S3 URLs (or fallback base64) for images, but store base64 in message for display
+
+    // Append file contents to the message
+    let messageText = input.trim();
+    if (attachedFiles.length > 0) {
+      for (const f of attachedFiles) {
+        messageText += `\n\n<file name="${f.name}">\n${f.content}\n</file>`;
+      }
+    }
+
     const imageUrlsToSend = uploadedImageUrls.length > 0 ? uploadedImageUrls : (pastedImages.length > 0 ? pastedImages : undefined);
-    sendMessage(input.trim(), imageUrlsToSend, selectedModel);
+    sendMessage(messageText, imageUrlsToSend, selectedModel);
     setInput("");
     setPastedImages([]);
     setUploadedImageUrls([]);
+    setAttachedFiles([]);
     setHistoryIdx(-1);
     savedInputRef.current = "";
   };
@@ -677,7 +705,40 @@ export default function ChatPanel() {
             ))}
           </div>
         )}
+        {/* Attached file previews */}
+        {attachedFiles.length > 0 && (
+          <div className="flex gap-2 mb-2 flex-wrap">
+            {attachedFiles.map((f, idx) => (
+              <div key={idx} className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg text-[11px] text-gray-600 group">
+                <Paperclip className="w-3 h-3" />
+                <span className="max-w-32 truncate">{f.name}</span>
+                <button
+                  onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))}
+                  className="text-gray-300 hover:text-red-500"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="flex items-end gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.json,.txt,.md,.py,.yaml,.yml,.xml,.html,.log,.sql"
+            multiple
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="p-2.5 text-gray-400 hover:text-gray-600 flex-shrink-0"
+            title="Attach file"
+          >
+            <Paperclip className="w-4 h-4" />
+          </button>
           <textarea
             ref={textareaRef}
             value={input}
