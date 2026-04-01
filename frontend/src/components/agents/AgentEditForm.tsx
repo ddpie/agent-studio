@@ -1,7 +1,7 @@
 import { useAgentEditStore } from "../../stores/agent-edit-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, Plus, Trash2, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 
 const TEMPLATE_OPTIONS = [
@@ -266,7 +266,86 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
             />
           </Field>
         </Section>
+
+        {/* Secrets */}
+        {!isCreateMode && (
+          <SecretsSection agentId={editingAgentId!} />
+        )}
       </div>
     </div>
+  );
+}
+
+function SecretsSection({ agentId }: { agentId: string }) {
+  const [secrets, setSecrets] = useState<Array<{ key: string; value: string }>>([]);
+  const [saving, setSaving] = useState(false);
+  const [showValues, setShowValues] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const addRow = () => setSecrets([...secrets, { key: "", value: "" }]);
+  const removeRow = (idx: number) => setSecrets(secrets.filter((_, i) => i !== idx));
+  const updateRow = (idx: number, field: "key" | "value", val: string) => {
+    setSecrets(secrets.map((s, i) => i === idx ? { ...s, [field]: val } : s));
+  };
+
+  const saveSecrets = async () => {
+    const valid = secrets.filter((s) => s.key && s.value);
+    if (valid.length === 0) return;
+    setSaving(true);
+    setStatus(null);
+    try {
+      const secretsObj: Record<string, string> = {};
+      for (const s of valid) secretsObj[s.key] = s.value;
+      const prompt = `Execute set_agent_secrets with these parameters:
+- agent_id: ${agentId}
+- secrets: ${JSON.stringify(JSON.stringify(secretsObj))}
+
+Do NOT ask for confirmation. Execute immediately.`;
+      let result = "";
+      const stream = invokeMetaAgent(prompt, [], undefined, undefined, undefined, undefined);
+      for await (const chunk of stream) result += chunk;
+      setStatus(result.includes("error") ? "Failed to save secrets" : "Secrets saved");
+      if (!result.includes("error")) setSecrets(valid.map((s) => ({ key: s.key, value: "" })));
+    } catch (err) {
+      setStatus(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Section title="Secrets">
+      {status && (
+        <div className={`px-2 py-1 rounded text-[11px] ${status.includes("Error") || status.includes("Failed") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+          {status}
+        </div>
+      )}
+      <p className="text-[10px] text-gray-400 mb-2">API keys stored in AWS Secrets Manager. Values are never shown after saving.</p>
+      {secrets.map((s, idx) => (
+        <div key={idx} className="flex gap-2 items-center">
+          <input type="text" value={s.key} onChange={(e) => updateRow(idx, "key", e.target.value)}
+            placeholder="KEY_NAME" className={inputClass + " flex-1 font-mono"} />
+          <input type={showValues ? "text" : "password"} value={s.value} onChange={(e) => updateRow(idx, "value", e.target.value)}
+            placeholder="value" className={inputClass + " flex-1"} />
+          <button onClick={() => removeRow(idx)} className="p-1 text-gray-300 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+        </div>
+      ))}
+      <div className="flex items-center gap-2 mt-1">
+        <button onClick={addRow} className="flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-700">
+          <Plus className="w-3 h-3" /> Add secret
+        </button>
+        {secrets.length > 0 && (
+          <>
+            <button onClick={() => setShowValues(!showValues)} className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600">
+              {showValues ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />} {showValues ? "Hide" : "Show"}
+            </button>
+            <button onClick={saveSecrets} disabled={saving}
+              className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 ml-auto">
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save secrets
+            </button>
+          </>
+        )}
+      </div>
+    </Section>
   );
 }

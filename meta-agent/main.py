@@ -22,6 +22,7 @@ from tools.check_agent_logs import check_agent_logs
 from tools.create_skill import create_skill
 from tools.list_skills import list_skills
 from tools.list_mcp_servers import list_mcp_servers
+from tools.manage_secrets import set_agent_secrets, list_agent_secrets, delete_agent_secret
 from tools_library.registry import list_tool_library
 from tools.analyze_trace import analyze_trace
 from tools.create_schedule import create_schedule
@@ -157,6 +158,9 @@ ALL_TOOLS = [
     analyze_trace,
     create_schedule,
     list_tool_library,
+    set_agent_secrets,
+    list_agent_secrets,
+    delete_agent_secret,
 ]
 
 
@@ -172,9 +176,11 @@ async def invoke(payload, context):
     import tools.create_agent as _ca
     import tools.update_agent as _ua
     import tools.delete_agent as _da
+    import tools.manage_secrets as _ms
     _ca._caller_id = caller_id
     _ua._caller_id = caller_id
     _da._caller_id = caller_id
+    _ms._caller_id = caller_id
 
     agent = Agent(
         model=BedrockModel(model_id=model_id),
