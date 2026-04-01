@@ -134,6 +134,13 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
             <Loader2 className="w-3 h-3 animate-spin" /> Thinking...
           </span>
         )}
+        {/* Streaming indicator on last assistant message */}
+        {!isUser && isLastAssistant && isStreaming && msg.content && (
+          <div className="flex items-center gap-2 mt-2 pt-1.5 border-t border-gray-200 text-[11px] text-blue-500 animate-pulse">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Generating...
+          </div>
+        )}
       </div>
     </div>
   );
