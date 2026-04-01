@@ -4,16 +4,48 @@
 import { useState, useRef, useEffect, memo, useCallback } from "react";
 import { useEditAssistantStore, type AssistantMessage } from "../../stores/edit-assistant-store";
 import { useAgentEditStore } from "../../stores/agent-edit-store";
-import { Loader2, Send, Trash2, X, Square, RefreshCw, Pencil, Check } from "lucide-react";
+import { Loader2, Send, Trash2, X, Square, RefreshCw, Pencil, Check, Eye } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MODEL_GROUPS, findModelLabel } from "../../lib/models";
 
-const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStreaming, onEdit }: {
+/** Preview modal for streaming code generation */
+function CodePreviewModal({ onClose }: { onClose: () => void }) {
+  const { previewContent } = useEditAssistantStore();
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [previewContent]);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center animate-[fadeSlideIn_0.15s_ease-out]" onClick={onClose}>
+      <div className="bg-gray-900 rounded-xl w-[80vw] h-[70vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
+          <span className="text-xs text-gray-400">Generating code...</span>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div ref={scrollRef} className="flex-1 overflow-auto p-4">
+          <pre className="text-[12px] font-mono text-green-300 whitespace-pre-wrap leading-relaxed">
+            {previewContent || "Waiting for content..."}
+            <span className="animate-pulse">|</span>
+          </pre>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStreaming, onEdit, onShowPreview }: {
   msg: AssistantMessage;
   isLastAssistant: boolean;
   isStreaming: boolean;
   onEdit?: (id: string) => void;
+  onShowPreview?: () => void;
 }) {
   const isUser = msg.role === "user";
   return (
@@ -43,9 +75,17 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
             {msg.content.split(/(\n\n---(?:applying-changes|updated:[^-]+)---\n\n)/).map((part, i) => {
               if (part.includes("---applying-changes---")) {
                 return (
-                  <div key={i} className="flex items-center gap-2 my-2 px-2 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-blue-600 text-[11px] animate-pulse">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    Applying changes...
+                  <div key={i} className="flex items-center justify-between my-2 px-2 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-blue-600 text-[11px] animate-pulse">
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Applying changes...
+                    </span>
+                    <button
+                      onClick={() => onShowPreview?.()}
+                      className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 hover:bg-blue-200 rounded text-[10px] font-medium transition-colors animate-none"
+                    >
+                      <Eye className="w-3 h-3" /> View
+                    </button>
                   </div>
                 );
               }
@@ -86,6 +126,7 @@ export default function EditAssistant() {
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [panelWidth, setPanelWidth] = useState(350);
+  const [showPreview, setShowPreview] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const draggingRef = useRef(false);
@@ -277,6 +318,7 @@ export default function EditAssistant() {
                 isLastAssistant={isLastAssistant}
                 isStreaming={isStreaming}
                 onEdit={msg.role === "user" ? startEdit : undefined}
+                onShowPreview={() => setShowPreview(true)}
               />
             );
           })
@@ -326,6 +368,8 @@ export default function EditAssistant() {
           )}
         </div>
       </div>
+      {/* Code preview modal */}
+      {showPreview && <CodePreviewModal onClose={() => setShowPreview(false)} />}
     </div>
   );
 }

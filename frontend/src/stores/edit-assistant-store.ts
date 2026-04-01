@@ -20,6 +20,7 @@ interface EditAssistantState {
   loading: boolean;
   panelOpen: boolean;
   selectedModelId: string | null;
+  previewContent: string | null; // Raw streaming content during __update hold
 
   openPanel: (agentId: string) => void;
   closePanel: () => void;
@@ -61,6 +62,7 @@ export const useEditAssistantStore = create<EditAssistantState>((set, get) => ({
   loading: false,
   panelOpen: false,
   selectedModelId: null,
+  previewContent: null,
 
   openPanel: (agentId: string) => {
     const current = get().agentId;
@@ -171,6 +173,7 @@ After the JSON block, briefly explain what you changed in 1-2 sentences. Do not 
       const showGenerating = () => {
         if (showedGenerating) return;
         showedGenerating = true;
+        set({ previewContent: "" });
         set((s) => ({
           messages: s.messages.map((m) =>
             m.id === assistantMsg.id ? { ...m, content: m.content + "\n\n---applying-changes---\n\n" } : m
@@ -257,6 +260,11 @@ After the JSON block, briefly explain what you changed in 1-2 sentences. Do not 
           fullText += cleaned;
           pendingText += cleaned;
 
+          // Update preview content when holding
+          if (holdFlush) {
+            set({ previewContent: pendingText });
+          }
+
           // Check for __update — may extract multiple
           tryExtractUpdate();
 
@@ -288,7 +296,7 @@ After the JSON block, briefly explain what you changed in 1-2 sentences. Do not 
       }
     } finally {
       _abortController = null;
-      set({ isStreaming: false });
+      set({ isStreaming: false, previewContent: null });
 
       // Persist to S3 (async, non-blocking)
       const { agentId, messages } = get();
