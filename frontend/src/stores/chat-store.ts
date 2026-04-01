@@ -34,6 +34,7 @@ interface ChatState {
   setTarget: (agentId: string | null, agentName: string | null) => void;
   setSelectedModel: (modelId: string) => void;
   sendMessage: (content: string, images?: string[], modelId?: string) => Promise<void>;
+  regenerateLastMessage: () => Promise<void>;
   cancelStreaming: () => void;
   clearMessages: () => void;
   newSession: () => void;
@@ -230,6 +231,27 @@ export const useChatStore = create<ChatState>()(
           _abortController = null;
         }
         set({ isStreaming: false, statusText: null });
+      },
+
+      regenerateLastMessage: async () => {
+        const { messages, isStreaming } = get();
+        if (isStreaming) return;
+
+        // Find the last user message
+        const lastUserIdx = messages.findLastIndex((m) => m.role === "user");
+        if (lastUserIdx === -1) return;
+
+        const lastUserMsg = messages[lastUserIdx];
+        const content = lastUserMsg.content;
+        const images = lastUserMsg.images;
+
+        // Remove the last assistant message (and the user message to re-send)
+        const trimmed = messages.slice(0, lastUserIdx);
+        set({ messages: trimmed });
+
+        // Re-send using the current model
+        const modelId = get().selectedModelId || undefined;
+        await get().sendMessage(content, images, modelId);
       },
     }),
     {

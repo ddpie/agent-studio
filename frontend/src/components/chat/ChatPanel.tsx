@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { useChatStore, type Message, type ChatSession } from "../../stores/chat-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
-import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText, Check } from "lucide-react";
+import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText, Check, RefreshCw } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -159,6 +159,7 @@ export default function ChatPanel() {
     messages, isStreaming, statusText, sendMessage, cancelStreaming, clearMessages,
     targetAgentId, targetAgentName, newSession, loadSession, deleteSession,
     getAgentSessions, activeSessionId, selectedModelId, setSelectedModel: storeSetModel,
+    regenerateLastMessage,
   } = useChatStore();
   const { fetchAgents } = useAgentListStore();
   const [input, setInput] = useState("");
@@ -452,6 +453,19 @@ export default function ChatPanel() {
             />
           ));
         })()}
+        {/* Regenerate button after last assistant message */}
+        {messages.length > 0 && !isStreaming && messages[messages.length - 1]?.role === "assistant" && messages[messages.length - 1]?.content && (
+          <div className="flex justify-start mb-4 -mt-2">
+            <button
+              onClick={regenerateLastMessage}
+              className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors"
+              title="Regenerate response"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Regenerate
+            </button>
+          </div>
+        )}
         {statusText && (
           <div className="flex justify-start mb-4">
             <div className="rounded-2xl px-4 py-3 bg-amber-50 border border-amber-200 text-amber-800">
