@@ -1,7 +1,7 @@
 /**
  * Edit Assistant — AI sidebar for editing agent config via natural language.
  */
-import { useState, useRef, useEffect, memo, useCallback } from "react";
+import { useState, useRef, useEffect, memo, useCallback, useMemo } from "react";
 import { useEditAssistantStore, type AssistantMessage } from "../../stores/edit-assistant-store";
 import { useAgentEditStore } from "../../stores/agent-edit-store";
 import { Loader2, Send, Trash2, X, Square, RefreshCw, Pencil, Check, Eye } from "lucide-react";
@@ -19,6 +19,35 @@ function splitToolBlocks(defs: string): string[] {
 function getFuncName(block: string): string {
   const m = block.match(/def\s+(\w+)\s*\(/);
   return m ? m[1] : block.slice(0, 30);
+}
+
+/** Unescape JSON string escape sequences */
+function unescapeJsonString(s: string): string {
+  return s.replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+}
+
+/** Try to extract a named field value from a partial JSON stream */
+function extractFieldFromJson(raw: string, field: string): string | null {
+  // Match "field": "value..." — value may be incomplete (no closing quote)
+  const re = new RegExp(`"${field}"\\s*:\\s*"`, "g");
+  const m = re.exec(raw);
+  if (!m) return null;
+
+  // Walk from after the opening quote, tracking escapes
+  let result = "";
+  let i = m.index + m[0].length;
+  while (i < raw.length) {
+    if (raw[i] === "\\" && i + 1 < raw.length) {
+      result += raw[i] + raw[i + 1];
+      i += 2;
+    } else if (raw[i] === '"') {
+      break; // End of value
+    } else {
+      result += raw[i];
+      i++;
+    }
+  }
+  return unescapeJsonString(result);
 }
 
 /** Preview modal for streaming code generation */
@@ -39,22 +68,24 @@ function CodePreviewModal({ onClose }: { onClose: () => void }) {
     }
   }, [previewContent, assistantStreaming]);
 
-  // Try to extract readable content from the raw JSON stream
-  const displayContent = (() => {
-    if (!previewContent && !assistantStreaming) return null; // Will auto-close
-    if (!previewContent) return "";
-    // Try to find tool_definitions value in the JSON
-    const tdMatch = previewContent.match(/"tool_definitions"\s*:\s*"([\s\S]*?)(?:"\s*[,}]|$)/);
-    if (tdMatch) {
-      return tdMatch[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  // Extract readable content from the raw JSON stream
+  const { label, content: displayContent } = useMemo(() => {
+    if (!previewContent && !assistantStreaming) return { label: "", content: null };
+    if (!previewContent) return { label: "Generating", content: "" };
+
+    // Try fields in priority order
+    const fields = [
+      { key: "tool_definitions", label: "Tools" },
+      { key: "system_prompt", label: "System Prompt" },
+      { key: "description", label: "Description" },
+      { key: "welcome_message", label: "Welcome Message" },
+    ];
+    for (const f of fields) {
+      const val = extractFieldFromJson(previewContent, f.key);
+      if (val && val.length > 10) return { label: f.label, content: val };
     }
-    // Try to find system_prompt value
-    const spMatch = previewContent.match(/"system_prompt"\s*:\s*"([\s\S]*?)(?:"\s*[,}]|$)/);
-    if (spMatch) {
-      return spMatch[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-    }
-    return previewContent;
-  })();
+    return { label: "Output", content: previewContent };
+  }, [previewContent, assistantStreaming]);
 
   if (displayContent === null) return null;
 
@@ -62,7 +93,10 @@ function CodePreviewModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center animate-[fadeSlideIn_0.15s_ease-out]" onClick={onClose}>
       <div className="bg-gray-900 rounded-xl w-[80vw] h-[70vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
-          <span className="text-xs text-gray-400">Generating...</span>
+          <span className="text-xs text-gray-400 flex items-center gap-2">
+            {assistantStreaming && <Loader2 className="w-3 h-3 animate-spin" />}
+            {assistantStreaming ? `Generating ${label}...` : `${label} Preview`}
+          </span>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
             <X className="w-4 h-4" />
           </button>
@@ -70,7 +104,7 @@ function CodePreviewModal({ onClose }: { onClose: () => void }) {
         <div ref={scrollRef} className="flex-1 overflow-auto p-4">
           <pre className="text-[12px] font-mono text-green-300 whitespace-pre-wrap leading-relaxed">
             {displayContent}
-            <span className="animate-pulse">|</span>
+            {assistantStreaming && <span className="animate-pulse">|</span>}
           </pre>
         </div>
       </div>

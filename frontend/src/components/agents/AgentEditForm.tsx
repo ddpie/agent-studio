@@ -115,6 +115,7 @@ export default function AgentEditForm() {
   const { panelOpen, openPanel } = useEditAssistantStore();
   const [status, setStatus] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [progressStep, setProgressStep] = useState<string | null>(null);
 
   // Auto-open AI assistant panel when editing
   useEffect(() => {
@@ -138,6 +139,7 @@ export default function AgentEditForm() {
   const handleSave = async () => {
     setSaving(true);
     setStatus(null);
+    setProgressStep(isCreateMode ? "Preparing..." : "Updating...");
 
     try {
       const suggestions = Array.isArray(formData.suggestions)
@@ -174,11 +176,31 @@ Do NOT ask for confirmation. Execute create_agent immediately with these paramet
 Do NOT ask for confirmation. Execute update_agent immediately with these parameters.`;
 
       let result = "";
+      const toolNameMap: Record<string, string> = {
+        create_agent: "Creating agent...",
+        update_agent: "Updating agent...",
+        upload_deployment: "Uploading code...",
+        deploy_agent: "Deploying...",
+        get_agent_status: "Checking status...",
+        save_metadata: "Saving metadata...",
+      };
       const stream = invokeMetaAgent(prompt, [], undefined, undefined, undefined, undefined);
       for await (const chunk of stream) {
         result += chunk;
+        // Parse tool markers for progress
+        const toolRe = /\{"__tool"[^}]*\}/g;
+        let m;
+        while ((m = toolRe.exec(chunk)) !== null) {
+          try {
+            const parsed = JSON.parse(m[0]);
+            if (parsed.__tool === "start" && parsed.name) {
+              setProgressStep(toolNameMap[parsed.name] || `Running ${parsed.name}...`);
+            }
+          } catch { /* skip */ }
+        }
       }
 
+      setProgressStep(null);
       setStatus(result.includes("error") ? (isCreateMode ? "Create failed" : "Update failed") : (isCreateMode ? "Created successfully" : "Updated successfully"));
       fetchAgents();
 
@@ -190,6 +212,7 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
 
       if (isCreateMode && !result.includes("error")) closeEdit();
     } catch (err) {
+      setProgressStep(null);
       setStatus(`Error: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
       setSaving(false);
@@ -258,7 +281,7 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
             className="flex items-center gap-1.5 px-4 py-1.5 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 shadow-sm transition-all"
           >
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-            {isCreateMode ? "Create" : "Update"}
+            {saving && progressStep ? progressStep : (isCreateMode ? "Create" : "Update")}
           </button>
         </div>
       </div>
