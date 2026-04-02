@@ -346,7 +346,13 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
           <h2 className="text-sm font-semibold text-gray-900">
             {isCreateMode ? "Create Agent" : (formData.display_name || editingAgentName)}
           </h2>
-          <p className="text-[11px] text-gray-400">{isCreateMode ? "Configure and deploy a new agent" : "Edit agent configuration"}</p>
+          <p className="text-[11px] text-gray-400">
+            {isCreateMode ? "Configure and deploy a new agent" : (
+              <span className="flex items-center gap-1.5">
+                <span className="font-mono text-[10px] text-gray-400 select-all">{editingAgentId}</span>
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button
