@@ -31,6 +31,7 @@ interface ChatState {
   activeSessionId: string | null;
   selectedModelId: string | null;
   sessions: ChatSession[];
+  lastActiveSessionByAgent: Record<string, string>;
 
   setTarget: (agentId: string | null, agentName: string | null) => void;
   setSelectedModel: (modelId: string) => void;
@@ -73,6 +74,7 @@ export const useChatStore = create<ChatState>()(
       activeSessionId: null,
       selectedModelId: null,
       sessions: [],
+      lastActiveSessionByAgent: {} as Record<string, string>,
 
       getAgentSessions: () => {
         const { targetAgentId, sessions } = get();
@@ -84,12 +86,22 @@ export const useChatStore = create<ChatState>()(
 
       setTarget: (agentId, agentName) => {
         const state = get();
-        // Save current session before switching
+        // Save current session and remember which session was active for this agent
         _saveCurrentSession(state, set);
+        const currentKey = agentKey(state.targetAgentId);
+        if (state.activeSessionId) {
+          set((s) => ({
+            lastActiveSessionByAgent: { ...s.lastActiveSessionByAgent, [currentKey]: state.activeSessionId! },
+          }));
+        }
 
-        // Find the most recent session for the target agent
+        // Restore last active session for the target agent, or fall back to most recent
         const key = agentKey(agentId);
-        const recent = state.sessions
+        const lastActiveId = get().lastActiveSessionByAgent[key];
+        const lastActive = lastActiveId
+          ? state.sessions.find((s) => s.id === lastActiveId)
+          : null;
+        const recent = lastActive || state.sessions
           .filter((s) => s.agentKey === key)
           .sort((a, b) => b.updatedAt - a.updatedAt)[0];
 
@@ -357,6 +369,7 @@ export const useChatStore = create<ChatState>()(
         targetAgentId: state.targetAgentId,
         targetAgentName: state.targetAgentName,
         sessions: state.sessions,
+        lastActiveSessionByAgent: state.lastActiveSessionByAgent,
       }),
     }
   )
