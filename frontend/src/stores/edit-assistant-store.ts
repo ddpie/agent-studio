@@ -156,8 +156,12 @@ RULES:
       CORRECT: tool_definitions contains ONLY the modified search function
       WRONG: tool_definitions contains all tools
    g. For tool_names: output the COMPLETE list (existing + new).
-4. Include ALL changed fields in a SINGLE __update block.
-5. After the JSON, explain in 1-2 sentences what you changed. No emojis.
+4. TOOL ↔ SYSTEM PROMPT SYNC (CRITICAL):
+   - When ADDING a tool: also update system_prompt — append guidance like "When the user asks for X, use the Y tool". Remove any "not supported" references to the new capability.
+   - When REMOVING a tool: also update system_prompt — remove references to the deleted tool.
+   - Without this, the agent will ignore available tools or claim capabilities it doesn't have.
+5. Include ALL changed fields in a SINGLE __update block.
+6. After the JSON, explain in 1-2 sentences what you changed. No emojis.
 7. Keep tool code concise.
 8. Valid fields: name, display_name, description, system_prompt, tool_definitions, tool_names, welcome_message, suggestions, template_id, supports_images
 9. Respond in the same language the user uses.`;
