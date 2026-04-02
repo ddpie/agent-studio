@@ -7,16 +7,66 @@ import { readBinaryFromS3 } from "./s3-storage";
 
 /**
  * Parse @tool blocks from main.py source code.
- * Returns the concatenated tool definitions string (everything from first @tool onward).
+ * Extracts only @tool decorated functions and their preceding imports.
+ * Stops at non-tool code like _stream_with_tools, @app.entrypoint, etc.
  */
 export function parseToolDefinitions(source: string): string {
-  const firstTool = source.indexOf("\n@tool");
-  if (firstTool === -1) return "";
+  const lines = source.split("\n");
+  const toolBlocks: string[] = [];
+  let inTool = false;
+  let currentBlock: string[] = [];
+  let preambleImports: string[] = [];
+  let foundFirstTool = false;
 
-  // Include any imports before the first @tool that are after SYSTEM_PROMPT / app setup
-  // We want just the @tool blocks and their preceding imports
-  const toolSection = source.slice(firstTool + 1); // skip the leading \n
-  return toolSection.trimEnd();
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+
+    // @tool decorator starts a new tool block
+    if (trimmed === "@tool") {
+      if (inTool && currentBlock.length > 0) {
+        toolBlocks.push(currentBlock.join("\n"));
+      }
+      inTool = true;
+      foundFirstTool = true;
+      currentBlock = [line];
+      continue;
+    }
+
+    if (inTool) {
+      // A top-level non-empty, non-indented line that isn't part of the function = end of tool
+      if (trimmed && !line.startsWith(" ") && !line.startsWith("\t") && !trimmed.startsWith("def ") && !trimmed.startsWith("#") && !trimmed.startsWith("@")) {
+        toolBlocks.push(currentBlock.join("\n"));
+        inTool = false;
+        currentBlock = [];
+        // Don't continue — check if this line is another @tool or stop marker
+        if (trimmed.startsWith("async def _") || trimmed.startsWith("def _") || trimmed.startsWith("@app.")) {
+          break; // Hit template boilerplate, stop
+        }
+      } else {
+        currentBlock.push(line);
+      }
+    } else if (foundFirstTool) {
+      // Between tools — check for stop markers
+      if (trimmed.startsWith("async def _") || trimmed.startsWith("def _") || trimmed.startsWith("@app.")) {
+        break;
+      }
+    } else {
+      // Before first @tool — collect import lines
+      if (trimmed.startsWith("import ") || trimmed.startsWith("from ")) {
+        preambleImports.push(line);
+      }
+    }
+  }
+
+  // Flush last tool block
+  if (inTool && currentBlock.length > 0) {
+    toolBlocks.push(currentBlock.join("\n"));
+  }
+
+  if (toolBlocks.length === 0) return "";
+
+  return toolBlocks.join("\n\n\n").trimEnd();
 }
 
 /**
