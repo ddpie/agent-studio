@@ -87,10 +87,11 @@ def restore_agent(agent_id: str) -> str:
 
     # Read description from metadata
     description = ""
+    old_metadata = None
     try:
         obj = s3.get_object(Bucket=S3_BUCKET, Key=f"agents/{agent_id}/metadata.json")
-        metadata = json.loads(obj["Body"].read().decode("utf-8"))
-        description = metadata.get("description", "")
+        old_metadata = json.loads(obj["Body"].read().decode("utf-8"))
+        description = old_metadata.get("description", "")
     except Exception:
         pass
 
@@ -98,6 +99,16 @@ def restore_agent(agent_id: str) -> str:
     result = create_runtime(agent_name, description, s3_key)
     new_agent_id = result["agent_id"]
     status = wait_for_ready(new_agent_id)
+
+    # Copy metadata.json to new agent_id path
+    if old_metadata:
+        old_metadata["agent_id"] = new_agent_id
+        s3.put_object(
+            Bucket=S3_BUCKET,
+            Key=f"agents/{new_agent_id}/metadata.json",
+            Body=json.dumps(old_metadata),
+            ContentType="application/json",
+        )
 
     # Update DynamoDB with new agent ID
     table.delete_item(Key={"agentId": agent_id})
