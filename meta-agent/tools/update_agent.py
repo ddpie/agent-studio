@@ -15,6 +15,43 @@ from templates.prompt_templates import get_template_prompt, BASE_GUIDELINES
 _REDEPLOY_FIELDS = {"system_prompt", "tool_definitions", "tool_names", "template_id", "gateway_url"}
 
 
+def _clean_tool_definitions(defs: str) -> str:
+    """Strip template boilerplate from tool_definitions, keeping only @tool functions."""
+    if not defs or "@tool" not in defs:
+        return defs
+    lines = defs.split("\n")
+    result = []
+    in_tool = False
+    for line in lines:
+        stripped = line.lstrip()
+        # Start of a @tool block
+        if stripped == "@tool":
+            in_tool = True
+            result.append(line)
+            continue
+        if in_tool:
+            # Non-indented, non-empty line that isn't def/comment/decorator = end of tool
+            if stripped and not line[0:1] in (" ", "\t") and not stripped.startswith("def ") and not stripped.startswith("#") and not stripped.startswith("@"):
+                in_tool = False
+                # Stop markers: template boilerplate
+                if stripped.startswith("async def _") or stripped.startswith("def _") or stripped.startswith("@app.") or stripped.startswith("import json as _json") or stripped.startswith("import base64 as _b64"):
+                    break
+                # Could be another import between tools
+                if stripped.startswith("import ") or stripped.startswith("from "):
+                    result.append(line)
+                    continue
+            else:
+                result.append(line)
+                continue
+        else:
+            # Between tools or before first tool
+            if stripped.startswith("async def _") or stripped.startswith("def _") or stripped.startswith("@app."):
+                break
+            if stripped.startswith("import ") or stripped.startswith("from ") or not stripped:
+                result.append(line)
+    return "\n".join(result).strip()
+
+
 @tool
 def update_agent(
     agent_id: str,
@@ -97,7 +134,7 @@ def update_agent(
 
     # Merge: use new values if provided, else keep existing
     final_prompt = system_prompt or existing_metadata.get("system_prompt", "You are a helpful assistant.")
-    final_tools_def = tool_definitions or ""
+    final_tools_def = _clean_tool_definitions(tool_definitions) if tool_definitions else ""
     final_tools_names = tool_names or ""
     final_desc = description or existing_metadata.get("description", "")
     final_display = display_name or existing_metadata.get("display_name", agent_name)
