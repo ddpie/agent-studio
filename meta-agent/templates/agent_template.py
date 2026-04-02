@@ -11,24 +11,62 @@ containing triple quotes.
 # Shared helper function for building input with history + images
 _STREAM_HANDLER_CODE = '''
 import json as _json
+import base64 as _b64
 
 async def _stream_with_tools(agent, input_data):
     """Stream agent response, yielding both text and tool-use markers."""
     _current_tool = None
+    _tool_input_buf = ""
+    _tool_use_id_map = {{}}
     stream = agent.stream_async(input_data)
     async for event in stream:
         # Tool use start
         if "current_tool_use" in event:
             tool_info = event["current_tool_use"]
             tool_name = tool_info.get("name", "")
+            tool_use_id = tool_info.get("toolUseId", "")
             if tool_name and tool_name != _current_tool:
                 _current_tool = tool_name
+                _tool_input_buf = ""
+                if tool_use_id:
+                    _tool_use_id_map[tool_use_id] = tool_name
                 yield _json.dumps({{"__tool": "start", "name": tool_name}})
-        # Tool result / end
+            raw_input = tool_info.get("input", "")
+            if raw_input:
+                _tool_input_buf = raw_input
+        # Tool result message
+        if "message" in event:
+            msg = event["message"]
+            if isinstance(msg, dict) and msg.get("role") == "user":
+                for block in msg.get("content", []):
+                    tr = block.get("toolResult")
+                    if not tr:
+                        continue
+                    t_id = tr.get("toolUseId", "")
+                    t_name = _tool_use_id_map.get(t_id, "unknown")
+                    output_parts = []
+                    for c in tr.get("content", []):
+                        if "text" in c:
+                            output_parts.append(c["text"])
+                    output_text = "\\n".join(output_parts)
+                    inp_str = ""
+                    try:
+                        parsed_inp = _json.loads(_tool_input_buf) if isinstance(_tool_input_buf, str) and _tool_input_buf.strip() else _tool_input_buf
+                        if isinstance(parsed_inp, dict) and parsed_inp:
+                            inp_str = _json.dumps(parsed_inp, ensure_ascii=False, indent=2)
+                    except Exception:
+                        inp_str = str(_tool_input_buf) if _tool_input_buf else ""
+                    inp_b64 = _b64.b64encode(inp_str.encode()).decode() if inp_str else ""
+                    if len(output_text) > 2000:
+                        output_text = output_text[:2000] + "\\n... (truncated)"
+                    out_b64 = _b64.b64encode(output_text.encode()).decode() if output_text else ""
+                    yield _json.dumps({{"__tool": "result", "name": t_name, "input": inp_b64, "output": out_b64}})
+        # Text data
         if "data" in event and isinstance(event["data"], str):
             if _current_tool:
                 yield _json.dumps({{"__tool": "end", "name": _current_tool}})
                 _current_tool = None
+                _tool_input_buf = ""
             yield event["data"]
 '''
 
