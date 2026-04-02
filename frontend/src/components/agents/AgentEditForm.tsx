@@ -117,9 +117,9 @@ export default function AgentEditForm() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [progressStep, setProgressStep] = useState<string | null>(null);
 
-  // Auto-open AI assistant panel when editing
+  // Auto-open AI assistant panel when editing, reload history on agent switch
   useEffect(() => {
-    if (editingAgentId && !panelOpen) {
+    if (editingAgentId) {
       openPanel(editingAgentId);
     }
   }, [editingAgentId]);
