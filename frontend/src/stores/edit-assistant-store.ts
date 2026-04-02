@@ -121,6 +121,10 @@ export const useEditAssistantStore = create<EditAssistantState>((set, get) => ({
 
     // Build context prompt with current form data
     const toolDefs = (formContext.tool_definitions as string || "").trim();
+    // Extract tool names list for clarity
+    const toolNamesList = toolDefs
+      ? toolDefs.match(/def\s+(\w+)\s*\(/g)?.map(m => m.replace(/def\s+/, "").replace(/\s*\(/, "")).join(", ") || ""
+      : "";
     const contextPrompt = `You are an AI assistant helping edit an agent configuration.
 Current agent config:
 - Name: ${formContext.name || ""}
@@ -129,29 +133,34 @@ Current agent config:
 - Template: ${formContext.template_id || ""}
 - System Prompt (first 500 chars):
 ${(formContext.system_prompt as string || "").slice(0, 500)}${(formContext.system_prompt as string || "").length > 500 ? "..." : ""}
-- Tool Names: ${formContext.tool_names || ""}
 - Welcome Message: ${formContext.welcome_message || ""}
 - Suggestions: ${Array.isArray(formContext.suggestions) ? formContext.suggestions.join(", ") : formContext.suggestions || ""}
 - Supports Images: ${formContext.supports_images || false}
-${toolDefs ? `\nCurrent tool code (user may have manually edited, treat as source of truth):\n\`\`\`python\n${toolDefs}\n\`\`\`` : "\nNo tools defined yet."}
+- Existing tools: [${toolNamesList}]
+${toolDefs ? `\nCurrent tool code (source of truth, user may have manually edited):\n\`\`\`python\n${toolDefs}\n\`\`\`` : "\nNo tools defined yet."}
 
 User request: ${content}
 
 RULES:
 1. Output the __update JSON block FIRST, before any explanation.
 2. Use EXACTLY one JSON block: {"__update": {"field_name": "new_value"}}
-3. TOOL UPDATE RULES (CRITICAL):
-   a. When the user asks to modify tool code, FIRST confirm which specific tool(s) to update. List the current tool names and ask the user to specify. Do NOT guess.
-   b. Once confirmed, output ONLY the specified @tool function(s). Do NOT output unchanged tools.
-   c. Base your changes on the CURRENT tool code shown above (the user may have manually edited it). Make MINIMAL changes — only modify what the user asked for, preserve everything else in that function.
-   d. The frontend merges by function name: new/modified tools overlay existing ones, unmentioned tools are preserved.
-   e. For new tools: output the new @tool function(s) and update tool_names to include them.
-4. For tool_names: output the COMPLETE comma-separated list (existing + new).
-5. Include ALL changed fields in a SINGLE __update block.
-6. After the JSON, explain in 1-2 sentences what you changed. No emojis. No code in explanation.
-7. Keep tool code concise — avoid overly long implementations.
-8. Valid fields: name, display_name, description, system_prompt, tool_definitions, tool_names, welcome_message, suggestions, template_id, supports_images
-9. Respond in the same language the user uses.`;
+3. TOOL UPDATE RULES — THIS IS THE MOST IMPORTANT RULE:
+   a. When the user asks to modify existing tools, FIRST ask which tool(s) to update. List current tools: [${toolNamesList}]. Do NOT guess.
+   b. When the user asks to ADD a new tool, just output the new @tool function. Do NOT repeat existing tools.
+   c. In tool_definitions, output ONLY new or changed @tool functions. NEVER include unchanged tools.
+   d. The frontend auto-merges by function name. Unmentioned tools are preserved automatically.
+   e. EXAMPLE — if tools are [search, fetch, parse] and user says "add a translate tool":
+      CORRECT: tool_definitions contains ONLY the new translate function
+      WRONG: tool_definitions contains search + fetch + parse + translate
+   f. EXAMPLE — if user says "fix the search tool":
+      CORRECT: tool_definitions contains ONLY the modified search function
+      WRONG: tool_definitions contains all tools
+   g. For tool_names: output the COMPLETE list (existing + new).
+4. Include ALL changed fields in a SINGLE __update block.
+5. After the JSON, explain in 1-2 sentences what you changed. No emojis.
+6. Keep tool code concise.
+7. Valid fields: name, display_name, description, system_prompt, tool_definitions, tool_names, welcome_message, suggestions, template_id, supports_images
+8. Respond in the same language the user uses.`;
 
     // Build history (exclude tool_definitions from context to save tokens)
     const history = get()
