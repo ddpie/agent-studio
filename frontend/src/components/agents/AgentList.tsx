@@ -228,13 +228,16 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
               Archived ({archivedAgents.length})
             </button>
             {showArchived && archivedAgents.map((agent) => (
-              <div key={agent.id} className="group w-full text-left p-2.5 rounded-lg border border-dashed border-gray-200 opacity-60 hover:opacity-100 transition-opacity">
+              <div key={agent.id} className="group w-full text-left p-2.5 rounded-lg border border-dashed border-gray-200 hover:border-gray-300 transition-colors">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500 truncate">{agent.displayName}</span>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Archive className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                    <span className="text-xs text-gray-500 truncate">{agent.displayName}</span>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       onClick={() => setConfirmAction({ agentId: agent.id, agentName: agent.displayName, type: "restore" })}
-                      className="p-1 text-gray-300 hover:text-green-600 rounded transition-colors opacity-0 group-hover:opacity-100"
+                      className="p-1 text-gray-400 hover:text-green-600 rounded transition-colors"
                       title="Restore agent"
                       disabled={actionLoading === agent.id}
                     >
@@ -242,7 +245,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
                     </button>
                     <button
                       onClick={() => setConfirmAction({ agentId: agent.id, agentName: agent.displayName, type: "purge" })}
-                      className="p-1 text-gray-300 hover:text-red-600 rounded transition-colors opacity-0 group-hover:opacity-100"
+                      className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors"
                       title="Permanently delete"
                       disabled={actionLoading === agent.id}
                     >
