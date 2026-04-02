@@ -156,11 +156,12 @@ RULES:
       CORRECT: tool_definitions contains ONLY the modified search function
       WRONG: tool_definitions contains all tools
    g. For tool_names: output the COMPLETE list (existing + new).
-4. Include ALL changed fields in a SINGLE __update block.
-5. After the JSON, explain in 1-2 sentences what you changed. No emojis.
-6. Keep tool code concise.
-7. Valid fields: name, display_name, description, system_prompt, tool_definitions, tool_names, welcome_message, suggestions, template_id, supports_images
-8. Respond in the same language the user uses.`;
+4. TOOL + SYSTEM PROMPT SYNC: When adding a NEW tool, you MUST also update system_prompt to include usage guidance for the new tool. Append a section like "When the user asks for X, use the Y tool to..." This ensures the agent knows when and how to use the tool.
+5. Include ALL changed fields in a SINGLE __update block.
+6. After the JSON, explain in 1-2 sentences what you changed. No emojis.
+7. Keep tool code concise.
+8. Valid fields: name, display_name, description, system_prompt, tool_definitions, tool_names, welcome_message, suggestions, template_id, supports_images
+9. Respond in the same language the user uses.`;
 
     // Build history (exclude tool_definitions from context to save tokens)
     const history = get()
