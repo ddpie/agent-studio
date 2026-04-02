@@ -184,6 +184,7 @@ export default function AgentEditForm() {
   const { fetchAgents } = useAgentListStore();
   const { panelOpen, openPanel } = useEditAssistantStore();
   const [status, setStatus] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [progressStep, setProgressStep] = useState<string | null>(null);
   const [showReview, setShowReview] = useState(false);
@@ -279,6 +280,13 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
       setProgressStep(null);
       const failed = result.includes("error");
       setStatus(failed ? (isCreateMode ? "Create failed" : "Update failed") : (isCreateMode ? "Created successfully" : "Updated successfully"));
+      if (failed) {
+        // Strip tool markers for readable error detail
+        const cleanResult = result.replace(/\{"__tool"[^}]*\}/g, "").trim();
+        setErrorDetail(cleanResult || "Unknown error from agent");
+      } else {
+        setErrorDetail(null);
+      }
       fetchAgents();
 
       if (!failed) {
@@ -376,8 +384,24 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
       {/* Form */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {status && (
-          <div className={`px-4 py-3 rounded-lg text-sm font-medium ${status.includes("Error") || status.includes("failed") ? "bg-red-50 text-red-600 border border-red-200" : "bg-green-50 text-green-600 border border-green-200"}`}>
-            {status}
+          <div className={`rounded-lg text-sm font-medium ${status.includes("Error") || status.includes("failed") ? "bg-red-50 text-red-600 border border-red-200" : "bg-green-50 text-green-600 border border-green-200"}`}>
+            <div className="px-4 py-3 flex items-center justify-between">
+              <span>{status}</span>
+              {errorDetail && (
+                <button
+                  onClick={() => setErrorDetail(errorDetail === "__hidden__" ? errorDetail : "__hidden__")}
+                  className="text-[11px] underline opacity-70 hover:opacity-100"
+                >
+                  {/* Toggle is handled by details element below */}
+                </button>
+              )}
+            </div>
+            {errorDetail && errorDetail !== "__hidden__" && (
+              <details className="px-4 pb-3">
+                <summary className="text-[11px] cursor-pointer opacity-70 hover:opacity-100">Show details</summary>
+                <pre className="mt-2 text-[11px] font-mono whitespace-pre-wrap bg-red-100/50 rounded p-2 max-h-40 overflow-y-auto">{errorDetail}</pre>
+              </details>
+            )}
           </div>
         )}
 
