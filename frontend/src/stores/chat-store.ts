@@ -99,6 +99,7 @@ export const useChatStore = create<ChatState>()(
             targetAgentName: agentName,
             messages: recent.messages,
             activeSessionId: recent.id,
+            selectedModelId: recent.modelId || null,
             sessionId: undefined,
             statusText: null,
           });
@@ -109,6 +110,7 @@ export const useChatStore = create<ChatState>()(
             messages: [],
             sessionId: undefined,
             activeSessionId: null,
+            selectedModelId: null,
             statusText: null,
           });
         }
