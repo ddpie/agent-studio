@@ -109,7 +109,7 @@ const disabledClass = "w-full px-2 py-1.5 border border-gray-100 rounded-lg text
 export default function AgentEditForm() {
   const {
     editingAgentId, editingAgentName, formData, loading, saving,
-    closeEdit, updateField, setSaving,
+    closeEdit, updateField, setSaving, markSaved,
   } = useAgentEditStore();
   const { fetchAgents } = useAgentListStore();
   const { panelOpen, openPanel } = useEditAssistantStore();
@@ -201,16 +201,21 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
       }
 
       setProgressStep(null);
-      setStatus(result.includes("error") ? (isCreateMode ? "Create failed" : "Update failed") : (isCreateMode ? "Created successfully" : "Updated successfully"));
+      const failed = result.includes("error");
+      setStatus(failed ? (isCreateMode ? "Create failed" : "Update failed") : (isCreateMode ? "Created successfully" : "Updated successfully"));
       fetchAgents();
 
-      // Backfill tool_definitions into metadata.json so future edits skip zip download
-      if (!result.includes("error") && editingAgentId && formData.tool_definitions) {
-        const metaKey = `agents/${editingAgentId}/metadata.json`;
-        writeJsonToS3(metaKey, { ...formData, agent_id: editingAgentId });
-      }
+      if (!failed) {
+        markSaved();
 
-      if (isCreateMode && !result.includes("error")) closeEdit();
+        // Backfill tool_definitions into metadata.json so future edits skip zip download
+        if (editingAgentId && formData.tool_definitions) {
+          const metaKey = `agents/${editingAgentId}/metadata.json`;
+          writeJsonToS3(metaKey, { ...formData, agent_id: editingAgentId });
+        }
+
+        if (isCreateMode) closeEdit();
+      }
     } catch (err) {
       setProgressStep(null);
       setStatus(`Error: ${err instanceof Error ? err.message : "Unknown error"}`);

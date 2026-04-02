@@ -18,6 +18,7 @@ interface AgentEditState {
   updateField: <K extends keyof AgentMetadata>(key: K, value: AgentMetadata[K]) => void;
   setSaving: (saving: boolean) => void;
   hasChanges: () => boolean;
+  markSaved: () => void;
 }
 
 /**
@@ -139,4 +140,11 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   },
 
   setSaving: (saving) => set({ saving }),
+
+  markSaved: () => {
+    const { formData } = get();
+    if (formData) {
+      set({ originalData: JSON.parse(JSON.stringify(formData)) });
+    }
+  },
 }));
