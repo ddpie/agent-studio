@@ -120,6 +120,7 @@ export const useEditAssistantStore = create<EditAssistantState>((set, get) => ({
     }));
 
     // Build context prompt with current form data
+    const toolDefs = (formContext.tool_definitions as string || "").trim();
     const contextPrompt = `You are an AI assistant helping edit an agent configuration.
 Current agent config:
 - Name: ${formContext.name || ""}
@@ -132,20 +133,25 @@ ${(formContext.system_prompt as string || "").slice(0, 500)}${(formContext.syste
 - Welcome Message: ${formContext.welcome_message || ""}
 - Suggestions: ${Array.isArray(formContext.suggestions) ? formContext.suggestions.join(", ") : formContext.suggestions || ""}
 - Supports Images: ${formContext.supports_images || false}
-
-Note: Tool definitions are NOT shown here to save tokens. The user can see them in the editor.
+${toolDefs ? `\nCurrent tool code (user may have manually edited, treat as source of truth):\n\`\`\`python\n${toolDefs}\n\`\`\`` : "\nNo tools defined yet."}
 
 User request: ${content}
 
 RULES:
 1. Output the __update JSON block FIRST, before any explanation.
 2. Use EXACTLY one JSON block: {"__update": {"field_name": "new_value"}}
-3. For tool_definitions: output ONLY the new or modified @tool functions. Do NOT repeat unchanged tools. The frontend will merge automatically.
+3. TOOL UPDATE RULES (CRITICAL):
+   a. When the user asks to modify tool code, FIRST confirm which specific tool(s) to update. List the current tool names and ask the user to specify. Do NOT guess.
+   b. Once confirmed, output ONLY the specified @tool function(s). Do NOT output unchanged tools.
+   c. Base your changes on the CURRENT tool code shown above (the user may have manually edited it). Make MINIMAL changes — only modify what the user asked for, preserve everything else in that function.
+   d. The frontend merges by function name: new/modified tools overlay existing ones, unmentioned tools are preserved.
+   e. For new tools: output the new @tool function(s) and update tool_names to include them.
 4. For tool_names: output the COMPLETE comma-separated list (existing + new).
 5. Include ALL changed fields in a SINGLE __update block.
-6. After the JSON, explain in 1-2 sentences. No emojis. No code in explanation.
+6. After the JSON, explain in 1-2 sentences what you changed. No emojis. No code in explanation.
 7. Keep tool code concise — avoid overly long implementations.
-8. Valid fields: name, display_name, description, system_prompt, tool_definitions, tool_names, welcome_message, suggestions, template_id, supports_images`;
+8. Valid fields: name, display_name, description, system_prompt, tool_definitions, tool_names, welcome_message, suggestions, template_id, supports_images
+9. Respond in the same language the user uses.`;
 
     // Build history (exclude tool_definitions from context to save tokens)
     const history = get()
