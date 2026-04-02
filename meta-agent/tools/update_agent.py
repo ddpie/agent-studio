@@ -18,7 +18,7 @@ _REDEPLOY_FIELDS = {"system_prompt", "tool_definitions", "tool_names", "template
 @tool
 def update_agent(
     agent_id: str,
-    agent_name: str,
+    agent_name: str = "",
     description: str = "",
     display_name: str = "",
     system_prompt: str = "",
@@ -29,6 +29,7 @@ def update_agent(
     template_id: str = "",
     gateway_url: str = "",
     supports_images: bool = False,
+    staging_key: str = "",
 ) -> str:
     """Update an existing agent's code and configuration without deleting and recreating.
 
@@ -49,11 +50,34 @@ def update_agent(
         template_id: Prompt template to apply.
         gateway_url: Optional MCP Gateway URL.
         supports_images: Whether this agent can process image inputs.
+        staging_key: S3 key to a JSON file containing all update parameters. If provided, reads config from S3 instead of inline params.
 
     Returns:
         JSON with update status.
     """
     s3 = boto3.client("s3", region_name=REGION)
+
+    # If staging_key provided, read params from S3
+    if staging_key:
+        try:
+            obj = s3.get_object(Bucket=S3_BUCKET, Key=staging_key)
+            staged = json.loads(obj["Body"].read().decode("utf-8"))
+            agent_name = staged.get("name", agent_name) or agent_name
+            description = staged.get("description", description) or description
+            display_name = staged.get("display_name", display_name) or display_name
+            system_prompt = staged.get("system_prompt", system_prompt) or system_prompt
+            tool_definitions = staged.get("tool_definitions", tool_definitions) or tool_definitions
+            tool_names = staged.get("tool_names", tool_names) or tool_names
+            welcome_message = staged.get("welcome_message", welcome_message) or welcome_message
+            suggestions = staged.get("suggestions", suggestions)
+            if isinstance(suggestions, list):
+                suggestions = "|".join(suggestions)
+            template_id = staged.get("template_id", template_id) or template_id
+            supports_images = staged.get("supports_images", supports_images)
+            # Clean up staging file
+            s3.delete_object(Bucket=S3_BUCKET, Key=staging_key)
+        except Exception as e:
+            return json.dumps({"error": f"Failed to read staging config: {e}"})
 
     # Ownership check
     caller = getattr(__import__('tools.update_agent', fromlist=['_caller_id']), '_caller_id', 'unknown')

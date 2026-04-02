@@ -223,34 +223,41 @@ export default function AgentEditForm() {
         ? formData.suggestions.join("|")
         : (formData.suggestions || "");
 
+      // Upload full config to S3 staging to avoid token limits
+      const stagingKey = `agents/_staging/${editingAgentId || "new"}-${Date.now()}.json`;
+      const stagingData = {
+        name: formData.name || editingAgentName,
+        display_name: formData.display_name || editingAgentName,
+        description: formData.description || "",
+        system_prompt: formData.system_prompt || "",
+        tool_definitions: formData.tool_definitions || "",
+        tool_names: formData.tool_names || "",
+        welcome_message: formData.welcome_message || "",
+        suggestions: Array.isArray(formData.suggestions) ? formData.suggestions : (formData.suggestions || "").split("|").filter(Boolean),
+        template_id: formData.template_id || "",
+        supports_images: formData.supports_images || false,
+      };
+      const uploaded = await writeJsonToS3(stagingKey, stagingData);
+      if (!uploaded) {
+        setStatus("Failed to upload config to S3");
+        setSaving(false);
+        setProgressStep(null);
+        return;
+      }
+
       const prompt = isCreateMode
-        ? `Execute create_agent with these exact parameters:
+        ? `Execute create_agent with staging_key: ${stagingKey}
+The full config is in S3. Read it and use those parameters.
 - agent_name: ${formData.name || editingAgentName}
-- description: ${formData.description || ""}
-- system_prompt: ${formData.system_prompt || ""}
-- tool_definitions: ${formData.tool_definitions || ""}
-- tool_names: ${formData.tool_names || ""}
-- welcome_message: ${formData.welcome_message || ""}
-- suggestions: ${suggestions}
-- template_id: ${formData.template_id || ""}
-- supports_images: ${formData.supports_images || false}
 - permission_tier: readonly
 
-Do NOT ask for confirmation. Execute create_agent immediately with these parameters.`
-        : `Execute update_agent with these exact parameters:
+Do NOT ask for confirmation. Execute create_agent immediately.`
+        : `Execute update_agent with these parameters:
 - agent_id: ${editingAgentId}
-- agent_name: ${formData.name || editingAgentName}
-- display_name: ${formData.display_name || editingAgentName}
-- description: ${formData.description || ""}
-- system_prompt: ${formData.system_prompt || ""}
-- tool_definitions: ${formData.tool_definitions || ""}
-- tool_names: ${formData.tool_names || (formData.tools || []).join(",") || ""}
-- welcome_message: ${formData.welcome_message || ""}
-- suggestions: ${suggestions}
-- template_id: ${formData.template_id || ""}
-- supports_images: ${formData.supports_images || false}
+- staging_key: ${stagingKey}
 
-Do NOT ask for confirmation. Execute update_agent immediately with these parameters.`;
+The full config (system_prompt, tool_definitions, etc.) is in the S3 staging file. Pass staging_key to update_agent.
+Do NOT ask for confirmation. Execute update_agent immediately.`;
 
       let result = "";
       const toolNameMap: Record<string, string> = {

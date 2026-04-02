@@ -25,16 +25,17 @@ def list_prompt_templates() -> str:
 @tool
 def create_agent(
     agent_name: str,
-    description: str,
-    system_prompt: str,
-    tool_definitions: str,
-    tool_names: str,
+    description: str = "",
+    system_prompt: str = "",
+    tool_definitions: str = "",
+    tool_names: str = "",
     welcome_message: str = "",
     suggestions: str = "",
     template_id: str = "",
     gateway_url: str = "",
     supports_images: bool = False,
     permission_tier: str = "",
+    staging_key: str = "",
 ) -> str:
     """Create and deploy a new AI agent to AgentCore Runtime.
 
@@ -50,10 +51,31 @@ def create_agent(
         gateway_url: Optional AgentCore Gateway MCP URL.
         supports_images: Whether this agent can process image inputs.
         permission_tier: IAM permission level: basic (model only), readonly (AWS read), data-access (AWS read+write). Default: readonly.
+        staging_key: S3 key to a JSON file containing all parameters. If provided, reads config from S3 instead of inline params.
 
     Returns:
         JSON with agent_id, agent_arn, status.
     """
+    # If staging_key provided, read params from S3
+    if staging_key:
+        s3_client = boto3.client("s3", region_name=REGION)
+        try:
+            obj = s3_client.get_object(Bucket=S3_BUCKET, Key=staging_key)
+            staged = json.loads(obj["Body"].read().decode("utf-8"))
+            agent_name = staged.get("name", agent_name) or agent_name
+            description = staged.get("description", description) or description
+            system_prompt = staged.get("system_prompt", system_prompt) or system_prompt
+            tool_definitions = staged.get("tool_definitions", tool_definitions) or tool_definitions
+            tool_names = staged.get("tool_names", tool_names) or tool_names
+            welcome_message = staged.get("welcome_message", welcome_message) or welcome_message
+            suggestions = staged.get("suggestions", suggestions)
+            if isinstance(suggestions, list):
+                suggestions = "|".join(suggestions)
+            template_id = staged.get("template_id", template_id) or template_id
+            supports_images = staged.get("supports_images", supports_images)
+            s3_client.delete_object(Bucket=S3_BUCKET, Key=staging_key)
+        except Exception as e:
+            return json.dumps({"error": f"Failed to read staging config: {e}"})
     # Apply template if specified
     if template_id:
         base_prompt = get_template_prompt(template_id)
