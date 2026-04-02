@@ -33,10 +33,11 @@ def _clean_tool_definitions(defs: str) -> str:
             # Non-indented, non-empty line that isn't def/comment/decorator = end of tool
             if stripped and not line[0:1] in (" ", "\t") and not stripped.startswith("def ") and not stripped.startswith("#") and not stripped.startswith("@"):
                 in_tool = False
-                # Stop markers: template boilerplate
-                if stripped.startswith("async def _") or stripped.startswith("def _") or stripped.startswith("@app.") or stripped.startswith("import json as _json") or stripped.startswith("import base64 as _b64"):
-                    break
-                # Could be another import between tools
+                # Skip template boilerplate lines, but don't break — more @tools may follow
+                if stripped.startswith(("async def _", "def _", "@app.", "import json as _json",
+                                        "import base64 as _b64", "if __name__", "app.run()")):
+                    continue
+                # Regular import between tools — keep
                 if stripped.startswith("import ") or stripped.startswith("from "):
                     result.append(line)
                     continue
@@ -44,11 +45,15 @@ def _clean_tool_definitions(defs: str) -> str:
                 result.append(line)
                 continue
         else:
-            # Between tools or before first tool
-            if stripped.startswith("async def _") or stripped.startswith("def _") or stripped.startswith("@app."):
-                break
+            # Not in a tool — skip template boilerplate, keep imports
+            if stripped.startswith(("async def _", "def _", "@app.", "import json as _json",
+                                    "import base64 as _b64", "if __name__", "app.run()",
+                                    "yield chunk", "yield event")):
+                continue
             if stripped.startswith("import ") or stripped.startswith("from ") or not stripped:
-                result.append(line)
+                # Only keep imports that aren't template-internal
+                if not stripped.startswith("import json as _json"):
+                    result.append(line)
     return "\n".join(result).strip()
 
 
