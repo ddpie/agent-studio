@@ -100,6 +100,15 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     - tool_names: comma-separated function names matching the definitions
     - You MAY add `import` statements inside tool functions if needed
 
+    ## CRITICAL: System Prompt ↔ Tool Sync
+    Whenever tools are added, removed, or significantly changed for an agent, you MUST also
+    update the agent's system_prompt to reflect the change:
+    - Adding a tool: append guidance like "When the user asks for X, use the Y tool to..."
+    - Removing a tool: remove references to the deleted tool from the system prompt
+    - This applies to custom tools, Skills, and MCP tools alike
+    - The system_prompt is what tells the agent WHEN and HOW to use its tools — without
+      this guidance, the agent may ignore available tools even when they're relevant
+
     ## CRITICAL: Runtime Environment
     Sub-agents run in a Python 3.10 sandbox. Only these libraries are available:
     - **Python standard library**: json, urllib.request, re, math, datetime, base64, os, etc.
