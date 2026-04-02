@@ -2,7 +2,7 @@ import { useAgentEditStore } from "../../stores/agent-edit-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { useEditAssistantStore } from "../../stores/edit-assistant-store";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
-import { Loader2, Save, Plus, Trash2, Eye, EyeOff, Code2, MessageSquare, Settings2, Shield, AlertTriangle, Sparkles, Maximize2, Minimize2, FileDown } from "lucide-react";
+import { Loader2, Save, Plus, Trash2, Eye, EyeOff, Code2, MessageSquare, Settings2, Shield, AlertTriangle, Sparkles, Maximize2, Minimize2, FileDown, GitCompare } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
@@ -11,6 +11,7 @@ import { linter, type Diagnostic } from "@codemirror/lint";
 import { preloadPyodide, isPyodideReady, checkPythonSyntax } from "../../lib/pyodide-checker";
 import { MODEL_GROUPS } from "../../lib/models";
 import { writeJsonToS3 } from "../../lib/s3-storage";
+import { createPatch } from "diff";
 import EditAssistant from "./EditAssistant";
 
 /** Combined linter: Pyodide compile() when ready + structural checks always */
@@ -81,6 +82,72 @@ const TEMPLATE_OPTIONS = [
   { id: "creative_writer", label: "Creative Writer" },
 ];
 
+const FIELD_LABELS: Record<string, string> = {
+  name: "Name", display_name: "Display Name", description: "Description",
+  system_prompt: "System Prompt", tool_definitions: "Tools", tool_names: "Tool Names",
+  welcome_message: "Welcome Message", suggestions: "Suggestions", template_id: "Template",
+  default_model_id: "Default Model", supports_images: "Image Support", model_id: "Model",
+};
+
+function ReviewChangesModal({ changes, onConfirm, onCancel }: {
+  changes: Record<string, { old: string; new: string }>;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const entries = Object.entries(changes).filter(([k]) => !["tools", "tool_names", "created_at", "agent_id"].includes(k));
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center animate-[fadeSlideIn_0.15s_ease-out]" onClick={onCancel}>
+      <div className="bg-white rounded-xl w-[70vw] max-h-[80vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <GitCompare className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-semibold text-gray-800">Review Changes ({entries.length} field{entries.length > 1 ? "s" : ""})</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={onCancel} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg">Cancel</button>
+            <button onClick={onConfirm} className="px-4 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">Confirm & Deploy</button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {entries.map(([key, { old: oldVal, new: newVal }]) => {
+            const isCode = key === "tool_definitions" || key === "system_prompt";
+            const label = FIELD_LABELS[key] || key;
+
+            if (isCode) {
+              const patch = createPatch(label, oldVal, newVal, "", "", { context: 3 });
+              const lines = patch.split("\n").slice(4); // skip header
+              return (
+                <div key={key} className="rounded-lg border border-gray-200 overflow-hidden">
+                  <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600">{label}</div>
+                  <pre className="text-[11px] font-mono leading-relaxed overflow-x-auto p-3 bg-gray-900 text-gray-300">
+                    {lines.map((line, i) => {
+                      const color = line.startsWith("+") ? "text-green-400" : line.startsWith("-") ? "text-red-400" : line.startsWith("@@") ? "text-blue-400" : "text-gray-500";
+                      return <div key={i} className={color}>{line || " "}</div>;
+                    })}
+                  </pre>
+                </div>
+              );
+            }
+
+            // Simple text diff
+            return (
+              <div key={key} className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600">{label}</div>
+                <div className="p-3 space-y-1 text-xs">
+                  {oldVal && <div className="bg-red-50 text-red-700 px-2 py-1 rounded font-mono whitespace-pre-wrap">- {oldVal.length > 200 ? oldVal.slice(0, 200) + "..." : oldVal}</div>}
+                  <div className="bg-green-50 text-green-700 px-2 py-1 rounded font-mono whitespace-pre-wrap">+ {newVal.length > 200 ? newVal.slice(0, 200) + "..." : newVal}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Section({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
@@ -93,10 +160,13 @@ function Section({ title, icon, children }: { title: string; icon?: React.ReactN
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({ label, hint, changed, children }: { label: string; hint?: string; changed?: boolean; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-[11px] font-medium text-gray-500 mb-0.5">{label}</label>
+      <label className="block text-[11px] font-medium text-gray-500 mb-0.5 flex items-center gap-1">
+        {label}
+        {changed && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" title="Modified" />}
+      </label>
       {children}
       {hint && <p className="text-[10px] text-gray-400 mt-0.5">{hint}</p>}
     </div>
@@ -109,13 +179,19 @@ const disabledClass = "w-full px-2 py-1.5 border border-gray-100 rounded-lg text
 export default function AgentEditForm() {
   const {
     editingAgentId, editingAgentName, formData, loading, saving,
-    closeEdit, updateField, setSaving, markSaved,
+    closeEdit, updateField, setSaving, markSaved, getChangedFields,
   } = useAgentEditStore();
   const { fetchAgents } = useAgentListStore();
   const { panelOpen, openPanel } = useEditAssistantStore();
   const [status, setStatus] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [progressStep, setProgressStep] = useState<string | null>(null);
+  const [showReview, setShowReview] = useState(false);
+
+  // Track which fields have changed
+  const changedFields = useMemo(() => {
+    return getChangedFields();
+  }, [formData, getChangedFields]);
 
   // Auto-open AI assistant panel when editing, reload history on agent switch
   useEffect(() => {
@@ -281,7 +357,13 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
             Cancel
           </button>
           <button
-            onClick={handleSave}
+            onClick={() => {
+              if (!isCreateMode && Object.keys(changedFields).length > 0) {
+                setShowReview(true);
+              } else {
+                handleSave();
+              }
+            }}
             disabled={saving}
             className="flex items-center gap-1.5 px-4 py-1.5 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 shadow-sm transition-all"
           >
@@ -302,7 +384,7 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
         {/* Basic Info */}
         <Section title="Basic Info" icon={<Settings2 className="w-3.5 h-3.5" />}>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Name" hint={isCreateMode ? "Alphanumeric only, max 36 chars" : "Cannot be changed after creation"}>
+            <Field label="Name" changed={!!changedFields.name} hint={isCreateMode ? "Alphanumeric only, max 36 chars" : "Cannot be changed after creation"}>
               <input
                 type="text"
                 value={formData.name || editingAgentName || ""}
@@ -311,7 +393,7 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
                 className={isCreateMode ? inputClass : disabledClass}
               />
             </Field>
-            <Field label="Display Name" hint="Shown in sidebar and chat header">
+            <Field label="Display Name" changed={!!changedFields.display_name} hint="Shown in sidebar and chat header">
               <input
                 type="text"
                 value={formData.display_name || ""}
@@ -321,7 +403,7 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
               />
             </Field>
           </div>
-          <Field label="Description">
+          <Field label="Description" changed={!!changedFields.description}>
             <textarea
               value={formData.description || ""}
               onChange={(e) => updateField("description", e.target.value)}
@@ -334,7 +416,7 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
 
         {/* Chat Settings */}
         <Section title="Chat Settings" icon={<MessageSquare className="w-3.5 h-3.5" />}>
-          <Field label="Welcome Message" hint="First message shown when user opens this agent">
+          <Field label="Welcome Message" changed={!!changedFields.welcome_message} hint="First message shown when user opens this agent">
             <textarea
               value={formData.welcome_message || ""}
               onChange={(e) => updateField("welcome_message", e.target.value)}
@@ -343,7 +425,7 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
               placeholder="Hello! I can help you with..."
             />
           </Field>
-          <Field label="Suggested Prompts" hint="One per line, shown as quick-start buttons">
+          <Field label="Suggested Prompts" changed={!!changedFields.suggestions} hint="One per line, shown as quick-start buttons">
             <textarea
               value={(Array.isArray(formData.suggestions) ? formData.suggestions : (formData.suggestions || "").split("|").filter(Boolean)).join("\n")}
               onChange={(e) => updateField("suggestions", e.target.value.split("\n").filter(Boolean))}
@@ -357,7 +439,7 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
         {/* Agent Behavior */}
         <Section title="Agent Behavior" icon={<Settings2 className="w-3.5 h-3.5" />}>
           <div className="grid grid-cols-3 gap-4">
-            <Field label="Template">
+            <Field label="Template" changed={!!changedFields.template_id}>
               <select
                 value={formData.template_id || ""}
                 onChange={(e) => updateField("template_id", e.target.value)}
@@ -368,7 +450,7 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
                 ))}
               </select>
             </Field>
-            <Field label="Default Model" hint="Auto-selected when chatting">
+            <Field label="Default Model" changed={!!changedFields.default_model_id} hint="Auto-selected when chatting">
               <select
                 value={formData.default_model_id || ""}
                 onChange={(e) => updateField("default_model_id", e.target.value)}
@@ -382,7 +464,7 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
                 )}
               </select>
             </Field>
-            <Field label="Image Support">
+            <Field label="Image Support" changed={!!changedFields.supports_images}>
               <label className="flex items-center gap-2 h-[34px] px-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
                 <input
                   type="checkbox"
@@ -394,7 +476,7 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
               </label>
             </Field>
           </div>
-          <Field label="System Prompt" hint="Defines the agent's personality and behavior. Changes trigger a redeploy (1-2 min).">
+          <Field label="System Prompt" changed={!!changedFields.system_prompt} hint="Defines the agent's personality and behavior. Changes trigger a redeploy (1-2 min).">
             <textarea
               value={formData.system_prompt || ""}
               onChange={(e) => updateField("system_prompt", e.target.value)}
@@ -425,6 +507,14 @@ Do NOT ask for confirmation. Execute update_agent immediately with these paramet
     </div>
     {/* AI Assistant sidebar */}
     <EditAssistant />
+    {/* Review Changes modal */}
+    {showReview && (
+      <ReviewChangesModal
+        changes={changedFields}
+        onConfirm={() => { setShowReview(false); handleSave(); }}
+        onCancel={() => setShowReview(false)}
+      />
+    )}
     </div>
   );
 }

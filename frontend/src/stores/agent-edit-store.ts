@@ -19,6 +19,7 @@ interface AgentEditState {
   setSaving: (saving: boolean) => void;
   hasChanges: () => boolean;
   markSaved: () => void;
+  getChangedFields: () => Record<string, { old: string; new: string }>;
 }
 
 /**
@@ -146,5 +147,20 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     if (formData) {
       set({ originalData: JSON.parse(JSON.stringify(formData)) });
     }
+  },
+
+  getChangedFields: () => {
+    const { formData, originalData } = get();
+    if (!formData || !originalData) return {};
+    const changes: Record<string, { old: string; new: string }> = {};
+    const keys = new Set([...Object.keys(formData), ...Object.keys(originalData)]);
+    for (const key of keys) {
+      const oldVal = String((originalData as Record<string, unknown>)[key] ?? "");
+      const newVal = String((formData as Record<string, unknown>)[key] ?? "");
+      if (oldVal !== newVal) {
+        changes[key] = { old: oldVal, new: newVal };
+      }
+    }
+    return changes;
   },
 }));
