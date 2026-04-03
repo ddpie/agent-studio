@@ -9,6 +9,12 @@ import zipfile
 
 from config import REGION, ACCOUNT_ID, S3_BUCKET, AGENT_ROLE_ARN, BASE_DEPLOYMENT_KEY
 
+# Always inject the latest stream_utils.py into deployment packages
+try:
+    from templates.agent_template_v2 import STREAM_UTILS_CODE as _LATEST_STREAM_UTILS
+except ImportError:
+    _LATEST_STREAM_UTILS = None
+
 
 def validate_agent_files(main_py: str, tools_py: str, prompt_txt: str, config_json: str) -> dict:
     """Validate agent files independently before deployment.
@@ -83,6 +89,9 @@ def build_deployment_package_v2(main_py: str, tools_py: str, prompt_txt: str, co
     base_data = base_resp["Body"].read()
 
     agent_files = {"main.py", "tools.py", "prompt.txt", "config.json"}
+    # Always overwrite stream_utils.py with latest version
+    if _LATEST_STREAM_UTILS:
+        agent_files.add("stream_utils.py")
 
     buf = io.BytesIO()
     with zipfile.ZipFile(io.BytesIO(base_data), "r") as base_zip:
@@ -99,6 +108,9 @@ def build_deployment_package_v2(main_py: str, tools_py: str, prompt_txt: str, co
             new_zip.writestr("tools.py", tools_py)
             new_zip.writestr("prompt.txt", prompt_txt)
             new_zip.writestr("config.json", config_json)
+            # Always inject latest stream_utils.py
+            if _LATEST_STREAM_UTILS:
+                new_zip.writestr("stream_utils.py", _LATEST_STREAM_UTILS)
 
     return buf.getvalue()
 

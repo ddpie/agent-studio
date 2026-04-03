@@ -263,6 +263,50 @@ def validate_agent(
         except SyntaxError as e:
             errors.append(f"Python syntax error in tool_definitions: {e.msg} (line {e.lineno})")
 
+        # 2b. Dry-run: exec tool code and verify @tool functions are callable
+        if not any("syntax error" in e.lower() for e in errors):
+            try:
+                # Create a mock @tool decorator that just returns the function
+                exec_globals = {"__builtins__": __builtins__}
+                exec_globals["tool"] = lambda f: f  # mock @tool
+                exec(tool_definitions, exec_globals)
+                # Verify each @tool function exists and is callable
+                for fname in defined_funcs:
+                    fn = exec_globals.get(fname)
+                    if fn is None:
+                        warnings.append(f"Dry-run: @tool function '{fname}' not found after exec.")
+                    elif not callable(fn):
+                        warnings.append(f"Dry-run: '{fname}' is not callable.")
+                    else:
+                        # Try calling with introspected default args to catch obvious type errors
+                        import inspect
+                        sig = inspect.signature(fn)
+                        test_args = {}
+                        for pname, param in sig.parameters.items():
+                            if param.default is not inspect.Parameter.empty:
+                                test_args[pname] = param.default
+                            elif param.annotation == str or "str" in str(param.annotation):
+                                test_args[pname] = ""
+                            elif param.annotation == int or "int" in str(param.annotation):
+                                test_args[pname] = 0
+                            elif param.annotation == list or "list" in str(param.annotation):
+                                test_args[pname] = []
+                            elif param.annotation == dict or "dict" in str(param.annotation):
+                                test_args[pname] = {}
+                            elif param.annotation == bool or "bool" in str(param.annotation):
+                                test_args[pname] = False
+                            elif param.annotation == float or "float" in str(param.annotation):
+                                test_args[pname] = 0.0
+                            else:
+                                test_args[pname] = ""
+                        try:
+                            fn(**test_args)
+                        except Exception as call_err:
+                            err_type = type(call_err).__name__
+                            warnings.append(f"Dry-run: '{fname}' raised {err_type} with default args: {call_err}")
+            except Exception as exec_err:
+                warnings.append(f"Dry-run exec failed: {type(exec_err).__name__}: {exec_err}")
+
         # 5. Check for unavailable library imports
         imports = re.findall(r'(?:from\s+(\w+)|import\s+(\w+))', tool_definitions)
         for imp in imports:

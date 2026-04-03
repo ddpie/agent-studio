@@ -195,7 +195,7 @@ Step 4: Generate the tool code with:
 FIRST ask which tool. List: [${toolNamesList}]. Do NOT guess.
 
 ### tool_names
-Always output the COMPLETE list (existing + new).
+Always output the COMPLETE list (existing + new). ONLY include @tool decorated functions — NEVER include private helpers (def _xxx).
 
 ### Code output
 a. ADDING: output ONLY the new @tool function. Frontend auto-merges by function name.
@@ -220,7 +220,7 @@ Apply best practices:
 Fix ALL listed validation issues. Rules:
 - For system_prompt: APPEND improvements at the end. Do NOT rewrite from scratch.
 - For tool_definitions: only output changed tools.
-- For tool_names: set to the correct list matching @tool functions.
+- For tool_names: set to ONLY functions with @tool decorator. NEVER include private helper functions (starting with _). Example: if code has "@tool def smart_svg_chart" and "def _create_bar_chart", tool_names should be "smart_svg_chart" only.
 - Fix prompt review warnings by adding missing sections/content, not by rewriting.
 - Be precise and minimal — fix only what's flagged.
 
