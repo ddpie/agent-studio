@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
+import { useNavigate, useParams, useLocation } from "react-router";
 import { useAgentListStore } from "../../stores/agent-list-store";
-import { useChatStore } from "../../stores/chat-store";
 import { useAgentEditStore } from "../../stores/agent-edit-store";
 import { Bot, RefreshCw, Loader2, MessageSquare, Settings2, Archive, ChevronDown, RotateCcw, Trash2 } from "lucide-react";
 import ConfirmDialog from "../ui/ConfirmDialog";
@@ -8,8 +8,10 @@ import { invokeMetaAgent } from "../../lib/agentcore-client";
 
 export default function AgentList({ collapsed = false }: { collapsed?: boolean }) {
   const { agents, archivedAgents, loading, fetchAgents } = useAgentListStore();
-  const { targetAgentId, setTarget } = useChatStore();
-  const { editingAgentId, openEdit, closeEdit, hasChanges } = useAgentEditStore();
+  const navigate = useNavigate();
+  const { agentId } = useParams();
+  const location = useLocation();
+  const isEditing = location.pathname.includes("/edit/");
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -36,25 +38,24 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
     fetchAgents();
   }, [fetchAgents]);
 
-  const handleSwitch = useCallback((action: () => void) => {
-    if (editingAgentId && hasChanges()) {
-      setPendingAction(() => action);
+  const handleSwitch = useCallback((path: string) => {
+    if (isEditing && useAgentEditStore.getState().hasChanges()) {
+      setPendingAction(() => () => navigate(path));
     } else {
-      if (editingAgentId) closeEdit();
-      action();
+      navigate(path);
     }
-  }, [editingAgentId, hasChanges, closeEdit]);
+  }, [isEditing, navigate]);
 
   if (collapsed) {
     return (
       <div className="flex flex-col items-center h-full py-3 gap-2">
         {/* Meta-Agent icon */}
         <button
-          onClick={() => handleSwitch(() => { closeEdit(); setTarget(null, null); })}
+          onClick={() => handleSwitch("/agents")}
           className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
-            targetAgentId === null && !editingAgentId
+            !agentId && !isEditing
               ? "bg-blue-100 text-blue-600"
-              : "text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+              : "text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-600"
           }`}
           title="Meta Agent"
         >
@@ -67,25 +68,25 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
           <div key={agent.id} className="relative group flex flex-col items-center">
             <div className="relative">
               <button
-                onClick={() => handleSwitch(() => { closeEdit(); setTarget(agent.id, agent.displayName); })}
+                onClick={() => handleSwitch(`/agents/chat/${agent.id}`)}
                 className={`w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold transition-colors ${
-                  (targetAgentId === agent.id && !editingAgentId) || editingAgentId === agent.id
+                  agentId === agent.id
                     ? "bg-blue-100 text-blue-600"
-                    : "text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+                    : "text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-600"
                 }`}
                 title={agent.displayName}
               >
                 {agent.displayName.charAt(0).toUpperCase()}
               </button>
-              <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white ${agent.status === "READY" ? "bg-green-500" : "bg-yellow-500"}`} />
+              <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white dark:border-gray-900 ${agent.status === "READY" ? "bg-green-500" : "bg-yellow-500"}`} />
             </div>
             <span className="text-[9px] text-gray-400 leading-tight text-center w-12 mt-0.5 line-clamp-2 break-all">
               {agent.displayName}
             </span>
             {/* Edit icon on hover */}
             <button
-              onClick={(e) => { e.stopPropagation(); openEdit(agent.id, agent.displayName); }}
-              className="absolute -top-1 -right-1 w-4 h-4 bg-white border border-gray-200 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+              onClick={(e) => { e.stopPropagation(); navigate(`/agents/edit/${agent.id}`); }}
+              className="absolute -top-1 -right-1 w-4 h-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
               title="Edit"
             >
               <Settings2 className="w-2.5 h-2.5 text-gray-400" />
@@ -97,7 +98,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
         <button
           onClick={fetchAgents}
           disabled={loading}
-          className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-200"
+          className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
           title="Refresh"
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
@@ -120,12 +121,12 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
   // Full width mode
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">My Agents</h3>
         <button
           onClick={fetchAgents}
           disabled={loading}
-          className="p-1.5 text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100"
+          className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-400 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
           title="Refresh"
         >
           {loading ? (
@@ -139,18 +140,18 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {/* Meta-Agent */}
         <button
-          onClick={() => handleSwitch(() => { closeEdit(); setTarget(null, null); })}
+          onClick={() => handleSwitch("/agents")}
           className={`w-full text-left p-3 rounded-lg border transition-colors ${
-            targetAgentId === null && !editingAgentId
-              ? "border-blue-500 bg-blue-50"
-              : "border-gray-200 hover:bg-gray-50"
+            !agentId && !isEditing
+              ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30"
+              : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
           }`}
         >
           <div className="flex items-center gap-2">
             <MessageSquare className="w-4 h-4 text-blue-600 flex-shrink-0" />
             <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-900">Meta Agent</p>
-              <p className="text-xs text-gray-500 truncate">Create & manage agents</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Meta Agent</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">Create & manage agents</p>
             </div>
           </div>
         </button>
@@ -163,23 +164,23 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
           <div
             key={agent.id}
             className={`group w-full text-left p-3 rounded-lg border transition-colors ${
-              (targetAgentId === agent.id && !editingAgentId) || editingAgentId === agent.id
-                ? "border-blue-500 bg-blue-50"
-                : "border-gray-200 hover:bg-gray-50"
+              agentId === agent.id
+                ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30"
+                : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
             }`}
           >
             <div className="flex items-center justify-between">
               <button
                 className="flex-1 text-left min-w-0"
-                onClick={() => handleSwitch(() => { closeEdit(); setTarget(agent.id, agent.displayName); })}
+                onClick={() => handleSwitch(`/agents/chat/${agent.id}`)}
               >
-                <span className="text-sm font-medium text-gray-900 truncate block">
+                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate block">
                   {agent.displayName}
                 </span>
               </button>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button
-                  onClick={(e) => { e.stopPropagation(); openEdit(agent.id, agent.displayName); }}
+                  onClick={(e) => { e.stopPropagation(); navigate(`/agents/edit/${agent.id}`); }}
                   className="p-1 text-gray-300 hover:text-blue-600 rounded transition-colors"
                   title="Edit agent"
                 >
@@ -202,7 +203,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
               </div>
             </div>
             {agent.description && (
-              <p className="text-xs text-gray-500 mt-1 truncate">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
                 {agent.description}
               </p>
             )}
@@ -221,18 +222,18 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
           <>
             <button
               onClick={() => setShowArchived(!showArchived)}
-              className="flex items-center gap-1 text-xs text-gray-400 px-1 pt-3 hover:text-gray-600"
+              className="flex items-center gap-1 text-xs text-gray-400 px-1 pt-3 hover:text-gray-600 dark:hover:text-gray-300"
             >
               <ChevronDown className={`w-3 h-3 transition-transform ${showArchived ? "" : "-rotate-90"}`} />
               <Archive className="w-3 h-3" />
               Archived ({archivedAgents.length})
             </button>
             {showArchived && archivedAgents.map((agent) => (
-              <div key={agent.id} className="group w-full text-left p-2.5 rounded-lg border border-dashed border-gray-200 hover:border-gray-300 transition-colors">
+              <div key={agent.id} className="group w-full text-left p-2.5 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <Archive className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                    <span className="text-xs text-gray-500 truncate">{agent.displayName}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{agent.displayName}</span>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button

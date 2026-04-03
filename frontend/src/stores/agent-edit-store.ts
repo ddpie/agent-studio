@@ -6,16 +6,15 @@ import { agentConfig } from "../config";
 import { fetchToolCatalog } from "../lib/s3-utils";
 
 interface AgentEditState {
-  editingAgentId: string | null;
-  editingAgentName: string | null;
+  agentId: string | null;
+  agentName: string | null;
   formData: Partial<AgentMetadata> | null;
   originalData: Partial<AgentMetadata> | null;
   loading: boolean;
   saving: boolean;
 
-  openEdit: (agentId: string, agentName: string) => Promise<void>;
+  loadAgent: (agentId: string, agentName: string) => Promise<void>;
   openNewWithData: (data: Partial<AgentMetadata>) => void;
-  closeEdit: () => void;
   updateField: <K extends keyof AgentMetadata>(key: K, value: AgentMetadata[K]) => void;
   setSaving: (saving: boolean) => void;
   hasChanges: () => boolean;
@@ -110,8 +109,8 @@ async function injectBuiltinToolCode(data: Partial<AgentMetadata>): Promise<void
 }
 
 export const useAgentEditStore = create<AgentEditState>((set, get) => ({
-  editingAgentId: null,
-  editingAgentName: null,
+  agentId: null,
+  agentName: null,
   formData: null,
   originalData: null,
   loading: false,
@@ -123,8 +122,8 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     return JSON.stringify(formData) !== JSON.stringify(originalData);
   },
 
-  openEdit: async (agentId, agentName) => {
-    set({ editingAgentId: agentId, editingAgentName: agentName, loading: true, formData: null });
+  loadAgent: async (agentId, agentName) => {
+    set({ agentId: agentId, agentName: agentName, loading: true, formData: null });
 
     // Try S3 metadata first, fallback to control plane
     let metadata = await fetchAgentMetadata(agentId);
@@ -160,14 +159,12 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     set({ formData: data, originalData: JSON.parse(JSON.stringify(data)), loading: false });
   },
 
-  closeEdit: () => set({ editingAgentId: null, editingAgentName: null, formData: null, originalData: null }),
-
   openNewWithData: (data: Partial<AgentMetadata>) => {
     const draftId = `draft-${crypto.randomUUID().slice(0, 8)}`;
     // Inject built-in tool code async, update formData when done
     set({
-      editingAgentId: draftId,
-      editingAgentName: (data.display_name || data.name || "New Agent") as string,
+      agentId: draftId,
+      agentName: (data.display_name || data.name || "New Agent") as string,
       formData: data,
       originalData: JSON.parse(JSON.stringify(data)),
       loading: false,

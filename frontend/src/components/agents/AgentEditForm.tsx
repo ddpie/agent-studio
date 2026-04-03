@@ -2,8 +2,9 @@ import { useAgentEditStore } from "../../stores/agent-edit-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { useEditAssistantStore } from "../../stores/edit-assistant-store";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
-import { Loader2, Save, Plus, Trash2, Eye, EyeOff, Code2, MessageSquare, Settings2, Shield, AlertTriangle, Sparkles, Maximize2, Minimize2, FileDown, GitCompare, Wrench } from "lucide-react";
+import { Loader2, Save, Plus, Trash2, Eye, EyeOff, Code2, MessageSquare, Settings2, Shield, Sparkles, Maximize2, Minimize2, FileDown, GitCompare, Wrench } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
+import { useParams, useNavigate } from "react-router";
 import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
 import { vscodeDark } from "@uiw/codemirror-theme-vscode";
@@ -151,14 +152,14 @@ function ReviewChangesModal({ changes, onConfirm, onCancel, viewOnly }: {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center animate-[fadeSlideIn_0.15s_ease-out]" onClick={onCancel}>
-      <div className="bg-white rounded-xl w-[70vw] max-h-[80vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+      <div className="bg-white dark:bg-gray-800 rounded-xl w-[70vw] max-h-[80vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-2">
             <GitCompare className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-semibold text-gray-800">{viewOnly ? "Changes" : "Review Changes"} ({entries.length} field{entries.length > 1 ? "s" : ""})</span>
+            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{viewOnly ? "Changes" : "Review Changes"} ({entries.length} field{entries.length > 1 ? "s" : ""})</span>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onCancel} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg">{viewOnly ? "Close" : "Cancel"}</button>
+            <button onClick={onCancel} className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">{viewOnly ? "Close" : "Cancel"}</button>
             {!viewOnly && onConfirm && (
               <button onClick={onConfirm} className="px-4 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">Confirm & Deploy</button>
             )}
@@ -170,8 +171,8 @@ function ReviewChangesModal({ changes, onConfirm, onCancel, viewOnly }: {
             const patch = createPatch(label, oldVal, newVal, "", "", { context: 8 });
             const lines = patch.split("\n").slice(4); // skip header
             return (
-              <div key={key} className="rounded-lg border border-gray-200 overflow-hidden">
-                <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600">{label}</div>
+              <div key={key} className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-600 dark:text-gray-400">{label}</div>
                 <pre className="text-[11px] font-mono leading-relaxed overflow-x-auto p-3 bg-gray-900 text-gray-300">
                   {lines.map((line, i) => {
                     const color = line.startsWith("+") ? "text-green-400" : line.startsWith("-") ? "text-red-400" : line.startsWith("@@") ? "text-blue-400" : "text-gray-500";
@@ -189,10 +190,10 @@ function ReviewChangesModal({ changes, onConfirm, onCancel, viewOnly }: {
 
 function Section({ title, icon, action, children }: { title: string; icon?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-      <div className="px-3 py-1.5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white flex items-center gap-1.5">
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
+      <div className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-700 bg-gradient-to-r from-gray-50 dark:from-gray-800 to-white dark:to-gray-800 flex items-center gap-1.5">
         {icon && <span className="text-gray-400">{icon}</span>}
-        <h3 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{title}</h3>
+        <h3 className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">{title}</h3>
         {action && <span className="ml-auto">{action}</span>}
       </div>
       <div className="px-3 py-3 space-y-3">{children}</div>
@@ -203,7 +204,7 @@ function Section({ title, icon, action, children }: { title: string; icon?: Reac
 function Field({ label, hint, changed, onOptimize, children }: { label: string; hint?: string; changed?: boolean; onOptimize?: () => void; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[11px] font-medium text-gray-500 mb-0.5 flex items-center gap-1">
+      <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-0.5 flex items-center gap-1">
         {label}
         {changed && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" title="Modified" />}
         {onOptimize && (
@@ -223,15 +224,17 @@ function Field({ label, hint, changed, onOptimize, children }: { label: string; 
   );
 }
 
-const inputClass = "w-full px-2 py-1.5 border border-gray-200 rounded-lg text-[13px] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all";
-const disabledClass = "w-full px-2 py-1.5 border border-gray-100 rounded-lg text-[13px] bg-gray-50 text-gray-400 cursor-not-allowed";
+const inputClass = "w-full px-2 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-[13px] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all dark:bg-gray-800 dark:text-gray-100";
+const disabledClass = "w-full px-2 py-1.5 border border-gray-100 dark:border-gray-700 rounded-lg text-[13px] bg-gray-50 dark:bg-gray-800 text-gray-400 cursor-not-allowed";
 
 export default function AgentEditForm() {
+  const { agentId: routeAgentId } = useParams<{ agentId: string }>();
+  const navigate = useNavigate();
   const {
-    editingAgentId, editingAgentName, formData, loading, saving,
-    closeEdit, updateField, setSaving, markSaved, getChangedFields,
+    agentId, agentName, formData, loading, saving,
+    loadAgent, updateField, setSaving, markSaved, getChangedFields,
   } = useAgentEditStore();
-  const { fetchAgents } = useAgentListStore();
+  const { agents, fetchAgents } = useAgentListStore();
   const { panelOpen, openPanel } = useEditAssistantStore();
   const [status, setStatus] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
@@ -253,14 +256,22 @@ export default function AgentEditForm() {
 
   // Auto-open AI assistant panel when editing, reload history on agent switch
   useEffect(() => {
-    if (editingAgentId) {
-      openPanel(editingAgentId);
+    if (agentId) {
+      openPanel(agentId);
     }
-  }, [editingAgentId]);
+  }, [agentId]);
 
-  if (!editingAgentId || loading) {
+  // Load agent data when route param changes
+  useEffect(() => {
+    if (routeAgentId) {
+      const agent = agents.find(a => a.id === routeAgentId);
+      loadAgent(routeAgentId, agent?.displayName || routeAgentId);
+    }
+  }, [routeAgentId]);
+
+  if (!agentId || loading) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400">
+      <div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-400">
         {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : null}
       </div>
     );
@@ -268,7 +279,7 @@ export default function AgentEditForm() {
 
   if (!formData) return null;
 
-  const isCreateMode = editingAgentId?.startsWith("draft-") || editingAgentId === "__new__";
+  const isCreateMode = agentId?.startsWith("draft-") || agentId === "__new__";
 
   const handleValidateOnly = async () => {
     setValidating(true);
@@ -276,10 +287,10 @@ export default function AgentEditForm() {
     setValidationResult(null);
 
     try {
-      const stagingKey = `agents/_staging/${editingAgentId || "new"}-val-${Date.now()}.json`;
+      const stagingKey = `agents/_staging/${agentId || "new"}-val-${Date.now()}.json`;
       const stagingData = {
-        name: formData.name || editingAgentName,
-        display_name: formData.display_name || editingAgentName,
+        name: formData.name || agentName,
+        display_name: formData.display_name || agentName,
         description: formData.description || "",
         system_prompt: formData.system_prompt || "",
         tool_definitions: formData.tool_definitions || "",
@@ -318,15 +329,11 @@ export default function AgentEditForm() {
     setValidationResult(null);
 
     try {
-      const suggestions = Array.isArray(formData.suggestions)
-        ? formData.suggestions.join("|")
-        : (formData.suggestions || "");
-
       // Upload full config to S3 staging to avoid token limits
-      const stagingKey = `agents/_staging/${editingAgentId || "new"}-${Date.now()}.json`;
+      const stagingKey = `agents/_staging/${agentId || "new"}-${Date.now()}.json`;
       const stagingData = {
-        name: formData.name || editingAgentName,
-        display_name: formData.display_name || editingAgentName,
+        name: formData.name || agentName,
+        display_name: formData.display_name || agentName,
         description: formData.description || "",
         system_prompt: formData.system_prompt || "",
         tool_definitions: formData.tool_definitions || "",
@@ -393,12 +400,12 @@ export default function AgentEditForm() {
       const prompt = isCreateMode
         ? `Execute create_agent with staging_key: ${stagingKey}
 The full config is in S3. Read it and use those parameters.
-- agent_name: ${formData.name || editingAgentName}
+- agent_name: ${formData.name || agentName}
 - permission_tier: readonly
 
 Do NOT ask for confirmation. Execute create_agent immediately.`
         : `Execute update_agent with these parameters:
-- agent_id: ${editingAgentId}
+- agent_id: ${agentId}
 - staging_key: ${stagingKey}
 
 The full config (system_prompt, tool_definitions, etc.) is in the S3 staging file. Pass staging_key to update_agent.
@@ -446,11 +453,11 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
 
       if (!failed) {
         markSaved();
-        if (editingAgentId && formData.tool_definitions) {
-          const metaKey = `agents/${editingAgentId}/metadata.json`;
-          writeJsonToS3(metaKey, { ...formData, agent_id: editingAgentId });
+        if (agentId && formData.tool_definitions) {
+          const metaKey = `agents/${agentId}/metadata.json`;
+          writeJsonToS3(metaKey, { ...formData, agent_id: agentId });
         }
-        if (isCreateMode) closeEdit();
+        if (isCreateMode) navigate(-1);
       }
     } catch (err) {
       setProgressStep(null);
@@ -485,7 +492,7 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
 
     if (allIssues.length > 0) {
       const { sendMessage, openPanel } = useEditAssistantStore.getState();
-      openPanel(editingAgentId!);
+      openPanel(agentId!);
       const fixPrompt = `## Auto-Fix Task
 Fix these validation issues:
 
@@ -516,7 +523,7 @@ tool_names should be: ${funcNames.join(",") || "(extract from @tool functions)"}
 
   const handleOptimizeField = (fieldName: string, fieldLabel: string) => {
     const { sendMessage, openPanel } = useEditAssistantStore.getState();
-    openPanel(editingAgentId!);
+    openPanel(agentId!);
     const prompts: Record<string, string> = {
       description: `Optimize the description field. Make it concise (1-2 sentences), clear, and descriptive. Keep the same language. Output __update JSON.`,
       display_name: `Optimize the display_name. Make it short, memorable, and descriptive. Keep the same language. Output __update JSON.`,
@@ -551,12 +558,12 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
     try {
       const draftKey = isCreateMode
         ? `agents/_drafts/${formData.name || "untitled"}/metadata.json`
-        : `agents/${editingAgentId}/draft.json`;
+        : `agents/${agentId}/draft.json`;
       const draftData = {
         ...formData,
         _draftSavedAt: new Date().toISOString(),
-        _agentId: editingAgentId,
-        _agentName: editingAgentName,
+        _agentId: agentId,
+        _agentName: agentName,
       };
       const ok = await writeJsonToS3(draftKey, draftData);
       setStatus(ok ? "Draft saved" : "Failed to save draft");
@@ -569,24 +576,24 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
 
   return (
     <div className="flex h-full">
-    <div className="flex flex-col flex-1 min-w-0 bg-gray-50/50">
+    <div className="flex flex-col flex-1 min-w-0 bg-gray-50/50 dark:bg-gray-800/50">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-white">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
         <div>
-          <h2 className="text-sm font-semibold text-gray-900">
-            {isCreateMode ? "Create Agent" : (formData.display_name || editingAgentName)}
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            {isCreateMode ? "Create Agent" : (formData.display_name || agentName)}
           </h2>
           <p className="text-[11px] text-gray-400">
             {isCreateMode ? "Configure and deploy a new agent" : (
               <span className="flex items-center gap-1.5">
-                <span className="font-mono text-[10px] text-gray-400 select-all">{editingAgentId}</span>
+                <span className="font-mono text-[10px] text-gray-400 select-all">{agentId}</span>
               </span>
             )}
           </p>
         </div>
         <div className="flex items-center gap-1.5">
           <button
-            onClick={() => openPanel(editingAgentId!)}
+            onClick={() => openPanel(agentId!)}
             className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${panelOpen ? "bg-purple-50 text-purple-600" : "text-gray-500 hover:text-purple-600 hover:bg-purple-50"}`}
             title="AI Assistant"
           >
@@ -614,16 +621,16 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
           <button
             onClick={handleSaveDraft}
             disabled={savingDraft}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
             title="Save draft"
           >
             {savingDraft ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
             Draft
           </button>
-          <div className="w-px h-5 bg-gray-200 mx-0.5" />
+          <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-0.5" />
           <button
-            onClick={closeEdit}
-            className="px-2.5 py-1.5 text-[12px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            onClick={() => navigate(-1)}
+            className="px-2.5 py-1.5 text-[12px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
           >
             Cancel
           </button>
@@ -726,7 +733,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
               <div className="mt-3 flex items-center gap-2">
                 <button
                   onClick={() => { setValidationResult(null); setPendingStagingKey(null); }}
-                  className="px-3 py-1 text-[12px] text-gray-500 hover:bg-gray-100 rounded-lg"
+                  className="px-3 py-1 text-[12px] text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
                 >
                   Dismiss
                 </button>
@@ -759,7 +766,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
                     } finally { setPreviewLoading(false); }
                   }}
                   disabled={previewLoading || !pendingStagingKey}
-                  className="flex items-center gap-1 px-3 py-1 text-[12px] font-medium text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+                  className="flex items-center gap-1 px-3 py-1 text-[12px] font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg disabled:opacity-50"
                 >
                   {previewLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Code2 className="w-3 h-3" />}
                   View Code
@@ -783,7 +790,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
             <Field label="Name" changed={!!changedFields.name} hint={isCreateMode ? "Alphanumeric only, max 36 chars" : "Cannot be changed after creation"}>
               <input
                 type="text"
-                value={formData.name || editingAgentName || ""}
+                value={formData.name || agentName || ""}
                 onChange={isCreateMode ? (e) => updateField("name", e.target.value) : undefined}
                 disabled={!isCreateMode}
                 className={isCreateMode ? inputClass : disabledClass}
@@ -794,7 +801,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
                 type="text"
                 value={formData.display_name || ""}
                 onChange={(e) => updateField("display_name", e.target.value)}
-                placeholder={formData.name || editingAgentName || ""}
+                placeholder={formData.name || agentName || ""}
                 className={inputClass}
               />
             </Field>
@@ -861,7 +868,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
               </select>
             </Field>
             <Field label="Image Support" changed={!!changedFields.supports_images}>
-              <label className={`flex items-center gap-2 h-[34px] px-3 border rounded-lg cursor-pointer transition-colors ${formData.supports_images ? "bg-blue-50 border-blue-300 text-blue-700" : "border-gray-200 hover:bg-gray-50"}`}>
+              <label className={`flex items-center gap-2 h-[34px] px-3 border rounded-lg cursor-pointer transition-colors ${formData.supports_images ? "bg-blue-50 border-blue-300 text-blue-700" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}>
                 <input
                   type="checkbox"
                   checked={formData.supports_images || false}
@@ -902,7 +909,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
             }}
             onOptimizeTool={(toolName, toolCode) => {
               const { sendMessage, openPanel } = useEditAssistantStore.getState();
-              openPanel(editingAgentId!);
+              openPanel(agentId!);
               sendMessage(
                 `Optimize the tool \`${toolName}\`. Current code:\n\`\`\`python\n${toolCode}\n\`\`\`\n\nImprove:\n1. Docstring: clear, describes purpose, args, and return value\n2. Type hints: complete for all parameters and return\n3. Error handling: handle common failures (timeout, permission denied, empty results)\n4. Code quality: concise, no unnecessary comments\nOnly output this one tool in tool_definitions. Output __update JSON.`,
                 { ...formData },
@@ -924,11 +931,10 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
             }}
           />
           <Field label="Registered Tools" changed={!!changedFields.tool_names} hint="Auto-synced from tool code. Shows which tools will be available at runtime.">
-            <div className={`w-full px-2 py-1.5 border border-gray-100 rounded-lg text-[12px] bg-gray-50 min-h-[28px] flex flex-wrap gap-1 ${!formData.tool_names ? "italic text-gray-400" : ""}`}>
+            <div className={`w-full px-2 py-1.5 border border-gray-100 dark:border-gray-700 rounded-lg text-[12px] bg-gray-50 dark:bg-gray-800 min-h-[28px] flex flex-wrap gap-1 ${!formData.tool_names ? "italic text-gray-400" : ""}`}>
               {formData.tool_names
                 ? (() => {
                     const allNames = formData.tool_names!.split(",").map(t => t.trim()).filter(Boolean);
-                    const localFuncs = new Set([...(formData.tool_definitions || "").matchAll(/def\s+(\w+)\s*\(/g)].map(m => m[1]));
                     return allNames.map(name => {
                       return (
                         <span key={name} className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono bg-blue-50 text-blue-700 border border-blue-200">
@@ -944,7 +950,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
 
         {/* Secrets */}
         {!isCreateMode && (
-          <SecretsSection agentId={editingAgentId!} />
+          <SecretsSection agentId={agentId!} />
         )}
       </div>
     </div>
@@ -1151,7 +1157,7 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
         const desc = extractDocstring(code);
         const isCollapsed = collapsed[idx] ?? false;
         return (
-          <div key={idx} className="rounded-lg border border-gray-200 overflow-hidden">
+          <div key={idx} className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
             <div
               className="flex items-center justify-between px-3 py-1.5 bg-gray-800 border-b border-gray-700 cursor-pointer select-none"
               onClick={() => toggleCollapse(idx)}
@@ -1210,13 +1216,13 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
       {/* Delete confirmation modal */}
       {confirmDeleteIdx !== null && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setConfirmDeleteIdx(null)}>
-          <div className="bg-white rounded-xl shadow-2xl p-5 max-w-sm mx-4" onClick={e => e.stopPropagation()}>
-            <p className="text-sm font-medium text-gray-800 mb-1">Delete tool?</p>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-5 max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">Delete tool?</p>
             <p className="text-xs text-gray-500 mb-4">
-              Remove <span className="font-mono font-medium text-gray-700">{extractFuncName(blocks[confirmDeleteIdx])}</span> from this agent. This cannot be undone.
+              Remove <span className="font-mono font-medium text-gray-700 dark:text-gray-300">{extractFuncName(blocks[confirmDeleteIdx])}</span> from this agent. This cannot be undone.
             </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmDeleteIdx(null)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg">Cancel</button>
+              <button onClick={() => setConfirmDeleteIdx(null)} className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Cancel</button>
               <button onClick={confirmRemove} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">Delete</button>
             </div>
           </div>
@@ -1286,7 +1292,7 @@ Do NOT ask for confirmation. Execute immediately.`;
         </button>
         {secrets.length > 0 && (
           <>
-            <button onClick={() => setShowValues(!showValues)} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
+            <button onClick={() => setShowValues(!showValues)} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
               {showValues ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />} {showValues ? "Hide" : "Show"}
             </button>
             <button onClick={saveSecrets} disabled={saving}

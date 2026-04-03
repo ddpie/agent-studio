@@ -22,8 +22,8 @@ export interface ChatSession {
 }
 
 interface ChatState {
-  targetAgentId: string | null;
-  targetAgentName: string | null;
+  currentAgentId: string | null;
+  currentAgentName: string | null;
   messages: Message[];
   isStreaming: boolean;
   statusText: string | null;
@@ -34,7 +34,7 @@ interface ChatState {
   sessions: ChatSession[];
   lastActiveSessionByAgent: Record<string, string>;
 
-  setTarget: (agentId: string | null, agentName: string | null) => void;
+  switchAgent: (agentId: string | null, agentName: string | null) => void;
   setSelectedModel: (modelId: string) => void;
   sendMessage: (content: string, images?: string[], modelId?: string, attachments?: Array<{ name: string; size: number; s3Key: string }>) => Promise<void>;
   regenerateLastMessage: () => Promise<void>;
@@ -65,8 +65,8 @@ function deriveTitle(messages: Message[]): string {
 export const useChatStore = create<ChatState>()(
   persist(
     (set, get) => ({
-      targetAgentId: null,
-      targetAgentName: null,
+      currentAgentId: null,
+      currentAgentName: null,
       messages: [],
       isStreaming: false,
       statusText: null,
@@ -78,20 +78,20 @@ export const useChatStore = create<ChatState>()(
       lastActiveSessionByAgent: {} as Record<string, string>,
 
       getAgentSessions: () => {
-        const { targetAgentId, sessions } = get();
-        const key = agentKey(targetAgentId);
+        const { currentAgentId, sessions } = get();
+        const key = agentKey(currentAgentId);
         return sessions
           .filter((s) => s.agentKey === key)
           .sort((a, b) => b.updatedAt - a.updatedAt);
       },
 
-      setTarget: (agentId, agentName) => {
+      switchAgent: (agentId, agentName) => {
         // Save current session first (may create a new session & update activeSessionId)
         _saveCurrentSession(get(), set);
 
         // Read fresh state AFTER save — state.activeSessionId may have changed
         const fresh = get();
-        const currentKey = agentKey(fresh.targetAgentId);
+        const currentKey = agentKey(fresh.currentAgentId);
         if (fresh.activeSessionId) {
           set((s) => ({
             lastActiveSessionByAgent: { ...s.lastActiveSessionByAgent, [currentKey]: fresh.activeSessionId! },
@@ -111,8 +111,8 @@ export const useChatStore = create<ChatState>()(
 
         if (recent) {
           set({
-            targetAgentId: agentId,
-            targetAgentName: agentName,
+            currentAgentId: agentId,
+            currentAgentName: agentName,
             messages: recent.messages,
             activeSessionId: recent.id,
             selectedModelId: recent.modelId || null,
@@ -121,8 +121,8 @@ export const useChatStore = create<ChatState>()(
           });
         } else {
           set({
-            targetAgentId: agentId,
-            targetAgentName: agentName,
+            currentAgentId: agentId,
+            currentAgentName: agentName,
             messages: [],
             sessionId: undefined,
             activeSessionId: null,
@@ -200,14 +200,14 @@ export const useChatStore = create<ChatState>()(
         };
 
         try {
-          const { targetAgentId } = get();
+          const { currentAgentId } = get();
           let stream: AsyncGenerator<string>;
 
-          if (targetAgentId) {
+          if (currentAgentId) {
             const history = get().messages
               .filter((m) => m.id !== assistantMsg.id && m.content && m.role !== "system")
               .map(({ role, content }) => ({ role: role as "user" | "assistant", content }));
-            stream = invokeAgentById(targetAgentId, content, history, get().sessionId, onStatus, images, modelId);
+            stream = invokeAgentById(currentAgentId, content, history, get().sessionId, onStatus, images, modelId);
           } else {
             const history = get().messages
               .filter((m) => m.id !== assistantMsg.id && m.content && m.role !== "system")
@@ -383,8 +383,8 @@ export const useChatStore = create<ChatState>()(
         sessionId: state.sessionId,
         activeSessionId: state.activeSessionId,
         selectedModelId: state.selectedModelId,
-        targetAgentId: state.targetAgentId,
-        targetAgentName: state.targetAgentName,
+        currentAgentId: state.currentAgentId,
+        currentAgentName: state.currentAgentName,
         sessions: state.sessions,
         lastActiveSessionByAgent: state.lastActiveSessionByAgent,
       }),
@@ -400,7 +400,7 @@ function _saveCurrentSession(
   const msgs = state.messages.filter((m) => m.content);
   if (msgs.length === 0) return;
 
-  const key = agentKey(state.targetAgentId);
+  const key = agentKey(state.currentAgentId);
   const now = Date.now();
 
   if (state.activeSessionId) {

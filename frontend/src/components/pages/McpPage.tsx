@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plug, RefreshCw, Loader2, ExternalLink, Globe } from "lucide-react";
+import { Plug, RefreshCw, Loader2, Globe } from "lucide-react";
 import { fetchAuthSession } from "aws-amplify/auth";
 import { agentConfig } from "../../config";
 
@@ -143,14 +143,14 @@ export default function McpPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">MCP Servers</h2>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">MCP Servers</h2>
           <p className="text-xs text-gray-500">AgentCore Gateway MCP services available for your agents</p>
         </div>
         <button
           onClick={load}
-          className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+          className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
         >
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
         </button>
@@ -165,21 +165,21 @@ export default function McpPage() {
         ) : gateways.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <Plug className="w-12 h-12 mb-3 opacity-30" />
-            <p className="text-sm font-medium text-gray-600">No MCP Gateways found</p>
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">No MCP Gateways found</p>
             <p className="text-xs mt-1">Create a Gateway in the AgentCore console to connect external tools</p>
           </div>
         ) : (
           <div className="space-y-3">
             {gateways.map((gw) => (
-              <div key={gw.id} className="border border-gray-200 rounded-lg overflow-hidden">
+              <div key={gw.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                 <button
                   onClick={() => toggleGateway(gw.id)}
-                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <Globe className="w-4 h-4 text-purple-500" />
                     <div className="text-left">
-                      <p className="text-sm font-medium text-gray-900">{gw.name}</p>
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{gw.name}</p>
                       <p className="text-[10px] text-gray-400">{gw.id}</p>
                     </div>
                   </div>
@@ -193,7 +193,7 @@ export default function McpPage() {
                 </button>
 
                 {expandedGw === gw.id && (
-                  <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/50 space-y-2">
+                  <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-3 bg-gray-50/50 dark:bg-gray-800/50 space-y-2">
                     {!targets[gw.id] ? (
                       <div className="flex items-center gap-2 text-xs text-gray-400">
                         <Loader2 className="w-3 h-3 animate-spin" /> Loading targets...
@@ -202,9 +202,9 @@ export default function McpPage() {
                       <p className="text-xs text-gray-400">No targets configured</p>
                     ) : (
                       targets[gw.id].map((t) => (
-                        <div key={t.name} className="flex items-center justify-between py-1.5 px-3 bg-white rounded-md border border-gray-100">
+                        <div key={t.name} className="flex items-center justify-between py-1.5 px-3 bg-white dark:bg-gray-900 rounded-md border border-gray-100 dark:border-gray-700">
                           <div>
-                            <p className="text-xs font-medium text-gray-800">{t.name}</p>
+                            <p className="text-xs font-medium text-gray-800 dark:text-gray-200">{t.name}</p>
                             {t.description && <p className="text-[10px] text-gray-400">{t.description}</p>}
                           </div>
                           <div className="flex items-center gap-2">

@@ -139,7 +139,7 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
         className={`relative max-w-[90%] rounded-xl px-3 py-2 text-xs leading-relaxed ${
           isUser
             ? "bg-blue-600 text-white"
-            : "bg-gray-100 text-gray-800"
+            : "bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
         }`}
       >
         {/* Edit button for user messages */}
@@ -155,7 +155,7 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
         {isUser ? (
           <span>{msg.content}</span>
         ) : msg.content ? (
-          <div className="prose prose-sm max-w-none [&_p]:my-1 [&_pre]:my-1 [&_pre]:text-[11px] [&_code]:text-[11px] [&_h1]:text-sm [&_h2]:text-[13px] [&_h3]:text-xs [&_li]:my-0.5 [&_ul]:my-1 [&_ol]:my-1">
+          <div className="prose prose-sm max-w-none dark:prose-invert [&_p]:my-1 [&_pre]:my-1 [&_pre]:text-[11px] [&_code]:text-[11px] [&_h1]:text-sm [&_h2]:text-[13px] [&_h3]:text-xs [&_li]:my-0.5 [&_ul]:my-1 [&_ol]:my-1">
             {/* Render special markers as UI elements */}
             {msg.content.split(/(\n\n---(?:applying-changes|updated:[^-]+)---\n\n)/).map((part, i) => {
               if (part.includes("---applying-changes---")) {
@@ -219,7 +219,7 @@ export default function EditAssistant() {
     closePanel, sendMessage, cancelStreaming, clearHistory, setModel,
     regenerateLastMessage, editAndResend,
   } = useEditAssistantStore();
-  const { formData, updateField, editingAgentId } = useAgentEditStore();
+  const { formData, updateField } = useAgentEditStore();
 
   const [input, setInput] = useState("");
   const [showModelPicker, setShowModelPicker] = useState(false);
@@ -348,34 +348,34 @@ export default function EditAssistant() {
   };
 
   return (
-    <div className="flex flex-col h-full border-l border-gray-200 bg-white relative animate-[slideInRight_0.2s_ease-out]" style={{ width: panelWidth, minWidth: 250 }}>
+    <div className="flex flex-col h-full border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 relative animate-[slideInRight_0.2s_ease-out]" style={{ width: panelWidth, minWidth: 250 }}>
       {/* Drag handle on left edge */}
       <div
         onMouseDown={onDragStart}
         className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400/30 active:bg-blue-400/50 z-10 transition-colors"
       />
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50/50">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">AI Assistant</span>
           {/* Model picker */}
           <div className="relative">
             <button
               onClick={() => setShowModelPicker(!showModelPicker)}
-              className="text-[9px] px-1.5 py-0.5 rounded border border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+              className="text-[9px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
               {findModelLabel(selectedModelId || MODEL_GROUPS[0].models[0].id)}
             </button>
             {showModelPicker && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-48 max-h-60 overflow-y-auto">
+              <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 w-48 max-h-60 overflow-y-auto">
                 {MODEL_GROUPS.map((group) => (
                   <div key={group.label}>
-                    <div className="px-2 py-0.5 text-[8px] font-medium text-gray-400 uppercase bg-gray-50">{group.label}</div>
+                    <div className="px-2 py-0.5 text-[8px] font-medium text-gray-400 uppercase bg-gray-50 dark:bg-gray-700">{group.label}</div>
                     {group.models.map((m) => (
                       <button
                         key={m.id}
                         onClick={() => { setModel(m.id); setShowModelPicker(false); }}
-                        className={`w-full text-left px-2 py-1 text-[10px] hover:bg-blue-50 ${selectedModelId === m.id ? "text-blue-600 bg-blue-50/50" : "text-gray-700"}`}
+                        className={`w-full text-left px-2 py-1 text-[10px] hover:bg-blue-50 ${selectedModelId === m.id ? "text-blue-600 bg-blue-50/50" : "text-gray-700 dark:text-gray-300"}`}
                       >
                         {m.label}
                       </button>
@@ -424,7 +424,7 @@ export default function EditAssistant() {
                 <button
                   key={s}
                   onClick={() => { setInput(s); inputRef.current?.focus(); }}
-                  className="block w-full text-left text-[11px] text-gray-500 hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
+                  className="block w-full text-left text-[11px] text-gray-500 dark:text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 px-2 py-1 rounded transition-colors"
                 >
                   {s}
                 </button>
@@ -483,7 +483,7 @@ export default function EditAssistant() {
       </div>
 
       {/* Input */}
-      <div className="border-t border-gray-100 px-3 py-2">
+      <div className="border-t border-gray-100 dark:border-gray-700 px-3 py-2">
         <div className="flex items-end gap-2">
           <textarea
             ref={inputRef}
@@ -492,7 +492,7 @@ export default function EditAssistant() {
             onKeyDown={handleKeyDown}
             placeholder="Describe what to change..."
             rows={1}
-            className="flex-1 px-2 py-1.5 text-xs border border-gray-200 rounded-lg resize-none outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            className="flex-1 px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg resize-none outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             style={{ maxHeight: 80 }}
           />
           {isStreaming ? (

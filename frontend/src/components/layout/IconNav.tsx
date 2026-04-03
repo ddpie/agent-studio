@@ -1,45 +1,30 @@
-import { useNavStore } from "../../stores/nav-store";
+// src/components/layout/IconNav.tsx
+import { NavLink } from "react-router";
 import { Bot, Package, Plug, Settings } from "lucide-react";
 
 const navItems = [
-  { id: "agents" as const, icon: Bot, label: "Agents" },
-  { id: "skills" as const, icon: Package, label: "Skills" },
-  { id: "mcp" as const, icon: Plug, label: "MCP" },
+  { to: "/agents", icon: Bot, label: "Agents" },
+  { to: "/skills", icon: Package, label: "Skills" },
+  { to: "/mcp", icon: Plug, label: "MCP" },
 ] as const;
 
 export default function IconNav() {
-  const { activeSection, setSection } = useNavStore();
+  const linkClass = ({ isActive }: { isActive: boolean }) =>
+    `w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
+      isActive ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800"
+    }`;
 
   return (
     <nav className="flex flex-col items-center w-12 bg-gray-900 py-3 gap-1 flex-shrink-0">
-      {navItems.map(({ id, icon: Icon, label }) => (
-        <button
-          key={id}
-          onClick={() => setSection(id)}
-          title={label}
-          className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
-            activeSection === id
-              ? "bg-blue-600 text-white"
-              : "text-gray-400 hover:text-white hover:bg-gray-800"
-          }`}
-        >
+      {navItems.map(({ to, icon: Icon, label }) => (
+        <NavLink key={to} to={to} className={linkClass} title={label}>
           <Icon className="w-5 h-5" />
-        </button>
+        </NavLink>
       ))}
-
-      {/* Settings at bottom */}
       <div className="mt-auto">
-        <button
-          onClick={() => setSection("settings")}
-          title="Settings"
-          className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
-            activeSection === "settings"
-              ? "bg-blue-600 text-white"
-              : "text-gray-400 hover:text-white hover:bg-gray-800"
-          }`}
-        >
+        <NavLink to="/settings" className={linkClass} title="Settings">
           <Settings className="w-5 h-5" />
-        </button>
+        </NavLink>
       </div>
     </nav>
   );

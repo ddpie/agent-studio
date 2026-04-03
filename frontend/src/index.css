@@ -44,6 +44,9 @@ body {
   th, td {
     padding: 0.25em 0.5em;
   }
+  th {
+    color: theme(colors.gray.600);
+  }
 
   pre {
     margin-top: 0.4em;
@@ -94,6 +97,15 @@ body {
   }
   details.tool-call > *:not(summary) {
     padding: 0.3em 0.6em;
+  }
+}
+
+/* Dark mode prose overrides */
+.dark .prose.prose-sm {
+  --tw-prose-headings: theme(colors.gray.100);
+
+  th {
+    color: theme(colors.gray.400);
   }
 }
 

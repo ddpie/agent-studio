@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
-import { useChatStore, type Message, type ChatSession } from "../../stores/chat-store";
+import { useParams } from "react-router";
+import { useChatStore, type Message } from "../../stores/chat-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText, Check, RefreshCw, Download, Pencil, Paperclip, Image as ImageIcon } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
@@ -39,13 +40,13 @@ function AgentProposalCard({ json }: { json: string }) {
     // Heuristic: if JSON doesn't end with }, it's still streaming (incomplete)
     const looksComplete = json.trimEnd().endsWith("}");
     return (
-      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 my-2 text-xs not-prose">
+      <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3 my-2 text-xs not-prose">
         {parseError && looksComplete ? (
           <div>
             <p className="text-red-500 text-[11px] mb-1">Failed to parse agent proposal</p>
             <details className="text-[10px] text-gray-500">
               <summary className="cursor-pointer">Show raw JSON</summary>
-              <pre className="mt-1 whitespace-pre-wrap break-all bg-gray-100 p-2 rounded max-h-40 overflow-y-auto">{json}</pre>
+              <pre className="mt-1 whitespace-pre-wrap break-all bg-gray-100 dark:bg-gray-700 p-2 rounded max-h-40 overflow-y-auto">{json}</pre>
             </details>
           </div>
         ) : (
@@ -94,13 +95,13 @@ function AgentProposalCard({ json }: { json: string }) {
         <span className="font-semibold text-blue-900">{name}</span>
         <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">{tier}</span>
       </div>
-      {desc && <p className="text-gray-600 mb-2">{desc}</p>}
+      {desc && <p className="text-gray-600 dark:text-gray-400 mb-2">{desc}</p>}
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-gray-500 mb-2">
-        {template && <div>Template: <span className="text-gray-700">{template}</span></div>}
-        <div>Images: <span className="text-gray-700">{supportsImages ? "Yes" : "No"}</span></div>
+        {template && <div>Template: <span className="text-gray-700 dark:text-gray-300">{template}</span></div>}
+        <div>Images: <span className="text-gray-700 dark:text-gray-300">{supportsImages ? "Yes" : "No"}</span></div>
         {toolNames.length > 0 && (
           <div className="col-span-2">Tools: {toolNames.map(t => (
-            <span key={t} className="inline-block px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[10px] mr-1">{t.trim()}</span>
+            <span key={t} className="inline-block px-1.5 py-0.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-[10px] mr-1">{t.trim()}</span>
           ))}</div>
         )}
       </div>
@@ -112,7 +113,7 @@ function AgentProposalCard({ json }: { json: string }) {
       {systemPrompt && (
         <details className="mb-2">
           <summary className="text-[11px] text-gray-500 cursor-pointer select-none">System Prompt</summary>
-          <pre className="mt-1 p-2 bg-white border border-gray-200 rounded text-[11px] text-gray-700 whitespace-pre-wrap max-h-48 overflow-y-auto">{systemPrompt}</pre>
+          <pre className="mt-1 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-[11px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap max-h-48 overflow-y-auto">{systemPrompt}</pre>
         </details>
       )}
       {toolDefs && (
@@ -155,8 +156,8 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   return (
     <div className="relative group/code">
       <div className="absolute top-1 right-1 flex items-center gap-1 opacity-0 group-hover/code:opacity-100 transition-opacity z-10">
-        <span className="text-[10px] text-gray-400 bg-white/80 px-1 rounded">{language}</span>
-        <button onClick={handleCopy} className="p-1 bg-white/80 hover:bg-white rounded border border-gray-200" title="Copy code">
+        <span className="text-[10px] text-gray-400 bg-white/80 dark:bg-gray-800/80 px-1 rounded">{language}</span>
+        <button onClick={handleCopy} className="p-1 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded border border-gray-200 dark:border-gray-700" title="Copy code">
           {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3 text-gray-400" />}
         </button>
       </div>
@@ -256,14 +257,14 @@ function CopyButtons({ content, contentRef }: { content: string; contentRef?: Re
   };
 
   return (
-    <div className="absolute -top-1 right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-md shadow-sm border border-gray-200 p-0.5">
-      <button onClick={() => copyAs("text")} className="p-1 hover:bg-gray-100 rounded" title="Copy as plain text">
+    <div className="absolute -top-1 right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700 p-0.5">
+      <button onClick={() => copyAs("text")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title="Copy as plain text">
         {copied === "text" ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3 text-gray-400" />}
       </button>
-      <button onClick={() => copyAs("md")} className="p-1 hover:bg-gray-100 rounded" title="Copy as Markdown">
+      <button onClick={() => copyAs("md")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title="Copy as Markdown">
         {copied === "md" ? <Check className="w-3 h-3 text-green-500" /> : <FileText className="w-3 h-3 text-gray-400" />}
       </button>
-      <button onClick={() => copyAs("rich")} className="p-1 hover:bg-gray-100 rounded" title="Copy as rich text (with charts)">
+      <button onClick={() => copyAs("rich")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title="Copy as rich text (with charts)">
         {copied === "rich" ? <Check className="w-3 h-3 text-green-500" /> : <ImageIcon className="w-3 h-3 text-gray-400" />}
       </button>
     </div>
@@ -319,7 +320,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
             className="w-full px-4 py-3 rounded-2xl border-2 border-blue-400 text-sm focus:outline-none resize-none"
           />
           <div className="flex justify-end gap-1.5 mt-1">
-            <button onClick={() => setEditing(false)} className="text-[11px] px-2 py-0.5 text-gray-500 hover:bg-gray-100 rounded">Cancel</button>
+            <button onClick={() => setEditing(false)} className="text-[11px] px-2 py-0.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded">Cancel</button>
             <button onClick={submitEdit} className="text-[11px] px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700">Send</button>
           </div>
         </div>
@@ -341,7 +342,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
         {isUser && message.content && !isStreaming && (
           <button
             onClick={startEdit}
-            className="absolute -bottom-1 -left-1 w-5 h-5 bg-white border border-gray-200 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+            className="absolute -bottom-1 -left-1 w-5 h-5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
             title="Edit message"
           >
             <Pencil className="w-2.5 h-2.5 text-gray-400" />
@@ -372,7 +373,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
                     URL.revokeObjectURL(blobUrl);
                   } catch { /* ignore */ }
                 }}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] border cursor-pointer transition-colors ${isUser ? "bg-white/10 border-white/20 text-white/90 hover:bg-white/20" : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] border cursor-pointer transition-colors ${isUser ? "bg-white/10 border-white/20 text-white/90 hover:bg-white/20" : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
                 title="Click to download"
               >
                 <FileText className="w-3.5 h-3.5 flex-shrink-0" />
@@ -384,7 +385,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
           </div>
         )}
         {message.content ? (
-          <div ref={contentDivRef} className={`prose prose-sm max-w-none ${isUser ? "prose-invert" : ""}`}>
+          <div ref={contentDivRef} className={`prose prose-sm max-w-none ${isUser ? "prose-invert" : "dark:prose-invert"}`}>
             <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]} components={mdComponents}>{
               // Strip [Attached file: ...] lines from display — file cards handle this
               message.attachments?.length
@@ -408,13 +409,15 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
 });
 
 export default function ChatPanel() {
+  const { agentId } = useParams();
   const {
-    messages, isStreaming, statusText, sendMessage, cancelStreaming, clearMessages,
-    targetAgentId, targetAgentName, newSession, loadSession, deleteSession,
+    messages, isStreaming, statusText, sendMessage, cancelStreaming,
+    switchAgent, newSession, loadSession, deleteSession,
     getAgentSessions, activeSessionId, selectedModelId, setSelectedModel: storeSetModel,
     regenerateLastMessage, activeTool,
   } = useChatStore();
-  const { fetchAgents } = useAgentListStore();
+  const { agents, fetchAgents } = useAgentListStore();
+  const agentName = agents.find(a => a.id === agentId)?.displayName || null;
   const [input, setInput] = useState("");
   const [pastedImages, setPastedImages] = useState<string[]>([]); // base64 for preview
   const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]); // S3 URLs for sending
@@ -451,7 +454,7 @@ export default function ChatPanel() {
   }, [inputHeight, setInputHeight]);
 
   // Meta-Agent always supports images; sub-agents depend on metadata
-  const imagesAllowed = !targetAgentId || metadata?.supports_images === true;
+  const imagesAllowed = !agentId || metadata?.supports_images === true;
   const agentSessions = getAgentSessions();
 
   // Sent messages for arrow-up/down history
@@ -506,10 +509,15 @@ export default function ChatPanel() {
     prevStreamingRef.current = isStreaming;
   }, [isStreaming, fetchAgents]);
 
+  // Sync URL agent to store
+  useEffect(() => {
+    switchAgent(agentId || null, agentName);
+  }, [agentId, agentName, switchAgent]);
+
   // Load agent metadata when target changes
   useEffect(() => {
-    if (targetAgentName && targetAgentId) {
-      fetchAgentMetadata(targetAgentId).then((m) => {
+    if (agentName && agentId) {
+      fetchAgentMetadata(agentId).then((m) => {
         setMetadata(m);
         // Auto-select agent's default model if set
         if (m?.default_model_id) {
@@ -519,7 +527,7 @@ export default function ChatPanel() {
     } else {
       setMetadata(null);
     }
-  }, [targetAgentId, targetAgentName]);
+  }, [agentId, agentName]);
 
 
 
@@ -652,11 +660,11 @@ export default function ChatPanel() {
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
-            {targetAgentId ? targetAgentName : "Meta Agent"}
+            {agentId ? agentName : "Meta Agent"}
           </h2>
           <p className="text-xs text-gray-500 truncate">
-            {targetAgentId
-              ? `Chatting with ${targetAgentName}`
+            {agentId
+              ? `Chatting with ${agentName}`
               : "Create & manage agents through conversation"}
           </p>
         </div>
@@ -665,21 +673,21 @@ export default function ChatPanel() {
           <div className="relative" ref={modelPickerRef}>
             <button
               onClick={() => setShowModelPicker(!showModelPicker)}
-              className="text-[10px] px-1.5 py-0.5 rounded border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 flex items-center gap-1"
+              className="text-[10px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1"
             >
               {selectedModelLabel}
               <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
             {showModelPicker && (
-              <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-80 overflow-y-auto">
+              <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 max-h-80 overflow-y-auto">
                 {MODEL_GROUPS.map((group) => (
                   <div key={group.label}>
-                    <div className="px-2 py-1 text-[9px] font-medium text-gray-400 uppercase tracking-wide bg-gray-50">{group.label}</div>
+                    <div className="px-2 py-1 text-[9px] font-medium text-gray-400 uppercase tracking-wide bg-gray-50 dark:bg-gray-800">{group.label}</div>
                     {group.models.map((m) => (
                       <button
                         key={m.id}
                         onClick={() => { setSelectedModel(m.id); setShowModelPicker(false); }}
-                        className={`w-full text-left px-3 py-1 text-[10px] hover:bg-blue-50 ${selectedModel === m.id ? "text-blue-600 bg-blue-50/50" : "text-gray-700"}`}
+                        className={`w-full text-left px-3 py-1 text-[10px] hover:bg-blue-50 ${selectedModel === m.id ? "text-blue-600 bg-blue-50/50" : "text-gray-700 dark:text-gray-300"}`}
                       >
                         {m.label}
                       </button>
@@ -699,8 +707,8 @@ export default function ChatPanel() {
               <History className="w-4 h-4" />
             </button>
             {showHistory && (
-              <div className="absolute right-0 top-full mt-1 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-80 overflow-y-auto">
-                <div className="p-2 border-b border-gray-100 flex items-center justify-between">
+              <div className="absolute right-0 top-full mt-1 w-72 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 max-h-80 overflow-y-auto">
+                <div className="p-2 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
                   <span className="text-xs font-medium text-gray-500">History</span>
                   <span className="text-xs text-gray-400">{agentSessions.length} sessions</span>
                 </div>
@@ -710,14 +718,14 @@ export default function ChatPanel() {
                   agentSessions.map((session) => (
                     <div
                       key={session.id}
-                      className={`flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer group ${
+                      className={`flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer group ${
                         session.id === activeSessionId ? "bg-blue-50" : ""
                       }`}
                       onClick={() => { loadSession(session.id); setShowHistory(false); }}
                     >
                       <Clock className="w-3 h-3 text-gray-300 flex-shrink-0" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm text-gray-700 truncate">{session.title}</p>
+                        <p className="text-sm text-gray-700 dark:text-gray-300 truncate">{session.title}</p>
                         <p className="text-xs text-gray-400">
                           {new Date(session.updatedAt).toLocaleDateString()} {new Date(session.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                           {" · "}{session.messages.length} msgs
@@ -740,14 +748,14 @@ export default function ChatPanel() {
           {messages.length > 0 && (
             <button
               onClick={() => {
-                const agentName = targetAgentName || "Meta Agent";
-                const lines = [`# ${agentName}\n`];
+                const agentNameExport = agentName || "Meta Agent";
+                const lines = [`# ${agentNameExport}\n`];
                 for (const msg of messages) {
                   if (!msg.content) continue;
                   if (msg.role === "user") {
                     lines.push(`**User:**\n${msg.content}\n`);
                   } else if (msg.role === "assistant") {
-                    lines.push(`**${agentName}:**\n${msg.content}\n`);
+                    lines.push(`**${agentNameExport}:**\n${msg.content}\n`);
                   }
                 }
                 const md = lines.join("\n");
@@ -755,7 +763,7 @@ export default function ChatPanel() {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = `${agentName}-${new Date().toISOString().slice(0, 10)}.md`;
+                a.download = `${agentNameExport}-${new Date().toISOString().slice(0, 10)}.md`;
                 a.click();
                 URL.revokeObjectURL(url);
               }}
@@ -780,15 +788,15 @@ export default function ChatPanel() {
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-4">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
-            <p className="text-4xl mb-4">{targetAgentId ? "💬" : "🤖"}</p>
-            <p className="text-lg font-medium text-gray-600">
-              {metadata?.welcome_message || (targetAgentId ? `Chat with ${targetAgentName}` : "Welcome to Meta Agent")}
+            <p className="text-4xl mb-4">{agentId ? "💬" : "🤖"}</p>
+            <p className="text-lg font-medium text-gray-600 dark:text-gray-400">
+              {metadata?.welcome_message || (agentId ? `Chat with ${agentName}` : "Welcome to Meta Agent")}
             </p>
-            {!targetAgentId && (
+            {!agentId && (
               <p className="text-sm mt-1">Create & manage agents through conversation</p>
             )}
             <div className="mt-6 grid gap-2 text-sm w-full max-w-lg">
-              {(metadata?.suggestions || (!targetAgentId ? [
+              {(metadata?.suggestions || (!agentId ? [
                 "Create an agent that can search the web and summarize results",
                 "Build a math tutor that can solve equations step by step",
                 "Make a coding assistant that writes Python functions",
@@ -796,7 +804,7 @@ export default function ChatPanel() {
                 <button
                   key={suggestion}
                   onClick={() => { setInput(suggestion); }}
-                  className="text-left px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600"
+                  className="text-left px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400"
                 >
                   {suggestion}
                 </button>
@@ -820,7 +828,7 @@ export default function ChatPanel() {
           <div className="flex justify-start mb-4 -mt-2">
             <button
               onClick={regenerateLastMessage}
-              className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors"
+              className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               title="Regenerate response"
             >
               <RefreshCw className="w-3 h-3" />
@@ -856,7 +864,7 @@ export default function ChatPanel() {
         <div
           onMouseDown={onInputDragStart}
           onDoubleClick={() => setInputHeight(inputHeight > 60 ? 44 : 160)}
-          className="h-1 cursor-row-resize bg-transparent hover:bg-blue-400/30 active:bg-blue-400/50 border-t border-gray-200 transition-colors"
+          className="h-1 cursor-row-resize bg-transparent hover:bg-blue-400/30 active:bg-blue-400/50 border-t border-gray-200 dark:border-gray-700 transition-colors"
           title="Drag up to expand, double-click to toggle"
         />
         <div className="px-4 py-2">
@@ -865,7 +873,7 @@ export default function ChatPanel() {
           <div className="flex gap-2 mb-2 flex-wrap">
             {pastedImages.map((src, idx) => (
               <div key={idx} className="relative group">
-                <img src={src} className="w-16 h-16 rounded-lg object-cover border border-gray-200" />
+                <img src={src} className="w-16 h-16 rounded-lg object-cover border border-gray-200 dark:border-gray-700" />
                 <button
                   onClick={() => removeImage(idx)}
                   className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -880,7 +888,7 @@ export default function ChatPanel() {
         {attachedFiles.length > 0 && (
           <div className="flex gap-2 mb-2 flex-wrap">
             {attachedFiles.map((f, idx) => (
-              <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-100 rounded-lg text-[11px] text-gray-600 border border-gray-200">
+              <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg text-[11px] text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
                 {f.uploading ? <Loader2 className="w-3 h-3 animate-spin text-blue-500" /> : <FileText className="w-3 h-3 text-gray-400" />}
                 <span className="max-w-32 truncate font-medium">{f.name}</span>
                 <span className="text-gray-400">{(f.size / 1024).toFixed(1)}KB</span>
@@ -908,7 +916,7 @@ export default function ChatPanel() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="p-2.5 text-gray-400 hover:text-gray-600 flex-shrink-0"
+            className="p-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0"
             title="Attach file"
           >
             <Paperclip className="w-4 h-4" />
