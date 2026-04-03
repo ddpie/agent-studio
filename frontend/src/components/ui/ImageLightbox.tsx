@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
-import { getSignedImageUrl } from "../../lib/image-upload";
+import { fetchSignedS3 } from "../../lib/s3-utils";
 
 export default function ImageLightbox({ src, alt }: { src: string; alt?: string }) {
   const [open, setOpen] = useState(false);
@@ -13,7 +13,7 @@ export default function ImageLightbox({ src, alt }: { src: string; alt?: string 
       return;
     }
     let revoked = false;
-    getSignedImageUrl(src).then((url) => {
+    fetchSignedS3(src).then((url) => {
       if (!revoked) setDisplayUrl(url);
     }).catch(() => {
       setDisplayUrl(src); // fallback to original

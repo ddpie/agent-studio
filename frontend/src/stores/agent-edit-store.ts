@@ -3,6 +3,7 @@ import { fetchAgentMetadata, type AgentMetadata } from "../lib/agent-metadata";
 import { extractToolsFromDeployment } from "../lib/tool-extractor";
 import { fetchAuthSession } from "aws-amplify/auth";
 import { agentConfig } from "../config";
+import { fetchToolCatalog } from "../lib/s3-utils";
 
 interface AgentEditState {
   editingAgentId: string | null;
@@ -76,6 +77,38 @@ async function fetchAgentFromControlPlane(agentId: string): Promise<Partial<Agen
   }
 }
 
+/**
+ * Inject missing built-in tool code from catalog.
+ * For each tool in tool_names that has no @tool function in tool_definitions,
+ * look it up in the catalog and append its code.
+ */
+async function injectBuiltinToolCode(data: Partial<AgentMetadata>): Promise<void> {
+  const toolNames = (data.tool_names as string || "").split(",").map(t => t.trim()).filter(Boolean);
+  if (!toolNames.length) return;
+
+  const defs = data.tool_definitions || "";
+  const definedFuncs = new Set([...(defs).matchAll(/@tool\s*\ndef\s+(\w+)\s*\(/g)].map(m => m[1]));
+
+  const missing = toolNames.filter(n => !definedFuncs.has(n));
+  if (!missing.length) return;
+
+  try {
+    const catalog = await fetchToolCatalog();
+    const codeParts: string[] = [];
+    for (const name of missing) {
+      if (catalog[name]) {
+        codeParts.push(catalog[name].code);
+      }
+    }
+    if (codeParts.length) {
+      const injected = codeParts.join("\n\n");
+      data.tool_definitions = defs ? defs.trimEnd() + "\n\n" + injected : injected;
+    }
+  } catch (e) {
+    console.warn("Failed to fetch tool catalog:", e);
+  }
+}
+
 export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   editingAgentId: null,
   editingAgentName: null,
@@ -121,6 +154,9 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
       }
     }
 
+    // Inject missing built-in tool code from catalog
+    await injectBuiltinToolCode(data);
+
     set({ formData: data, originalData: JSON.parse(JSON.stringify(data)), loading: false });
   },
 
@@ -128,12 +164,16 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
 
   openNewWithData: (data: Partial<AgentMetadata>) => {
     const draftId = `draft-${crypto.randomUUID().slice(0, 8)}`;
+    // Inject built-in tool code async, update formData when done
     set({
       editingAgentId: draftId,
       editingAgentName: (data.display_name || data.name || "New Agent") as string,
       formData: data,
       originalData: JSON.parse(JSON.stringify(data)),
       loading: false,
+    });
+    injectBuiltinToolCode(data).then(() => {
+      set({ formData: { ...data }, originalData: JSON.parse(JSON.stringify(data)) });
     });
   },
 

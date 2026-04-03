@@ -13,7 +13,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { fetchAgentMetadata, type AgentMetadata } from "../../lib/agent-metadata";
 import { useUISettings } from "../../stores/ui-settings-store";
-import { uploadImageToS3, uploadFileToS3, getSignedImageUrl } from "../../lib/image-upload";
+import { uploadImageToS3, uploadFileToS3, fetchSignedS3 } from "../../lib/s3-utils";
 import { agentConfig } from "../../config";
 import ImageLightbox from "../ui/ImageLightbox";
 
@@ -292,7 +292,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
                 onClick={async () => {
                   try {
                     const s3Url = `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/${f.s3Key}`;
-                    const blobUrl = await getSignedImageUrl(s3Url);
+                    const blobUrl = await fetchSignedS3(s3Url);
                     const a = document.createElement("a");
                     a.href = blobUrl;
                     a.download = f.name;

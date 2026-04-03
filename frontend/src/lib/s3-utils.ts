@@ -1,6 +1,27 @@
 import { fetchAuthSession } from "aws-amplify/auth";
 import { agentConfig } from "../config";
 
+export type ToolCatalogEntry = { id: string; name: string; description: string; category: string; code: string };
+export type ToolCatalog = Record<string, ToolCatalogEntry>;
+
+let _catalogCache: ToolCatalog | null = null;
+
+/**
+ * Fetch the built-in tool catalog from S3. Cached for the session.
+ */
+export async function fetchToolCatalog(): Promise<ToolCatalog> {
+  if (_catalogCache) return _catalogCache;
+
+  const url = `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/base/tool-catalog.json`;
+  const blobUrl = await fetchSignedS3(url);
+
+  const resp = await fetch(blobUrl);
+  const catalog = await resp.json() as ToolCatalog;
+  URL.revokeObjectURL(blobUrl);
+  _catalogCache = catalog;
+  return catalog;
+}
+
 /**
  * Upload a base64 data URL image to S3 and return the S3 URL.
  * Path: agents/images/{uuid}.{ext}
@@ -116,7 +137,7 @@ export async function uploadFileToS3(file: File, sessionId: string): Promise<{ k
 
   return { key, url: url.toString() };
 }
-export async function getSignedImageUrl(s3Url: string): Promise<string> {
+export async function fetchSignedS3(s3Url: string): Promise<string> {
   // If it's already a data URL, return as-is
   if (s3Url.startsWith("data:")) return s3Url;
 

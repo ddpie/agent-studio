@@ -111,3 +111,38 @@ def assemble_tools(tool_ids: list[str]) -> tuple[str, str]:
                 names.append(mod.TOOL_NAMES)
                 break
     return "\n\n".join(codes), ",".join(names)
+
+
+def build_tool_catalog() -> dict:
+    """Build a catalog dict mapping function names to their metadata + code.
+
+    Used to generate base/tool-catalog.json for the frontend.
+    """
+    catalog = {}
+    for mod in _ALL_TOOLS:
+        meta = mod.TOOL_META
+        for func_name in [n.strip() for n in mod.TOOL_NAMES.split(",") if n.strip()]:
+            catalog[func_name] = {
+                "id": meta["id"],
+                "name": meta["name"],
+                "description": meta["description"],
+                "category": meta["category"],
+                "code": mod.TOOL_CODE.strip(),
+            }
+    return catalog
+
+
+def upload_tool_catalog():
+    """Generate and upload tool-catalog.json to S3."""
+    import boto3
+    from config import REGION, S3_BUCKET
+
+    catalog = build_tool_catalog()
+    s3 = boto3.client("s3", region_name=REGION)
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key="base/tool-catalog.json",
+        Body=json.dumps(catalog, indent=2, ensure_ascii=False).encode("utf-8"),
+        ContentType="application/json",
+    )
+    return len(catalog)
