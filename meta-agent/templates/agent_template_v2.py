@@ -301,17 +301,18 @@ def get_skills_listing() -> str:
 
 
 @_tool
-def load_skill(name: str) -> str:
-    """Load a skill by name. Returns the full SKILL.md content.
+def load_skill(name: str, file: str = "") -> str:
+    """Load a skill by name. Returns the full SKILL.md content, or a specific file.
 
-    Use this when you need detailed instructions from a skill listed in
-    the Available Skills section of your system prompt.
+    When called without `file`, returns SKILL.md and lists available files.
+    When called with `file`, returns that file's content (e.g. "scripts/clean_csv.py").
 
     Args:
         name: The skill name (e.g. "data-analyzer").
+        file: Optional path to a specific file within the skill (e.g. "scripts/demo.py").
 
     Returns:
-        The full SKILL.md markdown content, or an error message.
+        The skill content, or an error message.
     """
     # Read index to find skill_id by name
     try:
@@ -333,13 +334,41 @@ def load_skill(name: str) -> str:
             "available_skills": available,
         })
 
-    # Read SKILL.md
+    prefix = f"skills/{skill_id}/"
+
+    # If a specific file is requested, read it directly
+    if file:
+        key = prefix + file.lstrip("/")
+        try:
+            obj = _s3.get_object(Bucket=_S3_BUCKET, Key=key)
+            return obj["Body"].read().decode("utf-8")
+        except Exception as e:
+            return _json.dumps({"error": f"File \\'{file}\\' not found in skill \\'{name}\\': {e}"})
+
+    # Default: read SKILL.md + list all files
     try:
-        obj = _s3.get_object(Bucket=_S3_BUCKET, Key=f"skills/{skill_id}/SKILL.md")
+        obj = _s3.get_object(Bucket=_S3_BUCKET, Key=f"{prefix}SKILL.md")
         content = obj["Body"].read().decode("utf-8")
-        return content
     except Exception as e:
         return _json.dumps({"error": f"Failed to read skill: {e}"})
+
+    # List other files in the skill directory
+    try:
+        resp = _s3.list_objects_v2(Bucket=_S3_BUCKET, Prefix=prefix)
+        files = [
+            o["Key"][len(prefix):]
+            for o in resp.get("Contents", [])
+            if o["Key"] != f"{prefix}SKILL.md"
+        ]
+        if files:
+            content += "\\n\\n---\\n## Skill Files\\n"
+            content += "Use `load_skill(\\"" + name + "\\", file=\\"<path>\\")` to read:\\n"
+            for f in files:
+                content += f"- `{f}`\\n"
+    except Exception:
+        pass
+
+    return content
 
 
 @_tool

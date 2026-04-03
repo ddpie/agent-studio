@@ -92,10 +92,13 @@ s3_key = f"agents/{agent_id}/deployment.zip"
 s3.put_object(Bucket=bucket, Key=s3_key, Body=package)
 print(f"  Uploaded to s3://{bucket}/{s3_key}")
 
-# Update agent runtime
+# Update agent runtime (must include roleArn + networkConfiguration)
 control = boto3.client("bedrock-agentcore-control", region_name=region)
+existing = control.get_agent_runtime(agentRuntimeId=agent_id)
 control.update_agent_runtime(
     agentRuntimeId=agent_id,
+    roleArn=existing["roleArn"],
+    networkConfiguration={"networkMode": existing["networkConfiguration"]["networkMode"]},
     agentRuntimeArtifact={
         "codeConfiguration": {
             "code": {"s3": {"bucket": bucket, "prefix": s3_key}},

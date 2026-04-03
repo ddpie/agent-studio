@@ -22,7 +22,7 @@ interface AgentListState {
 async function queryOwnedAgents(): Promise<Map<string, { displayName: string; status: string; description: string }>> {
   try {
     const { credentials } = await fetchAuthSession();
-    if (!credentials) return new Set();
+    if (!credentials) return new Map();
 
     const { username } = await getCurrentUser();
     const { SignatureV4 } = await import("@smithy/signature-v4");
@@ -142,7 +142,6 @@ export const useAgentListStore = create<AgentListState>((set) => ({
       ]);
 
       const runtimes = data.agentRuntimes || data.agentRuntimeSummaries || [];
-      const runtimeIds = new Set(runtimes.map((rt: Record<string, string>) => rt.agentRuntimeId));
 
       // Active agents: in both control plane and DynamoDB
       const agents: AgentInfo[] = runtimes

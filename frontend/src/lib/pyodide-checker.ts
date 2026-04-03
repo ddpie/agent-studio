@@ -23,7 +23,7 @@ export function preloadPyodide() {
       const { loadPyodide: load } = await import("pyodide");
       pyodide = await load({
         indexURL: "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/",
-      }) as typeof pyodide;
+      }) as unknown as typeof pyodide;
       console.log("[Pyodide] Loaded successfully");
     } catch (err) {
       console.warn("[Pyodide] Failed to load:", err);
