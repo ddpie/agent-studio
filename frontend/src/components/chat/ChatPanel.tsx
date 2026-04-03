@@ -172,18 +172,60 @@ import { MODEL_GROUPS, DEFAULT_MODEL_ID, findModelLabel } from "../../lib/models
 function CopyButtons({ content }: { content: string }) {
   const [copied, setCopied] = useState<"text" | "md" | null>(null);
 
-  // Strip tool-call <details> blocks, SVG/HTML rich output, and agent-proposal code blocks before copying
-  const clean = (s: string) => s
+  // Strip tool-call <details> blocks and agent-proposal code blocks
+  const cleanText = (s: string) => s
     .replace(/<details class="tool-call">[\s\S]*?<\/details>/g, "")
     .replace(/<div class="tool-rich-output">[\s\S]*?<\/div>/g, "\n[Chart]\n")
     .replace(/```agent-proposal\n[\s\S]*?```/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
+  // Convert SVG string to PNG base64 data URL
+  const svgToPngBase64 = (svgStr: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const svgBlob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(svgBlob);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth * 2;
+        canvas.height = img.naturalHeight * 2;
+        const ctx = canvas.getContext("2d")!;
+        ctx.scale(2, 2);
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(""); // fallback: skip
+      };
+      img.src = url;
+    });
+  };
+
   const copyAs = async (mode: "text" | "md") => {
-    const cleaned = clean(content);
-    const text = mode === "md" ? cleaned : cleaned.replace(/[#*`_~\[\]()>|\\-]/g, "").replace(/\n{3,}/g, "\n\n");
-    await navigator.clipboard.writeText(text);
+    if (mode === "text") {
+      const cleaned = cleanText(content);
+      const text = cleaned.replace(/[#*`_~\[\]()>|\\-]/g, "").replace(/\n{3,}/g, "\n\n");
+      await navigator.clipboard.writeText(text);
+    } else {
+      // For markdown: convert SVG charts to inline PNG images
+      let md = content
+        .replace(/<details class="tool-call">[\s\S]*?<\/details>/g, "")
+        .replace(/```agent-proposal\n[\s\S]*?```/g, "");
+
+      // Extract all SVG blocks and convert to PNG
+      const svgRegex = /<div class="tool-rich-output">(<svg[\s\S]*?<\/svg>)<\/div>/g;
+      const svgMatches = [...md.matchAll(svgRegex)];
+      for (const match of svgMatches) {
+        const png = await svgToPngBase64(match[1]);
+        md = md.replace(match[0], png ? `\n\n![Chart](${png})\n\n` : "\n\n[Chart]\n\n");
+      }
+
+      md = md.replace(/\n{3,}/g, "\n\n").trim();
+      await navigator.clipboard.writeText(md);
+    }
     setCopied(mode);
     setTimeout(() => setCopied(null), 1500);
   };

@@ -15,6 +15,11 @@ try:
 except ImportError:
     _LATEST_STREAM_UTILS = None
 
+try:
+    from templates.agent_template_v2 import BUILTIN_TOOLS_CODE as _LATEST_BUILTIN_TOOLS
+except ImportError:
+    _LATEST_BUILTIN_TOOLS = None
+
 
 def validate_agent_files(main_py: str, tools_py: str, prompt_txt: str, config_json: str) -> dict:
     """Validate agent files independently before deployment.
@@ -89,9 +94,11 @@ def build_deployment_package_v2(main_py: str, tools_py: str, prompt_txt: str, co
     base_data = base_resp["Body"].read()
 
     agent_files = {"main.py", "tools.py", "prompt.txt", "config.json"}
-    # Always overwrite stream_utils.py with latest version
+    # Always overwrite stream_utils.py and builtin_tools.py with latest version
     if _LATEST_STREAM_UTILS:
         agent_files.add("stream_utils.py")
+    if _LATEST_BUILTIN_TOOLS:
+        agent_files.add("builtin_tools.py")
 
     buf = io.BytesIO()
     with zipfile.ZipFile(io.BytesIO(base_data), "r") as base_zip:
@@ -111,6 +118,9 @@ def build_deployment_package_v2(main_py: str, tools_py: str, prompt_txt: str, co
             # Always inject latest stream_utils.py
             if _LATEST_STREAM_UTILS:
                 new_zip.writestr("stream_utils.py", _LATEST_STREAM_UTILS)
+            # Always inject latest builtin_tools.py
+            if _LATEST_BUILTIN_TOOLS:
+                new_zip.writestr("builtin_tools.py", _LATEST_BUILTIN_TOOLS)
 
     return buf.getvalue()
 

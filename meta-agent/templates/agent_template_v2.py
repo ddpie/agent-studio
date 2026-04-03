@@ -36,10 +36,19 @@ for _name in _config.get("tool_names", []):
 @app.entrypoint
 async def invoke(payload, context):
     model_id = payload.get("model_id", MODEL_ID)
+    import builtin_tools as _builtin
+    skills_listing = _builtin.get_skills_listing()
+    prompt = SYSTEM_PROMPT
+    if skills_listing:
+        prompt += (
+            "\\n\\n## Available Skills\\n"
+            + skills_listing
+            + "\\n\\nUse load_skill(name) to load a skill\\'s full instructions when needed."
+        )
     agent = Agent(
         model=BedrockModel(model_id=model_id),
-        system_prompt=SYSTEM_PROMPT,
-        tools=_ALL_TOOLS,
+        system_prompt=prompt,
+        tools=_ALL_TOOLS + [_builtin.load_skill],
     )
     async for chunk in _stream_with_tools(agent, _build_input(payload)):
         yield chunk
@@ -108,12 +117,21 @@ for _name in _config.get("tool_names", []):
 @app.entrypoint
 async def invoke(payload, context):
     model_id = payload.get("model_id", MODEL_ID)
+    import builtin_tools as _builtin
+    skills_listing = _builtin.get_skills_listing()
+    prompt = SYSTEM_PROMPT
+    if skills_listing:
+        prompt += (
+            "\\n\\n## Available Skills\\n"
+            + skills_listing
+            + "\\n\\nUse load_skill(name) to load a skill\\'s full instructions when needed."
+        )
     with mcp_client as mcp:
         mcp_tools = mcp.list_tools_sync()
         agent = Agent(
             model=BedrockModel(model_id=model_id),
-            system_prompt=SYSTEM_PROMPT,
-            tools=_ALL_TOOLS + mcp_tools,
+            system_prompt=prompt,
+            tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill],
         )
         async for chunk in _stream_with_tools(agent, _build_input(payload)):
             yield chunk
@@ -177,6 +195,8 @@ async def _stream_with_tools(agent, input_data):
                     inp_b64 = _b64.b64encode(inp_str.encode()).decode() if inp_str else ""
                     # SVG/HTML output must not be truncated (breaks rendering)
                     if output_text.lstrip().startswith("<"):
+                        max_out = 50000
+                    elif t_name == "load_skill":
                         max_out = 50000
                     else:
                         max_out = 5000
@@ -244,3 +264,80 @@ def _build_input(payload):
 
 # ── tools.py header ─────────────────────────────────────────────────────────
 TOOLS_PY_HEADER = "from strands import tool\n\n"
+
+# ── builtin_tools.py (injected into every sub-agent zip) ──────────────────
+BUILTIN_TOOLS_CODE = '''\
+"""Built-in tools for Agent Studio sub-agents — skill loading."""
+
+import json as _json
+import os as _os
+
+import boto3 as _boto3
+from strands import tool as _tool
+
+_REGION = _os.getenv("AWS_REGION", "us-east-1")
+_ACCOUNT_ID = _os.getenv("AWS_ACCOUNT_ID", "557690613480")
+_S3_BUCKET = _os.getenv(
+    "AGENT_STUDIO_S3_BUCKET",
+    f"bedrock-agentcore-codebuild-sources-{_ACCOUNT_ID}-{_REGION}",
+)
+_s3 = _boto3.client("s3", region_name=_REGION)
+
+
+def get_skills_listing() -> str:
+    """Read skills/index.json from S3, return formatted listing for prompt injection.
+
+    Returns empty string if no skills or index not found.
+    """
+    try:
+        obj = _s3.get_object(Bucket=_S3_BUCKET, Key="skills/index.json")
+        skills = _json.loads(obj["Body"].read().decode("utf-8"))
+        if not skills:
+            return ""
+        lines = [f"- {s['name']}: {s['description']}" for s in skills]
+        return "\\n".join(lines)
+    except Exception:
+        return ""
+
+
+@_tool
+def load_skill(name: str) -> str:
+    """Load a skill by name. Returns the full SKILL.md content.
+
+    Use this when you need detailed instructions from a skill listed in
+    the Available Skills section of your system prompt.
+
+    Args:
+        name: The skill name (e.g. "data-analyzer").
+
+    Returns:
+        The full SKILL.md markdown content, or an error message.
+    """
+    # Read index to find skill_id by name
+    try:
+        obj = _s3.get_object(Bucket=_S3_BUCKET, Key="skills/index.json")
+        skills = _json.loads(obj["Body"].read().decode("utf-8"))
+    except Exception as e:
+        return _json.dumps({"error": f"Failed to read skill index: {e}"})
+
+    skill_id = None
+    for s in skills:
+        if s.get("name") == name:
+            skill_id = s.get("id")
+            break
+
+    if not skill_id:
+        available = [s.get("name", "") for s in skills]
+        return _json.dumps({
+            "error": f"Skill \\'{name}\\' not found.",
+            "available_skills": available,
+        })
+
+    # Read SKILL.md
+    try:
+        obj = _s3.get_object(Bucket=_S3_BUCKET, Key=f"skills/{skill_id}/SKILL.md")
+        content = obj["Body"].read().decode("utf-8")
+        return content
+    except Exception as e:
+        return _json.dumps({"error": f"Failed to read skill: {e}"})
+'''

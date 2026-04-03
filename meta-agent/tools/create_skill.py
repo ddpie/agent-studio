@@ -9,6 +9,29 @@ from strands import tool
 from config import REGION, S3_BUCKET
 
 
+def _update_skill_index(s3_client, new_entry: dict):
+    """Read index.json, append new entry, write back."""
+    index = []
+    try:
+        obj = s3_client.get_object(Bucket=S3_BUCKET, Key="skills/index.json")
+        index = json.loads(obj["Body"].read().decode("utf-8"))
+    except s3_client.exceptions.NoSuchKey:
+        pass
+    except Exception:
+        pass
+
+    # Remove existing entry with same id (for idempotency)
+    index = [e for e in index if e.get("id") != new_entry["id"]]
+    index.append(new_entry)
+
+    s3_client.put_object(
+        Bucket=S3_BUCKET,
+        Key="skills/index.json",
+        Body=json.dumps(index, indent=2, ensure_ascii=False).encode("utf-8"),
+        ContentType="application/json",
+    )
+
+
 @tool
 def create_skill(
     skill_name: str,
@@ -75,6 +98,13 @@ def create_skill(
             Body=script_code.encode("utf-8"),
             ContentType="text/x-python",
         )
+
+    # Update index.json
+    _update_skill_index(s3, {
+        "id": skill_id,
+        "name": skill_name,
+        "description": description,
+    })
 
     result = {
         "skill_id": skill_id,

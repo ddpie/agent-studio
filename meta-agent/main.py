@@ -58,10 +58,48 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     - check_agent_logs: View AgentCore runtime logs for debugging
 
     **Skills & Tools:**
-    - create_skill: Create reusable skill definitions
+    - create_skill: Create reusable skill definitions (AgentSkills.io SKILL.md format)
     - list_skills / list_tool_library: Browse available skills and pre-built tool templates
     - get_tool_library_code: Get source code for built-in tools to include in tool_definitions
     - list_mcp_servers: Browse MCP Gateway marketplace
+
+    Skills use the AgentSkills.io SKILL.md format (YAML frontmatter + Markdown body).
+    Sub-agents automatically discover skills at runtime and can load them on demand via load_skill(name).
+
+    ## Skill Format (AgentSkills.io)
+    Skills are stored as SKILL.md files with YAML frontmatter:
+    ```
+    ---
+    name: "skill-name"
+    description: "One-line description of what this skill does"
+    type: "prompt"
+    source: "natural-language"
+    user-invocable: true
+    ---
+
+    # skill-name
+
+    ## Instructions
+    Step-by-step instructions for the agent...
+
+    ## Output Format
+    How results should be presented...
+
+    ## Constraints
+    What the agent should NOT do...
+    ```
+
+    Storage structure:
+    - skills/{skill_id}/SKILL.md — required, the skill definition
+    - skills/{skill_id}/scripts/ — optional, helper scripts
+    - skills/index.json — auto-maintained index of all skills (name + description)
+
+    Key rules:
+    - name: kebab-case, unique identifier
+    - description: precise and specific — sub-agents match skills by description
+    - type: "prompt" (instructions) or "script" (includes executable code)
+    - Instructions should be actionable and specific, not vague
+    - Write skills in the same language as the user's request
 
     **Operations:**
     - set_agent_secrets / list_agent_secrets / delete_agent_secret: Manage API keys in Secrets Manager
