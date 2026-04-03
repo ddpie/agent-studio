@@ -167,6 +167,82 @@ def b() -> str:
     expect(result).toContain("def a");
     expect(result).toContain("def b");
   });
+
+  it("handles tab-indented tool body", () => {
+    const source = `@tool
+def tabbed() -> str:
+\t"""Tabbed."""
+\treturn "t"`;
+
+    const result = parseToolDefinitions(source);
+    expect(result).toContain("def tabbed");
+    expect(result).toContain("return");
+  });
+
+  it("preserves comments inside tool body", () => {
+    const source = `@tool
+def commented() -> str:
+    """C."""
+    # important comment
+    return "c"`;
+
+    const result = parseToolDefinitions(source);
+    expect(result).toContain("# important comment");
+  });
+
+  it("handles blank lines inside tool body", () => {
+    const source = `@tool
+def spaced() -> str:
+    """S."""
+    x = 1
+
+    y = 2
+    return str(x + y)`;
+
+    const result = parseToolDefinitions(source);
+    expect(result).toContain("x = 1");
+    expect(result).toContain("y = 2");
+  });
+
+  it("handles only @tool decorator with no function (malformed)", () => {
+    const source = `@tool`;
+    const result = parseToolDefinitions(source);
+    // Single @tool line with no body — should produce the decorator line
+    expect(result).toBe("@tool");
+  });
+
+  it("ignores @tool-like decorators with arguments", () => {
+    // @tool(name="x") is not === "@tool", so it won't start a tool block
+    const source = `@tool(name="custom")
+def custom() -> str:
+    return ""`;
+
+    const result = parseToolDefinitions(source);
+    expect(result).toBe("");
+  });
+
+  it("does not handle Windows-style line endings (known limitation)", () => {
+    // split("\n") leaves \r attached, so "@tool\r" !== "@tool" — parser returns empty
+    const source = "@tool\r\ndef win() -> str:\r\n    \"\"\"W.\"\"\"\r\n    return \"w\"";
+    const result = parseToolDefinitions(source);
+    expect(result).toBe("");
+  });
+
+  it("stops between tools when encountering @app.entrypoint", () => {
+    const source = `@tool
+def first() -> str:
+    """F."""
+    return "f"
+
+@app.entrypoint
+async def invoke():
+    pass`;
+
+    const result = parseToolDefinitions(source);
+    expect(result).toContain("def first");
+    // @app.entrypoint is encountered between tools (foundFirstTool && !inTool)
+    expect(result).not.toContain("invoke");
+  });
 });
 
 // ── extractToolNames ────────────────────────────────────────────
@@ -194,5 +270,32 @@ describe("extractToolNames", () => {
     const names = extractToolNames(defs);
     // "def" appears in "async def" so regex will match — this documents current behavior
     expect(names).toBe("helper");
+  });
+
+  it("handles def with extra spaces before parens", () => {
+    const defs = `@tool\ndef spacey  () -> str:\n    return ""`;
+    expect(extractToolNames(defs)).toBe("spacey");
+  });
+
+  it("handles def with no space before parens", () => {
+    const defs = `@tool\ndef tight() -> str:\n    return ""`;
+    expect(extractToolNames(defs)).toBe("tight");
+  });
+
+  it("ignores class definitions", () => {
+    const defs = `class Foo:\n    def method(self):\n        pass`;
+    // extractToolNames finds all "def X(" — including methods
+    expect(extractToolNames(defs)).toBe("method");
+  });
+
+  it("handles underscored function names", () => {
+    const defs = `@tool\ndef my_long_tool_name(x: str = "") -> str:\n    return x`;
+    expect(extractToolNames(defs)).toBe("my_long_tool_name");
+  });
+
+  it("handles multiple defs on same line (edge case)", () => {
+    // Unlikely but tests regex global matching
+    const defs = `def a(): pass\ndef b(): pass`;
+    expect(extractToolNames(defs)).toBe("a,b");
   });
 });

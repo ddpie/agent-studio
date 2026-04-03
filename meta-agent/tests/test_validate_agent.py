@@ -58,6 +58,23 @@ class TestNameValidation:
         assert not r["valid"]
         assert any("alphanumeric" in e for e in r["errors"])
 
+    def test_single_char_name_passes(self):
+        r = _parse(validate_agent(agent_name="A", system_prompt="hello", description="d"))
+        assert r["valid"]
+
+    def test_numeric_only_name_passes(self):
+        r = _parse(validate_agent(agent_name="12345", system_prompt="hello", description="d"))
+        assert r["valid"]
+
+    @pytest.mark.parametrize("name", ["agent.v2", "agent/test", "agent@home", "agent#1"])
+    def test_special_chars_rejected(self, name):
+        r = _parse(validate_agent(agent_name=name, system_prompt="hello", description="d"))
+        assert not r["valid"]
+
+    def test_unicode_name_rejected(self):
+        r = _parse(validate_agent(agent_name="数据分析", system_prompt="hello", description="d"))
+        assert not r["valid"]
+
 
 # ── Required fields ──────────────────────────────────────────────
 
@@ -71,6 +88,28 @@ class TestRequiredFields:
         r = _parse(validate_agent(agent_name="Agent1", system_prompt="hello", description=""))
         assert r["valid"]  # warning, not error
         assert any("description" in w.lower() for w in r["warnings"])
+
+    def test_whitespace_only_prompt_is_error(self):
+        r = _parse(validate_agent(agent_name="Agent1", system_prompt="   \n\t  ", description="d"))
+        assert not r["valid"]
+
+    def test_multiple_errors_accumulated(self):
+        r = _parse(validate_agent(agent_name="", system_prompt="", description=""))
+        assert not r["valid"]
+        assert len(r["errors"]) >= 2  # name + prompt
+
+    def test_valid_minimal_agent(self):
+        r = _parse(validate_agent(agent_name="Agent1", system_prompt="hello", description="d"))
+        assert r["valid"]
+        assert len(r["errors"]) == 0
+
+    def test_summary_format_pass(self):
+        r = _parse(validate_agent(agent_name="Agent1", system_prompt="hello", description="d"))
+        assert r["summary"].startswith("PASS")
+
+    def test_summary_format_fail(self):
+        r = _parse(validate_agent(agent_name="", system_prompt="", description=""))
+        assert r["summary"].startswith("FAIL")
 
 
 # ── Python syntax check ─────────────────────────────────────────
@@ -92,6 +131,39 @@ class TestSyntaxCheck:
         ))
         assert not r["valid"]
         assert any("syntax error" in e.lower() for e in r["errors"])
+
+    def test_indentation_error_is_caught(self):
+        code = '@tool\ndef bad_indent() -> str:\n    """B."""\n  return "oops"'
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="hello",
+            tool_definitions=code, tool_names="bad_indent", description="d",
+        ))
+        assert not r["valid"]
+
+    def test_empty_tool_definitions_passes(self):
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="hello",
+            tool_definitions="", tool_names="", description="d",
+        ))
+        assert r["valid"]
+
+    def test_whitespace_only_tool_definitions_passes(self):
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="hello",
+            tool_definitions="   \n  ", tool_names="", description="d",
+        ))
+        assert r["valid"]
+
+    def test_multiple_tools_valid_syntax(self):
+        code = (
+            '@tool\ndef a(x: str = "") -> str:\n    """A."""\n    return x\n\n'
+            '@tool\ndef b(y: int = 0) -> str:\n    """B."""\n    return str(y)'
+        )
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="Use a and b",
+            tool_definitions=code, tool_names="a,b", description="d",
+        ))
+        assert r["valid"]
 
 
 # ── tool_names consistency ───────────────────────────────────────
@@ -120,6 +192,30 @@ class TestToolNamesConsistency:
             tool_definitions=code, tool_names="", description="d",
         ))
         assert any("tool_names is empty" in w for w in r["warnings"])
+
+    def test_exact_match_no_errors(self):
+        code = '@tool\ndef x() -> str:\n    """X."""\n    return ""\n\n@tool\ndef y() -> str:\n    """Y."""\n    return ""'
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="Use x and y",
+            tool_definitions=code, tool_names="x,y", description="d",
+        ))
+        assert r["valid"]
+        assert not any("tool_names" in w.lower() for w in r["warnings"])
+
+    def test_tool_names_with_extra_whitespace(self):
+        code = '@tool\ndef a() -> str:\n    """A."""\n    return ""'
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="Use a",
+            tool_definitions=code, tool_names=" a , ", description="d",
+        ))
+        assert r["valid"]
+
+    def test_tool_names_only_no_code_warns(self):
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="hello",
+            tool_definitions="", tool_names="mystery_tool", description="d",
+        ))
+        assert any("mystery_tool" in w for w in r["warnings"])
 
 
 # ── Unavailable library detection ────────────────────────────────
@@ -172,6 +268,25 @@ class TestWritePatternDetection:
         # data-access tier should NOT warn about write ops
         assert not any("write operation" in w.lower() for w in r["warnings"])
 
+    def test_write_pattern_detected_for_basic_tier(self):
+        code = '@tool\ndef w() -> str:\n    """W."""\n    table.put_item(Item={})\n    return ""'
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="Use w",
+            tool_definitions=code, tool_names="w",
+            permission_tier="basic", description="d",
+        ))
+        assert any("write operation" in w.lower() for w in r["warnings"])
+
+    def test_no_write_warning_without_permission_tier(self):
+        code = '@tool\ndef w() -> str:\n    """W."""\n    table.put_item(Item={})\n    return ""'
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="Use w",
+            tool_definitions=code, tool_names="w",
+            permission_tier="", description="d",
+        ))
+        # No permission tier set — no write warning
+        assert not any("write operation" in w.lower() for w in r["warnings"])
+
 
 # ── Prompt ↔ tool consistency ────────────────────────────────────
 
@@ -192,6 +307,34 @@ class TestPromptToolSync:
         ))
         assert not any("search" in w and "not mentioned" in w for w in r["warnings"])
 
+    def test_tool_mentioned_as_readable_name(self):
+        # "secret_tool" → "secret tool" should also count as mentioned
+        code = '@tool\ndef secret_tool() -> str:\n    """S."""\n    return ""'
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="Use the secret tool for hidden things.",
+            tool_definitions=code, tool_names="secret_tool", description="d",
+        ))
+        assert not any("secret_tool" in w and "not mentioned" in w for w in r["warnings"])
+
+    def test_tool_mentioned_case_insensitive_match(self):
+        # Code does prompt_lower = system_prompt.lower(), then checks func_name (original case) in prompt_lower
+        # So "MyTool" won't match "mytool" — the check is case-sensitive on func_name side
+        # But readable_name "my tool" (from replace("_","")) IS checked against lowered prompt
+        code = '@tool\ndef my_tool() -> str:\n    """M."""\n    return ""'
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="Use MY TOOL for things.",
+            tool_definitions=code, tool_names="my_tool", description="d",
+        ))
+        # "my tool" (readable) matches "my tool" in lowered prompt
+        assert not any("my_tool" in w and "not mentioned" in w for w in r["warnings"])
+
+    def test_no_warning_when_no_tools(self):
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="You are helpful.",
+            tool_definitions="", tool_names="", description="d",
+        ))
+        assert not any("not mentioned" in w for w in r["warnings"])
+
 
 # ── Long prompt warning ──────────────────────────────────────────
 
@@ -201,6 +344,40 @@ class TestLongPrompt:
             agent_name="Agent1", system_prompt="x" * 10001, description="d",
         ))
         assert any("very long" in w.lower() for w in r["warnings"])
+
+    def test_exactly_10000_chars_no_warning(self):
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="x" * 10000, description="d",
+        ))
+        assert not any("very long" in w.lower() for w in r["warnings"])
+
+
+# ── Security patterns ────────────────────────────────────────────
+
+class TestSecurityPatterns:
+    def test_os_system_warns(self):
+        code = 'import os\n\n@tool\ndef danger() -> str:\n    """D."""\n    os.system("ls")\n    return ""'
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="Use danger",
+            tool_definitions=code, tool_names="danger", description="d",
+        ))
+        assert any("os.system" in w or "subprocess" in w for w in r["warnings"])
+
+    def test_subprocess_warns(self):
+        code = 'import os\nimport subprocess\n\n@tool\ndef danger() -> str:\n    """D."""\n    subprocess.run(["ls"])\n    return ""'
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="Use danger",
+            tool_definitions=code, tool_names="danger", description="d",
+        ))
+        assert any("os.system" in w or "subprocess" in w for w in r["warnings"])
+
+    def test_no_security_warning_without_os_import(self):
+        code = '@tool\ndef safe() -> str:\n    """S."""\n    return "safe"'
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="Use safe",
+            tool_definitions=code, tool_names="safe", description="d",
+        ))
+        assert not any("os.system" in w or "subprocess" in w for w in r["warnings"])
 
 
 # ── _WRITE_RE regex unit tests ───────────────────────────────────
