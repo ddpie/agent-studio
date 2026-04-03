@@ -172,9 +172,10 @@ import { MODEL_GROUPS, DEFAULT_MODEL_ID, findModelLabel } from "../../lib/models
 function CopyButtons({ content }: { content: string }) {
   const [copied, setCopied] = useState<"text" | "md" | null>(null);
 
-  // Strip tool-call <details> blocks and agent-proposal code blocks before copying
+  // Strip tool-call <details> blocks, SVG/HTML rich output, and agent-proposal code blocks before copying
   const clean = (s: string) => s
     .replace(/<details class="tool-call">[\s\S]*?<\/details>/g, "")
+    .replace(/<div class="tool-rich-output">[\s\S]*?<\/div>/g, "\n[Chart]\n")
     .replace(/```agent-proposal\n[\s\S]*?```/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
