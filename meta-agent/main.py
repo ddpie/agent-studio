@@ -13,6 +13,14 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
 from config import MODEL_ID
 from tools.create_agent import create_agent, list_prompt_templates
+
+# Auto-publish tool catalog on startup
+try:
+    from tools_library.registry import upload_tool_catalog
+    _catalog_count = upload_tool_catalog()
+    print(f"Tool catalog published: {_catalog_count} tools")
+except Exception as _e:
+    print(f"Warning: Failed to publish tool catalog: {_e}")
 from tools.list_agents import list_agents
 from tools.delete_agent import delete_agent, restore_agent, purge_agent
 from tools.invoke_agent import invoke_agent
