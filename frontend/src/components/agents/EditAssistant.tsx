@@ -54,11 +54,24 @@ function extractFieldFromJson(raw: string, field: string): string | null {
 function CodePreviewModal({ onClose }: { onClose: () => void }) {
   const { previewContent, isStreaming: assistantStreaming } = useEditAssistantStore();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const userScrolledUp = useRef(false);
 
-  // Auto-scroll to bottom
+  // Track user scroll position
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const onScroll = () => {
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+      userScrolledUp.current = !atBottom;
+    };
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Auto-scroll only if user hasn't scrolled up
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && !userScrolledUp.current) el.scrollTop = el.scrollHeight;
   }, [previewContent]);
 
   // Close automatically when preview becomes null (update completed)
@@ -217,11 +230,31 @@ export default function EditAssistant() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const draggingRef = useRef(false);
+  const userScrolledUp = useRef(false);
 
-  // Auto-scroll
+  // Track user scroll in chat panel
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: isStreaming ? "instant" : "smooth" });
+    if (!el) return;
+    const onScroll = () => {
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+      userScrolledUp.current = !atBottom;
+    };
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Auto-scroll only if user hasn't scrolled up; reset when streaming ends
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (!isStreaming) {
+      // Streaming ended — reset flag so next message auto-scrolls
+      userScrolledUp.current = false;
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    } else if (!userScrolledUp.current) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
+    }
   }, [messages, isStreaming]);
 
   // Focus input when panel opens
@@ -255,17 +288,22 @@ export default function EditAssistant() {
   const onUpdateHandler = (updates: Record<string, unknown>) => {
     for (const [key, value] of Object.entries(updates)) {
       if (key === "tool_definitions" && typeof value === "string" && formData?.tool_definitions) {
+        // Sanitize: strip any non-@tool code (template boilerplate like _stream_with_tools, @app.entrypoint)
+        const sanitized = (value as string)
+          .replace(/^(async\s+)?def\s+_\w+[\s\S]*?(?=\n@tool\b|\n$)/gm, "") // remove def _private_func blocks
+          .replace(/@app\.\w+[\s\S]*$/gm, "") // remove @app.entrypoint and everything after
+          .replace(/if\s+__name__\s*==[\s\S]*$/gm, "") // remove if __name__ block
+          .trim();
+
         // Smart merge: match by function name, replace existing or append new
         const existingBlocks = splitToolBlocks(formData.tool_definitions);
-        const newBlocks = splitToolBlocks(value);
+        const newBlocks = splitToolBlocks(sanitized).filter(b => b.trim().startsWith("@tool"));
 
         const merged = new Map<string, string>();
-        // Add all existing tools
         for (const block of existingBlocks) {
           const name = getFuncName(block);
           merged.set(name, block);
         }
-        // Overlay new/modified tools
         for (const block of newBlocks) {
           const name = getFuncName(block);
           merged.set(name, block);

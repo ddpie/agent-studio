@@ -1,0 +1,355 @@
+"""validate_agent — Pre-deploy validation of agent configuration."""
+
+import json
+import re
+import ast
+
+from strands import tool, Agent
+from strands.models import BedrockModel
+
+from config import MODEL_ID
+
+# Write-operation patterns that readonly agents should not use
+_WRITE_PATTERNS = [
+    r'\bput_item\b', r'\bdelete_item\b', r'\bupdate_item\b',
+    r'\bput_object\b', r'\bdelete_object\b',
+    r'\bcreate_\w+\b', r'\bdelete_\w+\b', r'\bupdate_\w+\b',
+    r'\bINSERT\s+INTO\b', r'\bUPDATE\s+\w+\s+SET\b', r'\bDELETE\s+FROM\b',
+    r'\bDROP\s+TABLE\b', r'\bCREATE\s+TABLE\b',
+    r'\.put\(', r'\.delete\(', r'\.post\(',
+    r'\bos\.remove\b', r'\bos\.unlink\b', r'\bshutil\.rmtree\b',
+]
+_WRITE_RE = re.compile('|'.join(_WRITE_PATTERNS), re.IGNORECASE)
+
+# Libraries NOT available in the sandbox
+_UNAVAILABLE_LIBS = {
+    'scrapy', 'selenium', 'playwright', 'pandas', 'numpy', 'scipy',
+    'Pillow', 'PIL', 'feedparser', 'lxml', 'matplotlib', 'seaborn',
+    'sklearn', 'tensorflow', 'torch', 'cv2', 'flask', 'django',
+    'fastapi', 'sqlalchemy', 'celery', 'redis',
+}
+
+
+def _get_builtin_tool_names() -> set[str]:
+    """Dynamically get all built-in tool names from tools_library registry."""
+    try:
+        from tools_library import registry
+        names = set()
+        for mod in registry._ALL_TOOLS:
+            for n in mod.TOOL_NAMES.split(","):
+                n = n.strip()
+                if n:
+                    names.add(n)
+        return names
+    except Exception:
+        return set()
+
+_PROMPT_REVIEW_SYSTEM = """\
+## Role
+You are a prompt quality reviewer for AI agent system prompts. Score each dimension 1-5 based on the ACTUAL agent configuration provided (tools, permission tier, description). Find specific, actionable problems — not generic advice.
+
+## Scoring Dimensions (1-5 each)
+
+### 1. structure
+Does the prompt have clear sections with markdown headers (##)?
+- 5: Has Role, Capabilities, Constraints, Tool Usage, Output Format, Safety sections
+- 3: Some sections present but missing key ones
+- 1: Wall of text with no structure
+
+### 2. tool_prompt_sync
+Is EVERY tool mentioned with SPECIFIC usage guidance?
+- 5: Every tool has "When user asks X, use tool_name to Y" guidance
+- 3: Some tools have guidance, others are just listed by name
+- 1: Tools not mentioned, OR section title exists but content is empty/generic
+- N/A (score 5): Agent has no tools
+
+CRITICAL: A "## Tool Usage" header with no per-tool guidance scores 1-2, NOT 5.
+WRONG (score 1): "## Tool Usage\\n(empty)"
+WRONG (score 2): "## Tool Usage\\nUse tools when needed."
+CORRECT (score 5): "## Tool Usage\\n- query_metrics: Use when user asks about performance data.\\n- list_alarms: Use when user asks about alarm status."
+
+### 3. constraint_strength
+Are critical constraints enforced with strong language and consequences?
+- 5: Uses "NEVER"/"STRICTLY PROHIBITED", explains WHY, has recovery gates
+- 3: Has constraints but weak language ("try to avoid", "prefer not to")
+- 1: No constraints or only vague guidelines
+
+WRONG: "Try to avoid modifying data"
+CORRECT: "NEVER execute write operations. You are read-only. If user requests a write, explain you can only read and suggest the appropriate admin tool."
+
+### 4. anti_patterns
+Does the prompt show what NOT to do with concrete WRONG/RIGHT examples?
+- 5: Has WRONG/RIGHT examples for common mistakes
+- 3: Lists don'ts but without examples
+- 1: No anti-patterns documented
+
+### 5. rationalization_preemption
+Does the prompt predict and counter the agent's likely excuses for skipping tools?
+- 5: Lists 3+ specific excuses with counters ("You may think X — do Y instead")
+- 3: Has general "always use tools" guidance
+- 1: No preemption — agent will skip tools freely
+- N/A (score 5): Agent has no tools
+
+### 6. output_format
+Is the expected response format clearly defined?
+- 5: Shows exact format with examples (tables, prose, code blocks)
+- 3: Mentions format preferences but no examples
+- 1: No format guidance
+
+### 7. language_consistency
+Is the prompt in the same language as the agent's description/welcome_message?
+- 5: Fully consistent language throughout
+- 3: Mixed languages
+- 1: Completely mismatched
+
+### 8. safety
+Evaluate based on the ACTUAL tools and permission tier — not generic rules.
+- If agent has NO tools or only read-only tools (read, list, get, describe, query, chart, analyze): score 5 with basic constraints like "do not fabricate data". Do NOT require write-operation prohibitions.
+- If agent has WRITE-capable tools (create, update, delete, put, insert, post) AND permission is readonly/basic: score 5 requires explicit prohibition of write operations with specific operations listed.
+- If agent has WRITE-capable tools AND permission is data-access: score 5 requires scoped write permissions (which resources/operations are allowed).
+- Do NOT penalize for missing SQL prohibitions if agent has no SQL tools. Do NOT penalize for missing S3 write restrictions if agent has no S3 write tools.
+
+## Constraints
+- Return ONLY a JSON object. No markdown fences, no explanation before or after.
+- Be STRICT. Empty sections with only a title score 1, not 5.
+- Issues must be SPECIFIC to this agent's actual tools and purpose: "Tool 'list_alarms' has no usage guidance" not "improve tool section".
+- Max 5 issues, most important first.
+- Respond in the same language as the system prompt being reviewed.
+
+## Output Format
+{"scores": {"structure": N, "tool_prompt_sync": N, "constraint_strength": N, "anti_patterns": N, "rationalization_preemption": N, "output_format": N, "language_consistency": N, "safety": N}, "overall": N.N, "issues": ["specific fix 1", "specific fix 2"]}
+"""
+
+
+def _review_prompt_quality(system_prompt: str, tool_names_list: list[str], permission_tier: str,
+                           description: str = "", welcome_message: str = "") -> dict | None:
+    """Use an Agent to review prompt quality. Returns scores dict or None on failure."""
+    reviewer = Agent(
+        model=BedrockModel(model_id=MODEL_ID),
+        system_prompt=_PROMPT_REVIEW_SYSTEM,
+    )
+
+    review_input = f"""Review this agent's system prompt:
+
+```
+{system_prompt}
+```
+
+Agent context:
+- Tools: [{', '.join(tool_names_list) if tool_names_list else 'none'}]
+- Permission tier: {permission_tier or 'unknown'}
+- Description: {description or '(empty)'}
+- Welcome message: {welcome_message or '(empty)'}
+
+Return the JSON scores."""
+
+    result = reviewer(review_input)
+    text = str(result)
+
+    # Extract JSON — find the outermost { } containing "scores"
+    start = text.find('{"scores"')
+    if start == -1:
+        start = text.find('{')
+    if start == -1:
+        return None
+
+    depth = 0
+    end = -1
+    in_str = False
+    esc = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if esc:
+            esc = False
+            continue
+        if ch == '\\':
+            esc = True
+            continue
+        if ch == '"':
+            in_str = not in_str
+            continue
+        if in_str:
+            continue
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+
+    if end == -1:
+        return None
+
+    try:
+        return json.loads(text[start:end])
+    except json.JSONDecodeError:
+        return None
+
+
+@tool
+def validate_agent(
+    agent_name: str = "",
+    system_prompt: str = "",
+    tool_definitions: str = "",
+    tool_names: str = "",
+    description: str = "",
+    welcome_message: str = "",
+    permission_tier: str = "",
+    staging_key: str = "",
+) -> str:
+    """Validate an agent's configuration before deployment.
+
+    Checks:
+    1. Required fields (name, description, system_prompt)
+    2. Python syntax of tool_definitions (compile check)
+    3. tool_names matches actual @tool function names in tool_definitions
+    4. system_prompt references tools that exist
+    5. Unavailable library imports
+    6. Readonly permission tier vs write operations in tool code
+    7. Security patterns (os.system, subprocess)
+
+    Args:
+        agent_name: The agent name.
+        system_prompt: The system prompt text.
+        tool_definitions: Python code with @tool decorated functions.
+        tool_names: Comma-separated tool names.
+        description: Agent description.
+        welcome_message: Welcome message.
+        permission_tier: Permission tier (basic/readonly/data-access).
+        staging_key: S3 key to a JSON file containing all parameters.
+
+    Returns:
+        JSON with validation results: {valid: bool, errors: [...], warnings: [...]}
+    """
+    # If staging_key provided, read params from S3
+    if staging_key:
+        try:
+            import boto3
+            from config import REGION, S3_BUCKET
+            s3 = boto3.client("s3", region_name=REGION)
+            obj = s3.get_object(Bucket=S3_BUCKET, Key=staging_key)
+            staged = json.loads(obj["Body"].read().decode("utf-8"))
+            agent_name = staged.get("name", agent_name) or agent_name
+            system_prompt = staged.get("system_prompt", system_prompt) or system_prompt
+            tool_definitions = staged.get("tool_definitions", tool_definitions) or tool_definitions
+            tool_names = staged.get("tool_names", tool_names) or tool_names
+            description = staged.get("description", description) or description
+            welcome_message = staged.get("welcome_message", welcome_message) or welcome_message
+            permission_tier = staged.get("permission_tier", permission_tier) or permission_tier
+        except Exception as e:
+            return json.dumps({"valid": False, "errors": [f"Failed to read staging config: {e}"], "warnings": []})
+
+    errors = []
+    warnings = []
+
+    # 1. Required fields
+    if not agent_name or not agent_name.strip():
+        errors.append("Agent name is required.")
+    elif not re.match(r'^[A-Za-z0-9]+$', agent_name):
+        errors.append(f"Agent name '{agent_name}' must be alphanumeric only (no hyphens, underscores, or spaces).")
+    if not description or not description.strip():
+        warnings.append("Description is empty. Consider adding one for discoverability.")
+    if not system_prompt or not system_prompt.strip():
+        errors.append("System prompt is required.")
+
+    # 2. Python syntax check for tool_definitions
+    defined_funcs = []
+    if tool_definitions and tool_definitions.strip():
+        defined_funcs = re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', tool_definitions)
+
+        try:
+            ast.parse(tool_definitions)
+        except SyntaxError as e:
+            errors.append(f"Python syntax error in tool_definitions: {e.msg} (line {e.lineno})")
+
+        # 5. Check for unavailable library imports
+        imports = re.findall(r'(?:from\s+(\w+)|import\s+(\w+))', tool_definitions)
+        for imp in imports:
+            lib = imp[0] or imp[1]
+            if lib in _UNAVAILABLE_LIBS:
+                errors.append(f"Library '{lib}' is not available in the sandbox. Use MCP Gateway or a different approach.")
+
+        # 6. Readonly permission tier vs write operations
+        if permission_tier in ("basic", "readonly"):
+            write_matches = _WRITE_RE.findall(tool_definitions)
+            if write_matches:
+                unique = sorted(set(m.strip() for m in write_matches))
+                warnings.append(
+                    f"Agent has '{permission_tier}' permission but tool code contains write operations: "
+                    f"[{', '.join(unique[:5])}]. These may fail at runtime due to IAM restrictions."
+                )
+
+        # 7. Security patterns
+        if "import os" in tool_definitions and ("os.system" in tool_definitions or "subprocess" in tool_definitions):
+            warnings.append("Tool code uses os.system or subprocess — ensure this is intentional and safe.")
+
+    # 3. tool_names vs actual @tool functions (exclude built-in tools)
+    declared_names = [t.strip() for t in tool_names.split(",") if t.strip()] if tool_names else []
+    builtin_names = _get_builtin_tool_names()
+
+    if defined_funcs and declared_names:
+        defined_set = set(defined_funcs)
+        declared_set = set(declared_names)
+
+        # Built-in tools won't be in tool_definitions — that's expected
+        missing_in_code = (declared_set - defined_set) - builtin_names
+        missing_in_names = defined_set - declared_set
+
+        if missing_in_code:
+            errors.append(f"tool_names declares [{', '.join(sorted(missing_in_code))}] but no matching @tool function found in code.")
+        if missing_in_names:
+            warnings.append(f"@tool functions [{', '.join(sorted(missing_in_names))}] exist in code but not listed in tool_names. They will be ignored at runtime.")
+    elif defined_funcs and not declared_names:
+        warnings.append(f"tool_definitions has {len(defined_funcs)} @tool functions but tool_names is empty. Tools won't be registered.")
+    elif declared_names and not defined_funcs:
+        # All declared names are built-in — no warning needed
+        custom_names = set(declared_names) - builtin_names
+        if custom_names:
+            warnings.append(f"tool_names declares [{', '.join(sorted(custom_names))}] but tool_definitions has no matching @tool functions.")
+
+    # 4. system_prompt ↔ tool consistency
+    if system_prompt and defined_funcs:
+        prompt_lower = system_prompt.lower()
+        for func_name in defined_funcs:
+            readable_name = func_name.replace("_", " ")
+            if func_name not in prompt_lower and readable_name not in prompt_lower:
+                warnings.append(f"Tool '{func_name}' is not mentioned in system_prompt. The agent may not know when to use it.")
+
+    # Check for overly long system_prompt
+    if system_prompt and len(system_prompt) > 10000:
+        warnings.append(f"System prompt is very long ({len(system_prompt)} chars). Consider trimming for better performance.")
+
+    # 8. LLM-based prompt quality review (covers structure, tool sync, constraints, safety, etc.)
+    prompt_review = None
+    if system_prompt and system_prompt.strip() and len(errors) == 0:
+        tool_names_list = declared_names or defined_funcs
+        try:
+            prompt_review = _review_prompt_quality(
+                system_prompt, tool_names_list, permission_tier,
+                description=description, welcome_message=welcome_message,
+            )
+        except Exception as e:
+            warnings.append(f"Prompt quality review skipped: {e}")
+        if prompt_review and "scores" in prompt_review:
+            scores = prompt_review["scores"]
+            overall = prompt_review.get("overall", 0)
+            issues = prompt_review.get("issues", [])
+
+            if overall < 3:
+                warnings.append(f"Prompt quality score: {overall}/5 — consider optimizing with Auto-fix or AI assistant.")
+            for issue in issues[:5]:
+                if isinstance(issue, str) and issue.strip():
+                    warnings.append(f"Prompt review: {issue}")
+
+    valid = len(errors) == 0
+    result = {
+        "valid": valid,
+        "errors": errors,
+        "warnings": warnings,
+        "summary": f"{'PASS' if valid else 'FAIL'}: {len(errors)} error(s), {len(warnings)} warning(s)",
+    }
+    if prompt_review and "scores" in prompt_review:
+        result["prompt_scores"] = prompt_review["scores"]
+        result["prompt_overall"] = prompt_review.get("overall", 0)
+    return json.dumps(result, indent=2, ensure_ascii=False)

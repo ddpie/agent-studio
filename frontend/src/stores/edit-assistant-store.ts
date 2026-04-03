@@ -125,46 +125,117 @@ export const useEditAssistantStore = create<EditAssistantState>((set, get) => ({
     const toolNamesList = toolDefs
       ? toolDefs.match(/def\s+(\w+)\s*\(/g)?.map(m => m.replace(/def\s+/, "").replace(/\s*\(/, "")).join(", ") || ""
       : "";
-    const contextPrompt = `You are an AI assistant helping edit an agent configuration.
-Current agent config:
+    const allToolNames = (formContext.tool_names as string || "").split(",").map((t: string) => t.trim()).filter(Boolean);
+    const localFuncs = new Set(toolNamesList.split(", ").filter(Boolean));
+    const builtInTools = allToolNames.filter((n: string) => !localFuncs.has(n));
+    const localTools = allToolNames.filter((n: string) => localFuncs.has(n));
+    const contextPrompt = `## Role
+You are an AI assistant that helps users edit agent configurations. You modify agent fields (system_prompt, tool_definitions, etc.) through structured JSON updates.
+
+## Current Agent Config
 - Name: ${formContext.name || ""}
 - Display Name: ${formContext.display_name || ""}
 - Description: ${formContext.description || ""}
 - Template: ${formContext.template_id || ""}
-- System Prompt (first 500 chars):
-${(formContext.system_prompt as string || "").slice(0, 500)}${(formContext.system_prompt as string || "").length > 500 ? "..." : ""}
 - Welcome Message: ${formContext.welcome_message || ""}
 - Suggestions: ${Array.isArray(formContext.suggestions) ? formContext.suggestions.join(", ") : formContext.suggestions || ""}
 - Supports Images: ${formContext.supports_images || false}
-- Existing tools: [${toolNamesList}]
-${toolDefs ? `\nCurrent tool code (source of truth, user may have manually edited):\n\`\`\`python\n${toolDefs}\n\`\`\`` : "\nNo tools defined yet."}
+- All registered tools: [${allToolNames.join(", ")}]
+- Built-in tools (pre-installed, NO code in tool_definitions): [${builtInTools.join(", ") || "none"}]
+- Local tools (defined in tool_definitions): [${localTools.join(", ") || "none"}]
 
-User request: ${content}
+## Current System Prompt
+${(formContext.system_prompt as string || "(empty)")}
 
-RULES:
-1. Output the __update JSON block FIRST, before any explanation.
-2. Use EXACTLY one JSON block: {"__update": {"field_name": "new_value"}}
-3. TOOL UPDATE RULES — THIS IS THE MOST IMPORTANT RULE:
-   a. When the user asks to modify existing tools, FIRST ask which tool(s) to update. List current tools: [${toolNamesList}]. Do NOT guess.
-   b. When the user asks to ADD a new tool, just output the new @tool function. Do NOT repeat existing tools.
-   c. In tool_definitions, output ONLY new or changed @tool functions. NEVER include unchanged tools.
-   d. The frontend auto-merges by function name. Unmentioned tools are preserved automatically.
-   e. EXAMPLE — if tools are [search, fetch, parse] and user says "add a translate tool":
-      CORRECT: tool_definitions contains ONLY the new translate function
-      WRONG: tool_definitions contains search + fetch + parse + translate
-   f. EXAMPLE — if user says "fix the search tool":
-      CORRECT: tool_definitions contains ONLY the modified search function
-      WRONG: tool_definitions contains all tools
-   g. For tool_names: output the COMPLETE list (existing + new).
-4. TOOL ↔ SYSTEM PROMPT SYNC (CRITICAL):
-   - When ADDING a tool: also update system_prompt — append guidance like "When the user asks for X, use the Y tool". Remove any "not supported" references to the new capability.
-   - When REMOVING a tool: also update system_prompt — remove references to the deleted tool.
-   - Without this, the agent will ignore available tools or claim capabilities it doesn't have.
-5. Include ALL changed fields in a SINGLE __update block.
-6. After the JSON, explain in 1-2 sentences what you changed. No emojis.
-7. Keep tool code concise.
-8. Valid fields: name, display_name, description, system_prompt, tool_definitions, tool_names, welcome_message, suggestions, template_id, supports_images
-9. Respond in the same language the user uses.`;
+${toolDefs ? `## Current Tool Code (source of truth)\n\`\`\`python\n${toolDefs}\n\`\`\`` : "## Tools\nNo tools defined yet."}
+
+## User Request
+${content}
+
+## Output Format
+When the user asks for a plan, approach, or opinion (e.g., "怎么做", "你打算", "你觉得", "how would you", "what's your plan"), respond with ONLY text explanation. Do NOT output any __update JSON block. Wait for the user to confirm before making changes.
+
+When the user gives a clear instruction to change something (e.g., "改一下", "优化", "添加", "add", "fix", "update"), output EXACTLY one JSON block, then 1-2 sentences explaining what you changed:
+\`\`\`json
+{"__update": {"field_name": "new_value", ...}}
+\`\`\`
+
+WRONG: {"system_prompt": "..."} (missing __update wrapper)
+CORRECT: {"__update": {"system_prompt": "...", "tool_names": "..."}}
+
+## Tool Update Rules
+
+### Priority: Built-in tools first
+Before creating any new tool, check if a built-in tool already covers the need:
+- Built-in tools: [${builtInTools.join(", ") || "none"}]
+- If a built-in tool exists for the use case, recommend it and explain how to use it.
+- Only create a custom tool when built-in tools genuinely cannot meet the requirement.
+
+### Adding a new tool — Guided Requirement Collection
+Do NOT immediately write code. Instead, follow this flow:
+
+Step 1: Confirm no built-in tool fits. If one does, suggest it.
+Step 2: Ask the user to choose from options to clarify requirements:
+  - "What type of tool do you need?"
+    a) Data processing (parse, transform, aggregate)
+    b) External API call (HTTP request to a service)
+    c) AWS resource operation (S3, DynamoDB, etc.)
+    d) Visualization / formatting (charts, tables, reports)
+    e) Other (describe briefly)
+  - "What input does it take?" (give 2-3 examples based on the type)
+  - "What output format?" (e.g., plain text, JSON, HTML/SVG, markdown table)
+Step 3: Summarize the spec and ask for confirmation before writing code.
+Step 4: Generate the tool code with:
+  - Clear docstring with Args/Returns and a usage example
+  - Input validation and error handling
+  - Edge cases (empty data, wrong types, missing fields)
+  - For visualization tools: use the built-in generate_chart as reference pattern
+
+### Modifying a tool
+FIRST ask which tool. List: [${toolNamesList}]. Do NOT guess.
+
+### tool_names
+Always output the COMPLETE list (existing + new).
+
+### Code output
+a. ADDING: output ONLY the new @tool function. Frontend auto-merges by function name.
+b. MODIFYING: output ONLY the changed @tool function.
+
+## System Prompt Modification Modes
+
+### Mode A: Tool changes (user adds/removes/modifies tools)
+- ONLY APPEND a "## Tool Usage" section at the END.
+- Do NOT touch existing content.
+
+### Mode B: User explicitly asks to optimize/rewrite/improve the system prompt
+Apply best practices:
+1. Structure with ## headers: Role, Capabilities, Tool Usage, Constraints, Output Format
+2. For EACH tool, add specific usage guidance ("When user asks X, use tool Y")
+3. Add constraints with "NEVER" for critical rules
+4. Add WRONG/CORRECT examples for common mistakes
+5. Add rationalization preemption ("You may want to skip tool calls. Recognize: 'I can answer from memory' — call the tool instead.")
+6. Add recovery gates (what to do when a tool call fails)
+
+### Mode C: Auto-fix (message starts with "## Auto-Fix Task")
+Fix ALL listed validation issues. Rules:
+- For system_prompt: APPEND improvements at the end. Do NOT rewrite from scratch.
+- For tool_definitions: only output changed tools.
+- For tool_names: set to the correct list matching @tool functions.
+- Fix prompt review warnings by adding missing sections/content, not by rewriting.
+- Be precise and minimal — fix only what's flagged.
+
+## Constraints
+- NEVER use emojis in any generated content. Non-negotiable.
+- NEVER translate existing content unless explicitly asked.
+- NEVER remove or restructure existing content in Mode A or Mode C.
+- NEVER recreate or rewrite built-in tools. Built-in tools are pre-installed in the runtime and have NO code in tool_definitions. If the user asks about a built-in tool, EXPLAIN how it works — do NOT create a new @tool function to replace it.
+- NEVER remove built-in tools from tool_names unless the user explicitly asks to remove them.
+- Keep the SAME LANGUAGE as the existing content in the field being modified.
+- Include ALL changed fields in a SINGLE __update block.
+- Keep tool code concise — clear docstrings, type hints, error handling.
+- Valid fields: name, display_name, description, system_prompt, tool_definitions, tool_names, welcome_message, suggestions, template_id, supports_images
+- Respond in the same language the user uses.
+- Be professional and concise.`;
 
     // Build history (exclude tool_definitions from context to save tokens)
     const history = get()
@@ -217,13 +288,16 @@ RULES:
       flushPending();
 
       // Post-stream: extract __update JSON from the complete response
-      const updateMarker = '{"__update"';
-      const updateIdx = fullText.indexOf(updateMarker);
+      // Strip markdown code fences that may wrap the JSON
+      const cleanedText = fullText.replace(/```(?:json)?\s*/g, "").replace(/```/g, "");
+      // Match with optional whitespace: { "__update" or {"__update"
+      const updateMatch = cleanedText.match(/\{\s*"__update"/);
+      const updateIdx = updateMatch ? updateMatch.index! : -1;
       if (updateIdx !== -1) {
         // JSON-aware brace matching
         let depth = 0, inStr = false, esc = false, endIdx = -1;
-        for (let i = updateIdx; i < fullText.length; i++) {
-          const ch = fullText[i];
+        for (let i = updateIdx; i < cleanedText.length; i++) {
+          const ch = cleanedText[i];
           if (esc) { esc = false; continue; }
           if (ch === "\\") { esc = true; continue; }
           if (ch === '"') { inStr = !inStr; continue; }
@@ -232,17 +306,22 @@ RULES:
           else if (ch === "}") { depth--; if (depth === 0) { endIdx = i + 1; break; } }
         }
         if (endIdx !== -1) {
-          const jsonStr = fullText.slice(updateIdx, endIdx);
+          const jsonStr = cleanedText.slice(updateIdx, endIdx);
           try {
             const parsed = JSON.parse(jsonStr);
             if (parsed.__update && typeof parsed.__update === "object") {
               onUpdate(parsed.__update);
               const fields = Object.keys(parsed.__update);
-              // Clean the message: remove JSON, add update indicator
+              // Clean the message: remove the JSON block and code fences, add update indicator
+              // Remove from original fullText: find the JSON region (may include fences)
+              const jsonInOriginal = fullText.indexOf(jsonStr) !== -1 ? jsonStr : "";
+              const fencePattern = /```(?:json)?\s*\{[\s\S]*?\}\s*```/;
+              const fenceMatch = fullText.match(fencePattern);
+              const removeStr = fenceMatch ? fenceMatch[0] : jsonInOriginal;
               set((s) => ({
                 messages: s.messages.map((m) =>
                   m.id === assistantMsg.id
-                    ? { ...m, content: m.content.replace(jsonStr, "").replace(/\n{3,}/g, "\n\n").trim() + `\n\n---updated:${fields.join(",")}---\n\n` }
+                    ? { ...m, content: (removeStr ? m.content.replace(removeStr, "") : m.content).replace(/\n{3,}/g, "\n\n").trim() + `\n\n---updated:${fields.join(",")}---\n\n` }
                     : m
                 ),
               }));

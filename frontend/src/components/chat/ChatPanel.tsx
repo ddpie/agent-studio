@@ -13,7 +13,8 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { fetchAgentMetadata, type AgentMetadata } from "../../lib/agent-metadata";
 import { useUISettings } from "../../stores/ui-settings-store";
-import { uploadImageToS3 } from "../../lib/image-upload";
+import { uploadImageToS3, uploadFileToS3, getSignedImageUrl } from "../../lib/image-upload";
+import { agentConfig } from "../../config";
 import ImageLightbox from "../ui/ImageLightbox";
 
 import { useAgentEditStore } from "../../stores/agent-edit-store";
@@ -21,18 +22,42 @@ import { useAgentEditStore } from "../../stores/agent-edit-store";
 function AgentProposalCard({ json }: { json: string }) {
   const { openNewWithData } = useAgentEditStore();
   let proposal: Record<string, unknown> | null = null;
+  let parseError = "";
   try {
     proposal = JSON.parse(json);
-  } catch {
-    // JSON incomplete (still streaming) — show skeleton
+  } catch (e) {
+    // Try to repair common LLM JSON issues
+    try {
+      const repaired = json.replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
+      proposal = JSON.parse(repaired);
+    } catch {
+      parseError = e instanceof Error ? e.message : "Invalid JSON";
+    }
+  }
+
+  if (!proposal) {
+    // Heuristic: if JSON doesn't end with }, it's still streaming (incomplete)
+    const looksComplete = json.trimEnd().endsWith("}");
     return (
-      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 my-2 text-xs not-prose animate-pulse">
-        <div className="h-4 bg-gray-200 rounded w-1/3 mb-2" />
-        <div className="h-3 bg-gray-200 rounded w-2/3 mb-2" />
-        <div className="h-3 bg-gray-200 rounded w-1/2 mb-2" />
-        <div className="text-[11px] text-gray-500 flex items-center gap-1">
-          <Loader2 className="w-3 h-3 animate-spin" /> Generating proposal...
-        </div>
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 my-2 text-xs not-prose">
+        {parseError && looksComplete ? (
+          <div>
+            <p className="text-red-500 text-[11px] mb-1">Failed to parse agent proposal</p>
+            <details className="text-[10px] text-gray-500">
+              <summary className="cursor-pointer">Show raw JSON</summary>
+              <pre className="mt-1 whitespace-pre-wrap break-all bg-gray-100 p-2 rounded max-h-40 overflow-y-auto">{json}</pre>
+            </details>
+          </div>
+        ) : (
+          <div className="animate-pulse">
+            <div className="h-4 bg-gray-200 rounded w-1/3 mb-2" />
+            <div className="h-3 bg-gray-200 rounded w-2/3 mb-2" />
+            <div className="h-3 bg-gray-200 rounded w-1/2 mb-2" />
+            <div className="text-[11px] text-gray-500 flex items-center gap-1">
+              <Loader2 className="w-3 h-3 animate-spin" /> Generating proposal...
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -246,9 +271,42 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
             ))}
           </div>
         )}
+        {/* Show attached files as cards with download */}
+        {message.attachments && message.attachments.length > 0 && (
+          <div className="flex gap-2 flex-wrap mb-2">
+            {message.attachments.map((f, i) => (
+              <button
+                key={i}
+                onClick={async () => {
+                  try {
+                    const s3Url = `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/${f.s3Key}`;
+                    const blobUrl = await getSignedImageUrl(s3Url);
+                    const a = document.createElement("a");
+                    a.href = blobUrl;
+                    a.download = f.name;
+                    a.click();
+                    URL.revokeObjectURL(blobUrl);
+                  } catch { /* ignore */ }
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] border cursor-pointer transition-colors ${isUser ? "bg-white/10 border-white/20 text-white/90 hover:bg-white/20" : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+                title="Click to download"
+              >
+                <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="font-medium max-w-40 truncate">{f.name}</span>
+                <span className={isUser ? "text-white/50" : "text-gray-400"}>{(f.size / 1024).toFixed(1)}KB</span>
+                <Download className="w-3 h-3 flex-shrink-0 opacity-50" />
+              </button>
+            ))}
+          </div>
+        )}
         {message.content ? (
           <div className={`prose prose-sm max-w-none ${isUser ? "prose-invert" : ""}`}>
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]} components={mdComponents}>{message.content}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]} components={mdComponents}>{
+              // Strip [Attached file: ...] lines from display — file cards handle this
+              message.attachments?.length
+                ? message.content.replace(/\n\n\[Attached file:[^\]]*\]/g, "").trim()
+                : message.content
+            }</ReactMarkdown>
             {showTypingIndicator && (
               <span className="inline-flex items-center gap-1 text-gray-400 text-xs mt-2">
                 <Loader2 className="w-3 h-3 animate-spin" /> Working...
@@ -276,7 +334,7 @@ export default function ChatPanel() {
   const [input, setInput] = useState("");
   const [pastedImages, setPastedImages] = useState<string[]>([]); // base64 for preview
   const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]); // S3 URLs for sending
-  const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; content: string }>>([]);
+  const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; size: number; s3Key: string; uploading?: boolean }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const selectedModel = selectedModelId || DEFAULT_MODEL_ID;
   const setSelectedModel = (id: string) => storeSetModel(id);
@@ -329,12 +387,30 @@ export default function ChatPanel() {
   }, [showHistory, showModelPicker]);
 
   const selectedModelLabel = findModelLabel(selectedModel);
+  const userScrolledUp = useRef(false);
+
+  // Track user scroll in chat area
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+      userScrolledUp.current = !atBottom;
+    };
+    el.addEventListener("scroll", onScroll);
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    // Instant scroll during streaming to avoid jitter, smooth otherwise
-    el.scrollTo({ top: el.scrollHeight, behavior: isStreaming ? "instant" : "smooth" });
+    if (!isStreaming) {
+      // Streaming ended — reset and scroll to bottom
+      userScrolledUp.current = false;
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    } else if (!userScrolledUp.current) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
+    }
   }, [messages, isStreaming]);
 
   // Refresh agent list when streaming finishes
@@ -396,19 +472,28 @@ export default function ChatPanel() {
     setUploadedImageUrls((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
+    const sessionId = activeSessionId || "tmp-" + Date.now();
     for (const file of files) {
-      if (file.size > 100 * 1024) {
-        alert(`File ${file.name} is too large (max 100KB)`);
+      if (file.size > 5 * 1024 * 1024) {
+        alert(`File ${file.name} is too large (max 5MB)`);
         continue;
       }
-      const reader = new FileReader();
-      reader.onload = () => {
-        setAttachedFiles((prev) => [...prev, { name: file.name, content: reader.result as string }]);
-      };
-      reader.readAsText(file);
+      // Add placeholder with uploading state
+      const placeholder = { name: file.name, size: file.size, s3Key: "", uploading: true };
+      setAttachedFiles((prev) => [...prev, placeholder]);
+      try {
+        const { key } = await uploadFileToS3(file, sessionId);
+        setAttachedFiles((prev) =>
+          prev.map((f) => f === placeholder ? { ...f, s3Key: key, uploading: false } : f)
+        );
+      } catch (err) {
+        console.error("File upload failed:", err);
+        setAttachedFiles((prev) => prev.filter((f) => f !== placeholder));
+        alert(`Upload failed for ${file.name}`);
+      }
     }
     e.target.value = "";
   };
@@ -416,17 +501,21 @@ export default function ChatPanel() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isStreaming) return;
+    // Don't submit while files are still uploading
+    if (attachedFiles.some((f) => f.uploading)) return;
 
-    // Append file contents to the message
+    // Build message text with S3 file references (not raw content)
     let messageText = input.trim();
-    if (attachedFiles.length > 0) {
-      for (const f of attachedFiles) {
-        messageText += `\n\n<file name="${f.name}">\n${f.content}\n</file>`;
+    const fileAttachments = attachedFiles.filter((f) => f.s3Key);
+    if (fileAttachments.length > 0) {
+      const bucket = agentConfig.s3Bucket;
+      for (const f of fileAttachments) {
+        messageText += `\n\n[Attached file: ${f.name} (${(f.size / 1024).toFixed(1)}KB) — use s3_read(bucket="${bucket}", key="${f.s3Key}") to read this file]`;
       }
     }
 
     const imageUrlsToSend = uploadedImageUrls.length > 0 ? uploadedImageUrls : (pastedImages.length > 0 ? pastedImages : undefined);
-    sendMessage(messageText, imageUrlsToSend, selectedModel);
+    sendMessage(messageText, imageUrlsToSend, selectedModel, fileAttachments.length > 0 ? fileAttachments : undefined);
     setInput("");
     setPastedImages([]);
     setUploadedImageUrls([]);
@@ -707,15 +796,18 @@ export default function ChatPanel() {
         {attachedFiles.length > 0 && (
           <div className="flex gap-2 mb-2 flex-wrap">
             {attachedFiles.map((f, idx) => (
-              <div key={idx} className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg text-[11px] text-gray-600 group">
-                <Paperclip className="w-3 h-3" />
-                <span className="max-w-32 truncate">{f.name}</span>
-                <button
-                  onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))}
-                  className="text-gray-300 hover:text-red-500"
-                >
-                  <X className="w-3 h-3" />
-                </button>
+              <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-100 rounded-lg text-[11px] text-gray-600 border border-gray-200">
+                {f.uploading ? <Loader2 className="w-3 h-3 animate-spin text-blue-500" /> : <FileText className="w-3 h-3 text-gray-400" />}
+                <span className="max-w-32 truncate font-medium">{f.name}</span>
+                <span className="text-gray-400">{(f.size / 1024).toFixed(1)}KB</span>
+                {!f.uploading && (
+                  <button
+                    onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))}
+                    className="text-gray-300 hover:text-red-500 ml-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -724,7 +816,7 @@ export default function ChatPanel() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,.json,.txt,.md,.py,.yaml,.yml,.xml,.html,.log,.sql"
+            accept=".csv,.tsv,.json,.txt,.md,.py,.yaml,.yml,.xml,.html,.log,.sql"
             multiple
             className="hidden"
             onChange={handleFileSelect}

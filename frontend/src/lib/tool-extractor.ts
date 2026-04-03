@@ -83,7 +83,7 @@ export function extractToolNames(toolDefs: string): string {
 }
 
 /**
- * Fetch deployment.zip from S3, extract main.py, parse @tool blocks.
+ * Fetch deployment.zip from S3, extract tools from tools.py (new format) or main.py (legacy).
  * Tries agentId path first, then falls back to base name path.
  * Returns { tool_definitions, tool_names } or null if extraction fails.
  */
@@ -106,9 +106,22 @@ export async function extractToolsFromDeployment(
     if (!zipData) return null;
 
     const files = unzipSync(new Uint8Array(zipData), {
-      filter: (file) => file.name === "main.py",
+      filter: (file) => file.name === "tools.py" || file.name === "main.py",
     });
 
+    // New multi-file format: tools.py has only @tool functions
+    const toolsPy = files["tools.py"];
+    if (toolsPy) {
+      const source = new TextDecoder().decode(toolsPy);
+      // Strip the "from strands import tool" header, keep only @tool blocks
+      const stripped = source.replace(/^from strands import tool\s*\n*/m, "").trim();
+      if (stripped && stripped.includes("@tool")) {
+        const tool_names = extractToolNames(stripped);
+        return { tool_definitions: stripped, tool_names };
+      }
+    }
+
+    // Legacy single-file format: parse @tool blocks from main.py
     const mainPy = files["main.py"];
     if (!mainPy) return null;
 

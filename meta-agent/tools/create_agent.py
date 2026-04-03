@@ -1,15 +1,17 @@
 """create_agent — Generate code, package, and deploy a new Agent to AgentCore Runtime."""
 
 import json
+import re
 from datetime import datetime, timezone
 
 import boto3
 from strands import tool
 
 from config import MODEL_ID, REGION, S3_BUCKET, AGENTS_TABLE, PERMISSION_TIER_ROLES, DEFAULT_PERMISSION_TIER
-from deploy import build_deployment_package, upload_deployment, create_runtime, wait_for_ready
-from templates.agent_template import AGENT_CODE_TEMPLATE, AGENT_CODE_WITH_MCP_TEMPLATE
+from deploy import build_deployment_package_v2, upload_deployment, create_runtime, wait_for_ready, validate_agent_files
+from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_template_prompt, get_template_names, BASE_GUIDELINES
+from tools_library.registry import get_tool_code_by_func_name as _get_builtin_code
 
 
 @tool
@@ -47,11 +49,11 @@ def create_agent(
         tool_names: Comma-separated list of tool function names.
         welcome_message: Welcome message shown when user opens this agent's chat.
         suggestions: Three suggested prompts separated by | (e.g., "Ask about X|Try Y|Help with Z").
-        template_id: Optional prompt template to use as base (general/expert/customer_service/data_analyst/creative_writer).
+        template_id: Optional prompt template to use as base.
         gateway_url: Optional AgentCore Gateway MCP URL.
         supports_images: Whether this agent can process image inputs.
-        permission_tier: IAM permission level: basic (model only), readonly (AWS read), data-access (AWS read+write). Default: readonly.
-        staging_key: S3 key to a JSON file containing all parameters. If provided, reads config from S3 instead of inline params.
+        permission_tier: IAM permission level: basic/readonly/data-access. Default: readonly.
+        staging_key: S3 key to a JSON file containing all parameters.
 
     Returns:
         JSON with agent_id, agent_arn, status.
@@ -73,9 +75,10 @@ def create_agent(
                 suggestions = "|".join(suggestions)
             template_id = staged.get("template_id", template_id) or template_id
             supports_images = staged.get("supports_images", supports_images)
-            s3_client.delete_object(Bucket=S3_BUCKET, Key=staging_key)
+            gateway_url = staged.get("gateway_url", gateway_url) or gateway_url
         except Exception as e:
             return json.dumps({"error": f"Failed to read staging config: {e}"})
+
     # Apply template if specified
     if template_id:
         base_prompt = get_template_prompt(template_id)
@@ -83,37 +86,46 @@ def create_agent(
     else:
         final_prompt = system_prompt + "\n" + BASE_GUIDELINES
 
-    # Use repr() to safely escape the system_prompt
-    safe_prompt = repr(final_prompt)
+    # Build tool_names list
+    tool_names_list = [t.strip() for t in tool_names.split(",") if t.strip()]
 
-    # Generate agent code
+    # Inject built-in tool code for tools declared in tool_names but not in tool_definitions
+    custom_code = tool_definitions or ""
+    defined_funcs = set(re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', custom_code)) if custom_code.strip() else set()
+    builtin_code_parts = []
+    for tname in tool_names_list:
+        if tname not in defined_funcs:
+            code = _get_builtin_code(tname)
+            if code:
+                builtin_code_parts.append(code.strip())
+
+    # Generate multi-file structure (no more repr() or string template substitution!)
+    main_py = MAIN_PY_MCP_TEMPLATE if gateway_url else MAIN_PY_TEMPLATE
+    tools_py = TOOLS_PY_HEADER + "\n\n".join(builtin_code_parts + ([custom_code] if custom_code.strip() else []))
+    prompt_txt = final_prompt
+    config_data = {
+        "model_id": MODEL_ID,
+        "tool_names": tool_names_list,
+    }
     if gateway_url:
-        agent_code = AGENT_CODE_WITH_MCP_TEMPLATE.format(
-            model_id=MODEL_ID,
-            system_prompt_repr=safe_prompt,
-            tool_definitions=tool_definitions,
-            tool_names=tool_names,
-            gateway_url=gateway_url,
-        )
-    else:
-        agent_code = AGENT_CODE_TEMPLATE.format(
-            model_id=MODEL_ID,
-            system_prompt_repr=safe_prompt,
-            tool_definitions=tool_definitions,
-            tool_names=tool_names,
-        )
+        config_data["gateway_url"] = gateway_url
+    config_json = json.dumps(config_data, indent=2, ensure_ascii=False)
+
+    # Validate each file independently
+    validation = validate_agent_files(main_py, tools_py, prompt_txt, config_json)
+    if not validation["valid"]:
+        return json.dumps({"error": "Code validation failed", "details": validation["errors"]})
 
     # Build, upload, deploy
-    # Note: upload uses agent_name because agentId isn't known yet
     tier = permission_tier or DEFAULT_PERMISSION_TIER
     role_arn = PERMISSION_TIER_ROLES.get(tier, PERMISSION_TIER_ROLES[DEFAULT_PERMISSION_TIER])
-    package = build_deployment_package(agent_code)
+    package = build_deployment_package_v2(main_py, tools_py, prompt_txt, config_json)
     s3_key = upload_deployment(agent_name, package)
     result = create_runtime(agent_name, description, s3_key, role_arn)
 
     agent_id = result["agent_id"]
 
-    # Save metadata.json using agentId as path
+    # Save metadata.json
     suggestion_list = [s.strip() for s in suggestions.split("|") if s.strip()] if suggestions else []
     metadata = {
         "agent_id": agent_id,
@@ -122,10 +134,12 @@ def create_agent(
         "description": description,
         "model_id": MODEL_ID,
         "system_prompt": final_prompt,
+        "tool_definitions": tool_definitions,
         "welcome_message": welcome_message or f"I'm {agent_name}. {description}",
         "suggestions": suggestion_list,
         "template_id": template_id,
-        "tools": [t.strip() for t in tool_names.split(",")],
+        "tools": tool_names_list,
+        "tool_names": ",".join(tool_names_list),
         "supports_images": supports_images,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }

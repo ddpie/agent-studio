@@ -105,8 +105,12 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
 
     const data: Partial<AgentMetadata> = metadata || { name: agentName };
 
-    // If metadata has no tool_definitions, extract from deployment.zip
-    if (!data.tool_definitions) {
+    // Extract tools from deployment.zip if:
+    // 1. No tool_definitions at all, OR
+    // 2. tool_definitions has fewer @tool functions than the tools[] list (partial/stale metadata)
+    const toolCount = (data.tool_definitions || "").split("@tool").length - 1;
+    const expectedCount = (data.tools || []).length;
+    if (!data.tool_definitions || (expectedCount > 0 && toolCount < expectedCount)) {
       const name = data.name || agentName || "";
       if (name) {
         const extracted = await extractToolsFromDeployment(name);

@@ -2,7 +2,7 @@ import { useAgentEditStore } from "../../stores/agent-edit-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { useEditAssistantStore } from "../../stores/edit-assistant-store";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
-import { Loader2, Save, Plus, Trash2, Eye, EyeOff, Code2, MessageSquare, Settings2, Shield, AlertTriangle, Sparkles, Maximize2, Minimize2, FileDown, GitCompare } from "lucide-react";
+import { Loader2, Save, Plus, Trash2, Eye, EyeOff, Code2, MessageSquare, Settings2, Shield, AlertTriangle, Sparkles, Maximize2, Minimize2, FileDown, GitCompare, Wrench } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { python } from "@codemirror/lang-python";
@@ -12,6 +12,7 @@ import { preloadPyodide, isPyodideReady, checkPythonSyntax } from "../../lib/pyo
 import { MODEL_GROUPS } from "../../lib/models";
 import { writeJsonToS3 } from "../../lib/s3-storage";
 import { createPatch } from "diff";
+import ReactMarkdown from "react-markdown";
 import EditAssistant from "./EditAssistant";
 
 /** Combined linter: Pyodide compile() when ready + structural checks always */
@@ -89,10 +90,61 @@ const FIELD_LABELS: Record<string, string> = {
   default_model_id: "Default Model", supports_images: "Image Support", model_id: "Model",
 };
 
-function ReviewChangesModal({ changes, onConfirm, onCancel }: {
+/** Extract structured tool results from a Meta-Agent stream response.
+ *  Parses __tool result markers and decodes base64 output into JSON.
+ *  Returns a map of toolName → parsed JSON result.
+ */
+function extractToolResults(rawStream: string): Record<string, unknown> {
+  const results: Record<string, unknown> = {};
+  const markerRe = /\{"__tool"\s*:\s*"result"\s*,\s*"name"\s*:\s*"([^"]+)"\s*,\s*"input"\s*:\s*"([^"]*)"\s*,\s*"output"\s*:\s*"([^"]*)"\s*\}/g;
+  let match;
+  while ((match = markerRe.exec(rawStream)) !== null) {
+    const [, name, , outputB64] = match;
+    if (outputB64) {
+      try {
+        const decoded = new TextDecoder().decode(Uint8Array.from(atob(outputB64), c => c.charCodeAt(0)));
+        const parsed = JSON.parse(decoded);
+        results[name] = parsed;
+      } catch { /* skip unparseable */ }
+    }
+  }
+  return results;
+}
+
+/** Stream a Meta-Agent prompt, collecting tool markers for progress and results. */
+async function streamMetaAgent(
+  prompt: string,
+  onProgress?: (step: string, pct: number) => void,
+  toolNameMap?: Record<string, string>,
+  toolPctMap?: Record<string, number>,
+): Promise<{ raw: string; toolResults: Record<string, unknown> }> {
+  let raw = "";
+  const stream = invokeMetaAgent(prompt, [], undefined, undefined, undefined, undefined);
+  for await (const chunk of stream) {
+    raw += chunk;
+    if (onProgress) {
+      const toolRe = /\{"__tool"[^}]*\}/g;
+      let m;
+      while ((m = toolRe.exec(chunk)) !== null) {
+        try {
+          const parsed = JSON.parse(m[0]);
+          if (parsed.__tool === "start" && parsed.name) {
+            const step = toolNameMap?.[parsed.name] || `Running ${parsed.name}...`;
+            const pct = toolPctMap?.[parsed.name] || 0;
+            onProgress(step, pct);
+          }
+        } catch { /* skip */ }
+      }
+    }
+  }
+  return { raw, toolResults: extractToolResults(raw) };
+}
+
+function ReviewChangesModal({ changes, onConfirm, onCancel, viewOnly }: {
   changes: Record<string, { old: string; new: string }>;
-  onConfirm: () => void;
+  onConfirm?: () => void;
   onCancel: () => void;
+  viewOnly?: boolean;
 }) {
   const entries = Object.entries(changes).filter(([k]) => !["tools", "tool_names", "created_at", "agent_id"].includes(k));
   if (entries.length === 0) return null;
@@ -103,42 +155,29 @@ function ReviewChangesModal({ changes, onConfirm, onCancel }: {
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
           <div className="flex items-center gap-2">
             <GitCompare className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-semibold text-gray-800">Review Changes ({entries.length} field{entries.length > 1 ? "s" : ""})</span>
+            <span className="text-sm font-semibold text-gray-800">{viewOnly ? "Changes" : "Review Changes"} ({entries.length} field{entries.length > 1 ? "s" : ""})</span>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onCancel} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg">Cancel</button>
-            <button onClick={onConfirm} className="px-4 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">Confirm & Deploy</button>
+            <button onClick={onCancel} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg">{viewOnly ? "Close" : "Cancel"}</button>
+            {!viewOnly && onConfirm && (
+              <button onClick={onConfirm} className="px-4 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">Confirm & Deploy</button>
+            )}
           </div>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {entries.map(([key, { old: oldVal, new: newVal }]) => {
-            const isCode = key === "tool_definitions" || key === "system_prompt";
             const label = FIELD_LABELS[key] || key;
-
-            if (isCode) {
-              const patch = createPatch(label, oldVal, newVal, "", "", { context: 3 });
-              const lines = patch.split("\n").slice(4); // skip header
-              return (
-                <div key={key} className="rounded-lg border border-gray-200 overflow-hidden">
-                  <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600">{label}</div>
-                  <pre className="text-[11px] font-mono leading-relaxed overflow-x-auto p-3 bg-gray-900 text-gray-300">
-                    {lines.map((line, i) => {
-                      const color = line.startsWith("+") ? "text-green-400" : line.startsWith("-") ? "text-red-400" : line.startsWith("@@") ? "text-blue-400" : "text-gray-500";
-                      return <div key={i} className={color}>{line || " "}</div>;
-                    })}
-                  </pre>
-                </div>
-              );
-            }
-
-            // Simple text diff
+            const patch = createPatch(label, oldVal, newVal, "", "", { context: 8 });
+            const lines = patch.split("\n").slice(4); // skip header
             return (
               <div key={key} className="rounded-lg border border-gray-200 overflow-hidden">
                 <div className="px-3 py-1.5 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600">{label}</div>
-                <div className="p-3 space-y-1 text-xs">
-                  {oldVal && <div className="bg-red-50 text-red-700 px-2 py-1 rounded font-mono whitespace-pre-wrap">- {oldVal.length > 200 ? oldVal.slice(0, 200) + "..." : oldVal}</div>}
-                  <div className="bg-green-50 text-green-700 px-2 py-1 rounded font-mono whitespace-pre-wrap">+ {newVal.length > 200 ? newVal.slice(0, 200) + "..." : newVal}</div>
-                </div>
+                <pre className="text-[11px] font-mono leading-relaxed overflow-x-auto p-3 bg-gray-900 text-gray-300">
+                  {lines.map((line, i) => {
+                    const color = line.startsWith("+") ? "text-green-400" : line.startsWith("-") ? "text-red-400" : line.startsWith("@@") ? "text-blue-400" : "text-gray-500";
+                    return <div key={i} className={color}>{line || " "}</div>;
+                  })}
+                </pre>
               </div>
             );
           })}
@@ -148,25 +187,36 @@ function ReviewChangesModal({ changes, onConfirm, onCancel }: {
   );
 }
 
-function Section({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
+function Section({ title, icon, action, children }: { title: string; icon?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
       <div className="px-3 py-1.5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white flex items-center gap-1.5">
         {icon && <span className="text-gray-400">{icon}</span>}
         <h3 className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{title}</h3>
+        {action && <span className="ml-auto">{action}</span>}
       </div>
       <div className="px-3 py-3 space-y-3">{children}</div>
     </div>
   );
 }
 
-function Field({ label, hint, changed, children }: { label: string; hint?: string; changed?: boolean; children: React.ReactNode }) {
+function Field({ label, hint, changed, onOptimize, children }: { label: string; hint?: string; changed?: boolean; onOptimize?: () => void; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-[11px] font-medium text-gray-500 mb-0.5 flex items-center gap-1">
+      <div className="text-[11px] font-medium text-gray-500 mb-0.5 flex items-center gap-1">
         {label}
         {changed && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" title="Modified" />}
-      </label>
+        {onOptimize && (
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOptimize(); }}
+            className="ml-auto w-4 h-4 flex items-center justify-center text-gray-300 hover:text-purple-500 transition-colors rounded"
+            title={`AI optimize ${label}`}
+          >
+            <Sparkles className="w-2.5 h-2.5" />
+          </button>
+        )}
+      </div>
       {children}
       {hint && <p className="text-[10px] text-gray-400 mt-0.5">{hint}</p>}
     </div>
@@ -187,7 +237,14 @@ export default function AgentEditForm() {
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [progressStep, setProgressStep] = useState<string | null>(null);
-  const [showReview, setShowReview] = useState(false);
+  const [progressPct, setProgressPct] = useState(0);
+  const [showReview, setShowReview] = useState<false | "view" | "deploy">(false);
+  const [validationResult, setValidationResult] = useState<{ valid: boolean; errors: string[]; warnings: string[]; prompt_scores?: Record<string, number>; prompt_overall?: number } | null>(null);
+  const [validating, setValidating] = useState(false);
+  const [pendingStagingKey, setPendingStagingKey] = useState<string | null>(null);
+  const [autoFixing, setAutoFixing] = useState(false);
+  const [previewCode, setPreviewCode] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   // Track which fields have changed
   const changedFields = useMemo(() => {
@@ -213,10 +270,52 @@ export default function AgentEditForm() {
 
   const isCreateMode = editingAgentId?.startsWith("draft-") || editingAgentId === "__new__";
 
+  const handleValidateOnly = async () => {
+    setValidating(true);
+    setStatus(null);
+    setValidationResult(null);
+
+    try {
+      const stagingKey = `agents/_staging/${editingAgentId || "new"}-val-${Date.now()}.json`;
+      const stagingData = {
+        name: formData.name || editingAgentName,
+        display_name: formData.display_name || editingAgentName,
+        description: formData.description || "",
+        system_prompt: formData.system_prompt || "",
+        tool_definitions: formData.tool_definitions || "",
+        tool_names: formData.tool_names || "",
+        template_id: formData.template_id || "",
+        supports_images: formData.supports_images || false,
+      };
+      const uploaded = await writeJsonToS3(stagingKey, stagingData);
+      if (!uploaded) { setStatus("Failed to upload config"); return; }
+
+      const { toolResults } = await streamMetaAgent(
+        `Execute validate_agent with staging_key: ${stagingKey}\nDo NOT ask for confirmation.`,
+      );
+      const validation = toolResults.validate_agent as { valid: boolean; errors: string[]; warnings: string[]; prompt_scores?: Record<string, number>; prompt_overall?: number } | undefined;
+
+      if (validation) {
+        setValidationResult(validation);
+        setPendingStagingKey(stagingKey);
+        if (validation.valid && validation.warnings.length === 0) {
+          setStatus("Validation passed — ready to deploy");
+        }
+      } else {
+        setStatus("Validation returned no result — Meta-Agent may not have called validate_agent");
+      }
+    } catch (err) {
+      setStatus(`Validation error: ${err instanceof Error ? err.message : "Unknown"}`);
+    } finally {
+      setValidating(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setStatus(null);
-    setProgressStep(isCreateMode ? "Preparing..." : "Updating...");
+    setErrorDetail(null);
+    setValidationResult(null);
 
     try {
       const suggestions = Array.isArray(formData.suggestions)
@@ -241,10 +340,56 @@ export default function AgentEditForm() {
       if (!uploaded) {
         setStatus("Failed to upload config to S3");
         setSaving(false);
-        setProgressStep(null);
         return;
       }
 
+      // Step 1: Validate
+      setProgressStep("Validating...");
+      setProgressPct(10);
+      const valPrompt = `Execute validate_agent with staging_key: ${stagingKey}\nDo NOT ask for confirmation.`;
+      const { toolResults: valToolResults } = await streamMetaAgent(valPrompt);
+      setValidating(false);
+      setProgressPct(30);
+
+      // Extract structured validation result from tool marker
+      const validation = valToolResults.validate_agent as { valid: boolean; errors: string[]; warnings: string[]; prompt_scores?: Record<string, number>; prompt_overall?: number } | undefined;
+
+      if (validation) {
+        setValidationResult(validation);
+        setPendingStagingKey(stagingKey); // Always preserve for Auto-fix or Deploy anyway
+        if (!validation.valid) {
+          setProgressStep(null);
+          setStatus("Validation failed — fix errors before deploying");
+          setSaving(false);
+          return;
+        }
+        // Has warnings but no errors — let user confirm
+        if (validation.warnings.length > 0) {
+          setProgressStep(null);
+          setStatus(null);
+          setSaving(false);
+          return; // User will click "Deploy anyway" or "Auto-fix"
+        }
+      }
+
+      // Step 2: Deploy (no errors, no warnings or validation failed to parse)
+      await doDeploy(stagingKey);
+    } catch (err) {
+      setProgressStep(null);
+      setStatus(`Error: ${err instanceof Error ? err.message : "Unknown error"}`);
+    } finally {
+      setSaving(false);
+      setValidating(false);
+    }
+  };
+
+  const doDeploy = async (stagingKey: string) => {
+    setSaving(true);
+    setStatus(null);
+    setErrorDetail(null);
+    setProgressStep(isCreateMode ? "Preparing..." : "Updating...");
+
+    try {
       const prompt = isCreateMode
         ? `Execute create_agent with staging_key: ${stagingKey}
 The full config is in S3. Read it and use those parameters.
@@ -259,8 +404,7 @@ Do NOT ask for confirmation. Execute create_agent immediately.`
 The full config (system_prompt, tool_definitions, etc.) is in the S3 staging file. Pass staging_key to update_agent.
 Do NOT ask for confirmation. Execute update_agent immediately.`;
 
-      let result = "";
-      const toolNameMap: Record<string, string> = {
+      const deployToolNameMap: Record<string, string> = {
         create_agent: "Creating agent...",
         update_agent: "Updating agent...",
         upload_deployment: "Uploading code...",
@@ -268,29 +412,33 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
         get_agent_status: "Checking status...",
         save_metadata: "Saving metadata...",
       };
-      const stream = invokeMetaAgent(prompt, [], undefined, undefined, undefined, undefined);
-      for await (const chunk of stream) {
-        result += chunk;
-        // Parse tool markers for progress
-        const toolRe = /\{"__tool"[^}]*\}/g;
-        let m;
-        while ((m = toolRe.exec(chunk)) !== null) {
-          try {
-            const parsed = JSON.parse(m[0]);
-            if (parsed.__tool === "start" && parsed.name) {
-              setProgressStep(toolNameMap[parsed.name] || `Running ${parsed.name}...`);
-            }
-          } catch { /* skip */ }
-        }
-      }
+      const deployToolPctMap: Record<string, number> = {
+        validate_agent: 40, create_agent: 50, update_agent: 50,
+        upload_deployment: 70, deploy_agent: 80, get_agent_status: 90, save_metadata: 95,
+      };
+      setProgressPct(35);
+
+      const { toolResults } = await streamMetaAgent(
+        prompt,
+        (step, pct) => { setProgressStep(step); if (pct) setProgressPct(pct); },
+        deployToolNameMap,
+        deployToolPctMap,
+      );
+
+      // Extract structured result from tool markers
+      const deployResult = (toolResults.update_agent || toolResults.create_agent) as { error?: string; status?: string; details?: string[] } | undefined;
+      const failed = deployResult?.error != null;
 
       setProgressStep(null);
-      const failed = result.includes("error");
+      setProgressPct(failed ? 0 : 100);
       setStatus(failed ? (isCreateMode ? "Create failed" : "Update failed") : (isCreateMode ? "Created successfully" : "Updated successfully"));
+
       if (failed) {
-        // Strip tool markers for readable error detail
-        const cleanResult = result.replace(/\{"__tool"[^}]*\}/g, "").trim();
-        setErrorDetail(cleanResult || "Unknown error from agent");
+        const errorMsg = deployResult!.error!;
+        const details = deployResult!.details?.join("\n") || "";
+        setErrorDetail(details || errorMsg);
+        setValidationResult({ valid: false, errors: [errorMsg, ...( deployResult!.details || [])], warnings: [] });
+        setPendingStagingKey(stagingKey);
       } else {
         setErrorDetail(null);
       }
@@ -298,13 +446,10 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
 
       if (!failed) {
         markSaved();
-
-        // Backfill tool_definitions into metadata.json so future edits skip zip download
         if (editingAgentId && formData.tool_definitions) {
           const metaKey = `agents/${editingAgentId}/metadata.json`;
           writeJsonToS3(metaKey, { ...formData, agent_id: editingAgentId });
         }
-
         if (isCreateMode) closeEdit();
       }
     } catch (err) {
@@ -313,6 +458,91 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAutoFix = async () => {
+    if (!validationResult || !formData) return;
+    setAutoFixing(true);
+
+    // 1. Fix tool_names — always sync from tool_definitions
+    const toolDefs = formData.tool_definitions || "";
+    const funcNames = [...toolDefs.matchAll(/def\s+(\w+)\s*\(/g)].map(m => m[1]);
+    if (funcNames.length > 0) {
+      const currentNames = (formData.tool_names || "").split(",").map(s => s.trim()).filter(Boolean);
+      const definedSet = new Set(funcNames);
+      const currentSet = new Set(currentNames);
+      if (funcNames.length !== currentNames.length || funcNames.some(n => !currentSet.has(n)) || currentNames.some(n => !definedSet.has(n))) {
+        updateField("tool_names", funcNames.join(","));
+        updateField("tools", funcNames);
+      }
+    }
+
+    // 2. Pass ALL validation issues to AI assistant — generic, no per-field hardcoding
+    const allIssues = [
+      ...validationResult.errors.map(e => `ERROR: ${e}`),
+      ...validationResult.warnings.map(w => `WARNING: ${w}`),
+    ];
+
+    if (allIssues.length > 0) {
+      const { sendMessage, openPanel } = useEditAssistantStore.getState();
+      openPanel(editingAgentId!);
+      const fixPrompt = `## Auto-Fix Task
+Fix these validation issues:
+
+${allIssues.map((issue, i) => `${i + 1}. ${issue}`).join("\n")}
+
+tool_names should be: ${funcNames.join(",") || "(extract from @tool functions)"}`;
+
+      await sendMessage(fixPrompt, { ...formData }, (updates) => {
+        for (const [key, value] of Object.entries(updates)) {
+          if (key === "tool_definitions" && typeof value === "string" && formData.tool_definitions) {
+            const existingBlocks = (formData.tool_definitions).split(/\n(?=@tool\b)/).map(s => s.trim()).filter(Boolean);
+            const newBlocks = (value as string).split(/\n(?=@tool\b)/).map(s => s.trim()).filter(Boolean);
+            const merged = new Map<string, string>();
+            for (const b of existingBlocks) { const n = b.match(/def\s+(\w+)\s*\(/)?.[1] || b.slice(0,30); merged.set(n, b); }
+            for (const b of newBlocks) { const n = b.match(/def\s+(\w+)\s*\(/)?.[1] || b.slice(0,30); merged.set(n, b); }
+            updateField("tool_definitions" as keyof typeof formData, Array.from(merged.values()).join("\n\n\n") as never);
+          } else {
+            updateField(key as keyof typeof formData, value as never);
+          }
+        }
+      });
+    }
+
+    setValidationResult(null);
+    setAutoFixing(false);
+    setStatus("Auto-fix applied. Click Update to re-validate and deploy.");
+  };
+
+  const handleOptimizeField = (fieldName: string, fieldLabel: string) => {
+    const { sendMessage, openPanel } = useEditAssistantStore.getState();
+    openPanel(editingAgentId!);
+    const prompts: Record<string, string> = {
+      description: `Optimize the description field. Make it concise (1-2 sentences), clear, and descriptive. Keep the same language. Output __update JSON.`,
+      display_name: `Optimize the display_name. Make it short, memorable, and descriptive. Keep the same language. Output __update JSON.`,
+      welcome_message: `Optimize the welcome_message. Make it friendly, concise, and mention key capabilities. Keep the same language. Output __update JSON.`,
+      suggestions: `Optimize the suggestions (quick-start prompts). Generate 3-5 practical, specific prompts that showcase the agent's main capabilities. Keep the same language. Output __update JSON with suggestions as an array.`,
+      system_prompt: `Optimize the system_prompt following best practices:
+1. Structure with ## headers: Role, Capabilities, Tool Usage, Constraints, Output Format
+2. For each tool, add specific usage guidance ("When user asks X, use tool Y")
+3. Add constraints with "NEVER" for critical rules
+4. Add WRONG/CORRECT examples for common mistakes
+5. Keep the same language as the current prompt
+6. Preserve all existing capabilities and tool references
+Output __update JSON.`,
+      tool_definitions: `Review and optimize the tool code. For each tool:
+1. Ensure docstring is clear and describes what the tool does
+2. Ensure type hints are complete
+3. Add error handling for common failures (network timeout, permission denied, empty results)
+4. Keep code concise — no unnecessary comments or verbose patterns
+Only output changed tools in tool_definitions. Output __update JSON.`,
+    };
+    const prompt = prompts[fieldName] || `Optimize the ${fieldLabel} field. Improve clarity and quality. Keep the same language. Output __update JSON.`;
+    sendMessage(prompt, { ...formData! }, (updates) => {
+      for (const [key, value] of Object.entries(updates)) {
+        updateField(key as keyof typeof formData, value as never);
+      }
+    });
   };
 
   const handleSaveDraft = async () => {
@@ -354,41 +584,65 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={() => openPanel(editingAgentId!)}
-            className={`p-1.5 rounded-lg transition-colors ${panelOpen ? "bg-purple-100 text-purple-600" : "text-gray-400 hover:text-purple-600 hover:bg-purple-50"}`}
+            className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${panelOpen ? "bg-purple-50 text-purple-600" : "text-gray-500 hover:text-purple-600 hover:bg-purple-50"}`}
             title="AI Assistant"
           >
-            <Sparkles className="w-4 h-4" />
+            <Sparkles className="w-3.5 h-3.5" />
+          </button>
+          {Object.keys(changedFields).length > 0 && (
+            <button
+              onClick={() => setShowReview("view")}
+              className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="View changes diff"
+            >
+              <GitCompare className="w-3.5 h-3.5" />
+              Diff
+            </button>
+          )}
+          <button
+            onClick={handleValidateOnly}
+            disabled={saving || validating}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+            title="Validate configuration"
+          >
+            {validating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
+            Validate
           </button>
           <button
             onClick={handleSaveDraft}
             disabled={savingDraft}
-            className="flex items-center gap-1 px-3 py-1.5 text-[13px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-            title="Save draft without deploying"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+            title="Save draft"
           >
             {savingDraft ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
             Draft
           </button>
+          <div className="w-px h-5 bg-gray-200 mx-0.5" />
           <button
             onClick={closeEdit}
-            className="px-3 py-1.5 text-[13px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            className="px-2.5 py-1.5 text-[12px] text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
             Cancel
           </button>
           <button
-            onClick={() => {
-              if (!isCreateMode && Object.keys(changedFields).length > 0) {
-                setShowReview(true);
-              } else {
-                handleSave();
-              }
-            }}
+            onClick={() => handleSave()}
             disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 shadow-sm transition-all"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 shadow-sm transition-all"
           >
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            {saving ? (
+              <svg className="w-4 h-4" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25" />
+                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+                  strokeDasharray={`${2 * Math.PI * 10}`}
+                  strokeDashoffset={`${2 * Math.PI * 10 * (1 - progressPct / 100)}`}
+                  transform="rotate(-90 12 12)"
+                  style={{ transition: "stroke-dashoffset 0.5s ease" }}
+                />
+              </svg>
+            ) : <Save className="w-3.5 h-3.5" />}
             {saving && progressStep ? progressStep : (isCreateMode ? "Create" : "Update")}
           </button>
         </div>
@@ -418,6 +672,111 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
           </div>
         )}
 
+        {/* Validation Results */}
+        {validationResult && (validationResult.errors.length > 0 || validationResult.warnings.length > 0) && (
+          <div className={`rounded-lg text-sm border ${!validationResult.valid ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"}`}>
+            <div className="px-4 py-3">
+              <p className={`font-medium ${validationResult.valid ? "text-amber-700" : "text-red-600"}`}>
+                {!validationResult.valid
+                  ? "Validation failed"
+                  : validationResult.warnings.length > 0
+                    ? `Validation passed with ${validationResult.warnings.length} warning(s)`
+                    : "Validation passed"}
+              </p>
+              {validationResult.errors.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {validationResult.errors.map((e, i) => (
+                    <li key={i} className="text-[11px] text-red-600 flex items-start gap-1.5">
+                      <span className="text-red-400 mt-0.5 flex-shrink-0">&#x2716;</span>
+                      <span className="prose prose-xs prose-red max-w-none [&_p]:m-0 [&_code]:text-red-700 [&_strong]:text-red-700"><ReactMarkdown>{e}</ReactMarkdown></span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {validationResult.warnings.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {validationResult.warnings.map((w, i) => (
+                    <li key={i} className="text-[11px] text-amber-700 flex items-start gap-1.5">
+                      <span className="text-amber-500 mt-0.5 flex-shrink-0">&#x26A0;</span>
+                      <span className="prose prose-xs prose-amber max-w-none [&_p]:m-0 [&_code]:text-amber-800 [&_strong]:text-amber-800"><ReactMarkdown>{w}</ReactMarkdown></span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {/* Prompt Quality Scores */}
+              {validationResult.prompt_scores && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {Object.entries(validationResult.prompt_scores).map(([dim, score]) => (
+                    <span key={dim} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                      score >= 4 ? "bg-green-100 text-green-700" : score >= 3 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"
+                    }`}>
+                      {dim.replace(/_/g, " ")}: {score}/5
+                    </span>
+                  ))}
+                  {validationResult.prompt_overall != null && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                      validationResult.prompt_overall >= 4 ? "bg-green-200 text-green-800" : validationResult.prompt_overall >= 3 ? "bg-yellow-200 text-yellow-800" : "bg-red-200 text-red-800"
+                    }`}>
+                      overall: {validationResult.prompt_overall}/5
+                    </span>
+                  )}
+                </div>
+              )}
+              {/* Action buttons: always show Auto-fix; Deploy anyway only when valid (warnings only) */}
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  onClick={() => { setValidationResult(null); setPendingStagingKey(null); }}
+                  className="px-3 py-1 text-[12px] text-gray-500 hover:bg-gray-100 rounded-lg"
+                >
+                  Dismiss
+                </button>
+                <button
+                  onClick={handleAutoFix}
+                  disabled={autoFixing}
+                  className="flex items-center gap-1 px-3 py-1 text-[12px] font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
+                >
+                  {autoFixing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wrench className="w-3 h-3" />}
+                  {autoFixing ? "Fixing..." : "Auto-fix"}
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!pendingStagingKey) return;
+                    setPreviewLoading(true);
+                    try {
+                      const prompt = `Execute preview_assembled_code with staging_key: ${pendingStagingKey}\nReturn ONLY the JSON result. Do NOT include the code in your response.`;
+                      let result = "";
+                      const stream = invokeMetaAgent(prompt, [], undefined, undefined, undefined, undefined);
+                      for await (const chunk of stream) { result += chunk; }
+                      const clean = result.replace(/\{"__tool"[^}]*\}/g, "");
+                      // Extract preview_key from response
+                      const keyMatch = clean.match(/"preview_key"\s*:\s*"([^"]+)"/);
+                      if (keyMatch) {
+                        // Fetch code from S3
+                        const { readBinaryFromS3 } = await import("../../lib/s3-storage");
+                        const buf = await readBinaryFromS3(keyMatch[1]);
+                        if (buf) setPreviewCode(new TextDecoder().decode(buf));
+                      }
+                    } finally { setPreviewLoading(false); }
+                  }}
+                  disabled={previewLoading || !pendingStagingKey}
+                  className="flex items-center gap-1 px-3 py-1 text-[12px] font-medium text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+                >
+                  {previewLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Code2 className="w-3 h-3" />}
+                  View Code
+                </button>
+                {validationResult.valid && pendingStagingKey && (
+                  <button
+                    onClick={() => { setValidationResult(null); doDeploy(pendingStagingKey!); setPendingStagingKey(null); }}
+                    className="px-3 py-1 text-[12px] font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600"
+                  >
+                    Deploy anyway
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Basic Info */}
         <Section title="Basic Info" icon={<Settings2 className="w-3.5 h-3.5" />}>
           <div className="grid grid-cols-2 gap-4">
@@ -430,7 +789,7 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
                 className={isCreateMode ? inputClass : disabledClass}
               />
             </Field>
-            <Field label="Display Name" changed={!!changedFields.display_name} hint="Shown in sidebar and chat header">
+            <Field label="Display Name" changed={!!changedFields.display_name} hint="Shown in sidebar and chat header" onOptimize={() => handleOptimizeField("display_name", "Display Name")}>
               <input
                 type="text"
                 value={formData.display_name || ""}
@@ -440,7 +799,7 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
               />
             </Field>
           </div>
-          <Field label="Description" changed={!!changedFields.description}>
+          <Field label="Description" changed={!!changedFields.description} onOptimize={() => handleOptimizeField("description", "Description")}>
             <textarea
               value={formData.description || ""}
               onChange={(e) => updateField("description", e.target.value)}
@@ -453,7 +812,7 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
 
         {/* Chat Settings */}
         <Section title="Chat Settings" icon={<MessageSquare className="w-3.5 h-3.5" />}>
-          <Field label="Welcome Message" changed={!!changedFields.welcome_message} hint="First message shown when user opens this agent">
+          <Field label="Welcome Message" changed={!!changedFields.welcome_message} hint="First message shown when user opens this agent" onOptimize={() => handleOptimizeField("welcome_message", "Welcome Message")}>
             <textarea
               value={formData.welcome_message || ""}
               onChange={(e) => updateField("welcome_message", e.target.value)}
@@ -462,7 +821,7 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
               placeholder="Hello! I can help you with..."
             />
           </Field>
-          <Field label="Suggested Prompts" changed={!!changedFields.suggestions} hint="One per line, shown as quick-start buttons">
+          <Field label="Suggested Prompts" changed={!!changedFields.suggestions} hint="One per line, shown as quick-start buttons" onOptimize={() => handleOptimizeField("suggestions", "Suggested Prompts")}>
             <textarea
               value={(Array.isArray(formData.suggestions) ? formData.suggestions : (formData.suggestions || "").split("|").filter(Boolean)).join("\n")}
               onChange={(e) => updateField("suggestions", e.target.value.split("\n").filter(Boolean))}
@@ -502,18 +861,18 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
               </select>
             </Field>
             <Field label="Image Support" changed={!!changedFields.supports_images}>
-              <label className="flex items-center gap-2 h-[34px] px-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+              <label className={`flex items-center gap-2 h-[34px] px-3 border rounded-lg cursor-pointer transition-colors ${formData.supports_images ? "bg-blue-50 border-blue-300 text-blue-700" : "border-gray-200 hover:bg-gray-50"}`}>
                 <input
                   type="checkbox"
                   checked={formData.supports_images || false}
                   onChange={(e) => updateField("supports_images", e.target.checked)}
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                <span className="text-[13px] text-gray-600">Multimodal</span>
+                <span className="text-[13px]">{formData.supports_images ? "Multimodal (enabled)" : "Multimodal"}</span>
               </label>
             </Field>
           </div>
-          <Field label="System Prompt" changed={!!changedFields.system_prompt} hint="Defines the agent's personality and behavior. Changes trigger a redeploy (1-2 min).">
+          <Field label="System Prompt" changed={!!changedFields.system_prompt} hint="Defines the agent's personality and behavior. Changes trigger a redeploy (1-2 min)." onOptimize={() => handleOptimizeField("system_prompt", "System Prompt")}>
             <textarea
               value={formData.system_prompt || ""}
               onChange={(e) => updateField("system_prompt", e.target.value)}
@@ -525,7 +884,15 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
         </Section>
 
         {/* Tools */}
-        <Section title="Tools" icon={<Code2 className="w-3.5 h-3.5" />}>
+        <Section title="Tools" icon={<Code2 className="w-3.5 h-3.5" />} action={
+          <button
+            onClick={() => handleOptimizeField("tool_definitions", "Tools")}
+            className="p-0.5 text-gray-300 hover:text-purple-500 transition-colors"
+            title="AI optimize tools"
+          >
+            <Sparkles className="w-3 h-3" />
+          </button>
+        }>
           <ToolsEditor
             value={formData.tool_definitions || ""}
             onChange={(defs, names) => {
@@ -533,7 +900,48 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
               updateField("tool_names", names);
               updateField("tools", names.split(",").map(s => s.trim()).filter(Boolean));
             }}
+            onOptimizeTool={(toolName, toolCode) => {
+              const { sendMessage, openPanel } = useEditAssistantStore.getState();
+              openPanel(editingAgentId!);
+              sendMessage(
+                `Optimize the tool \`${toolName}\`. Current code:\n\`\`\`python\n${toolCode}\n\`\`\`\n\nImprove:\n1. Docstring: clear, describes purpose, args, and return value\n2. Type hints: complete for all parameters and return\n3. Error handling: handle common failures (timeout, permission denied, empty results)\n4. Code quality: concise, no unnecessary comments\nOnly output this one tool in tool_definitions. Output __update JSON.`,
+                { ...formData },
+                (updates) => {
+                  for (const [key, value] of Object.entries(updates)) {
+                    if (key === "tool_definitions" && typeof value === "string" && formData.tool_definitions) {
+                      const existingBlocks = (formData.tool_definitions).split(/\n(?=@tool\b)/).map(s => s.trim()).filter(Boolean);
+                      const newBlocks = (value as string).split(/\n(?=@tool\b)/).map(s => s.trim()).filter(Boolean);
+                      const merged = new Map<string, string>();
+                      for (const b of existingBlocks) { const n = b.match(/def\s+(\w+)\s*\(/)?.[1] || b.slice(0,30); merged.set(n, b); }
+                      for (const b of newBlocks) { const n = b.match(/def\s+(\w+)\s*\(/)?.[1] || b.slice(0,30); merged.set(n, b); }
+                      updateField("tool_definitions" as keyof typeof formData, Array.from(merged.values()).join("\n\n\n") as never);
+                    } else {
+                      updateField(key as keyof typeof formData, value as never);
+                    }
+                  }
+                }
+              );
+            }}
           />
+          <Field label="Registered Tools" changed={!!changedFields.tool_names} hint="Auto-synced from tool code. Shows which tools will be available at runtime.">
+            <div className={`w-full px-2 py-1.5 border border-gray-100 rounded-lg text-[12px] bg-gray-50 min-h-[28px] flex flex-wrap gap-1 ${!formData.tool_names ? "italic text-gray-400" : ""}`}>
+              {formData.tool_names
+                ? (() => {
+                    const allNames = formData.tool_names!.split(",").map(t => t.trim()).filter(Boolean);
+                    const localFuncs = new Set([...(formData.tool_definitions || "").matchAll(/def\s+(\w+)\s*\(/g)].map(m => m[1]));
+                    return allNames.map(name => {
+                      const isLocal = localFuncs.has(name);
+                      return (
+                        <span key={name} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono ${isLocal ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-purple-50 text-purple-700 border border-purple-200"}`}>
+                          {name}
+                          <span className={`ml-1 text-[9px] font-sans ${isLocal ? "text-blue-400" : "text-purple-400"}`}>{isLocal ? "local" : "built-in"}</span>
+                        </span>
+                      );
+                    });
+                  })()
+                : "No tools registered"}
+            </div>
+          </Field>
         </Section>
 
         {/* Secrets */}
@@ -548,9 +956,30 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
     {showReview && (
       <ReviewChangesModal
         changes={changedFields}
-        onConfirm={() => { setShowReview(false); handleSave(); }}
+        viewOnly={showReview === "view"}
+        onConfirm={showReview === "deploy" ? () => { setShowReview(false); handleSave(); } : undefined}
         onCancel={() => setShowReview(false)}
       />
+    )}
+    {/* Code Preview modal */}
+    {previewCode && (
+      <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setPreviewCode(null)}>
+        <div className="bg-gray-900 rounded-xl w-[80vw] max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()} onWheel={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
+            <span className="text-sm font-medium text-gray-200">Assembled Code Preview (main.py)</span>
+            <button onClick={() => setPreviewCode(null)} className="px-3 py-1 text-xs text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg">Close</button>
+          </div>
+          <div className="flex-1 overflow-auto">
+            <CodeMirror
+              value={previewCode}
+              editable={false}
+              extensions={[python(), toolLinter]}
+              theme={vscodeDark}
+              style={{ fontSize: "12px" }}
+            />
+          </div>
+        </div>
+      </div>
     )}
     </div>
   );
@@ -612,9 +1041,10 @@ def my_tool(query: str) -> str:
     """
     return "result"`;
 
-function ToolsEditor({ value, onChange }: {
+function ToolsEditor({ value, onChange, onOptimizeTool }: {
   value: string;
   onChange: (defs: string, names: string) => void;
+  onOptimizeTool?: (toolName: string, toolCode: string) => void;
 }) {
   const [blocks, setBlocks] = useState<string[]>(() => {
     const initial = splitTools(value);
@@ -651,8 +1081,17 @@ function ToolsEditor({ value, onChange }: {
     sync(updated);
   };
 
+  const [confirmDeleteIdx, setConfirmDeleteIdx] = useState<number | null>(null);
+
   const removeBlock = (idx: number) => {
-    sync(blocks.filter((_, i) => i !== idx));
+    setConfirmDeleteIdx(idx);
+  };
+
+  const confirmRemove = () => {
+    if (confirmDeleteIdx !== null) {
+      sync(blocks.filter((_, i) => i !== confirmDeleteIdx));
+      setConfirmDeleteIdx(null);
+    }
   };
 
   const addBlock = () => {
@@ -725,6 +1164,15 @@ function ToolsEditor({ value, onChange }: {
                 {desc && <span className="text-gray-500 font-sans ml-2">— {desc}</span>}
               </span>
               <div className="flex items-center gap-1">
+                {onOptimizeTool && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onOptimizeTool(name, code); }}
+                    className="p-1 text-gray-500 hover:text-purple-400 transition-colors"
+                    title="AI optimize this tool"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); setFullscreenIdx(idx); }}
                   className="p-1 text-gray-500 hover:text-white transition-colors"
@@ -761,6 +1209,21 @@ function ToolsEditor({ value, onChange }: {
       >
         <Plus className="w-3.5 h-3.5" /> Add Tool
       </button>
+      {/* Delete confirmation modal */}
+      {confirmDeleteIdx !== null && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setConfirmDeleteIdx(null)}>
+          <div className="bg-white rounded-xl shadow-2xl p-5 max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium text-gray-800 mb-1">Delete tool?</p>
+            <p className="text-xs text-gray-500 mb-4">
+              Remove <span className="font-mono font-medium text-gray-700">{extractFuncName(blocks[confirmDeleteIdx])}</span> from this agent. This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setConfirmDeleteIdx(null)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg">Cancel</button>
+              <button onClick={confirmRemove} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

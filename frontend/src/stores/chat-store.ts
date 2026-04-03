@@ -7,6 +7,7 @@ export interface Message {
   role: "user" | "assistant" | "system";
   content: string;
   images?: string[];
+  attachments?: Array<{ name: string; size: number; s3Key: string }>;
   timestamp: number;
 }
 
@@ -35,7 +36,7 @@ interface ChatState {
 
   setTarget: (agentId: string | null, agentName: string | null) => void;
   setSelectedModel: (modelId: string) => void;
-  sendMessage: (content: string, images?: string[], modelId?: string) => Promise<void>;
+  sendMessage: (content: string, images?: string[], modelId?: string, attachments?: Array<{ name: string; size: number; s3Key: string }>) => Promise<void>;
   regenerateLastMessage: () => Promise<void>;
   editAndResend: (messageId: string, newContent: string) => Promise<void>;
   cancelStreaming: () => void;
@@ -85,23 +86,26 @@ export const useChatStore = create<ChatState>()(
       },
 
       setTarget: (agentId, agentName) => {
-        const state = get();
-        // Save current session and remember which session was active for this agent
-        _saveCurrentSession(state, set);
-        const currentKey = agentKey(state.targetAgentId);
-        if (state.activeSessionId) {
+        // Save current session first (may create a new session & update activeSessionId)
+        _saveCurrentSession(get(), set);
+
+        // Read fresh state AFTER save — state.activeSessionId may have changed
+        const fresh = get();
+        const currentKey = agentKey(fresh.targetAgentId);
+        if (fresh.activeSessionId) {
           set((s) => ({
-            lastActiveSessionByAgent: { ...s.lastActiveSessionByAgent, [currentKey]: state.activeSessionId! },
+            lastActiveSessionByAgent: { ...s.lastActiveSessionByAgent, [currentKey]: fresh.activeSessionId! },
           }));
         }
 
         // Restore last active session for the target agent, or fall back to most recent
         const key = agentKey(agentId);
-        const lastActiveId = get().lastActiveSessionByAgent[key];
+        const updated = get();
+        const lastActiveId = updated.lastActiveSessionByAgent[key];
         const lastActive = lastActiveId
-          ? state.sessions.find((s) => s.id === lastActiveId)
+          ? updated.sessions.find((s) => s.id === lastActiveId)
           : null;
-        const recent = lastActive || state.sessions
+        const recent = lastActive || updated.sessions
           .filter((s) => s.agentKey === key)
           .sort((a, b) => b.updatedAt - a.updatedAt)[0];
 
@@ -165,7 +169,7 @@ export const useChatStore = create<ChatState>()(
 
       setSelectedModel: (modelId: string) => set({ selectedModelId: modelId }),
 
-      sendMessage: async (content: string, images?: string[], modelId?: string) => {
+      sendMessage: async (content: string, images?: string[], modelId?: string, attachments?: Array<{ name: string; size: number; s3Key: string }>) => {
         _abortController = new AbortController();
         const signal = _abortController.signal;
 
@@ -174,6 +178,7 @@ export const useChatStore = create<ChatState>()(
           role: "user",
           content,
           images: images && images.length > 0 ? images : undefined,
+          attachments: attachments && attachments.length > 0 ? attachments : undefined,
           timestamp: Date.now(),
         };
 
@@ -264,12 +269,22 @@ export const useChatStore = create<ChatState>()(
                 if (m.type === "start") {
                   set({ activeTool: m.name });
                 } else if (m.type === "result") {
-                  const inp = m.input ? atob(m.input) : "";
-                  const out = m.output ? atob(m.output) : "";
+                  let inp = "", out = "";
+                  try { inp = m.input ? new TextDecoder().decode(Uint8Array.from(atob(m.input), c => c.charCodeAt(0))) : ""; } catch { inp = m.input || ""; }
+                  try { out = m.output ? new TextDecoder().decode(Uint8Array.from(atob(m.output), c => c.charCodeAt(0))) : ""; } catch { out = m.output || ""; }
                   let detailContent = `\n\n<details class="tool-call"><summary>Called <strong>${m.name}</strong></summary>\n\n`;
                   if (inp) detailContent += `**Input:**\n\`\`\`json\n${inp}\n\`\`\`\n`;
-                  if (out) detailContent += `**Output:**\n\`\`\`\n${out}\n\`\`\`\n`;
+                  const isHtml = out && out.trimStart().startsWith("<");
+                  if (out && !isHtml) {
+                    detailContent += `**Output:**\n\`\`\`\n${out}\n\`\`\`\n`;
+                  } else if (isHtml) {
+                    detailContent += `**Output:** Rich content rendered below.\n`;
+                  }
                   detailContent += `\n</details>\n\n`;
+                  // HTML/SVG output: render inline after the details block
+                  if (isHtml) {
+                    detailContent += `\n\n<div class="tool-rich-output">${out}</div>\n\n`;
+                  }
                   set((s) => ({
                     messages: s.messages.map((msg) =>
                       msg.id === assistantMsg.id

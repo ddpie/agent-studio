@@ -35,6 +35,14 @@ def list_tool_library() -> str:
     return json.dumps(catalog, indent=2, ensure_ascii=False)
 
 
+def get_tool_code_by_func_name(func_name: str) -> str | None:
+    """Get the Python code for a tool by its function name (e.g., 's3_read')."""
+    for mod in _ALL_TOOLS:
+        if func_name in [n.strip() for n in mod.TOOL_NAMES.split(",")]:
+            return mod.TOOL_CODE
+    return None
+
+
 def get_tool_code(tool_id: str) -> str | None:
     """Get the Python code for a tool by its ID."""
     for mod in _ALL_TOOLS:

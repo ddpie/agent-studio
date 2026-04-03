@@ -1,5 +1,6 @@
 """Deployment utilities for packaging and deploying agents to AgentCore Runtime."""
 
+import ast
 import boto3
 import io
 import json
@@ -9,12 +10,102 @@ import zipfile
 from config import REGION, ACCOUNT_ID, S3_BUCKET, AGENT_ROLE_ARN, BASE_DEPLOYMENT_KEY
 
 
-def build_deployment_package(agent_code: str) -> bytes:
-    """Clone base deployment zip and replace main.py with new agent code.
+def validate_agent_files(main_py: str, tools_py: str, prompt_txt: str, config_json: str) -> dict:
+    """Validate agent files independently before deployment.
 
-    The base zip contains all pre-built Python dependencies (~25MB).
-    We only swap out main.py to create a new agent.
+    Unlike the old validate_assembled_code which checked a single monolithic main.py,
+    this validates each file separately — catching errors at the source.
     """
+    errors = []
+    warnings = []
+
+    # 1. Validate tools.py syntax independently
+    if tools_py.strip():
+        try:
+            ast.parse(tools_py)
+        except SyntaxError as e:
+            errors.append(f"tools.py SyntaxError: {e.msg} (line {e.lineno})")
+
+    # 2. Validate main.py syntax (should always pass since it's a template)
+    try:
+        ast.parse(main_py)
+    except SyntaxError as e:
+        errors.append(f"main.py SyntaxError: {e.msg} (line {e.lineno})")
+
+    # 3. Validate config.json
+    try:
+        config = json.loads(config_json)
+        if not config.get("model_id"):
+            errors.append("config.json missing model_id")
+        if not isinstance(config.get("tool_names", []), list):
+            errors.append("config.json tool_names must be a list")
+    except json.JSONDecodeError as e:
+        errors.append(f"config.json invalid JSON: {e}")
+
+    # 4. Validate prompt.txt
+    if not prompt_txt.strip():
+        warnings.append("prompt.txt is empty")
+
+    # 5. Check main.py has required structure
+    if "@app.entrypoint" not in main_py:
+        errors.append("main.py missing @app.entrypoint")
+    if "BedrockAgentCoreApp()" not in main_py:
+        errors.append("main.py missing BedrockAgentCoreApp()")
+
+    return {"valid": len(errors) == 0, "errors": errors, "warnings": warnings}
+
+
+# Keep old function for backward compatibility during transition
+def validate_assembled_code(agent_code: str) -> dict:
+    """Legacy: validate a single-file agent code."""
+    errors = []
+    try:
+        ast.parse(agent_code)
+    except SyntaxError as e:
+        errors.append(f"Assembled code SyntaxError: {e.msg} (line {e.lineno})")
+        return {"valid": False, "errors": errors, "warnings": []}
+    if "@app.entrypoint" not in agent_code:
+        errors.append("Missing @app.entrypoint")
+    count = agent_code.count("@app.entrypoint")
+    if count > 1:
+        errors.append(f"Duplicate @app.entrypoint ({count} times)")
+    return {"valid": len(errors) == 0, "errors": errors, "warnings": []}
+
+
+def build_deployment_package_v2(main_py: str, tools_py: str, prompt_txt: str, config_json: str) -> bytes:
+    """Build deployment zip with multi-file structure.
+
+    Files written: main.py, tools.py, prompt.txt, config.json
+    stream_utils.py is expected to be in the base zip already.
+    """
+    s3 = boto3.client("s3", region_name=REGION)
+    base_resp = s3.get_object(Bucket=S3_BUCKET, Key=BASE_DEPLOYMENT_KEY)
+    base_data = base_resp["Body"].read()
+
+    agent_files = {"main.py", "tools.py", "prompt.txt", "config.json"}
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(base_data), "r") as base_zip:
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as new_zip:
+            for item in base_zip.namelist():
+                if item in agent_files:
+                    continue  # Will be replaced below
+                if item.startswith(("mcp_client/", "model/")):
+                    continue  # Skip old template-specific modules
+                new_zip.writestr(item, base_zip.read(item))
+
+            # Write agent-specific files
+            new_zip.writestr("main.py", main_py)
+            new_zip.writestr("tools.py", tools_py)
+            new_zip.writestr("prompt.txt", prompt_txt)
+            new_zip.writestr("config.json", config_json)
+
+    return buf.getvalue()
+
+
+# Keep old function for backward compatibility
+def build_deployment_package(agent_code: str) -> bytes:
+    """Legacy: build deployment with single main.py."""
     s3 = boto3.client("s3", region_name=REGION)
     base_resp = s3.get_object(Bucket=S3_BUCKET, Key=BASE_DEPLOYMENT_KEY)
     base_data = base_resp["Body"].read()
@@ -26,17 +117,21 @@ def build_deployment_package(agent_code: str) -> bytes:
                 if item == "main.py":
                     new_zip.writestr("main.py", agent_code)
                 elif item.startswith(("mcp_client/", "model/")):
-                    continue  # Skip template-specific modules
+                    continue
                 else:
                     new_zip.writestr(item, base_zip.read(item))
 
     return buf.getvalue()
 
 
-def upload_deployment(agent_id: str, package: bytes) -> str:
-    """Upload deployment package to S3. Returns S3 key."""
+def upload_deployment(agent_id_or_name: str, package: bytes) -> str:
+    """Upload deployment package to S3. Returns S3 key.
+
+    Note: For create_agent, agent_name is passed (agentId not yet known).
+    For update_agent, agent_id is passed. Both are valid S3 path segments.
+    """
     s3 = boto3.client("s3", region_name=REGION)
-    s3_key = f"agents/{agent_id}/deployment.zip"
+    s3_key = f"agents/{agent_id_or_name}/deployment.zip"
     s3.put_object(Bucket=S3_BUCKET, Key=s3_key, Body=package)
     return s3_key
 
@@ -113,3 +208,4 @@ def delete_runtime(agent_id: str):
     """Delete an agent runtime."""
     control = boto3.client("bedrock-agentcore-control", region_name=REGION)
     control.delete_agent_runtime(agentRuntimeId=agent_id)
+
