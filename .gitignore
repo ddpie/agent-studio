@@ -18,6 +18,11 @@ dist/
 build/
 *.zip
 
+# Test coverage
+coverage/
+.coverage
+htmlcov/
+
 # AgentCore CLI
 .bedrock_agentcore/
 .bedrock_agentcore.yaml
