@@ -208,13 +208,25 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
   const { editAndResend } = useChatStore();
 
   const startEdit = () => {
-    setEditText(message.content);
+    // Strip [Attached file: ...] lines from edit textarea — file cards handle display
+    const cleanContent = message.attachments?.length
+      ? message.content.replace(/\n\n\[Attached file:[^\]]*\]/g, "").trim()
+      : message.content;
+    setEditText(cleanContent);
     setEditing(true);
   };
 
   const submitEdit = () => {
     if (editText.trim() && editText !== message.content) {
-      editAndResend(message.id, editText.trim());
+      // Re-append attachment references for the agent to use
+      let finalText = editText.trim();
+      if (message.attachments?.length) {
+        const bucket = agentConfig.s3Bucket;
+        for (const f of message.attachments) {
+          finalText += `\n\n[Attached file: ${f.name} (${(f.size / 1024).toFixed(1)}KB) — use s3_read(bucket="${bucket}", key="${f.s3Key}") to read this file]`;
+        }
+      }
+      editAndResend(message.id, finalText);
     }
     setEditing(false);
   };

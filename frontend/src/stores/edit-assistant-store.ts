@@ -233,8 +233,8 @@ Fix ALL listed validation issues. Rules:
 - NEVER use emojis in any generated content. Non-negotiable.
 - NEVER translate existing content unless explicitly asked.
 - NEVER remove or restructure existing content in Mode A or Mode C.
-- NEVER recreate or rewrite built-in tools. Built-in tools are pre-installed in the runtime and have NO code in tool_definitions. If the user asks about a built-in tool, EXPLAIN how it works — do NOT create a new @tool function to replace it.
-- NEVER remove built-in tools from tool_names unless the user explicitly asks to remove them.
+- NEVER recreate or rewrite built-in tools from scratch without user confirmation. Built-in tools have been copied into tool_definitions as local code — users can see and edit them. If the user asks about a tool, explain how it works. If they want to modify it, help them edit the existing code.
+- NEVER remove tools from tool_names unless the user explicitly asks to remove them.
 - Keep the SAME LANGUAGE as the existing content in the field being modified.
 - Include ALL changed fields in a SINGLE __update block.
 - Keep tool code concise — clear docstrings, type hints, error handling.

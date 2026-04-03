@@ -116,6 +116,12 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     - The user explicitly requests custom behavior that built-in tools cannot provide
     - The user needs a domain-specific tool (e.g., parsing a proprietary format)
 
+    ### IMPORTANT: Include built-in tool code in tool_definitions
+    When using built-in tools, you MUST include their code in tool_definitions.
+    The deployment system will package whatever is in tool_definitions into the agent.
+    Do NOT assume built-in tools are pre-installed — they are templates that get copied into the agent's code.
+    This allows users to see and customize the tool code before deployment.
+
     ### Guided requirement collection for custom tools
     When a custom tool IS needed, do NOT immediately write code. Instead:
     1. Confirm no built-in tool fits

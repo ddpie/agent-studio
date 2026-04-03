@@ -930,11 +930,9 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
                     const allNames = formData.tool_names!.split(",").map(t => t.trim()).filter(Boolean);
                     const localFuncs = new Set([...(formData.tool_definitions || "").matchAll(/def\s+(\w+)\s*\(/g)].map(m => m[1]));
                     return allNames.map(name => {
-                      const isLocal = localFuncs.has(name);
                       return (
-                        <span key={name} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono ${isLocal ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-purple-50 text-purple-700 border border-purple-200"}`}>
+                        <span key={name} className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono bg-blue-50 text-blue-700 border border-blue-200">
                           {name}
-                          <span className={`ml-1 text-[9px] font-sans ${isLocal ? "text-blue-400" : "text-purple-400"}`}>{isLocal ? "local" : "built-in"}</span>
                         </span>
                       );
                     });
