@@ -218,7 +218,11 @@ def update_agent(
 
     # Always update metadata
     suggestion_list = [s.strip() for s in final_suggestions.split("|") if s.strip()]
-    final_tools_def_for_meta = final_tools_def or existing_metadata.get("tool_definitions", "")
+    # Use the actual deployed tools_py (includes injected built-in code) if redeployed
+    if needs_redeploy:
+        final_tools_def_for_meta = tools_py.replace(TOOLS_PY_HEADER, "").strip()
+    else:
+        final_tools_def_for_meta = final_tools_def or existing_metadata.get("tool_definitions", "")
     metadata = {
         "agent_id": agent_id,
         "name": agent_name,

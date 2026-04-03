@@ -134,7 +134,7 @@ def create_agent(
         "description": description,
         "model_id": MODEL_ID,
         "system_prompt": final_prompt,
-        "tool_definitions": tool_definitions,
+        "tool_definitions": tools_py.replace(TOOLS_PY_HEADER, "").strip(),
         "welcome_message": welcome_message or f"I'm {agent_name}. {description}",
         "suggestions": suggestion_list,
         "template_id": template_id,
