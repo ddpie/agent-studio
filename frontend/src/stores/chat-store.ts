@@ -348,6 +348,7 @@ export const useChatStore = create<ChatState>()(
         const lastUserMsg = messages[lastUserIdx];
         const content = lastUserMsg.content;
         const images = lastUserMsg.images;
+        const attachments = lastUserMsg.attachments;
 
         // Remove the last assistant message (and the user message to re-send)
         const trimmed = messages.slice(0, lastUserIdx);
@@ -355,7 +356,7 @@ export const useChatStore = create<ChatState>()(
 
         // Re-send using the current model
         const modelId = get().selectedModelId || undefined;
-        await get().sendMessage(content, images, modelId);
+        await get().sendMessage(content, images, modelId, attachments);
       },
 
       editAndResend: async (messageId: string, newContent: string) => {
@@ -368,10 +369,11 @@ export const useChatStore = create<ChatState>()(
         // Truncate everything from this message onward
         const trimmed = messages.slice(0, msgIdx);
         const images = messages[msgIdx].images;
+        const attachments = messages[msgIdx].attachments;
         set({ messages: trimmed });
 
         const modelId = get().selectedModelId || undefined;
-        await get().sendMessage(newContent, images, modelId);
+        await get().sendMessage(newContent, images, modelId, attachments);
       },
     }),
     {

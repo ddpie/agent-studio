@@ -123,8 +123,19 @@ def generate_chart(chart_type: str, data: str, title: str = "", x_label: str = "
                 w += font_size * 0.55
         return w
 
-    # ── SVG start ────────────────────────────────────────────────────────
-    pad = {"top": 55 if title else 30, "right": 30, "bottom": 75, "left": 85}
+    # ── Determine padding (pre-scan for rotation need) ────────────────
+    needs_rotate = False
+    if chart_type in ("bar", "line"):
+        xl_items = []
+        for item in items:
+            xl = str(item.get("x", item.get("name", "")))
+            if xl not in xl_items:
+                xl_items.append(xl)
+        n_labels = len(xl_items)
+        est_gw = (width - 115) / max(n_labels, 1)
+        needs_rotate = n_labels > 8 or any(_text_width(xl) > est_gw * 0.9 for xl in xl_items)
+
+    pad = {"top": 55 if title else 30, "right": 30, "bottom": 95 if needs_rotate else 70, "left": 85}
     cw = width - pad["left"] - pad["right"]
     ch = height - pad["top"] - pad["bottom"]
 
@@ -284,7 +295,7 @@ def generate_chart(chart_type: str, data: str, title: str = "", x_label: str = "
         rotate = n > 8 or any(_text_width(xl) > gw * 0.9 for xl in x_labels)
         for gi, xl in enumerate(x_labels):
             tx = pad["left"] + gi * gw + gw / 2
-            ty = pad["top"] + ch + 18
+            ty = pad["top"] + ch + 20
             if rotate:
                 svg.append(f'<text x="{tx:.1f}" y="{ty:.1f}" text-anchor="end" font-size="10" fill="#6B7280" transform="rotate(-40,{tx:.1f},{ty:.1f})">{_esc(xl)}</text>')
             else:
