@@ -194,6 +194,11 @@ Step 4: Generate the tool code with:
 ### Modifying a tool
 FIRST ask which tool. List: [${toolNamesList}]. Do NOT guess.
 
+### Deleting a tool
+NEVER guess which tool to delete. ALWAYS list ALL current tools and ask the user to confirm:
+"Current tools: [list each tool with a number]. Which one do you want to delete? (reply with the number or name)"
+Only delete the EXACT tool the user confirms. NEVER delete additional tools.
+
 ### tool_names
 Always output the COMPLETE list (existing + new). ONLY include @tool decorated functions — NEVER include private helpers (def _xxx).
 
