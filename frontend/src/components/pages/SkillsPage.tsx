@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
-  Package, Search, RefreshCw, Loader2, Trash2, ChevronLeft, FileText,
+  Package, Search, RefreshCw, Loader2, Trash2, ChevronLeft, FileText, Upload,
 } from "lucide-react";
-import { listSkills, getSkillContent, deleteSkill, type SkillIndexEntry } from "../../lib/skill-storage";
+import { listSkills, getSkillContent, deleteSkill, importSkill, type SkillIndexEntry } from "../../lib/skill-storage";
 
 export default function SkillsPage() {
   const [skills, setSkills] = useState<SkillIndexEntry[]>([]);
@@ -11,6 +11,8 @@ export default function SkillsPage() {
   const [selectedSkill, setSelectedSkill] = useState<SkillIndexEntry | null>(null);
   const [skillContent, setSkillContent] = useState<string | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -33,6 +35,22 @@ export default function SkillsPage() {
     setSelectedSkill(null);
     setSkillContent(null);
     refresh();
+  };
+
+  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const content = await file.text();
+      const name = file.name.replace(/\.(md|txt|cursorrules)$/i, "").replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
+      const result = await importSkill(content, name, `Imported from ${file.name}`);
+      if (result) refresh();
+      else alert("Import failed. If the file has no YAML frontmatter, a name is required.");
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const filtered = skills.filter(
@@ -92,6 +110,12 @@ export default function SkillsPage() {
           <button onClick={refresh}
             className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+          </button>
+          <input ref={fileInputRef} type="file" accept=".md,.txt,.cursorrules" className="hidden" onChange={handleFileImport} />
+          <button onClick={() => fileInputRef.current?.click()} disabled={importing}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">
+            {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            Import
           </button>
         </div>
       </div>

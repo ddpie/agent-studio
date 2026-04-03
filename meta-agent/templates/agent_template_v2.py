@@ -48,7 +48,7 @@ async def invoke(payload, context):
     agent = Agent(
         model=BedrockModel(model_id=model_id),
         system_prompt=prompt,
-        tools=_ALL_TOOLS + [_builtin.load_skill],
+        tools=_ALL_TOOLS + [_builtin.load_skill, _builtin.run_command],
     )
     async for chunk in _stream_with_tools(agent, _build_input(payload)):
         yield chunk
@@ -131,7 +131,7 @@ async def invoke(payload, context):
         agent = Agent(
             model=BedrockModel(model_id=model_id),
             system_prompt=prompt,
-            tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill],
+            tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill, _builtin.run_command],
         )
         async for chunk in _stream_with_tools(agent, _build_input(payload)):
             yield chunk
@@ -340,4 +340,55 @@ def load_skill(name: str) -> str:
         return content
     except Exception as e:
         return _json.dumps({"error": f"Failed to read skill: {e}"})
+
+
+@_tool
+def run_command(command: str, language: str = "python") -> str:
+    """Execute Python code or shell commands. Use for data processing, calculations, or running scripts.
+
+    Args:
+        command: The code or command to execute.
+        language: "python" to run Python code, "shell" to run a shell command. Default: python.
+
+    Returns:
+        The stdout output, or an error message if execution failed.
+    """
+    import subprocess as _sp
+
+    timeout = 30
+
+    if language == "python":
+        try:
+            result = _sp.run(
+                ["python3", "-c", command],
+                capture_output=True, text=True, timeout=timeout, cwd="/tmp",
+            )
+            output = result.stdout
+            if result.returncode != 0:
+                output += ("\\n" + result.stderr) if result.stderr else ""
+                return _json.dumps({"error": f"Exit code {result.returncode}", "output": output.strip()})
+            return output.strip() if output.strip() else "(no output)"
+        except _sp.TimeoutExpired:
+            return _json.dumps({"error": f"Execution timed out after {timeout}s"})
+        except Exception as e:
+            return _json.dumps({"error": str(e)})
+
+    elif language == "shell":
+        try:
+            result = _sp.run(
+                command, shell=True,
+                capture_output=True, text=True, timeout=timeout, cwd="/tmp",
+            )
+            output = result.stdout
+            if result.returncode != 0:
+                output += ("\\n" + result.stderr) if result.stderr else ""
+                return _json.dumps({"error": f"Exit code {result.returncode}", "output": output.strip()})
+            return output.strip() if output.strip() else "(no output)"
+        except _sp.TimeoutExpired:
+            return _json.dumps({"error": f"Execution timed out after {timeout}s"})
+        except Exception as e:
+            return _json.dumps({"error": str(e)})
+
+    else:
+        return _json.dumps({"error": f"Unsupported language: {language}. Use 'python' or 'shell'."})
 '''

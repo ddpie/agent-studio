@@ -112,6 +112,10 @@ Evaluate based on the ACTUAL tools and permission tier — not generic rules.
 ## Constraints
 - Return ONLY a JSON object. No markdown fences, no explanation before or after.
 - Be STRICT. Empty sections with only a title score 1, not 5.
+- Do NOT be lenient. Recognize your excuses:
+  - "The prompt is short but covers the basics" — short prompts almost always lack tool guidance and constraints. Score accordingly.
+  - "The intent is clear enough" — if a tool is not mentioned BY NAME with usage guidance, score tool_prompt_sync low.
+  - "The constraints are implied" — implicit constraints don't work. The agent needs explicit "NEVER" statements.
 - Issues must be SPECIFIC to this agent's actual tools and purpose: "Tool 'list_alarms' has no usage guidance" not "improve tool section".
 - Max 5 issues, most important first.
 - Respond in the same language as the system prompt being reviewed.

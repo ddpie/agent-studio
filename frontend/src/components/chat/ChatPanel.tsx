@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { useChatStore, type Message, type ChatSession } from "../../stores/chat-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
-import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText, Check, RefreshCw, Download, Pencil, Paperclip } from "lucide-react";
+import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText, Check, RefreshCw, Download, Pencil, Paperclip, Image as ImageIcon } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -169,62 +169,87 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
 
 import { MODEL_GROUPS, DEFAULT_MODEL_ID, findModelLabel } from "../../lib/models";
 
-function CopyButtons({ content }: { content: string }) {
-  const [copied, setCopied] = useState<"text" | "md" | null>(null);
+function CopyButtons({ content, contentRef }: { content: string; contentRef?: React.RefObject<HTMLDivElement | null> }) {
+  const [copied, setCopied] = useState<"text" | "md" | "rich" | null>(null);
 
-  // Strip tool-call <details> blocks and agent-proposal code blocks
-  const cleanText = (s: string) => s
+  const stripNonContent = (s: string) => s
     .replace(/<details class="tool-call">[\s\S]*?<\/details>/g, "")
-    .replace(/<div class="tool-rich-output">[\s\S]*?<\/div>/g, "\n[Chart]\n")
     .replace(/```agent-proposal\n[\s\S]*?```/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  // Convert SVG string to PNG base64 data URL
-  const svgToPngBase64 = (svgStr: string): Promise<string> => {
-    return new Promise((resolve) => {
-      const svgBlob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
-      const url = URL.createObjectURL(svgBlob);
-      const img = new Image();
+  // SVG → PNG data URL via Canvas
+  const svgToPng = (svgEl: SVGSVGElement): Promise<string> =>
+    new Promise((resolve) => {
+      const svgStr = new XMLSerializer().serializeToString(svgEl);
+      // Parse viewBox to get actual dimensions
+      const vb = svgEl.getAttribute("viewBox")?.split(/[\s,]+/).map(Number);
+      const svgW = vb && vb.length >= 4 ? vb[2] : svgEl.clientWidth || 800;
+      const svgH = vb && vb.length >= 4 ? vb[3] : svgEl.clientHeight || 400;
+      const scale = 2;
+      const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const img = new window.Image();
       img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth * 2;
-        canvas.height = img.naturalHeight * 2;
-        const ctx = canvas.getContext("2d")!;
-        ctx.scale(2, 2);
-        ctx.drawImage(img, 0, 0);
+        const c = document.createElement("canvas");
+        c.width = svgW * scale;
+        c.height = svgH * scale;
+        const ctx = c.getContext("2d")!;
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0, svgW, svgH);
         URL.revokeObjectURL(url);
-        resolve(canvas.toDataURL("image/png"));
+        resolve(c.toDataURL("image/png"));
       };
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        resolve(""); // fallback: skip
-      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(""); };
       img.src = url;
     });
-  };
 
-  const copyAs = async (mode: "text" | "md") => {
+  const copyAs = async (mode: "text" | "md" | "rich") => {
     if (mode === "text") {
-      const cleaned = cleanText(content);
-      const text = cleaned.replace(/[#*`_~\[\]()>|\\-]/g, "").replace(/\n{3,}/g, "\n\n");
+      const text = stripNonContent(content)
+        .replace(/<div class="tool-rich-output">[\s\S]*?<\/div>/g, "\n[Chart]\n")
+        .replace(/[#*`_~\[\]()>|\\-]/g, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
       await navigator.clipboard.writeText(text);
-    } else {
-      // For markdown: convert SVG charts to inline PNG images
-      let md = content
-        .replace(/<details class="tool-call">[\s\S]*?<\/details>/g, "")
-        .replace(/```agent-proposal\n[\s\S]*?```/g, "");
-
-      // Extract all SVG blocks and convert to PNG
-      const svgRegex = /<div class="tool-rich-output">(<svg[\s\S]*?<\/svg>)<\/div>/g;
-      const svgMatches = [...md.matchAll(svgRegex)];
-      for (const match of svgMatches) {
-        const png = await svgToPngBase64(match[1]);
-        md = md.replace(match[0], png ? `\n\n![Chart](${png})\n\n` : "\n\n[Chart]\n\n");
-      }
-
-      md = md.replace(/\n{3,}/g, "\n\n").trim();
+    } else if (mode === "md") {
+      const md = stripNonContent(content)
+        .replace(/<div class="tool-rich-output">[\s\S]*?<\/div>/g, "\n\n[Chart]\n\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
       await navigator.clipboard.writeText(md);
+    } else {
+      // Rich: grab rendered HTML from DOM, convert SVGs to PNG <img>
+      if (!contentRef?.current) {
+        await navigator.clipboard.writeText(content);
+        return;
+      }
+      const clone = contentRef.current.cloneNode(true) as HTMLDivElement;
+      // Remove tool-call details blocks from clone
+      clone.querySelectorAll("details.tool-call").forEach(el => el.remove());
+      // Convert SVGs to PNG images
+      const svgs = clone.querySelectorAll("svg");
+      for (const svg of svgs) {
+        const png = await svgToPng(svg as SVGSVGElement);
+        if (png) {
+          const img = document.createElement("img");
+          img.src = png;
+          img.style.maxWidth = "100%";
+          svg.parentElement?.replaceChild(img, svg);
+        }
+      }
+      const html = clone.innerHTML;
+      const plainText = clone.textContent || "";
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/plain": new Blob([plainText], { type: "text/plain" }),
+            "text/html": new Blob([html], { type: "text/html" }),
+          }),
+        ]);
+      } catch {
+        await navigator.clipboard.writeText(plainText);
+      }
     }
     setCopied(mode);
     setTimeout(() => setCopied(null), 1500);
@@ -232,11 +257,14 @@ function CopyButtons({ content }: { content: string }) {
 
   return (
     <div className="absolute -top-1 right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-md shadow-sm border border-gray-200 p-0.5">
-      <button onClick={() => copyAs("text")} className="p-1 hover:bg-gray-100 rounded" title="Copy as text">
+      <button onClick={() => copyAs("text")} className="p-1 hover:bg-gray-100 rounded" title="Copy as plain text">
         {copied === "text" ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3 text-gray-400" />}
       </button>
       <button onClick={() => copyAs("md")} className="p-1 hover:bg-gray-100 rounded" title="Copy as Markdown">
         {copied === "md" ? <Check className="w-3 h-3 text-green-500" /> : <FileText className="w-3 h-3 text-gray-400" />}
+      </button>
+      <button onClick={() => copyAs("rich")} className="p-1 hover:bg-gray-100 rounded" title="Copy as rich text (with charts)">
+        {copied === "rich" ? <Check className="w-3 h-3 text-green-500" /> : <ImageIcon className="w-3 h-3 text-gray-400" />}
       </button>
     </div>
   );
@@ -249,6 +277,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const { editAndResend } = useChatStore();
+  const contentDivRef = useRef<HTMLDivElement>(null);
 
   const startEdit = () => {
     // Strip [Attached file: ...] lines from edit textarea — file cards handle display
@@ -307,7 +336,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
             : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
         }`}
       >
-        {showCopy && <CopyButtons content={message.content} />}
+        {showCopy && <CopyButtons content={message.content} contentRef={contentDivRef} />}
         {/* Edit button for user messages */}
         {isUser && message.content && !isStreaming && (
           <button
@@ -355,7 +384,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
           </div>
         )}
         {message.content ? (
-          <div className={`prose prose-sm max-w-none ${isUser ? "prose-invert" : ""}`}>
+          <div ref={contentDivRef} className={`prose prose-sm max-w-none ${isUser ? "prose-invert" : ""}`}>
             <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]} components={mdComponents}>{
               // Strip [Attached file: ...] lines from display — file cards handle this
               message.attachments?.length
