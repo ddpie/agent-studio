@@ -142,11 +142,12 @@ async def _stream_with_tools(agent, input_data):
             tool_info = event["current_tool_use"]
             tool_name = tool_info.get("name", "")
             tool_use_id = tool_info.get("toolUseId", "")
-            if tool_name and tool_name != _current_tool:
+            # Always register toolUseId (same tool can be called multiple times)
+            if tool_use_id and tool_name:
+                _tool_use_id_map[tool_use_id] = tool_name
+            if tool_name and (tool_name != _current_tool or tool_use_id not in _tool_use_id_map or _tool_input_buf == ""):
                 _current_tool = tool_name
                 _tool_input_buf = ""
-                if tool_use_id:
-                    _tool_use_id_map[tool_use_id] = tool_name
                 yield _json.dumps({"__tool": "start", "name": tool_name})
             raw_input = tool_info.get("input", "")
             if raw_input:
@@ -174,8 +175,13 @@ async def _stream_with_tools(agent, input_data):
                     except Exception:
                         inp_str = str(_tool_input_buf) if _tool_input_buf else ""
                     inp_b64 = _b64.b64encode(inp_str.encode()).decode() if inp_str else ""
-                    if len(output_text) > 2000:
-                        output_text = output_text[:2000] + "\\n... (truncated)"
+                    # SVG/HTML output must not be truncated (breaks rendering)
+                    if output_text.lstrip().startswith("<"):
+                        max_out = 50000
+                    else:
+                        max_out = 5000
+                    if len(output_text) > max_out:
+                        output_text = output_text[:max_out] + "\\n... (truncated)"
                     out_b64 = _b64.b64encode(output_text.encode()).decode() if output_text else ""
                     yield _json.dumps({"__tool": "result", "name": t_name, "input": inp_b64, "output": out_b64})
         # Text data
