@@ -22,6 +22,11 @@ export async function listSkills(): Promise<SkillIndexEntry[]> {
 
 /** Read full SKILL.md content */
 export async function getSkillContent(id: string): Promise<string | null> {
+  return getSkillFile(id, "SKILL.md");
+}
+
+/** Read any file from a skill directory */
+export async function getSkillFile(id: string, path: string): Promise<string | null> {
   try {
     const { credentials } = await fetchAuthSession();
     if (!credentials) return null;
@@ -41,7 +46,7 @@ export async function getSkillContent(id: string): Promise<string | null> {
     });
 
     const url = new URL(
-      `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/skills/${id}/SKILL.md`
+      `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/skills/${id}/${path}`
     );
     const signed = await signer.sign({
       method: "GET",
@@ -62,6 +67,70 @@ export async function getSkillContent(id: string): Promise<string | null> {
   }
 }
 
+/** List all files in a skill directory (excluding SKILL.md) */
+export async function listSkillFiles(id: string): Promise<string[]> {
+  try {
+    const { listS3Keys } = await import("./s3-storage");
+    const prefix = `skills/${id}/`;
+    const keys = await listS3Keys(prefix);
+    return keys
+      .map((k) => k.slice(prefix.length))
+      .filter((f) => f && f !== "SKILL.md");
+  } catch {
+    return [];
+  }
+}
+
+/** Write any file to a skill directory */
+export async function writeSkillFile(id: string, path: string, content: string): Promise<boolean> {
+  try {
+    const { credentials } = await fetchAuthSession();
+    if (!credentials) return false;
+
+    const { SignatureV4 } = await import("@smithy/signature-v4");
+    const { Sha256 } = await import("@aws-crypto/sha256-js");
+
+    const signer = new SignatureV4({
+      service: "s3",
+      region: agentConfig.region,
+      credentials: {
+        accessKeyId: credentials.accessKeyId,
+        secretAccessKey: credentials.secretAccessKey,
+        sessionToken: credentials.sessionToken,
+      },
+      sha256: Sha256,
+    });
+
+    const url = new URL(
+      `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/skills/${id}/${path}`
+    );
+    const body = new TextEncoder().encode(content);
+    const contentType = path.endsWith(".py") ? "text/x-python"
+      : path.endsWith(".json") ? "application/json"
+      : path.endsWith(".md") ? "text/markdown"
+      : "text/plain";
+
+    const signed = await signer.sign({
+      method: "PUT",
+      protocol: url.protocol,
+      hostname: url.hostname,
+      path: url.pathname,
+      query: {},
+      headers: { Host: url.host, "Content-Type": contentType },
+      body,
+    });
+
+    const resp = await fetch(url.toString(), {
+      method: "PUT",
+      headers: signed.headers as Record<string, string>,
+      body,
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Delete a skill and update index */
 export async function deleteSkill(id: string): Promise<boolean> {
   const deleted = await deleteFromS3(`skills/${id}/SKILL.md`);
@@ -74,7 +143,7 @@ export async function deleteSkill(id: string): Promise<boolean> {
 }
 
 /** Parse YAML frontmatter from SKILL.md content */
-function parseFrontmatter(content: string): { name: string; description: string } | null {
+export function parseFrontmatter(content: string): { name: string; description: string } | null {
   if (!content.startsWith("---")) return null;
   const parts = content.split("---", 3);
   if (parts.length < 3) return null;
@@ -88,7 +157,7 @@ function parseFrontmatter(content: string): { name: string; description: string 
 }
 
 /** Wrap plain markdown with AgentSkills.io frontmatter */
-function wrapWithFrontmatter(content: string, name: string, description: string): string {
+export function wrapWithFrontmatter(content: string, name: string, description: string): string {
   return `---
 name: "${name}"
 description: "${description}"
