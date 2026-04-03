@@ -141,7 +141,7 @@ def upload_tool_catalog():
     s3 = boto3.client("s3", region_name=REGION)
     s3.put_object(
         Bucket=S3_BUCKET,
-        Key="base/tool-catalog.json",
+        Key="agents/base/tool-catalog.json",
         Body=json.dumps(catalog, indent=2, ensure_ascii=False).encode("utf-8"),
         ContentType="application/json",
     )

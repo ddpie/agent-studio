@@ -12,7 +12,7 @@ let _catalogCache: ToolCatalog | null = null;
 export async function fetchToolCatalog(): Promise<ToolCatalog> {
   if (_catalogCache) return _catalogCache;
 
-  const url = `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/base/tool-catalog.json`;
+  const url = `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/agents/base/tool-catalog.json`;
   const blobUrl = await fetchSignedS3(url);
 
   const resp = await fetch(blobUrl);
