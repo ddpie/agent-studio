@@ -81,7 +81,7 @@ export async function listSkillFiles(id: string): Promise<string[]> {
   }
 }
 
-/** Write any file to a skill directory */
+/** Write any file to a skill directory. If writing SKILL.md, syncs index.json from frontmatter. */
 export async function writeSkillFile(id: string, path: string, content: string): Promise<boolean> {
   try {
     const { credentials } = await fetchAuthSession();
@@ -125,10 +125,40 @@ export async function writeSkillFile(id: string, path: string, content: string):
       headers: signed.headers as Record<string, string>,
       body,
     });
-    return resp.ok;
+    if (!resp.ok) return false;
+
+    // Sync index.json when SKILL.md is updated
+    if (path === "SKILL.md") {
+      const meta = parseFrontmatter(content);
+      if (meta) {
+        const index = (await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY)) ?? [];
+        const entry = index.find((s) => s.id === id);
+        if (entry) {
+          entry.name = meta.name;
+          entry.description = meta.description;
+          await writeJsonToS3(INDEX_KEY, index);
+        }
+      }
+    }
+
+    return true;
   } catch {
     return false;
   }
+}
+
+/** Delete a single file from a skill directory */
+export async function deleteSkillFile(id: string, path: string): Promise<boolean> {
+  return deleteFromS3(`skills/${id}/${path}`);
+}
+
+/** Rename/move a file within a skill directory (copy + delete, S3 has no rename) */
+export async function renameSkillFile(id: string, oldPath: string, newPath: string): Promise<boolean> {
+  const content = await getSkillFile(id, oldPath);
+  if (content === null) return false;
+  const written = await writeSkillFile(id, newPath, content);
+  if (!written) return false;
+  return deleteFromS3(`skills/${id}/${oldPath}`);
 }
 
 /** Delete a skill and update index */

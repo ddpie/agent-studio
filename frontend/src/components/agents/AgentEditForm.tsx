@@ -5,75 +5,19 @@ import { invokeMetaAgent } from "../../lib/agentcore-client";
 import { Loader2, Save, Plus, Trash2, Eye, EyeOff, Code2, MessageSquare, Settings2, Shield, Sparkles, Maximize2, Minimize2, FileDown, GitCompare, Wrench } from "lucide-react";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router";
-import CodeMirror from "@uiw/react-codemirror";
-import { python } from "@codemirror/lang-python";
-import { vscodeDark } from "@uiw/codemirror-theme-vscode";
-import { linter, type Diagnostic } from "@codemirror/lint";
-import { preloadPyodide, isPyodideReady, checkPythonSyntax } from "../../lib/pyodide-checker";
+import MonacoEditor, { DiffEditor } from "@monaco-editor/react";
 import { MODEL_GROUPS } from "../../lib/models";
 import { writeJsonToS3 } from "../../lib/s3-storage";
-import { createPatch } from "diff";
 import ReactMarkdown from "react-markdown";
 import EditAssistant from "./EditAssistant";
+import { useUISettings } from "../../stores/ui-settings-store";
 
-/** Combined linter: Pyodide compile() when ready + structural checks always */
-const toolLinter = linter((view) => {
-  const doc = view.state.doc.toString();
-  if (!doc.trim()) return [];
-
-  // Start loading Pyodide if not already
-  preloadPyodide();
-
-  const diagnostics: Diagnostic[] = [];
-
-  // Real Python syntax check via Pyodide (if loaded)
-  if (isPyodideReady()) {
-    const pyErrors = checkPythonSyntax(doc);
-    for (const err of pyErrors) {
-      const lineNum = Math.min(err.line, view.state.doc.lines);
-      const line = view.state.doc.line(lineNum);
-      const col = Math.min(Math.max(err.col - 1, 0), line.length);
-      diagnostics.push({
-        from: line.from + col,
-        to: line.to,
-        severity: "error",
-        message: err.msg,
-      });
-    }
-  }
-
-  // Structural checks (always run)
-  if (!doc.includes("@tool")) {
-    diagnostics.push({ from: 0, to: Math.min(doc.length, 5), severity: "error", message: "Missing @tool decorator" });
-  }
-
-  const defMatch = doc.match(/def\s+(\w+)\s*\(/);
-  if (!defMatch) {
-    diagnostics.push({ from: 0, to: Math.min(doc.length, 5), severity: "error", message: "Missing function definition (def ...)" });
-  } else {
-    const defLine = doc.split("\n").find(l => l.trimStart().startsWith("def "));
-    if (defLine && !defLine.includes("->")) {
-      const idx = doc.indexOf(defLine);
-      diagnostics.push({ from: idx, to: idx + defLine.length, severity: "warning", message: "Missing return type hint (e.g., -> str)" });
-    }
-    if (!doc.includes('"""') && !doc.includes("'''")) {
-      diagnostics.push({ from: 0, to: 0, severity: "warning", message: "Missing docstring — required for tool description" });
-    }
-  }
-
-  // Bracket balance
-  let parens = 0, brackets = 0, braces = 0;
-  for (const ch of doc) {
-    if (ch === "(") parens++; else if (ch === ")") parens--;
-    else if (ch === "[") brackets++; else if (ch === "]") brackets--;
-    else if (ch === "{") braces++; else if (ch === "}") braces--;
-  }
-  if (parens !== 0) diagnostics.push({ from: 0, to: 0, severity: "error", message: `Unbalanced parentheses: ${parens > 0 ? `${parens} unclosed (` : `${-parens} extra )`}` });
-  if (brackets !== 0) diagnostics.push({ from: 0, to: 0, severity: "error", message: `Unbalanced brackets: ${brackets > 0 ? `${brackets} unclosed [` : `${-brackets} extra ]`}` });
-  if (braces !== 0) diagnostics.push({ from: 0, to: 0, severity: "error", message: `Unbalanced braces: ${braces > 0 ? `${braces} unclosed {` : `${-braces} extra }`}` });
-
-  return diagnostics;
-});
+function useIsDark() {
+  const { theme } = useUISettings();
+  if (theme === "dark") return true;
+  if (theme === "light") return false;
+  return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
 
 const TEMPLATE_OPTIONS = [
   { id: "", label: "None" },
@@ -147,41 +91,58 @@ function ReviewChangesModal({ changes, onConfirm, onCancel, viewOnly }: {
   onCancel: () => void;
   viewOnly?: boolean;
 }) {
+  const isDark = useIsDark();
   const entries = Object.entries(changes).filter(([k]) => !["tools", "tool_names", "created_at", "agent_id"].includes(k));
+  const [activeIdx, setActiveIdx] = useState(0);
   if (entries.length === 0) return null;
+
+  const [key, { old: oldVal, new: newVal }] = entries[activeIdx];
+  const label = FIELD_LABELS[key] || key;
+  const lang = key === "tool_definitions" ? "python" : key === "system_prompt" ? "markdown" : "plaintext";
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center animate-[fadeSlideIn_0.15s_ease-out]" onClick={onCancel}>
-      <div className="bg-white dark:bg-gray-800 rounded-xl w-[70vw] max-h-[80vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center gap-2">
+      <div className={`${isDark ? "bg-gray-900" : "bg-white"} rounded-xl w-[85vw] h-[80vh] flex flex-col shadow-2xl`} onClick={(e) => e.stopPropagation()}>
+        <div className={`flex items-center justify-between px-4 py-3 border-b ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+          <div className="flex items-center gap-3">
             <GitCompare className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{viewOnly ? "Changes" : "Review Changes"} ({entries.length} field{entries.length > 1 ? "s" : ""})</span>
+            <span className={`text-sm font-semibold ${isDark ? "text-gray-200" : "text-gray-800"}`}>{viewOnly ? "Changes" : "Review Changes"}</span>
+            <div className="flex items-center gap-1">
+              {entries.map(([k], i) => (
+                <button key={k} onClick={() => setActiveIdx(i)}
+                  className={`px-2 py-0.5 text-[11px] rounded ${i === activeIdx
+                    ? "bg-blue-600 text-white"
+                    : isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"
+                  }`}>
+                  {FIELD_LABELS[k] || k}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onCancel} className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">{viewOnly ? "Close" : "Cancel"}</button>
+            <button onClick={onCancel} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>{viewOnly ? "Close" : "Cancel"}</button>
             {!viewOnly && onConfirm && (
               <button onClick={onConfirm} className="px-4 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">Confirm & Deploy</button>
             )}
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {entries.map(([key, { old: oldVal, new: newVal }]) => {
-            const label = FIELD_LABELS[key] || key;
-            const patch = createPatch(label, oldVal, newVal, "", "", { context: 8 });
-            const lines = patch.split("\n").slice(4); // skip header
-            return (
-              <div key={key} className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 text-xs font-semibold text-gray-600 dark:text-gray-400">{label}</div>
-                <pre className="text-[11px] font-mono leading-relaxed overflow-x-auto p-3 bg-gray-900 text-gray-300">
-                  {lines.map((line, i) => {
-                    const color = line.startsWith("+") ? "text-green-400" : line.startsWith("-") ? "text-red-400" : line.startsWith("@@") ? "text-blue-400" : "text-gray-500";
-                    return <div key={i} className={color}>{line || " "}</div>;
-                  })}
-                </pre>
-              </div>
-            );
-          })}
+        <div className={`px-4 py-1.5 text-xs font-semibold border-b ${isDark ? "text-gray-400 border-gray-700 bg-gray-800/50" : "text-gray-600 border-gray-200 bg-gray-50"}`}>
+          {label}
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <DiffEditor
+            original={oldVal}
+            modified={newVal}
+            language={lang}
+            theme={isDark ? "vs-dark" : "light"}
+            options={{
+              readOnly: true,
+              renderSideBySide: true,
+              fontSize: 12,
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+            }}
+          />
         </div>
       </div>
     </div>
@@ -968,18 +929,17 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
     {/* Code Preview modal */}
     {previewCode && (
       <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setPreviewCode(null)}>
-        <div className="bg-gray-900 rounded-xl w-[80vw] max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()} onWheel={e => e.stopPropagation()}>
+        <div className="bg-gray-900 rounded-xl w-[80vw] h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()} onWheel={e => e.stopPropagation()}>
           <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
             <span className="text-sm font-medium text-gray-200">Assembled Code Preview (main.py)</span>
             <button onClick={() => setPreviewCode(null)} className="px-3 py-1 text-xs text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg">Close</button>
           </div>
-          <div className="flex-1 overflow-auto">
-            <CodeMirror
+          <div className="flex-1 overflow-hidden">
+            <MonacoEditor
               value={previewCode}
-              editable={false}
-              extensions={[python(), toolLinter]}
-              theme={vscodeDark}
-              style={{ fontSize: "12px" }}
+              language="python"
+              theme="vs-dark"
+              options={{ readOnly: true, fontSize: 12, minimap: { enabled: true }, scrollBeyondLastLine: false, automaticLayout: true }}
             />
           </div>
         </div>
@@ -1050,6 +1010,7 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
   onChange: (defs: string, names: string) => void;
   onOptimizeTool?: (toolName: string, toolCode: string) => void;
 }) {
+  const isDark = useIsDark();
   const [blocks, setBlocks] = useState<string[]>(() => {
     const initial = splitTools(value);
     return initial.length > 0 ? initial : [];
@@ -1134,13 +1095,12 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
           </button>
         </div>
         <div className="flex-1 overflow-hidden">
-          <CodeMirror
+          <MonacoEditor
             value={code}
-            onChange={(v) => updateBlock(fullscreenIdx, v)}
-            extensions={[python(), toolLinter]}
-            theme={vscodeDark}
-            height="100%"
-            style={{ fontSize: "13px", height: "100%" }}
+            onChange={(v) => { if (v !== undefined && v !== code) updateBlock(fullscreenIdx, v); }}
+            language="python"
+            theme="vs-dark"
+            options={{ fontSize: 13, minimap: { enabled: true }, scrollBeyondLastLine: false, automaticLayout: true }}
           />
         </div>
       </div>
@@ -1194,15 +1154,15 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
               </div>
             </div>
             {!isCollapsed && (
-              <CodeMirror
-                value={code}
-                onChange={(v) => updateBlock(idx, v)}
-                extensions={[python(), toolLinter]}
-                theme={vscodeDark}
-                minHeight="120px"
-                maxHeight="400px"
-                style={{ fontSize: "12px" }}
-              />
+              <div style={{ height: "300px" }}>
+                <MonacoEditor
+                  value={code}
+                  onChange={(v) => { if (v !== undefined && v !== code) updateBlock(idx, v); }}
+                  language="python"
+                  theme={isDark ? "vs-dark" : "light"}
+                  options={{ fontSize: 12, minimap: { enabled: false }, scrollBeyondLastLine: false, automaticLayout: true, tabSize: 4 }}
+                />
+              </div>
             )}
           </div>
         );

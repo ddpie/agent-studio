@@ -21,7 +21,9 @@ export default function AppShell({ signOut, user }: AppShellProps) {
       </header>
       <div className="flex flex-1 overflow-hidden">
         <IconNav />
-        <Outlet />
+        <div className="flex-1 min-w-0 overflow-hidden flex flex-col">
+          <Outlet />
+        </div>
       </div>
     </div>
   );
