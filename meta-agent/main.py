@@ -23,7 +23,7 @@ from tools.create_skill import create_skill
 from tools.list_skills import list_skills
 from tools.list_mcp_servers import list_mcp_servers
 from tools.manage_secrets import set_agent_secrets, list_agent_secrets, delete_agent_secret
-from tools_library.registry import list_tool_library
+from tools_library.registry import list_tool_library, get_tool_library_code
 from tools.analyze_trace import analyze_trace
 from tools.create_schedule import create_schedule
 from tools.validate_agent import validate_agent
@@ -52,6 +52,7 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     **Skills & Tools:**
     - create_skill: Create reusable skill definitions
     - list_skills / list_tool_library: Browse available skills and pre-built tool templates
+    - get_tool_library_code: Get source code for built-in tools to include in tool_definitions
     - list_mcp_servers: Browse MCP Gateway marketplace
 
     **Operations:**
@@ -117,9 +118,11 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     - The user needs a domain-specific tool (e.g., parsing a proprietary format)
 
     ### IMPORTANT: Include built-in tool code in tool_definitions
-    When using built-in tools, you MUST include their code in tool_definitions.
-    The deployment system will package whatever is in tool_definitions into the agent.
-    Do NOT assume built-in tools are pre-installed — they are templates that get copied into the agent's code.
+    When using built-in tools, you MUST:
+    1. Call list_tool_library to find the tool IDs
+    2. Call get_tool_library_code with the tool IDs to get the source code
+    3. Include the returned code in tool_definitions
+    The deployment system packages whatever is in tool_definitions into the agent.
     This allows users to see and customize the tool code before deployment.
 
     ### Guided requirement collection for custom tools
@@ -270,6 +273,7 @@ ALL_TOOLS = [
     validate_agent,
     preview_assembled_code,
     list_tool_library,
+    get_tool_library_code,
     set_agent_secrets,
     list_agent_secrets,
     delete_agent_secret,

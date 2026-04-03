@@ -35,6 +35,43 @@ def list_tool_library() -> str:
     return json.dumps(catalog, indent=2, ensure_ascii=False)
 
 
+@tool
+def get_tool_library_code(tool_ids: str) -> str:
+    """Get the Python source code for one or more built-in tools.
+
+    Use this to include built-in tool code in tool_definitions when creating or updating agents.
+    The returned code contains @tool decorated functions ready to be used.
+
+    Args:
+        tool_ids: Comma-separated tool IDs from list_tool_library (e.g., "s3_read,generate_chart").
+
+    Returns:
+        Combined Python code for all requested tools, or error if tool not found.
+    """
+    ids = [t.strip() for t in tool_ids.split(",") if t.strip()]
+    if not ids:
+        return json.dumps({"error": "No tool IDs provided. Call list_tool_library first."})
+
+    codes = []
+    not_found = []
+    for tid in ids:
+        code = get_tool_code(tid)
+        if code:
+            codes.append(code.strip())
+        else:
+            # Try by function name
+            code = get_tool_code_by_func_name(tid)
+            if code:
+                codes.append(code.strip())
+            else:
+                not_found.append(tid)
+
+    result = "\n\n".join(codes)
+    if not_found:
+        result += f"\n\n# WARNING: Tools not found: {', '.join(not_found)}"
+    return result
+
+
 def get_tool_code_by_func_name(func_name: str) -> str | None:
     """Get the Python code for a tool by its function name (e.g., 's3_read')."""
     for mod in _ALL_TOOLS:
