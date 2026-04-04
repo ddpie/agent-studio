@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams, useBlocker } from "react-route
 import {
   Package, ChevronLeft, Trash2, Loader2, Save, GitCompare,
   FileText, FolderOpen, FolderClosed, File, ChevronRight as ChevronRightIcon,
-  Plus, Pencil, FolderPlus, ArrowRightLeft, Sparkles, ShieldCheck,
+  Plus, Pencil, FolderPlus, ArrowRightLeft, Sparkles, ShieldCheck, Play,
 } from "lucide-react";
 import { getSkillContent, getSkillFile, listSkillFiles, deleteSkill, writeSkillFile, deleteSkillFile, renameSkillFile, listSkills, type SkillIndexEntry } from "../../lib/skill-storage";
 import Editor, { DiffEditor } from "@monaco-editor/react";
@@ -12,6 +12,7 @@ import { Tree, type NodeRendererProps } from "react-arborist";
 import { useUISettings } from "../../stores/ui-settings-store";
 import { useSkillAssistantStore } from "../../stores/skill-assistant-store";
 import SkillAssistant from "../skills/SkillAssistant";
+import { invokeMetaAgent } from "../../lib/agentcore-client";
 
 // --- Language helpers ---
 
@@ -340,6 +341,8 @@ export default function SkillDetail() {
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(224);
   const dragging = useRef(false);
+  const [runOutput, setRunOutput] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
 
   const onDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -1047,6 +1050,37 @@ export default function SkillDetail() {
             <div className="flex flex-col flex-1 overflow-hidden">
               <div className={`flex items-center justify-between px-3 py-1.5 border-b ${isDark ? "bg-gray-800 border-gray-700" : "bg-gray-100 border-gray-200"}`}>
                 <span className={`text-xs font-mono ${isDark ? "text-gray-300" : "text-gray-600"}`}>{activeFile || "SKILL.md"}</span>
+                {(currentPath.endsWith(".py") || currentPath.endsWith(".sh")) && (
+                  <button
+                    onClick={async () => {
+                      if (running || !skillContent) return;
+                      setRunning(true);
+                      setRunOutput("Running...");
+                      try {
+                        const lang = currentPath.endsWith(".py") ? "python" : "shell";
+                        const prompt = `Run this ${lang} code and return ONLY the output. No explanation.\n\nUse run_command tool with language="${lang === "shell" ? "shell" : "python"}".\n\nCode:\n\`\`\`\n${skillContent}\n\`\`\``;
+                        let result = "";
+                        for await (const chunk of invokeMetaAgent(prompt, [])) {
+                          const cleaned = chunk.replace(/\{"__tool"[^}]*\}/g, "");
+                          if (cleaned) result += cleaned;
+                        }
+                        setRunOutput(result.trim() || "(no output)");
+                      } catch (err) {
+                        setRunOutput(`Error: ${err instanceof Error ? err.message : "Unknown error"}`);
+                      } finally {
+                        setRunning(false);
+                      }
+                    }}
+                    disabled={running}
+                    className={`ml-2 flex items-center gap-1 px-2 py-0.5 text-[11px] rounded ${
+                      isDark ? "text-green-400 hover:bg-green-900/30" : "text-green-600 hover:bg-green-50"
+                    } transition-colors disabled:opacity-50`}
+                    title="Run script via Meta-Agent"
+                  >
+                    {running ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                    Run
+                  </button>
+                )}
               </div>
               <div className="flex-1">
                 <Editor
@@ -1111,6 +1145,19 @@ export default function SkillDetail() {
                 />
               </div>
             </div>
+            {/* Run output panel */}
+            {runOutput !== null && (
+              <div className={`border-t ${isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-gray-50"} max-h-48 overflow-auto`}>
+                <div className={`flex items-center justify-between px-3 py-1 ${isDark ? "bg-gray-800" : "bg-gray-100"}`}>
+                  <span className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? "text-gray-500" : "text-gray-400"}`}>Output</span>
+                  <button onClick={() => setRunOutput(null)} className={`text-[10px] ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-600"}`}>Close</button>
+                </div>
+                <pre className={`px-3 py-2 text-[11px] font-mono whitespace-pre-wrap ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                  {runOutput}
+                </pre>
+              </div>
+            )}
+          </div>
           ) : (
             <p className="text-sm text-gray-400 p-6">Failed to load content.</p>
           )}
