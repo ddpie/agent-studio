@@ -159,14 +159,13 @@ export default function SkillAssistant({ skillId, currentPath, currentContent, a
   const submitEdit = () => {
     if (!editingMsgId || !editText.trim()) return;
     const newContent = editText.trim();
+    const msgId = editingMsgId; // capture before clearing
     setEditingMsgId(null);
-    // Trim history to before this message and resend
-    const msgIdx = messages.findIndex((m) => m.id === editingMsgId);
+    const msgIdx = messages.findIndex((m) => m.id === msgId);
     if (msgIdx === -1) return;
-    const store = useSkillAssistantStore.getState();
     const trimmed = messages.slice(0, msgIdx);
     useSkillAssistantStore.setState({ messages: trimmed });
-    store.sendMessage(newContent, { path: currentPath, content: currentContent, allFiles, getFileContent }, onFileUpdate);
+    useSkillAssistantStore.getState().sendMessage(newContent, { path: currentPath, content: currentContent, allFiles, getFileContent }, onFileUpdate);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

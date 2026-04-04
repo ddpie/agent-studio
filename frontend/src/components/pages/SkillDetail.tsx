@@ -435,9 +435,10 @@ export default function SkillDetail() {
     preloadPyodide();
   }, [skillId]);
 
+  const loadingPathRef = useRef<string | null>(null);
+
   const loadFile = useCallback(async (path: string) => {
     if (!skillId) return;
-    // Check pending creates first
     if (pendingCreates.has(path)) {
       setSkillContent(editedContents.get(path) ?? pendingCreates.get(path)!);
       return;
@@ -446,10 +447,13 @@ export default function SkillDetail() {
       setSkillContent(editedContents.get(path)!);
       return;
     }
+    loadingPathRef.current = path;
     setLoadingContent(true);
     const content = path === "SKILL.md"
       ? await getSkillContent(skillId)
       : await getSkillFile(skillId, path);
+    // Only apply if this is still the file we're loading (prevents race condition)
+    if (loadingPathRef.current !== path) return;
     setSkillContent(content);
     if (content !== null) {
       originalContents.set(path, content);
@@ -460,6 +464,7 @@ export default function SkillDetail() {
   const handleNodeClick = async (nodeId: string) => {
     if (nodeId.startsWith("__dir__")) return;
     if (nodeId === currentPath) return;
+    setValidationResult(null); // Clear old validation
     if (nodeId === "SKILL.md") {
       setSearchParams({});
     } else {
@@ -480,6 +485,32 @@ export default function SkillDetail() {
       next.delete(currentPath);
     }
     setChangedFiles(next);
+
+    // Run Python/Shell validation on change (onValidate only fires for JSON/JS/TS)
+    requestAnimationFrame(() => {
+      const monacoInstance = (window as unknown as { monaco?: typeof MonacoNS }).monaco;
+      if (!monacoInstance) return;
+      const models = monacoInstance.editor.getModels();
+      const model = models.length > 0 ? models[models.length - 1] : null;
+      if (!model) return;
+      if (currentPath.endsWith(".py")) {
+        const pyMarkers = validatePython(val).map(m => ({
+          startLineNumber: m.line, endLineNumber: m.line,
+          startColumn: m.col, endColumn: 1000,
+          message: m.message,
+          severity: m.severity as unknown as MonacoNS.MarkerSeverity,
+        }));
+        monacoInstance.editor.setModelMarkers(model, "python-lint", pyMarkers);
+      } else if (currentPath.endsWith(".sh") || currentPath.endsWith(".bash")) {
+        const shMarkers = validateShell(val).map(m => ({
+          startLineNumber: m.line, endLineNumber: m.line,
+          startColumn: m.col, endColumn: 1000,
+          message: m.message,
+          severity: m.severity as unknown as MonacoNS.MarkerSeverity,
+        }));
+        monacoInstance.editor.setModelMarkers(model, "shell-lint", shMarkers);
+      }
+    });
   };
 
   const handleSaveAll = async () => {

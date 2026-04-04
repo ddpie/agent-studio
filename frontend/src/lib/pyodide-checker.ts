@@ -43,11 +43,11 @@ export function isPyodideReady(): boolean {
 export function checkPythonSyntax(code: string): PythonError[] {
   if (!pyodide) return [];
   try {
-    // Escape the code for embedding in Python string
-    const escaped = code.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t");
+    // Use JSON encoding to safely pass code into Python (avoids manual escaping issues)
+    const jsonCode = JSON.stringify(code);
     const result = pyodide.runPython(
       `import json\n` +
-      `_code = '${escaped}'\n` +
+      `_code = json.loads(${JSON.stringify(jsonCode)})\n` +
       `_errors = []\n` +
       `try:\n` +
       `    compile(_code, '<tool>', 'exec')\n` +

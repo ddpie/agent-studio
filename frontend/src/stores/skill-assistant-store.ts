@@ -295,18 +295,29 @@ You may be tempted to take shortcuts. Recognize these:
         let pairMatch;
         let fileContent = fileContext.getFileContent(targetPath) ?? fileContext.content;
         let applied = false;
+        const failedSearches: string[] = [];
         while ((pairMatch = pairRegex.exec(editBlock)) !== null) {
           const searchText = pairMatch[1];
           const replaceText = pairMatch[2];
           if (fileContent.includes(searchText)) {
-            // Replace ALL occurrences, not just the first
             fileContent = fileContent.split(searchText).join(replaceText);
             applied = true;
+          } else {
+            failedSearches.push(searchText.slice(0, 50) + (searchText.length > 50 ? "..." : ""));
           }
         }
         if (applied) {
           onFileUpdate(targetPath, fileContent);
           updatedPaths.push(targetPath);
+        }
+        if (failedSearches.length > 0) {
+          // Append failure notice to assistant message
+          const notice = `\n\n> ⚠ ${failedSearches.length} search/replace block(s) failed to match in ${targetPath}`;
+          set((s) => ({
+            messages: s.messages.map((m) =>
+              m.id === assistantMsg.id ? { ...m, content: m.content + notice } : m
+            ),
+          }));
         }
         cleanedContent = cleanedContent.replace(match[0], "");
       }
