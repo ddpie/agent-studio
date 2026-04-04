@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router";
 import {
-  Package, Search, RefreshCw, Loader2, FileText, Upload, Trash2, RotateCcw, X,
+  Package, Search, RefreshCw, Loader2, FileText, Upload, Trash2, RotateCcw, X, Plus,
 } from "lucide-react";
 import { listSkills, listDeletedSkills, importSkill, restoreSkill, permanentlyDeleteSkill, type SkillIndexEntry } from "../../lib/skill-storage";
 
@@ -14,6 +14,10 @@ export default function SkillsPage() {
   const [importing, setImporting] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
   const [confirmPermanentDelete, setConfirmPermanentDelete] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createDesc, setCreateDesc] = useState("");
+  const [creating, setCreating] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => {
@@ -54,6 +58,33 @@ export default function SkillsPage() {
     refresh();
   };
 
+  const handleCreate = async () => {
+    if (!createName.trim()) return;
+    setCreating(true);
+    const name = createName.trim().replace(/[^a-zA-Z0-9_-]/g, "-").toLowerCase();
+    const desc = createDesc.trim();
+    const content = `---
+name: "${name}"
+description: "${desc}"
+type: "prompt"
+source: "manual"
+user-invocable: true
+---
+
+# ${createName.trim()}
+
+${desc || "TODO: Add skill instructions here."}
+`;
+    const result = await importSkill(content, name, desc);
+    setCreating(false);
+    setShowCreate(false);
+    setCreateName("");
+    setCreateDesc("");
+    if (result) {
+      navigate(`/skills/${result.id}`);
+    }
+  };
+
   const filtered = (showTrash ? trashedSkills : skills).filter(
     (s) => !search || s.name.toLowerCase().includes(search.toLowerCase())
       || s.description.toLowerCase().includes(search.toLowerCase())
@@ -89,9 +120,14 @@ export default function SkillsPage() {
             <>
               <input ref={fileInputRef} type="file" accept=".md,.txt,.cursorrules" className="hidden" onChange={handleFileImport} />
               <button onClick={() => fileInputRef.current?.click()} disabled={importing}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50">
                 {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                 Import
+              </button>
+              <button onClick={() => setShowCreate(true)}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                <Plus className="w-3.5 h-3.5" />
+                Create
               </button>
             </>
           )}
@@ -163,6 +199,45 @@ export default function SkillsPage() {
             <div className="flex justify-end gap-2">
               <button onClick={() => setConfirmPermanentDelete(null)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
               <button onClick={() => handlePermanentDelete(confirmPermanentDelete)} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">Delete Forever</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create skill dialog */}
+      {showCreate && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setShowCreate(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-5 max-w-sm mx-4 w-80" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium mb-3 text-gray-800 dark:text-gray-200">Create Skill</p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] text-gray-500 mb-1 block">Name</label>
+                <input
+                  autoFocus
+                  value={createName}
+                  onChange={e => setCreateName(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && createName.trim()) handleCreate(); if (e.key === "Escape") setShowCreate(false); }}
+                  placeholder="my-skill"
+                  className="w-full px-2.5 py-1.5 text-xs border rounded-lg outline-none bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-gray-500 mb-1 block">Description</label>
+                <input
+                  value={createDesc}
+                  onChange={e => setCreateDesc(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && createName.trim()) handleCreate(); if (e.key === "Escape") setShowCreate(false); }}
+                  placeholder="What does this skill do?"
+                  className="w-full px-2.5 py-1.5 text-xs border rounded-lg outline-none bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
+              <button onClick={handleCreate} disabled={!createName.trim() || creating}
+                className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">
+                {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Create"}
+              </button>
             </div>
           </div>
         </div>
