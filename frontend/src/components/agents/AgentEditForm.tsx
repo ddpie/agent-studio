@@ -1103,6 +1103,20 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
             onChange={(v) => { if (v !== undefined && v !== code) updateBlock(fullscreenIdx, v); }}
             language="python"
             theme="vs-dark"
+            onMount={(editor, monaco) => {
+              if (isPyodideReady() && code) {
+                const model = editor.getModel();
+                if (model) {
+                  const errors = checkPythonSyntax(code).map(e => ({
+                    startLineNumber: e.line, endLineNumber: e.line,
+                    startColumn: e.col || 1, endColumn: 1000,
+                    message: e.msg,
+                    severity: 8 as unknown as MonacoNS.MarkerSeverity,
+                  }));
+                  monaco.editor.setModelMarkers(model, "python-lint", errors);
+                }
+              }
+            }}
             onValidate={() => {
               if (!isPyodideReady() || !code) return;
               const monacoInstance = (window as unknown as { monaco?: typeof MonacoNS }).monaco;
@@ -1177,6 +1191,20 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
                   onChange={(v) => { if (v !== undefined && v !== code) updateBlock(idx, v); }}
                   language="python"
                   theme={isDark ? "vs-dark" : "light"}
+                  onMount={(editor, monaco) => {
+                    if (isPyodideReady() && code) {
+                      const model = editor.getModel();
+                      if (model) {
+                        const errors = checkPythonSyntax(code).map(e => ({
+                          startLineNumber: e.line, endLineNumber: e.line,
+                          startColumn: e.col || 1, endColumn: 1000,
+                          message: e.msg,
+                          severity: 8 as unknown as MonacoNS.MarkerSeverity,
+                        }));
+                        monaco.editor.setModelMarkers(model, "python-lint", errors);
+                      }
+                    }
+                  }}
                   onValidate={() => {
                     if (!isPyodideReady() || !code) return;
                     const monacoInstance = (window as unknown as { monaco?: typeof MonacoNS }).monaco;

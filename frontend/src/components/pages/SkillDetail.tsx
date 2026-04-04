@@ -909,41 +909,62 @@ export default function SkillDetail() {
             <p className="text-xs text-gray-400 truncate">{skill.description}</p>
           )}
         </div>
-        <button onClick={() => {
-          const content = skillContent ?? "";
-          const monacoInstance = (window as unknown as { monaco?: typeof MonacoNS }).monaco;
-          if (monacoInstance) {
-            const model = monacoInstance.editor.getModels().find(m => m.getValue() === content);
-            if (model) {
-              let customMarkers: { line: number; col: number; message: string; severity: number }[] = [];
-              if (currentPath.endsWith(".py")) customMarkers = validatePython(content);
-              else if (currentPath.endsWith(".sh") || currentPath.endsWith(".bash")) customMarkers = validateShell(content);
-              const mapped = customMarkers.map(m => ({
-                startLineNumber: m.line, endLineNumber: m.line,
-                startColumn: m.col, endColumn: 1000,
-                message: m.message,
-                severity: m.severity as unknown as MonacoNS.MarkerSeverity,
-              }));
-              const owner = currentPath.endsWith(".py") ? "python-lint" : "shell-lint";
-              monacoInstance.editor.setModelMarkers(model, owner, mapped);
-              const allMarkers = monacoInstance.editor.getModelMarkers({ resource: model.uri });
-              const errors = allMarkers.filter(m => m.severity >= 8);
-              const warnings = allMarkers.filter(m => m.severity >= 4 && m.severity < 8);
-              if (errors.length === 0 && warnings.length === 0 && customMarkers.length === 0) {
-                setValidationResult({ valid: true, errors: [], warnings: [] });
-                setTimeout(() => setValidationResult(null), 2000);
-              } else {
-                setValidationResult({
-                  valid: errors.length === 0,
-                  errors: errors.map(m => `Line ${m.startLineNumber}: ${m.message}`),
-                  warnings: warnings.map(m => `Line ${m.startLineNumber}: ${m.message}`),
-                });
+        <button onClick={async () => {
+          const allErrors: string[] = [];
+          const allWarnings: string[] = [];
+
+          // 1. Validate SKILL.md (frontmatter + structure)
+          const skillMd = editedContents.get("SKILL.md") ?? originalContents.get("SKILL.md") ?? skillContent ?? "";
+          const skillResult = validateSkill(skillMd, virtualFiles, pendingDeletes);
+          allErrors.push(...skillResult.errors);
+          allWarnings.push(...skillResult.warnings);
+
+          // 2. Validate all Python/Shell files
+          const allFiles = ["SKILL.md", ...virtualFiles];
+          for (const filePath of allFiles) {
+            const content = editedContents.get(filePath) ?? originalContents.get(filePath);
+            if (!content) continue;
+            if (filePath.endsWith(".py")) {
+              const pyErrors = validatePython(content);
+              for (const e of pyErrors) {
+                allErrors.push(`${filePath}:${e.line}: ${e.message}`);
+              }
+            } else if (filePath.endsWith(".sh") || filePath.endsWith(".bash")) {
+              const shErrors = validateShell(content);
+              for (const e of shErrors) {
+                allErrors.push(`${filePath}:${e.line}: ${e.message}`);
               }
             }
           }
-          if (currentPath === "SKILL.md") {
-            const result = validateSkill(content, virtualFiles, pendingDeletes);
-            setValidationResult(result);
+
+          // 3. Also validate current editor's Monaco markers
+          const monacoInstance = (window as unknown as { monaco?: typeof MonacoNS }).monaco;
+          if (monacoInstance) {
+            const model = monacoInstance.editor.getModels().find(m => m.getValue() === (skillContent ?? ""));
+            if (model) {
+              // Re-run markers on current file
+              if (currentPath.endsWith(".py") && skillContent) {
+                const mapped = validatePython(skillContent).map(m => ({
+                  startLineNumber: m.line, endLineNumber: m.line,
+                  startColumn: m.col, endColumn: 1000,
+                  message: m.message,
+                  severity: m.severity as unknown as MonacoNS.MarkerSeverity,
+                }));
+                monacoInstance.editor.setModelMarkers(model, "python-lint", mapped);
+              }
+              const builtinMarkers = monacoInstance.editor.getModelMarkers({ resource: model.uri });
+              for (const m of builtinMarkers) {
+                if (m.severity >= 8) allErrors.push(`${currentPath}:${m.startLineNumber}: ${m.message}`);
+                else if (m.severity >= 4) allWarnings.push(`${currentPath}:${m.startLineNumber}: ${m.message}`);
+              }
+            }
+          }
+
+          if (allErrors.length === 0 && allWarnings.length === 0) {
+            setValidationResult({ valid: true, errors: [], warnings: [] });
+            setTimeout(() => setValidationResult(null), 2000);
+          } else {
+            setValidationResult({ valid: allErrors.length === 0, errors: allErrors, warnings: allWarnings });
           }
         }}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors">
@@ -1140,6 +1161,29 @@ export default function SkillDetail() {
                   onChange={handleEditorChange}
                   language={getMonacoLanguage(currentPath)}
                   theme={isDark ? "vs-dark" : "light"}
+                  onMount={(editor, monaco) => {
+                    // Auto-run Python/Shell validation on file load
+                    const model = editor.getModel();
+                    if (model && skillContent) {
+                      if (currentPath.endsWith(".py")) {
+                        const pyMarkers = validatePython(skillContent).map(m => ({
+                          startLineNumber: m.line, endLineNumber: m.line,
+                          startColumn: m.col, endColumn: 1000,
+                          message: m.message,
+                          severity: m.severity as unknown as MonacoNS.MarkerSeverity,
+                        }));
+                        monaco.editor.setModelMarkers(model, "python-lint", pyMarkers);
+                      } else if (currentPath.endsWith(".sh") || currentPath.endsWith(".bash")) {
+                        const shMarkers = validateShell(skillContent).map(m => ({
+                          startLineNumber: m.line, endLineNumber: m.line,
+                          startColumn: m.col, endColumn: 1000,
+                          message: m.message,
+                          severity: m.severity as unknown as MonacoNS.MarkerSeverity,
+                        }));
+                        monaco.editor.setModelMarkers(model, "shell-lint", shMarkers);
+                      }
+                    }
+                  }}
                   onValidate={(markers) => {
                     // Monaco fires onValidate for JSON/JS/TS automatically
                     // For Python/Shell, add our custom markers
