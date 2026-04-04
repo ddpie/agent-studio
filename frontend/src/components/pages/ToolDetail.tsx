@@ -148,6 +148,8 @@ export default function ToolDetail() {
     setOriginalCode(tool.code);
     setIsBuiltin(tool.builtin);
     setLoaded(true);
+    // Auto-open AI assistant for non-builtin tools
+    if (!tool.builtin && toolId) openPanel(toolId);
   }, [tools, toolId, isNew, paramName, paramDesc, fetchTools]);
 
   // Unsaved changes tracking (must be before effects that use it)

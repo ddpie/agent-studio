@@ -1016,7 +1016,7 @@ export default function SkillDetail() {
             ? isDark ? "bg-purple-900/30 text-purple-400" : "bg-purple-50 text-purple-600"
             : isDark ? "text-gray-400 hover:text-purple-400 hover:bg-purple-900/30" : "text-gray-500 hover:text-purple-600 hover:bg-purple-50"
           }`}
-          title="AI Assistant">
+          title={t("assistant.title")}>
           <Sparkles className="w-3.5 h-3.5" />
         </button>
       </div>
