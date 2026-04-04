@@ -13,6 +13,7 @@ import { useUISettings } from "../../stores/ui-settings-store";
 import { useSkillAssistantStore } from "../../stores/skill-assistant-store";
 import SkillAssistant from "../skills/SkillAssistant";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
+import { preloadPyodide, checkPythonSyntax, isPyodideReady } from "../../lib/pyodide-checker";
 
 // --- Language helpers ---
 
@@ -27,12 +28,20 @@ function getMonacoLanguage(filename: string): string {
   return "plaintext";
 }
 
-/** Python validation: brackets, indentation, common syntax issues */
+/** Python validation using Pyodide compile() if available, fallback to basic checks */
 function validatePython(code: string): { line: number; col: number; message: string; severity: number }[] {
+  // Use Pyodide (real CPython compile) if loaded
+  if (isPyodideReady()) {
+    return checkPythonSyntax(code).map(e => ({
+      line: e.line,
+      col: e.col || 1,
+      message: e.msg,
+      severity: 8,
+    }));
+  }
+  // Fallback: basic bracket balance check
   const markers: { line: number; col: number; message: string; severity: number }[] = [];
   const lines = code.split("\n");
-
-  // Bracket balance
   let parens = 0, brackets = 0, braces = 0;
   for (const line of lines) {
     for (const ch of line) {
@@ -41,62 +50,9 @@ function validatePython(code: string): { line: number; col: number; message: str
       else if (ch === "{") braces++; else if (ch === "}") braces--;
     }
   }
-  if (parens !== 0) markers.push({ line: lines.length, col: 1, message: `Unbalanced parentheses`, severity: 8 });
-  if (brackets !== 0) markers.push({ line: lines.length, col: 1, message: `Unbalanced brackets`, severity: 8 });
-  if (braces !== 0) markers.push({ line: lines.length, col: 1, message: `Unbalanced braces`, severity: 8 });
-
-  // Indentation consistency
-  let useTabs: boolean | null = null;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line.trim()) continue;
-    const ws = line.match(/^(\s+)/);
-    if (ws) {
-      if (useTabs === null) useTabs = ws[1].includes("\t");
-      if (useTabs && ws[1].includes(" ") && !ws[1].includes("\t")) {
-        markers.push({ line: i + 1, col: 1, message: "Mixed indentation: expected tabs", severity: 4 });
-      } else if (!useTabs && ws[1].includes("\t")) {
-        markers.push({ line: i + 1, col: 1, message: "Mixed indentation: expected spaces", severity: 4 });
-      }
-    }
-  }
-
-  // Missing colon after compound statements
-  const compoundRe = /^\s*(def|class|if|elif|else|for|while|try|except|finally|with|async\s+def|async\s+for|async\s+with)\b/;
-  let inMultiline = false;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    // Track multiline brackets
-    if (inMultiline) {
-      for (const ch of trimmed) { if (ch === "(" || ch === "[") parens++; if (ch === ")" || ch === "]") parens--; }
-      if (parens <= 0) { inMultiline = false; parens = 0; }
-      continue;
-    }
-    if (compoundRe.test(trimmed)) {
-      // Check if line ends with colon (ignoring comments and trailing whitespace)
-      const noComment = trimmed.replace(/#.*$/, "").trimEnd();
-      if (noComment.endsWith("\\") || noComment.endsWith(",")) continue; // continuation
-      let openP = 0;
-      for (const ch of noComment) { if (ch === "(") openP++; if (ch === ")") openP--; }
-      if (openP > 0) { inMultiline = true; parens = openP; continue; }
-      if (!noComment.endsWith(":")) {
-        markers.push({ line: i + 1, col: noComment.length + 1, message: `Missing ':' after ${trimmed.match(compoundRe)?.[1]}`, severity: 8 });
-      }
-    }
-  }
-
-  // Unterminated triple-quoted strings
-  let tripleCount = 0;
-  for (const line of lines) {
-    const matches = line.match(/"""/g);
-    if (matches) tripleCount += matches.length;
-  }
-  if (tripleCount % 2 !== 0) {
-    markers.push({ line: lines.length, col: 1, message: "Unterminated triple-quoted string", severity: 8 });
-  }
-
+  if (parens !== 0) markers.push({ line: lines.length, col: 1, message: "Unbalanced parentheses", severity: 8 });
+  if (brackets !== 0) markers.push({ line: lines.length, col: 1, message: "Unbalanced brackets", severity: 8 });
+  if (braces !== 0) markers.push({ line: lines.length, col: 1, message: "Unbalanced braces", severity: 8 });
   return markers;
 }
 
@@ -475,6 +431,8 @@ export default function SkillDetail() {
     });
     // Auto-open AI assistant
     useSkillAssistantStore.getState().openPanel(skillId);
+    // Warm up Pyodide for Python syntax checking
+    preloadPyodide();
   }, [skillId]);
 
   const loadFile = useCallback(async (path: string) => {
