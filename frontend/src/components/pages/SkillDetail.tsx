@@ -3,13 +3,15 @@ import { useParams, useNavigate, useSearchParams, useBlocker } from "react-route
 import {
   Package, ChevronLeft, Trash2, Loader2, Save, GitCompare,
   FileText, FolderOpen, FolderClosed, File, ChevronRight as ChevronRightIcon,
-  Plus, Pencil, FolderPlus, ArrowRightLeft,
+  Plus, Pencil, FolderPlus, ArrowRightLeft, Sparkles,
 } from "lucide-react";
 import { getSkillContent, getSkillFile, listSkillFiles, deleteSkill, writeSkillFile, deleteSkillFile, renameSkillFile, listSkills, type SkillIndexEntry } from "../../lib/skill-storage";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import type * as MonacoNS from "monaco-editor";
 import { Tree, type NodeRendererProps } from "react-arborist";
 import { useUISettings } from "../../stores/ui-settings-store";
+import { useSkillAssistantStore } from "../../stores/skill-assistant-store";
+import SkillAssistant from "../skills/SkillAssistant";
 
 // --- Language helpers ---
 
@@ -804,8 +806,21 @@ export default function SkillDetail() {
             Save ({pendingCount})
           </button>
         )}
-        <button onClick={() => setShowDeleteConfirm(true)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded">
+        <button onClick={() => setShowDeleteConfirm(true)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
           <Trash2 className="w-4 h-4" />
+        </button>
+        <button onClick={() => {
+          if (!skillId) return;
+          const store = useSkillAssistantStore.getState();
+          if (store.panelOpen) store.closePanel();
+          else store.openPanel(skillId);
+        }}
+          className={`p-1.5 rounded transition-colors ${useSkillAssistantStore.getState().panelOpen
+            ? "text-blue-500 bg-blue-50 dark:bg-blue-900/20"
+            : "text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+          }`}
+          title="AI Assistant">
+          <Sparkles className="w-4 h-4" />
         </button>
       </div>
 
@@ -973,6 +988,19 @@ export default function SkillDetail() {
             <p className="text-sm text-gray-400 p-6">Failed to load content.</p>
           )}
         </div>
+
+        {/* AI Assistant panel */}
+        {skillId && (
+          <SkillAssistant
+            skillId={skillId}
+            currentPath={currentPath}
+            currentContent={skillContent ?? ""}
+            allFiles={["SKILL.md", ...virtualFiles]}
+            onFileUpdate={(newContent) => {
+              handleEditorChange(newContent);
+            }}
+          />
+        )}
       </div>
 
       {showDiff && <DiffModal changes={getDiffChanges()} onClose={() => setShowDiff(false)} isDark={isDark} />}
