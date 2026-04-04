@@ -328,73 +328,100 @@ export default function ToolDetail() {
   }
 
   return (
-    <div className="flex h-full">
-      {/* Main content */}
-      <div className="flex flex-col flex-1 min-w-0">
-        {/* Header */}
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <button onClick={() => navigate("/tools")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded">
-            <ChevronLeft className="w-4 h-4 text-gray-500" />
-          </button>
-          <Code2 className="w-4 h-4 text-blue-500" />
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-            {name || toolId}
-          </h2>
-          {isBuiltin && (
-            <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500">
-              <Lock className="w-2.5 h-2.5" /> {t("tools.readOnly")}
-            </span>
-          )}
-          {hasChanges && !isBuiltin && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
-              {t("agentEditor.modified")}
-            </span>
-          )}
-          <div className="flex-1" />
-
-          {/* Actions */}
-          {hasChanges && !isBuiltin && (
-            <button
-              onClick={() => setShowDiff(!showDiff)}
-              className={`flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg transition-colors ${
-                showDiff ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600" : "text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-              }`}
-            >
-              <GitCompare className="w-3 h-3" />
-              {showDiff ? t("tools.hideChanges") : t("tools.showChanges")}
-            </button>
-          )}
-          {!isBuiltin && (
-            <>
-              <button
-                onClick={() => {
-                  if (toolId) openPanel(toolId);
-                }}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  panelOpen ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600" : "text-gray-400 hover:text-blue-600 hover:bg-gray-100 dark:hover:bg-gray-800"
-                }`}
-                title={t("assistant.title")}
-              >
-                <Sparkles className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setConfirmDelete(true)}
-                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                title={t("common.delete")}
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving || !hasChanges}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-40 transition-colors"
-              >
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                {t("common.save")}
-              </button>
-            </>
-          )}
+    <div className="flex flex-col h-full">
+      {/* Header — matches SkillDetail style */}
+      <div className={`flex items-center gap-3 px-6 py-3 border-b ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+        <button onClick={() => navigate("/tools")} className={`p-1 rounded ${isDark ? "hover:bg-gray-800 text-gray-300" : "hover:bg-gray-100 text-gray-600"}`} title={t("common.back")}>
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h2 className={`text-base font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{name || toolId}</h2>
+            {isBuiltin && (
+              <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500">
+                <Lock className="w-2.5 h-2.5" /> {t("tools.readOnly")}
+              </span>
+            )}
+          </div>
+          {description && <p className="text-xs text-gray-400 truncate">{description}</p>}
         </div>
+
+        {/* Diff button */}
+        {hasChanges && !isBuiltin && (
+          <button
+            onClick={() => setShowDiff(!showDiff)}
+            className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${
+              showDiff
+                ? isDark ? "bg-blue-900/30 text-blue-400" : "bg-blue-50 text-blue-600"
+                : isDark ? "text-gray-400 hover:text-blue-400 hover:bg-blue-900/30" : "text-gray-500 hover:text-blue-600 hover:bg-blue-50"
+            }`}
+          >
+            <GitCompare className="w-3.5 h-3.5" />
+            {showDiff ? t("tools.hideChanges") : t("tools.showChanges")}
+          </button>
+        )}
+
+        {/* Discard */}
+        {hasChanges && !isBuiltin && (
+          <button
+            onClick={() => { setCode(originalCode); setShowDiff(false); }}
+            className={`px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${isDark ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"}`}
+          >
+            {t("common.discard")}
+          </button>
+        )}
+
+        {/* Save */}
+        {hasChanges && !isBuiltin && (
+          <>
+            <div className={`w-px h-5 ${isDark ? "bg-gray-700" : "bg-gray-200"} mx-0.5`} />
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 shadow-sm transition-all"
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              {t("common.save")}
+            </button>
+          </>
+        )}
+
+        {/* Delete */}
+        {!isBuiltin && (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className={`p-1.5 rounded transition-colors ${isDark ? "text-red-400 hover:bg-red-900/20" : "text-red-400 hover:text-red-600 hover:bg-red-50"}`}
+            title={t("common.delete")}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        )}
+
+        {/* AI Assistant toggle — purple like SkillDetail */}
+        {!isBuiltin && (
+          <button
+            onClick={() => {
+              if (toolId) {
+                if (panelOpen) useToolAssistantStore.getState().closePanel();
+                else openPanel(toolId);
+              }
+            }}
+            className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${
+              panelOpen
+                ? isDark ? "bg-purple-900/30 text-purple-400" : "bg-purple-50 text-purple-600"
+                : isDark ? "text-gray-400 hover:text-purple-400 hover:bg-purple-900/30" : "text-gray-500 hover:text-purple-600 hover:bg-purple-50"
+            }`}
+            title={t("assistant.title")}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Body: metadata + editor + assistant */}
+      <div className="flex flex-1 min-h-0">
+        {/* Left: metadata + editor */}
+        <div className="flex flex-col flex-1 min-w-0">
 
         {/* Metadata form */}
         {!isBuiltin && (
@@ -487,19 +514,20 @@ export default function ToolDetail() {
             <button onClick={() => { setValidationError(null); clearError(); }} className="text-red-400 hover:text-red-600 text-[10px]">{t("common.dismiss")}</button>
           </div>
         )}
-      </div>
+        </div>{/* end left: metadata + editor */}
 
-      {/* AI Assistant panel */}
-      {panelOpen && toolId && !isBuiltin && (
-        <ToolAssistant
-          toolId={toolId}
-          currentCode={code}
-          toolName={name}
-          toolDescription={description}
-          toolCategory={category}
-          onCodeUpdate={handleCodeUpdate}
-        />
-      )}
+        {/* AI Assistant panel */}
+        {panelOpen && toolId && !isBuiltin && (
+          <ToolAssistant
+            toolId={toolId}
+            currentCode={code}
+            toolName={name}
+            toolDescription={description}
+            toolCategory={category}
+            onCodeUpdate={handleCodeUpdate}
+          />
+        )}
+      </div>{/* end body: metadata + editor + assistant */}
 
       {/* Delete confirm */}
       {confirmDelete && (
