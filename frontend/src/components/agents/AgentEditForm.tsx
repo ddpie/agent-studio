@@ -287,6 +287,8 @@ export default function AgentEditForm() {
         tool_names: formData.tool_names || "",
         template_id: formData.template_id || "",
         supports_images: formData.supports_images || false,
+        skills: formData.skills || [],
+        agent_id: agentId,
       };
       const uploaded = await writeJsonToS3(stagingKey, stagingData);
       if (!uploaded) { setStatus("Failed to upload config"); return; }
@@ -332,6 +334,8 @@ export default function AgentEditForm() {
         suggestions: Array.isArray(formData.suggestions) ? formData.suggestions : (formData.suggestions || "").split("|").filter(Boolean),
         template_id: formData.template_id || "",
         supports_images: formData.supports_images || false,
+        skills: formData.skills || [],
+        agent_id: agentId,
       };
       const uploaded = await writeJsonToS3(stagingKey, stagingData);
       if (!uploaded) {

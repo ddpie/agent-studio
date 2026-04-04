@@ -8,7 +8,7 @@ import boto3
 from strands import tool
 
 from config import MODEL_ID, REGION, S3_BUCKET, AGENTS_TABLE, PERMISSION_TIER_ROLES, DEFAULT_PERMISSION_TIER
-from deploy import build_deployment_package_v2, upload_deployment, create_runtime, wait_for_ready, validate_agent_files
+from deploy import build_deployment_package_v2, upload_deployment, create_runtime, wait_for_ready, validate_agent_files, build_skill_prompt_section
 from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_template_prompt, get_template_names, BASE_GUIDELINES
 from tools_library.registry import get_tool_code_by_func_name as _get_builtin_code
@@ -79,6 +79,50 @@ def create_agent(
         except Exception as e:
             return json.dumps({"error": f"Failed to read staging config: {e}"})
 
+    # Read skills from staging config
+    skills_config = staged.get("skills", []) if staging_key else []
+    skills_data = []
+    skill_scripts = {}
+
+    if skills_config:
+        s3_client = boto3.client("s3", region_name=REGION)
+        for skill_entry in skills_config:
+            skill_id = skill_entry.get("id", "")
+            skill_name = skill_entry.get("name", "").replace(" ", "_").replace("-", "_")
+            agent_name_for_path = staged.get("name", agent_name) if staging_key else agent_name
+
+            skill_md_content = ""
+            try:
+                skill_prefix = f"agents/{agent_name_for_path}/skills/{skill_id}/"
+                md_key = f"{skill_prefix}SKILL.md"
+                md_obj = s3_client.get_object(Bucket=S3_BUCKET, Key=md_key)
+                skill_md_content = md_obj["Body"].read().decode("utf-8")
+            except Exception:
+                pass
+
+            skills_data.append({
+                "name": skill_entry.get("name", skill_id),
+                "description": skill_entry.get("description", ""),
+                "skill_md_content": skill_md_content,
+            })
+
+            try:
+                resp = s3_client.list_objects_v2(
+                    Bucket=S3_BUCKET,
+                    Prefix=f"{skill_prefix}scripts/",
+                )
+                script_files = {}
+                for obj in resp.get("Contents", []):
+                    key = obj["Key"]
+                    filename = key.split("/")[-1]
+                    if filename:
+                        content = s3_client.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read().decode("utf-8")
+                        script_files[filename] = content
+                if script_files:
+                    skill_scripts[skill_name] = script_files
+            except Exception:
+                pass
+
     # Apply template if specified
     if template_id:
         base_prompt = get_template_prompt(template_id)
@@ -102,7 +146,14 @@ def create_agent(
     # Generate multi-file structure (no more repr() or string template substitution!)
     main_py = MAIN_PY_MCP_TEMPLATE if gateway_url else MAIN_PY_TEMPLATE
     tools_py = TOOLS_PY_HEADER + "\n\n".join(builtin_code_parts + ([custom_code] if custom_code.strip() else []))
-    prompt_txt = final_prompt
+
+    # Inject skill content into prompt (progressive disclosure)
+    skill_prompt_section = build_skill_prompt_section(skills_data)
+    if skill_prompt_section:
+        prompt_txt = final_prompt + skill_prompt_section
+    else:
+        prompt_txt = final_prompt
+
     config_data = {
         "model_id": MODEL_ID,
         "tool_names": tool_names_list,
@@ -119,7 +170,7 @@ def create_agent(
     # Build, upload, deploy
     tier = permission_tier or DEFAULT_PERMISSION_TIER
     role_arn = PERMISSION_TIER_ROLES.get(tier, PERMISSION_TIER_ROLES[DEFAULT_PERMISSION_TIER])
-    package = build_deployment_package_v2(main_py, tools_py, prompt_txt, config_json)
+    package = build_deployment_package_v2(main_py, tools_py, prompt_txt, config_json, skill_scripts=skill_scripts)
     s3_key = upload_deployment(agent_name, package)
     result = create_runtime(agent_name, description, s3_key, role_arn)
 
@@ -127,6 +178,11 @@ def create_agent(
 
     # Save metadata.json
     suggestion_list = [s.strip() for s in suggestions.split("|") if s.strip()] if suggestions else []
+
+    deployed_skill_hashes = {}
+    for skill_entry in skills_config:
+        deployed_skill_hashes[skill_entry["id"]] = skill_entry.get("contentHash", "")
+
     metadata = {
         "agent_id": agent_id,
         "name": agent_name,
@@ -141,6 +197,8 @@ def create_agent(
         "tools": tool_names_list,
         "tool_names": ",".join(tool_names_list),
         "supports_images": supports_images,
+        "skills": skills_config,
+        "deployedSkillHashes": deployed_skill_hashes,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     s3 = boto3.client("s3", region_name=REGION)

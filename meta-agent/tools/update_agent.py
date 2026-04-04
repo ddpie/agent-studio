@@ -8,7 +8,7 @@ import boto3
 from strands import tool
 
 from config import MODEL_ID, REGION, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE
-from deploy import build_deployment_package_v2, upload_deployment, wait_for_ready, validate_agent_files
+from deploy import build_deployment_package_v2, upload_deployment, wait_for_ready, validate_agent_files, build_skill_prompt_section
 from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_template_prompt, BASE_GUIDELINES
 from tools_library.registry import get_tool_code_by_func_name as _get_builtin_code
@@ -116,6 +116,49 @@ def update_agent(
         except Exception as e:
             return json.dumps({"error": f"Failed to read staging config: {e}"})
 
+    # Read skills from staging config
+    skills_config = staged.get("skills", []) if staging_key else []
+    skills_data = []
+    skill_scripts = {}
+
+    if skills_config:
+        s3_client = boto3.client("s3", region_name=REGION)
+        for skill_entry in skills_config:
+            skill_id = skill_entry.get("id", "")
+            skill_name = skill_entry.get("name", "").replace(" ", "_").replace("-", "_")
+
+            skill_md_content = ""
+            try:
+                skill_prefix = f"agents/{agent_id}/skills/{skill_id}/"
+                md_key = f"{skill_prefix}SKILL.md"
+                md_obj = s3_client.get_object(Bucket=S3_BUCKET, Key=md_key)
+                skill_md_content = md_obj["Body"].read().decode("utf-8")
+            except Exception:
+                pass
+
+            skills_data.append({
+                "name": skill_entry.get("name", skill_id),
+                "description": skill_entry.get("description", ""),
+                "skill_md_content": skill_md_content,
+            })
+
+            try:
+                resp = s3_client.list_objects_v2(
+                    Bucket=S3_BUCKET,
+                    Prefix=f"{skill_prefix}scripts/",
+                )
+                script_files = {}
+                for obj in resp.get("Contents", []):
+                    key = obj["Key"]
+                    filename = key.split("/")[-1]
+                    if filename:
+                        content = s3_client.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read().decode("utf-8")
+                        script_files[filename] = content
+                if script_files:
+                    skill_scripts[skill_name] = script_files
+            except Exception:
+                pass
+
     # Ownership check
     caller = getattr(__import__('tools.update_agent', fromlist=['_caller_id']), '_caller_id', 'unknown')
     ddb = boto3.resource("dynamodb", region_name=REGION)
@@ -181,7 +224,14 @@ def update_agent(
         # Generate multi-file structure (no more repr()!)
         main_py = MAIN_PY_MCP_TEMPLATE if gateway_url else MAIN_PY_TEMPLATE
         tools_py = TOOLS_PY_HEADER + "\n\n".join(builtin_code_parts + ([custom_code] if custom_code.strip() else []))
-        prompt_txt = final_prompt
+
+        # Inject skill content into prompt (progressive disclosure)
+        skill_prompt_section = build_skill_prompt_section(skills_data)
+        if skill_prompt_section:
+            prompt_txt = final_prompt + skill_prompt_section
+        else:
+            prompt_txt = final_prompt
+
         config_data = {
             "model_id": MODEL_ID,
             "tool_names": tool_names_list,
@@ -196,7 +246,7 @@ def update_agent(
             return json.dumps({"error": "Code validation failed", "details": validation["errors"]})
 
         # Build and upload
-        package = build_deployment_package_v2(main_py, tools_py, prompt_txt, config_json)
+        package = build_deployment_package_v2(main_py, tools_py, prompt_txt, config_json, skill_scripts=skill_scripts)
         s3_key = upload_deployment(agent_id, package)
 
         # Update runtime in-place
@@ -223,6 +273,11 @@ def update_agent(
         final_tools_def_for_meta = tools_py.replace(TOOLS_PY_HEADER, "").strip()
     else:
         final_tools_def_for_meta = final_tools_def or existing_metadata.get("tool_definitions", "")
+
+    deployed_skill_hashes = {}
+    for skill_entry in skills_config:
+        deployed_skill_hashes[skill_entry["id"]] = skill_entry.get("contentHash", "")
+
     metadata = {
         "agent_id": agent_id,
         "name": agent_name,
@@ -236,6 +291,8 @@ def update_agent(
         "template_id": final_template,
         "tools": [t.strip() for t in final_tools_names.split(",") if t.strip()],
         "supports_images": supports_images or existing_metadata.get("supports_images", False),
+        "skills": skills_config,
+        "deployedSkillHashes": deployed_skill_hashes,
         "created_at": existing_metadata.get("created_at", datetime.now(timezone.utc).isoformat()),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }

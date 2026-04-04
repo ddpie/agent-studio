@@ -368,6 +368,70 @@ def validate_agent(
     if system_prompt and len(system_prompt) > 10000:
         warnings.append(f"System prompt is very long ({len(system_prompt)} chars). Consider trimming for better performance.")
 
+    # Skill conflict detection
+    skills_config = staged.get("skills", []) if staging_key else []
+    if skills_config and staging_key:
+        try:
+            s3_val = boto3.client("s3", region_name=REGION)
+            agent_id_for_path = staged.get("agent_id", agent_name)
+
+            skill_tool_funcs = {}  # skill_name -> [func_names]
+            skill_file_names = {}  # skill_name -> [filenames]
+
+            for skill_entry in skills_config:
+                skill_id = skill_entry.get("id", "")
+                skill_name = skill_entry.get("name", skill_id)
+                skill_prefix = f"agents/{agent_id_for_path}/skills/{skill_id}/scripts/"
+
+                try:
+                    resp = s3_val.list_objects_v2(Bucket=S3_BUCKET, Prefix=skill_prefix)
+                    funcs = []
+                    fnames = []
+                    for obj in resp.get("Contents", []):
+                        key = obj["Key"]
+                        filename = key.split("/")[-1]
+                        if not filename:
+                            continue
+                        fnames.append(filename)
+                        if filename.endswith(".py"):
+                            try:
+                                content = s3_val.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read().decode("utf-8")
+                                tool_funcs = re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', content)
+                                funcs.extend(tool_funcs)
+                            except Exception:
+                                pass
+                    skill_tool_funcs[skill_name] = funcs
+                    skill_file_names[skill_name] = fnames
+                except Exception:
+                    pass
+
+            # File name collisions across skills
+            all_files = {}
+            for sname, fnames in skill_file_names.items():
+                for fname in fnames:
+                    all_files.setdefault(fname, []).append(sname)
+            for fname, snames in all_files.items():
+                if len(snames) > 1:
+                    errors.append(f"Skill script file name collision: '{fname}' exists in skills [{', '.join(snames)}]")
+
+            # @tool function name collisions across skills
+            all_funcs = {}
+            for sname, funcs in skill_tool_funcs.items():
+                for func in funcs:
+                    all_funcs.setdefault(func, []).append(sname)
+            for func, snames in all_funcs.items():
+                if len(snames) > 1:
+                    errors.append(f"Skill @tool function name collision: '{func}' defined in skills [{', '.join(snames)}]")
+
+            # Skill @tool vs agent's own tool_definitions
+            agent_defined = set(defined_funcs) if defined_funcs else set()
+            for sname, funcs in skill_tool_funcs.items():
+                for func in funcs:
+                    if func in agent_defined:
+                        errors.append(f"Skill @tool function '{func}' in skill '{sname}' conflicts with agent's own tool_definitions")
+        except Exception as e:
+            warnings.append(f"Skill conflict detection skipped: {e}")
+
     # 8. LLM-based prompt quality review (covers structure, tool sync, constraints, safety, etc.)
     prompt_review = None
     if system_prompt and system_prompt.strip() and len(errors) == 0:

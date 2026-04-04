@@ -83,7 +83,13 @@ def validate_assembled_code(agent_code: str) -> dict:
     return {"valid": len(errors) == 0, "errors": errors, "warnings": []}
 
 
-def build_deployment_package_v2(main_py: str, tools_py: str, prompt_txt: str, config_json: str) -> bytes:
+def build_deployment_package_v2(
+    main_py: str,
+    tools_py: str,
+    prompt_txt: str,
+    config_json: str,
+    skill_scripts: dict | None = None,
+) -> bytes:
     """Build deployment zip with multi-file structure.
 
     Files written: main.py, tools.py, prompt.txt, config.json
@@ -122,7 +128,30 @@ def build_deployment_package_v2(main_py: str, tools_py: str, prompt_txt: str, co
             if _LATEST_BUILTIN_TOOLS:
                 new_zip.writestr("builtin_tools.py", _LATEST_BUILTIN_TOOLS)
 
+            # Write skill scripts into subdirectories
+            if skill_scripts:
+                for skill_name, files in skill_scripts.items():
+                    for filepath, content in files.items():
+                        zip_path = f"skills/{skill_name}/scripts/{filepath}"
+                        new_zip.writestr(zip_path, content)
+
     return buf.getvalue()
+
+
+def build_skill_prompt_section(skills_data: list[dict]) -> str:
+    """Build progressive disclosure prompt section from skill data."""
+    if not skills_data:
+        return ""
+
+    lines = ["\n\n## Available Skills"]
+    for s in skills_data:
+        lines.append(f"- {s['name']}: {s['description']}")
+
+    for s in skills_data:
+        lines.append(f"\n## Skill: {s['name']}")
+        lines.append(s.get("skill_md_content", ""))
+
+    return "\n".join(lines)
 
 
 # Keep old function for backward compatibility
