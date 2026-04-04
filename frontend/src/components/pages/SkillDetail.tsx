@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams, useBlocker } from "react-route
 import {
   Package, ChevronLeft, Trash2, Loader2, Save, GitCompare,
   FileText, FolderOpen, FolderClosed, File, ChevronRight as ChevronRightIcon,
-  Plus, Pencil, FolderPlus, ArrowRightLeft, Sparkles,
+  Plus, Pencil, FolderPlus, ArrowRightLeft, Sparkles, ShieldCheck,
 } from "lucide-react";
 import { getSkillContent, getSkillFile, listSkillFiles, deleteSkill, writeSkillFile, deleteSkillFile, renameSkillFile, listSkills, type SkillIndexEntry } from "../../lib/skill-storage";
 import Editor, { DiffEditor } from "@monaco-editor/react";
@@ -26,11 +26,12 @@ function getMonacoLanguage(filename: string): string {
   return "plaintext";
 }
 
-/** Basic Python validation (bracket balance + indentation consistency) */
+/** Python validation: brackets, indentation, common syntax issues */
 function validatePython(code: string): { line: number; col: number; message: string; severity: number }[] {
   const markers: { line: number; col: number; message: string; severity: number }[] = [];
   const lines = code.split("\n");
 
+  // Bracket balance
   let parens = 0, brackets = 0, braces = 0;
   for (const line of lines) {
     for (const ch of line) {
@@ -58,6 +59,84 @@ function validatePython(code: string): { line: number; col: number; message: str
       }
     }
   }
+
+  // Missing colon after compound statements
+  const compoundRe = /^\s*(def|class|if|elif|else|for|while|try|except|finally|with|async\s+def|async\s+for|async\s+with)\b/;
+  let inMultiline = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    // Track multiline brackets
+    if (inMultiline) {
+      for (const ch of trimmed) { if (ch === "(" || ch === "[") parens++; if (ch === ")" || ch === "]") parens--; }
+      if (parens <= 0) { inMultiline = false; parens = 0; }
+      continue;
+    }
+    if (compoundRe.test(trimmed)) {
+      // Check if line ends with colon (ignoring comments and trailing whitespace)
+      const noComment = trimmed.replace(/#.*$/, "").trimEnd();
+      if (noComment.endsWith("\\") || noComment.endsWith(",")) continue; // continuation
+      let openP = 0;
+      for (const ch of noComment) { if (ch === "(") openP++; if (ch === ")") openP--; }
+      if (openP > 0) { inMultiline = true; parens = openP; continue; }
+      if (!noComment.endsWith(":")) {
+        markers.push({ line: i + 1, col: noComment.length + 1, message: `Missing ':' after ${trimmed.match(compoundRe)?.[1]}`, severity: 8 });
+      }
+    }
+  }
+
+  // Unterminated triple-quoted strings
+  let tripleCount = 0;
+  for (const line of lines) {
+    const matches = line.match(/"""/g);
+    if (matches) tripleCount += matches.length;
+  }
+  if (tripleCount % 2 !== 0) {
+    markers.push({ line: lines.length, col: 1, message: "Unterminated triple-quoted string", severity: 8 });
+  }
+
+  return markers;
+}
+
+/** Shell script validation: quotes, brackets, common issues */
+function validateShell(code: string): { line: number; col: number; message: string; severity: number }[] {
+  const markers: { line: number; col: number; message: string; severity: number }[] = [];
+  const lines = code.split("\n");
+
+  // Quote balance (single and double)
+  let inSingle = false, inDouble = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    for (let j = 0; j < line.length; j++) {
+      const ch = line[j];
+      if (ch === "\\" && !inSingle) { j++; continue; } // skip escaped
+      if (ch === "'" && !inDouble) inSingle = !inSingle;
+      else if (ch === '"' && !inSingle) inDouble = !inDouble;
+    }
+  }
+  if (inSingle) markers.push({ line: lines.length, col: 1, message: "Unterminated single quote", severity: 8 });
+  if (inDouble) markers.push({ line: lines.length, col: 1, message: "Unterminated double quote", severity: 8 });
+
+  // if/then/fi, do/done, case/esac balance
+  let ifCount = 0, fiCount = 0, doCount = 0, doneCount = 0, caseCount = 0, esacCount = 0;
+  for (const line of lines) {
+    const words = line.trim().replace(/#.*$/, "").split(/\s+|;/);
+    for (const w of words) {
+      if (w === "if" || w === "elif") ifCount++;
+      else if (w === "fi") fiCount++;
+      else if (w === "do") doCount++;
+      else if (w === "done") doneCount++;
+      else if (w === "case") caseCount++;
+      else if (w === "esac") esacCount++;
+    }
+  }
+  if (ifCount !== fiCount) markers.push({ line: lines.length, col: 1, message: `Unbalanced if/fi (${ifCount} if vs ${fiCount} fi)`, severity: 8 });
+  if (doCount !== doneCount) markers.push({ line: lines.length, col: 1, message: `Unbalanced do/done (${doCount} do vs ${doneCount} done)`, severity: 8 });
+  if (caseCount !== esacCount) markers.push({ line: lines.length, col: 1, message: `Unbalanced case/esac`, severity: 8 });
+
   return markers;
 }
 
@@ -788,6 +867,49 @@ export default function SkillDetail() {
           <span className="text-xs text-gray-400 ml-2 truncate">{skill.description}</span>
         )}
         <div className="flex-1" />
+        <button onClick={() => {
+          // Run validation on current file
+          const content = skillContent ?? "";
+          const monacoInstance = (window as unknown as { monaco?: typeof MonacoNS }).monaco;
+          if (monacoInstance) {
+            const model = monacoInstance.editor.getModels().find(m => m.getValue() === content);
+            if (model) {
+              let customMarkers: { line: number; col: number; message: string; severity: number }[] = [];
+              if (currentPath.endsWith(".py")) customMarkers = validatePython(content);
+              else if (currentPath.endsWith(".sh") || currentPath.endsWith(".bash")) customMarkers = validateShell(content);
+              const mapped = customMarkers.map(m => ({
+                startLineNumber: m.line, endLineNumber: m.line,
+                startColumn: m.col, endColumn: 1000,
+                message: m.message,
+                severity: m.severity as unknown as MonacoNS.MarkerSeverity,
+              }));
+              const owner = currentPath.endsWith(".py") ? "python-lint" : "shell-lint";
+              monacoInstance.editor.setModelMarkers(model, owner, mapped);
+              // Also get Monaco's built-in markers
+              const allMarkers = monacoInstance.editor.getModelMarkers({ resource: model.uri });
+              const errors = allMarkers.filter(m => m.severity >= 8);
+              const warnings = allMarkers.filter(m => m.severity >= 4 && m.severity < 8);
+              if (errors.length === 0 && warnings.length === 0 && customMarkers.length === 0) {
+                setValidationResult({ valid: true, errors: [], warnings: ["No issues found"] });
+              } else {
+                setValidationResult({
+                  valid: errors.length === 0,
+                  errors: errors.map(m => `Line ${m.startLineNumber}: ${m.message}`),
+                  warnings: warnings.map(m => `Line ${m.startLineNumber}: ${m.message}`),
+                });
+              }
+            }
+          }
+          // Also run skill-level validation if on SKILL.md
+          if (currentPath === "SKILL.md") {
+            const result = validateSkill(content, virtualFiles, pendingDeletes);
+            setValidationResult(result);
+          }
+        }}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-colors">
+          <ShieldCheck className="w-3.5 h-3.5" />
+          Validate
+        </button>
         {hasPendingOps && (
           <button onClick={() => setShowDiff(true)}
             className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors">
@@ -934,27 +1056,30 @@ export default function SkillDetail() {
                   theme={isDark ? "vs-dark" : "light"}
                   onValidate={(markers) => {
                     // Monaco fires onValidate for JSON/JS/TS automatically
-                    // For Python, add our custom markers
-                    if (currentPath.endsWith(".py") && skillContent) {
-                      const monacoInstance = (window as unknown as { monaco?: typeof MonacoNS }).monaco;
-                      if (monacoInstance) {
-                        const model = monacoInstance.editor.getModels().find(m => m.getValue() === skillContent);
-                        if (model) {
-                          const pyMarkers = validatePython(skillContent).map(m => ({
-                            startLineNumber: m.line,
-                            endLineNumber: m.line,
-                            startColumn: m.col,
-                            endColumn: 1000,
-                            message: m.message,
-                            severity: m.severity as unknown as MonacoNS.MarkerSeverity,
-                          }));
-                          if (pyMarkers.length > 0) {
-                            monacoInstance.editor.setModelMarkers(model, "python-lint", pyMarkers);
-                          }
-                        }
-                      }
+                    // For Python/Shell, add our custom markers
+                    const monacoInstance = (window as unknown as { monaco?: typeof MonacoNS }).monaco;
+                    if (!monacoInstance || !skillContent) { void markers; return; }
+                    const model = monacoInstance.editor.getModels().find(m => m.getValue() === skillContent);
+                    if (!model) { void markers; return; }
+
+                    if (currentPath.endsWith(".py")) {
+                      const pyMarkers = validatePython(skillContent).map(m => ({
+                        startLineNumber: m.line, endLineNumber: m.line,
+                        startColumn: m.col, endColumn: 1000,
+                        message: m.message,
+                        severity: m.severity as unknown as MonacoNS.MarkerSeverity,
+                      }));
+                      monacoInstance.editor.setModelMarkers(model, "python-lint", pyMarkers);
+                    } else if (currentPath.endsWith(".sh") || currentPath.endsWith(".bash")) {
+                      const shMarkers = validateShell(skillContent).map(m => ({
+                        startLineNumber: m.line, endLineNumber: m.line,
+                        startColumn: m.col, endColumn: 1000,
+                        message: m.message,
+                        severity: m.severity as unknown as MonacoNS.MarkerSeverity,
+                      }));
+                      monacoInstance.editor.setModelMarkers(model, "shell-lint", shMarkers);
                     }
-                    void markers; // use built-in markers for JSON/JS/TS
+                    void markers;
                   }}
                   beforeMount={(monaco) => {
                     // Enable JSON validation
