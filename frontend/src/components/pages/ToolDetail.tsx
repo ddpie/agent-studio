@@ -282,7 +282,37 @@ export default function ToolDetail() {
       try {
         const lang = useUISettings.getState().language;
         const langHint = lang === "zh" ? "用中文回复。" : "Respond in English.";
-        const validatePrompt = `${langHint}\nValidate this @tool function. Check for:\n- Docstring quality (Args/Returns documented?)\n- Input validation and error handling\n- Edge cases (empty input, wrong types)\n- Code quality and best practices\n\nCode:\n\`\`\`python\n${code}\n\`\`\`\n\nRespond with ONLY a JSON block:\n\`\`\`json\n{"valid": true/false, "errors": ["..."], "warnings": ["..."]}\n\`\`\``;
+        const validatePrompt = `${langHint}
+You are a code reviewer for Agent Studio @tool functions. Review this tool and report ONLY issues that affect functionality, correctness, or user experience.
+
+## What to Report as Errors
+- Syntax errors or runtime errors
+- Missing @tool decorator
+- Missing or incorrect type hints that would cause runtime failures
+- Logic bugs that produce wrong results
+- Security issues (injection, data leaks)
+
+## What to Report as Warnings
+- Missing docstring or incomplete Args/Returns documentation
+- No input validation for user-provided data (empty strings, wrong types)
+- No error handling for operations that can fail (network, file I/O, parsing)
+- Hardcoded values that should be parameters
+
+## What to IGNORE (do NOT report)
+- Code style preferences (import order, variable naming conventions)
+- Minor refactoring suggestions (extract helper, move function)
+- Performance micro-optimizations
+- "Could be improved" suggestions without concrete impact
+
+Code:
+\`\`\`python
+${code}
+\`\`\`
+
+Respond with ONLY a JSON block:
+\`\`\`json
+{"valid": true/false, "errors": ["..."], "warnings": ["..."]}
+\`\`\``;
         let result = "";
         for await (const chunk of invokeMetaAgent(validatePrompt, [])) {
           const cleaned = chunk.replace(/\{"__tool"[^}]*\}/g, "");

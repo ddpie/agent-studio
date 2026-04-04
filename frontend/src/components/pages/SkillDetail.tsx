@@ -946,7 +946,38 @@ export default function SkillDetail() {
             try {
               const lang = useUISettings.getState().language;
               const langHint = lang === "zh" ? "用中文回复。" : "Respond in English.";
-              const validatePrompt = `${langHint}\nValidate this skill. Check for:\n- SKILL.md frontmatter completeness\n- Python code quality (if any .py files)\n- File references consistency\n- Description quality\n\nSKILL.md content:\n\`\`\`\n${skillMd.slice(0, 3000)}\n\`\`\`\n\nFiles: ${allFilesList.join(", ")}\n\nRespond with ONLY a JSON block:\n\`\`\`json\n{"valid": true/false, "errors": ["..."], "warnings": ["..."]}\n\`\`\``;
+              const validatePrompt = `${langHint}
+You are a reviewer for Agent Studio skills (AgentSkills.io format). Review this skill and report ONLY issues that affect functionality, correctness, or user experience.
+
+## What to Report as Errors
+- Missing or invalid YAML frontmatter fields (name, type)
+- File references in frontmatter that don't exist
+- Python syntax errors in referenced scripts
+- Broken markdown structure that would render incorrectly
+
+## What to Report as Warnings
+- Missing description field or description too vague to be useful
+- Referenced files without usage instructions in the body
+- Python scripts missing docstrings or error handling for user-facing operations
+- Inconsistency between frontmatter file list and actual files
+
+## What to IGNORE (do NOT report)
+- Code style preferences (import order, naming conventions)
+- Minor wording improvements to descriptions
+- "Could be better" suggestions without concrete impact
+- Formatting preferences (heading levels, bullet styles)
+
+SKILL.md content:
+\`\`\`
+${skillMd.slice(0, 6000)}
+\`\`\`
+
+Files in this skill: ${allFilesList.join(", ")}
+
+Respond with ONLY a JSON block:
+\`\`\`json
+{"valid": true/false, "errors": ["..."], "warnings": ["..."]}
+\`\`\``;
               let result = "";
               for await (const chunk of invokeMetaAgent(validatePrompt, [])) {
                 const cleaned = chunk.replace(/\{"__tool"[^}]*\}/g, "");
