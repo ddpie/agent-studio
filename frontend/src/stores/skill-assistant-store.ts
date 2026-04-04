@@ -136,19 +136,40 @@ After the user confirms (e.g., "yes", "go ahead", "do it", "好的", "做吧"), 
 EXCEPTION: If the user gives a very specific, unambiguous instruction (e.g., "add a comment on line 5"), you may skip the plan and directly output the update.
 
 ## Output Format
-For each file you want to update, output a code block with the target path:
+
+### For small changes (1-2 edits): use SEARCH/REPLACE blocks
+\`\`\`__file_edit:PATH
+<<<<<<< SEARCH
+exact text to find (copy from the file verbatim)
+=======
+replacement text
+>>>>>>> REPLACE
+\`\`\`
+
+You can include multiple SEARCH/REPLACE blocks in one \`__file_edit\` block:
+\`\`\`__file_edit:scripts/clean_csv.py
+<<<<<<< SEARCH
+def old_func():
+=======
+def new_func():
+>>>>>>> REPLACE
+
+<<<<<<< SEARCH
+    return None
+=======
+    return result
+>>>>>>> REPLACE
+\`\`\`
+
+### For large rewrites or new files: use full file update
 \`\`\`__file_update:PATH
-(entire file content here — every line, not just changes)
+(entire file content here — every line)
 \`\`\`
 
-You can update MULTIPLE files in a single response. Each file gets its own block:
-\`\`\`__file_update:SKILL.md
-(complete SKILL.md content)
-\`\`\`
-
-\`\`\`__file_update:scripts/clean_csv.py
-(complete script content)
-\`\`\`
+### Rules for choosing format
+- Changing < 30% of the file → use __file_edit (search/replace)
+- Rewriting > 30% or creating a new file → use __file_update (full content)
+- SEARCH text must match the file EXACTLY (whitespace matters)
 
 After the code blocks, add 1-2 sentences explaining what you changed.
 
@@ -159,13 +180,25 @@ If you need to see a file that is not the current file, tell the user to switch 
 
 ## Anti-Patterns
 
-WRONG (partial output — destroys the rest of the file):
+WRONG (partial output without SEARCH/REPLACE markers — destroys the file):
 \`\`\`
 ## New Section
 Added content here.
 \`\`\`
 
-RIGHT (complete file — preserves everything):
+RIGHT (search/replace for small edits):
+\`\`\`__file_edit:SKILL.md
+<<<<<<< SEARCH
+# Original Title
+=======
+# Original Title
+
+## New Section
+Added content here.
+>>>>>>> REPLACE
+\`\`\`
+
+RIGHT (full file for large rewrites):
 \`\`\`__file_update:SKILL.md
 ---
 name: "my-skill"
@@ -191,10 +224,11 @@ Added content here.
 
 ## Recognize Your Excuses
 You may be tempted to take shortcuts. Recognize these:
-- "The file is long, I'll just show the changed part" — NO. Output the COMPLETE file. The frontend replaces the entire file with your output. Partial output = data loss.
-- "I'll describe the changes instead of outputting code" — If the user confirmed changes, you MUST output the __file_update block(s).
-- "The frontmatter looks fine, I'll skip it" — ALWAYS include frontmatter in SKILL.md updates.
-- "I'll make all the changes without asking" — For multi-file changes, ALWAYS plan first.`;
+- "The file is long, I'll just show the changed part without markers" — NO. Use __file_edit with SEARCH/REPLACE blocks. Unmarked partial output = data loss.
+- "I'll describe the changes instead of outputting code" — If the user confirmed changes, you MUST output __file_edit or __file_update blocks.
+- "The frontmatter looks fine, I'll skip it" — When using __file_update for SKILL.md, ALWAYS include frontmatter.
+- "I'll make all the changes without asking" — For multi-file changes, ALWAYS plan first.
+- "The SEARCH text is close enough" — SEARCH text must match EXACTLY. Copy it verbatim from the file.`;
 
     const history = get()
       .messages.filter((m) => m.id !== assistantMsg.id && m.content)
@@ -237,7 +271,7 @@ You may be tempted to take shortcuts. Recognize these:
       if (flushTimer) clearTimeout(flushTimer);
       flushPending();
 
-      // Extract __file_update blocks (supports __file_update:PATH and legacy __file_update)
+      // Extract __file_update blocks (full file replacement)
       const updateRegex = /```__file_update(?::([^\n]*))?\n([\s\S]*?)```/g;
       let match;
       const updatedPaths: string[] = [];
@@ -248,6 +282,31 @@ You may be tempted to take shortcuts. Recognize these:
         const newContent = match[2].trimEnd();
         onFileUpdate(targetPath, newContent);
         updatedPaths.push(targetPath);
+        cleanedContent = cleanedContent.replace(match[0], "");
+      }
+
+      // Extract __file_edit blocks (search/replace incremental edits)
+      const editRegex = /```__file_edit(?::([^\n]*))?\n([\s\S]*?)```/g;
+      while ((match = editRegex.exec(fullText)) !== null) {
+        const targetPath = match[1]?.trim() || fileContext.path;
+        const editBlock = match[2];
+        // Parse SEARCH/REPLACE pairs
+        const pairRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
+        let pairMatch;
+        let fileContent = fileContext.getFileContent(targetPath) ?? fileContext.content;
+        let applied = false;
+        while ((pairMatch = pairRegex.exec(editBlock)) !== null) {
+          const searchText = pairMatch[1];
+          const replaceText = pairMatch[2];
+          if (fileContent.includes(searchText)) {
+            fileContent = fileContent.replace(searchText, replaceText);
+            applied = true;
+          }
+        }
+        if (applied) {
+          onFileUpdate(targetPath, fileContent);
+          updatedPaths.push(targetPath);
+        }
         cleanedContent = cleanedContent.replace(match[0], "");
       }
 
