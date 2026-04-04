@@ -96,7 +96,7 @@ export async function listSkillFiles(id: string): Promise<string[]> {
     const keys = await listS3Keys(prefix);
     return keys
       .map((k) => k.slice(prefix.length))
-      .filter((f) => f && f !== "SKILL.md" && f !== "assistant-history.json");
+      .filter((f) => f && f !== "SKILL.md" && f !== "assistant-history.json" && !f.startsWith("."));
   } catch {
     return [];
   }

@@ -96,6 +96,14 @@ function ReviewChangesModal({ changes, onConfirm, onCancel, viewOnly }: {
   const isDark = useIsDark();
   const entries = Object.entries(changes).filter(([k]) => !["tools", "tool_names", "created_at", "agent_id"].includes(k));
   const [activeIdx, setActiveIdx] = useState(0);
+
+  // ESC to close
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onCancel]);
+
   if (entries.length === 0) return null;
 
   const [key, { old: oldVal, new: newVal }] = entries[activeIdx];
