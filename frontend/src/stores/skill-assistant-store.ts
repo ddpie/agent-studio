@@ -5,6 +5,7 @@
 import { create } from "zustand";
 import { readJsonFromS3, writeJsonToS3 } from "../lib/s3-storage";
 import { invokeMetaAgent } from "../lib/agentcore-client";
+import { useUISettings } from "./ui-settings-store";
 
 export interface SkillAssistantMessage {
   id: string;
@@ -230,6 +231,14 @@ You may be tempted to take shortcuts. Recognize these:
 - "I'll make all the changes without asking" — For multi-file changes, ALWAYS plan first.
 - "The SEARCH text is close enough" — SEARCH text must match EXACTLY. Copy it verbatim from the file.`;
 
+    // Inject language instruction based on user settings
+    const lang = useUISettings.getState().language;
+    const LANG_INSTRUCTIONS: Record<string, string> = {
+      zh: "\n\n## Language\n请用中文回复。所有解释、计划确认、错误提示都用中文。代码和技术标识符保持英文。",
+      en: "\n\n## Language\nRespond in English. All explanations, plan confirmations, and error messages in English. Keep code and technical identifiers as-is.",
+    };
+    const finalPrompt = contextPrompt + (LANG_INSTRUCTIONS[lang] ?? LANG_INSTRUCTIONS.en);
+
     const history = get()
       .messages.filter((m) => m.id !== assistantMsg.id && m.content)
       .map(({ role, content: c }) => ({
@@ -238,7 +247,7 @@ You may be tempted to take shortcuts. Recognize these:
       }));
 
     try {
-      const stream = invokeMetaAgent(contextPrompt, history, undefined, undefined, undefined, get().selectedModelId || undefined);
+      const stream = invokeMetaAgent(finalPrompt, history, undefined, undefined, undefined, get().selectedModelId || undefined);
 
       let pendingText = "";
       let flushTimer: ReturnType<typeof setTimeout> | null = null;
