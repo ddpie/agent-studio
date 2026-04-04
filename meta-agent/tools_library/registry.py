@@ -179,7 +179,7 @@ def upload_tool_catalog():
     table = _get_tools_table()
     now = __import__("datetime").datetime.utcnow().isoformat() + "Z"
 
-    # 1. Upsert built-in tools to DDB
+    # 1. Seed built-in tools to DDB (only if not already present)
     for mod in _ALL_TOOLS:
         meta = mod.TOOL_META
         for func_name in [n.strip() for n in mod.TOOL_NAMES.split(",") if n.strip()]:
@@ -198,8 +198,7 @@ def upload_tool_catalog():
                         "created_at": {"S": now},
                         "updated_at": {"S": now},
                     },
-                    ConditionExpression="attribute_not_exists(toolId) OR builtin = :true",
-                    ExpressionAttributeValues={":true": {"BOOL": True}},
+                    ConditionExpression="attribute_not_exists(toolId)",
                 )
             except ddb.exceptions.ConditionalCheckFailedException:
                 # User has a tool with the same name — don't overwrite

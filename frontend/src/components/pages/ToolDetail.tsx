@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams, useBlocker } from "react-router";
 import { useTranslation } from "react-i18next";
 import {
-  ChevronLeft, Loader2, Save, Trash2, GitCompare, Sparkles, Code2, Lock,
+  ChevronLeft, Loader2, Save, Trash2, GitCompare, Sparkles, Code2,
 } from "lucide-react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import type * as MonacoNS from "monaco-editor";
@@ -25,8 +25,6 @@ def my_tool(query: str) -> str:
     return "result"
 `;
 
-const CATEGORIES = ["custom", "aws", "data", "web"];
-
 function useIsDark() {
   const { theme } = useUISettings();
   if (theme === "dark") return true;
@@ -34,7 +32,6 @@ function useIsDark() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-/** Basic Python validation for Monaco markers */
 function validatePython(code: string): { line: number; col: number; message: string; severity: number }[] {
   const markers: { line: number; col: number; message: string; severity: number }[] = [];
   const lines = code.split("\n");
@@ -51,12 +48,10 @@ function validatePython(code: string): { line: number; col: number; message: str
   if (brackets !== 0) markers.push({ line: lines.length, col: 1, message: "Unbalanced brackets", severity: 8 });
   if (braces !== 0) markers.push({ line: lines.length, col: 1, message: "Unbalanced braces", severity: 8 });
 
-  // Check @tool decorator
   if (!code.includes("@tool")) {
     markers.push({ line: 1, col: 1, message: "Missing @tool decorator", severity: 8 });
   }
 
-  // Unterminated triple-quoted strings
   let tripleCount = 0;
   for (const line of lines) {
     const matches = line.match(/"""/g);
@@ -69,7 +64,6 @@ function validatePython(code: string): { line: number; col: number; message: str
   return markers;
 }
 
-/** Extract @tool function name from code */
 function extractFuncName(code: string): string | null {
   const match = code.match(/@tool\s*\ndef\s+(\w+)\s*\(/);
   return match ? match[1] : null;
@@ -89,16 +83,13 @@ export default function ToolDetail() {
   const paramName = searchParams.get("name") || "";
   const paramDesc = searchParams.get("desc") || "";
 
-  // Local editing state
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("custom");
   const [code, setCode] = useState("");
   const [originalCode, setOriginalCode] = useState("");
   const [showDiff, setShowDiff] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [notFound, setNotFound] = useState(false);
-  const [isBuiltin, setIsBuiltin] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [fetchAttempted, setFetchAttempted] = useState(false);
@@ -117,7 +108,6 @@ export default function ToolDetail() {
     }
 
     if (isNew) {
-      // Guard against bookmark: if tool already exists, load it instead
       const existing = tools.find((t) => t.id === toolId);
       if (existing) {
         navigate(`/tools/${toolId}`, { replace: true });
@@ -125,10 +115,8 @@ export default function ToolDetail() {
       }
       setName(paramName);
       setDescription(paramDesc);
-      setCategory("custom");
       setCode(TOOL_TEMPLATE);
       setOriginalCode("");
-      setIsBuiltin(false);
       setLoaded(true);
       if (toolId) openPanel(toolId);
       return;
@@ -143,25 +131,18 @@ export default function ToolDetail() {
 
     setName(tool.name);
     setDescription(tool.description);
-    setCategory(tool.category);
     setCode(tool.code);
     setOriginalCode(tool.code);
-    setIsBuiltin(tool.builtin);
     setLoaded(true);
-    // Auto-open AI assistant for non-builtin tools
-    if (!tool.builtin && toolId) openPanel(toolId);
+    if (toolId) openPanel(toolId);
   }, [tools, toolId, isNew, paramName, paramDesc, fetchTools]);
 
-  // Unsaved changes tracking (must be before effects that use it)
   const hasChanges = code !== originalCode;
 
-  // Preload Pyodide
   useEffect(() => { preloadPyodide(); }, []);
 
-  // Ctrl+S save shortcut
-  useEffect(() => {
-    saveRef.current = handleSave;
-  });
+  // Ctrl+S
+  useEffect(() => { saveRef.current = handleSave; });
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
@@ -173,18 +154,17 @@ export default function ToolDetail() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // beforeunload warning
+  // beforeunload
   useEffect(() => {
-    if (!hasChanges || isBuiltin) return;
+    if (!hasChanges) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [hasChanges, isBuiltin]);
+  }, [hasChanges]);
 
-  // Unsaved changes blocker
-  const blocker = useBlocker(hasChanges && !isBuiltin);
+  const blocker = useBlocker(hasChanges);
 
-  // Validate code in Monaco
+  // Validation
   const runValidation = useCallback((value: string) => {
     if (!monacoRef.current || !editorRef.current) return;
     const monaco = monacoRef.current;
@@ -192,33 +172,24 @@ export default function ToolDetail() {
     if (!model) return;
 
     const markers: MonacoNS.editor.IMarkerData[] = [];
-
-    // Basic structural checks
     for (const err of validatePython(value)) {
       markers.push({
         severity: err.severity as MonacoNS.MarkerSeverity,
         message: err.message,
-        startLineNumber: err.line,
-        startColumn: err.col,
-        endLineNumber: err.line,
-        endColumn: err.col + 1,
+        startLineNumber: err.line, startColumn: err.col,
+        endLineNumber: err.line, endColumn: err.col + 1,
       });
     }
-
-    // Pyodide compile check
     if (isPyodideReady()) {
       for (const err of checkPythonSyntax(value)) {
         markers.push({
           severity: monaco.MarkerSeverity.Error,
           message: err.msg,
-          startLineNumber: err.line,
-          startColumn: err.col || 1,
-          endLineNumber: err.line,
-          endColumn: (err.col || 1) + 1,
+          startLineNumber: err.line, startColumn: err.col || 1,
+          endLineNumber: err.line, endColumn: (err.col || 1) + 1,
         });
       }
     }
-
     monaco.editor.setModelMarkers(model, "tool-validator", markers);
   }, []);
 
@@ -237,24 +208,15 @@ export default function ToolDetail() {
 
   // Save
   const handleSave = async () => {
-    if (isBuiltin) return;
     clearError();
-
     const funcName = extractFuncName(code);
     if (!funcName) {
       setValidationError(t("tools.missingDecorator"));
       return;
     }
-
-    // Check builtin name conflict (only for new tools or when function name changed)
-    const builtinIds = tools.filter((t) => t.builtin).map((t) => t.id);
-    if (builtinIds.includes(funcName)) {
-      setValidationError(t("tools.builtinConflict"));
-      return;
-    }
-    // Check conflict with other user tools (different from current)
-    const existingUserTool = tools.find((t) => t.id === funcName && !t.builtin);
-    if (existingUserTool && funcName !== toolId) {
+    // Check name conflict with other tools
+    const existing = tools.find((t) => t.id === funcName);
+    if (existing && funcName !== toolId) {
       setValidationError(t("tools.nameConflict"));
       return;
     }
@@ -264,7 +226,7 @@ export default function ToolDetail() {
       id: funcName,
       name: name || funcName,
       description,
-      category,
+      category: "custom",
       code,
       builtin: false,
       owner: "",
@@ -286,8 +248,7 @@ export default function ToolDetail() {
 
   // Delete
   const handleDelete = async () => {
-    if (!toolId || isBuiltin) return;
-    // New unsaved tool — just navigate back
+    if (!toolId) return;
     if (isNew || !originalCode) {
       navigate("/tools");
       return;
@@ -300,7 +261,6 @@ export default function ToolDetail() {
     }
   };
 
-  // AI assistant code update callback
   const handleCodeUpdate = useCallback((newCode: string) => {
     setCode(newCode);
     if (validateTimer.current) clearTimeout(validateTimer.current);
@@ -329,25 +289,17 @@ export default function ToolDetail() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header — matches SkillDetail style */}
+      {/* Header */}
       <div className={`flex items-center gap-3 px-6 py-3 border-b ${isDark ? "border-gray-700" : "border-gray-200"}`}>
         <button onClick={() => navigate("/tools")} className={`p-1 rounded ${isDark ? "hover:bg-gray-800 text-gray-300" : "hover:bg-gray-100 text-gray-600"}`} title={t("common.back")}>
           <ChevronLeft className="w-4 h-4" />
         </button>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className={`text-base font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{name || toolId}</h2>
-            {isBuiltin && (
-              <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500">
-                <Lock className="w-2.5 h-2.5" /> {t("tools.readOnly")}
-              </span>
-            )}
-          </div>
+          <h2 className={`text-base font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{name || toolId}</h2>
           {description && <p className="text-xs text-gray-400 truncate">{description}</p>}
         </div>
 
-        {/* Diff button */}
-        {hasChanges && !isBuiltin && (
+        {hasChanges && (
           <button
             onClick={() => setShowDiff(!showDiff)}
             className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${
@@ -361,8 +313,7 @@ export default function ToolDetail() {
           </button>
         )}
 
-        {/* Discard */}
-        {hasChanges && !isBuiltin && (
+        {hasChanges && (
           <button
             onClick={() => { setCode(originalCode); setShowDiff(false); }}
             className={`px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${isDark ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"}`}
@@ -371,8 +322,7 @@ export default function ToolDetail() {
           </button>
         )}
 
-        {/* Save */}
-        {hasChanges && !isBuiltin && (
+        {hasChanges && (
           <>
             <div className={`w-px h-5 ${isDark ? "bg-gray-700" : "bg-gray-200"} mx-0.5`} />
             <button
@@ -386,52 +336,43 @@ export default function ToolDetail() {
           </>
         )}
 
-        {/* Delete */}
-        {!isBuiltin && (
-          <button
-            onClick={() => setConfirmDelete(true)}
-            className={`p-1.5 rounded transition-colors ${isDark ? "text-red-400 hover:bg-red-900/20" : "text-red-400 hover:text-red-600 hover:bg-red-50"}`}
-            title={t("common.delete")}
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        )}
+        <button
+          onClick={() => setConfirmDelete(true)}
+          className={`p-1.5 rounded transition-colors ${isDark ? "text-red-400 hover:bg-red-900/20" : "text-red-400 hover:text-red-600 hover:bg-red-50"}`}
+          title={t("common.delete")}
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
 
-        {/* AI Assistant toggle — purple like SkillDetail */}
-        {!isBuiltin && (
-          <button
-            onClick={() => {
-              if (toolId) {
-                if (panelOpen) useToolAssistantStore.getState().closePanel();
-                else openPanel(toolId);
-              }
-            }}
-            className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${
-              panelOpen
-                ? isDark ? "bg-purple-900/30 text-purple-400" : "bg-purple-50 text-purple-600"
-                : isDark ? "text-gray-400 hover:text-purple-400 hover:bg-purple-900/30" : "text-gray-500 hover:text-purple-600 hover:bg-purple-50"
-            }`}
-            title={t("assistant.title")}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-          </button>
-        )}
+        <button
+          onClick={() => {
+            if (toolId) {
+              if (panelOpen) useToolAssistantStore.getState().closePanel();
+              else openPanel(toolId);
+            }
+          }}
+          className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${
+            panelOpen
+              ? isDark ? "bg-purple-900/30 text-purple-400" : "bg-purple-50 text-purple-600"
+              : isDark ? "text-gray-400 hover:text-purple-400 hover:bg-purple-900/30" : "text-gray-500 hover:text-purple-600 hover:bg-purple-50"
+          }`}
+          title={t("assistant.title")}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+        </button>
       </div>
 
-      {/* Body: metadata + editor + assistant */}
+      {/* Body */}
       <div className="flex flex-1 min-h-0">
-        {/* Left: metadata + editor */}
         <div className="flex flex-col flex-1 min-w-0">
-
-        {/* Metadata form */}
-        {!isBuiltin && (
-          <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
+          {/* Metadata */}
+          <div className={`flex items-center gap-3 px-4 py-2 border-b ${isDark ? "border-gray-800 bg-gray-900/50" : "border-gray-100 bg-gray-50/50"}`}>
             <div className="flex items-center gap-1.5">
               <label className="text-[10px] text-gray-500">{t("tools.name")}</label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="px-2 py-1 text-xs border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 w-36 outline-none focus:ring-1 focus:ring-blue-500"
+                className={`px-2 py-1 text-xs border rounded w-36 outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? "border-gray-700 bg-gray-800 text-gray-200" : "border-gray-200 bg-white text-gray-800"}`}
                 placeholder={t("tools.namePlaceholder")}
               />
             </div>
@@ -440,103 +381,64 @@ export default function ToolDetail() {
               <input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="flex-1 px-2 py-1 text-xs border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 outline-none focus:ring-1 focus:ring-blue-500"
+                className={`flex-1 px-2 py-1 text-xs border rounded outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? "border-gray-700 bg-gray-800 text-gray-200" : "border-gray-200 bg-white text-gray-800"}`}
                 placeholder={t("tools.descPlaceholder")}
               />
             </div>
-            <div className="flex items-center gap-1.5">
-              <label className="text-[10px] text-gray-500">{t("tools.category")}</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="px-2 py-1 text-xs border border-gray-200 dark:border-gray-700 rounded bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+          </div>
+
+          {/* Editor */}
+          <div className="flex-1 min-h-0">
+            {showDiff && originalCode ? (
+              <DiffEditor
+                original={originalCode}
+                modified={code}
+                language="python"
+                theme={isDark ? "vs-dark" : "light"}
+                options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, lineNumbers: "on", scrollBeyondLastLine: false, renderSideBySide: true }}
+              />
+            ) : (
+              <Editor
+                language="python"
+                theme={isDark ? "vs-dark" : "light"}
+                value={code}
+                onChange={handleCodeChange}
+                onMount={handleEditorMount}
+                options={{ minimap: { enabled: false }, fontSize: 13, lineNumbers: "on", scrollBeyondLastLine: false, tabSize: 4, insertSpaces: true, wordWrap: "on", automaticLayout: true }}
+              />
+            )}
+          </div>
+
+          {/* Error bar */}
+          {(error || validationError) && (
+            <div className={`px-4 py-2 text-xs flex items-center justify-between ${isDark ? "bg-red-900/20 border-t border-red-800 text-red-400" : "bg-red-50 border-t border-red-200 text-red-600"}`}>
+              <span>{validationError || error}</span>
+              <button onClick={() => { setValidationError(null); clearError(); }} className="text-red-400 hover:text-red-600 text-[10px]">{t("common.dismiss")}</button>
             </div>
-          </div>
-        )}
-
-        {/* Builtin metadata (read-only) */}
-        {isBuiltin && (
-          <div className="flex items-center gap-4 px-4 py-2 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
-            <span className="text-[10px] text-gray-500">{t("tools.name")}: <span className="text-gray-700 dark:text-gray-300">{name}</span></span>
-            <span className="text-[10px] text-gray-500">{t("tools.category")}: <span className="text-gray-700 dark:text-gray-300">{category}</span></span>
-            {description && <span className="text-[10px] text-gray-500 truncate flex-1">{description}</span>}
-          </div>
-        )}
-
-        {/* Editor */}
-        <div className="flex-1 min-h-0">
-          {showDiff && originalCode ? (
-            <DiffEditor
-              original={originalCode}
-              modified={code}
-              language="python"
-              theme={isDark ? "vs-dark" : "light"}
-              options={{
-                readOnly: true,
-                minimap: { enabled: false },
-                fontSize: 13,
-                lineNumbers: "on",
-                scrollBeyondLastLine: false,
-                renderSideBySide: true,
-              }}
-            />
-          ) : (
-            <Editor
-              language="python"
-              theme={isDark ? "vs-dark" : "light"}
-              value={code}
-              onChange={handleCodeChange}
-              onMount={handleEditorMount}
-              options={{
-                readOnly: isBuiltin,
-                minimap: { enabled: false },
-                fontSize: 13,
-                lineNumbers: "on",
-                scrollBeyondLastLine: false,
-                tabSize: 4,
-                insertSpaces: true,
-                wordWrap: "on",
-                automaticLayout: true,
-              }}
-            />
           )}
         </div>
 
-        {/* Error bar (validation + store errors) */}
-        {(error || validationError) && (
-          <div className="px-4 py-2 bg-red-50 dark:bg-red-900/20 border-t border-red-200 dark:border-red-800 text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
-            <span>{validationError || error}</span>
-            <button onClick={() => { setValidationError(null); clearError(); }} className="text-red-400 hover:text-red-600 text-[10px]">{t("common.dismiss")}</button>
-          </div>
-        )}
-        </div>{/* end left: metadata + editor */}
-
-        {/* AI Assistant panel */}
-        {panelOpen && toolId && !isBuiltin && (
+        {/* AI Assistant */}
+        {panelOpen && toolId && (
           <ToolAssistant
             toolId={toolId}
             currentCode={code}
             toolName={name}
             toolDescription={description}
-            toolCategory={category}
+            toolCategory="custom"
             onCodeUpdate={handleCodeUpdate}
           />
         )}
-      </div>{/* end body: metadata + editor + assistant */}
+      </div>
 
       {/* Delete confirm */}
       {confirmDelete && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setConfirmDelete(false)} onKeyDown={(e) => { if (e.key === "Escape") setConfirmDelete(false); }}>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-5 max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
-            <p className="text-sm font-medium mb-1 text-gray-800 dark:text-gray-200">{t("common.delete")}?</p>
+          <div className={`rounded-xl shadow-2xl p-5 max-w-sm mx-4 ${isDark ? "bg-gray-800" : "bg-white"}`} onClick={(e) => e.stopPropagation()}>
+            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("common.delete")}?</p>
             <p className="text-xs text-gray-500 mb-4">{t("tools.deleteConfirm")}</p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmDelete(false)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+              <button onClick={() => setConfirmDelete(false)} className={`px-3 py-1.5 text-xs rounded-lg ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"}`}>
                 {t("common.cancel")}
               </button>
               <button onClick={handleDelete} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">
@@ -550,11 +452,11 @@ export default function ToolDetail() {
       {/* Unsaved changes blocker */}
       {blocker.state === "blocked" && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onKeyDown={(e) => { if (e.key === "Escape") blocker.reset?.(); }}>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-5 max-w-sm mx-4">
-            <p className="text-sm font-medium mb-1 text-gray-800 dark:text-gray-200">{t("skillEditor.unsavedChanges")}</p>
+          <div className={`rounded-xl shadow-2xl p-5 max-w-sm mx-4 ${isDark ? "bg-gray-800" : "bg-white"}`}>
+            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.unsavedChanges")}</p>
             <p className="text-xs text-gray-500 mb-4">{t("skillEditor.unsavedDesc", { count: 1 })}</p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => blocker.reset?.()} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+              <button onClick={() => blocker.reset?.()} className={`px-3 py-1.5 text-xs rounded-lg ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"}`}>
                 {t("skillEditor.stay")}
               </button>
               <button onClick={() => blocker.proceed?.()} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">

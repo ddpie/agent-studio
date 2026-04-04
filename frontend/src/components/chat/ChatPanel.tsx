@@ -22,6 +22,7 @@ import ImageLightbox from "../ui/ImageLightbox";
 import { useAgentEditStore } from "../../stores/agent-edit-store";
 
 function AgentProposalCard({ json }: { json: string }) {
+  const { t } = useTranslation();
   const { openNewWithData } = useAgentEditStore();
   let proposal: Record<string, unknown> | null = null;
   let parseError = "";
@@ -44,9 +45,9 @@ function AgentProposalCard({ json }: { json: string }) {
       <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3 my-2 text-xs not-prose">
         {parseError && looksComplete ? (
           <div>
-            <p className="text-red-500 text-[11px] mb-1">Failed to parse agent proposal</p>
+            <p className="text-red-500 text-[11px] mb-1">{t("chat.parseFailed")}</p>
             <details className="text-[10px] text-gray-500">
-              <summary className="cursor-pointer">Show raw JSON</summary>
+              <summary className="cursor-pointer">{t("chat.showRawJson")}</summary>
               <pre className="mt-1 whitespace-pre-wrap break-all bg-gray-100 dark:bg-gray-700 p-2 rounded max-h-40 overflow-y-auto">{json}</pre>
             </details>
           </div>
@@ -56,7 +57,7 @@ function AgentProposalCard({ json }: { json: string }) {
             <div className="h-3 bg-gray-200 rounded w-2/3 mb-2" />
             <div className="h-3 bg-gray-200 rounded w-1/2 mb-2" />
             <div className="text-[11px] text-gray-500 flex items-center gap-1">
-              <Loader2 className="w-3 h-3 animate-spin" /> Generating proposal...
+              <Loader2 className="w-3 h-3 animate-spin" /> {t("chat.generatingProposal")}
             </div>
           </div>
         )}
@@ -98,28 +99,28 @@ function AgentProposalCard({ json }: { json: string }) {
       </div>
       {desc && <p className="text-gray-600 dark:text-gray-400 mb-2">{desc}</p>}
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-gray-500 mb-2">
-        {template && <div>Template: <span className="text-gray-700 dark:text-gray-300">{template}</span></div>}
-        <div>Images: <span className="text-gray-700 dark:text-gray-300">{supportsImages ? "Yes" : "No"}</span></div>
+        {template && <div>{t("chat.proposalTemplate")} <span className="text-gray-700 dark:text-gray-300">{template}</span></div>}
+        <div>{t("chat.proposalImages")} <span className="text-gray-700 dark:text-gray-300">{supportsImages ? t("chat.yes") : t("chat.no")}</span></div>
         {toolNames.length > 0 && (
-          <div className="col-span-2">Tools: {toolNames.map(t => (
-            <span key={t} className="inline-block px-1.5 py-0.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-[10px] mr-1">{t.trim()}</span>
+          <div className="col-span-2">{t("chat.proposalTools")} {toolNames.map(t2 => (
+            <span key={t2} className="inline-block px-1.5 py-0.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-[10px] mr-1">{t2.trim()}</span>
           ))}</div>
         )}
       </div>
       {suggestions.length > 0 && (
         <div className="text-[10px] text-gray-400 mb-2">
-          Suggestions: {suggestions.join(" / ")}
+          {t("chat.proposalSuggestions")} {suggestions.join(" / ")}
         </div>
       )}
       {systemPrompt && (
         <details className="mb-2">
-          <summary className="text-[11px] text-gray-500 cursor-pointer select-none">System Prompt</summary>
+          <summary className="text-[11px] text-gray-500 cursor-pointer select-none">{t("chat.proposalSystemPrompt")}</summary>
           <pre className="mt-1 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-[11px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap max-h-48 overflow-y-auto">{systemPrompt}</pre>
         </details>
       )}
       {toolDefs && (
         <details className="mb-2">
-          <summary className="text-[11px] text-gray-500 cursor-pointer select-none">Tool Definitions</summary>
+          <summary className="text-[11px] text-gray-500 cursor-pointer select-none">{t("chat.proposalToolDefs")}</summary>
           <pre className="mt-1 p-2 bg-gray-900 text-green-300 rounded text-[11px] whitespace-pre-wrap max-h-48 overflow-y-auto">{toolDefs}</pre>
         </details>
       )}
@@ -127,7 +128,7 @@ function AgentProposalCard({ json }: { json: string }) {
         onClick={handleEditAndCreate}
         className="w-full mt-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
       >
-        Edit & Create
+        {t("chat.editAndCreate")}
       </button>
     </div>
   );
@@ -324,8 +325,8 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
             className="w-full px-4 py-3 rounded-2xl border-2 border-blue-400 text-sm focus:outline-none resize-none"
           />
           <div className="flex justify-end gap-1.5 mt-1">
-            <button onClick={() => setEditing(false)} className="text-[11px] px-2 py-0.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded">Cancel</button>
-            <button onClick={submitEdit} className="text-[11px] px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700">Send</button>
+            <button onClick={() => setEditing(false)} className="text-[11px] px-2 py-0.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded">{t("common.cancel")}</button>
+            <button onClick={submitEdit} className="text-[11px] px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700">{t("common.send")}</button>
           </div>
         </div>
       </div>
@@ -398,13 +399,13 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
             }</ReactMarkdown>
             {showTypingIndicator && (
               <span className="inline-flex items-center gap-1 text-gray-400 text-xs mt-2">
-                <Loader2 className="w-3 h-3 animate-spin" /> Working...
+                <Loader2 className="w-3 h-3 animate-spin" /> {t("chat.working")}
               </span>
             )}
           </div>
         ) : (
           <span className="inline-flex items-center gap-1 text-gray-400 text-sm">
-            <Loader2 className="w-3 h-3 animate-spin" /> Thinking...
+            <Loader2 className="w-3 h-3 animate-spin" /> {t("assistant.thinking")}
           </span>
         )}
       </div>
@@ -665,12 +666,12 @@ export default function ChatPanel() {
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
-            {agentId ? agentName : "Meta Agent"}
+            {agentId ? agentName : t("agents.metaAgent")}
           </h2>
           <p className="text-xs text-gray-500 truncate">
             {agentId
-              ? `Chatting with ${agentName}`
-              : "Create & manage agents through conversation"}
+              ? t("chat.chattingWith", { name: agentName })
+              : t("chat.metaSubtitle")}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -714,11 +715,11 @@ export default function ChatPanel() {
             {showHistory && (
               <div className="absolute right-0 top-full mt-1 w-72 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 max-h-80 overflow-y-auto">
                 <div className="p-2 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500">History</span>
-                  <span className="text-xs text-gray-400">{agentSessions.length} sessions</span>
+                  <span className="text-xs font-medium text-gray-500">{t("chat.history")}</span>
+                  <span className="text-xs text-gray-400">{t("chat.sessionCount", { count: agentSessions.length })}</span>
                 </div>
                 {agentSessions.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-gray-400">No past sessions</div>
+                  <div className="p-4 text-center text-xs text-gray-400">{t("chat.noSessions")}</div>
                 ) : (
                   agentSessions.map((session) => (
                     <div
@@ -733,7 +734,7 @@ export default function ChatPanel() {
                         <p className="text-sm text-gray-700 dark:text-gray-300 truncate">{session.title}</p>
                         <p className="text-xs text-gray-400">
                           {new Date(session.updatedAt).toLocaleDateString()} {new Date(session.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          {" · "}{session.messages.length} msgs
+                          {" · "}{t("chat.msgCount", { count: session.messages.length })}
                         </p>
                       </div>
                       <button
@@ -753,7 +754,7 @@ export default function ChatPanel() {
           {messages.length > 0 && (
             <button
               onClick={() => {
-                const agentNameExport = agentName || "Meta Agent";
+                const agentNameExport = agentName || t("agents.metaAgent");
                 const lines = [`# ${agentNameExport}\n`];
                 for (const msg of messages) {
                   if (!msg.content) continue;
@@ -795,16 +796,16 @@ export default function ChatPanel() {
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <p className="text-4xl mb-4">{agentId ? "💬" : "🤖"}</p>
             <p className="text-lg font-medium text-gray-600 dark:text-gray-400">
-              {metadata?.welcome_message || (agentId ? `Chat with ${agentName}` : "Welcome to Meta Agent")}
+              {metadata?.welcome_message || (agentId ? t("chat.chatWith", { name: agentName }) : t("chat.welcomeMeta"))}
             </p>
             {!agentId && (
-              <p className="text-sm mt-1">Create & manage agents through conversation</p>
+              <p className="text-sm mt-1">{t("chat.metaSubtitle")}</p>
             )}
             <div className="mt-6 grid gap-2 text-sm w-full max-w-lg">
               {(metadata?.suggestions || (!agentId ? [
-                "Create an agent that can search the web and summarize results",
-                "Build a math tutor that can solve equations step by step",
-                "Make a coding assistant that writes Python functions",
+                t("chat.defaultSuggestion1"),
+                t("chat.defaultSuggestion2"),
+                t("chat.defaultSuggestion3"),
               ] : [])).map((suggestion) => (
                 <button
                   key={suggestion}
@@ -837,7 +838,7 @@ export default function ChatPanel() {
               title={t("chat.regenerate")}
             >
               <RefreshCw className="w-3 h-3" />
-              Regenerate
+              {t("common.regenerate")}
             </button>
           </div>
         )}
@@ -856,7 +857,7 @@ export default function ChatPanel() {
             <div className="rounded-xl px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700">
               <div className="flex items-center gap-2 text-xs">
                 <Loader2 className="w-3 h-3 animate-spin" />
-                <span>Calling <strong>{activeTool}</strong></span>
+                <span dangerouslySetInnerHTML={{ __html: t("chat.calling", { tool: activeTool }) }} />
               </div>
             </div>
           </div>
@@ -932,7 +933,7 @@ export default function ChatPanel() {
             onChange={(e) => { setInput(e.target.value); setHistoryIdx(-1); }}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={imagesAllowed ? t("chat.placeholder") + " (Shift+Enter for new line, paste images)" : t("chat.placeholder") + " (Shift+Enter for new line)"}
+            placeholder={t("chat.placeholder")}
             rows={1}
             style={{ height: inputHeight }}
             className="flex-1 px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none overflow-auto"

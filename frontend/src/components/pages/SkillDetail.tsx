@@ -306,6 +306,7 @@ export default function SkillDetail() {
   const [showDiff, setShowDiff] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+  const [validating, setValidating] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(224);
   const dragging = useRef(false);
   const [runOutput, setRunOutput] = useState<string | null>(null);
@@ -913,59 +914,68 @@ export default function SkillDetail() {
           )}
         </div>
         <button onClick={async () => {
+          setValidating(true);
           const allErrors: string[] = [];
           const allWarnings: string[] = [];
 
-          // 1. Validate SKILL.md (frontmatter + structure)
+          // 1. Local validation: SKILL.md frontmatter + structure
           const skillMd = editedContents.get("SKILL.md") ?? originalContents.get("SKILL.md") ?? skillContent ?? "";
           const skillResult = validateSkill(skillMd, virtualFiles, pendingDeletes);
           allErrors.push(...skillResult.errors);
           allWarnings.push(...skillResult.warnings);
 
-          // 2. Validate all Python/Shell files (fetch from S3 if not loaded)
-          const allFiles = ["SKILL.md", ...virtualFiles];
-          for (const filePath of allFiles) {
+          // 2. Local validation: Python/Shell syntax
+          const allFilesList = ["SKILL.md", ...virtualFiles];
+          for (const filePath of allFilesList) {
             if (!filePath.endsWith(".py") && !filePath.endsWith(".sh") && !filePath.endsWith(".bash")) continue;
             let content = editedContents.get(filePath) ?? originalContents.get(filePath) ?? null;
-            // Fetch from S3 if not in memory
             if (content === null && skillId) {
               content = await getSkillFile(skillId, filePath);
               if (content !== null) originalContents.set(filePath, content);
             }
             if (!content) continue;
             if (filePath.endsWith(".py")) {
-              const pyErrors = validatePython(content);
-              for (const e of pyErrors) {
-                allErrors.push(`${filePath}:${e.line}: ${e.message}`);
-              }
+              for (const e of validatePython(content)) allErrors.push(`${filePath}:${e.line}: ${e.message}`);
             } else if (filePath.endsWith(".sh") || filePath.endsWith(".bash")) {
-              const shErrors = validateShell(content);
-              for (const e of shErrors) {
-                allErrors.push(`${filePath}:${e.line}: ${e.message}`);
-              }
+              for (const e of validateShell(content)) allErrors.push(`${filePath}:${e.line}: ${e.message}`);
             }
           }
 
-          // 3. Also validate current editor's Monaco markers
+          // 3. Meta-Agent validation (deeper analysis)
+          if (allErrors.length === 0) {
+            try {
+              const lang = useUISettings.getState().language;
+              const langHint = lang === "zh" ? "用中文回复。" : "Respond in English.";
+              const validatePrompt = `${langHint}\nValidate this skill. Check for:\n- SKILL.md frontmatter completeness\n- Python code quality (if any .py files)\n- File references consistency\n- Description quality\n\nSKILL.md content:\n\`\`\`\n${skillMd.slice(0, 3000)}\n\`\`\`\n\nFiles: ${allFilesList.join(", ")}\n\nRespond with ONLY a JSON block:\n\`\`\`json\n{"valid": true/false, "errors": ["..."], "warnings": ["..."]}\n\`\`\``;
+              let result = "";
+              for await (const chunk of invokeMetaAgent(validatePrompt, [])) {
+                const cleaned = chunk.replace(/\{"__tool"[^}]*\}/g, "");
+                if (cleaned) result += cleaned;
+              }
+              // Parse JSON from response
+              const jsonMatch = result.match(/\{[\s\S]*"valid"[\s\S]*\}/);
+              if (jsonMatch) {
+                try {
+                  const parsed = JSON.parse(jsonMatch[0]);
+                  if (Array.isArray(parsed.errors)) allErrors.push(...parsed.errors);
+                  if (Array.isArray(parsed.warnings)) allWarnings.push(...parsed.warnings);
+                } catch { /* JSON parse failed, skip */ }
+              }
+            } catch { /* Meta-Agent call failed, continue with local results */ }
+          }
+
+          // 4. Update Monaco markers for current file
           const monacoInstance = (window as unknown as { monaco?: typeof MonacoNS }).monaco;
-          if (monacoInstance) {
-            const model = monacoInstance.editor.getModels().find(m => m.getValue() === (skillContent ?? ""));
+          if (monacoInstance && currentPath.endsWith(".py") && skillContent) {
+            const model = monacoInstance.editor.getModels().find(m => m.getValue() === skillContent);
             if (model) {
-              // Re-run markers on current file
-              if (currentPath.endsWith(".py") && skillContent) {
-                const mapped = validatePython(skillContent).map(m => ({
-                  startLineNumber: m.line, endLineNumber: m.line,
-                  startColumn: m.col, endColumn: 1000,
-                  message: m.message,
-                  severity: m.severity as unknown as MonacoNS.MarkerSeverity,
-                }));
-                monacoInstance.editor.setModelMarkers(model, "python-lint", mapped);
-              }
-              const builtinMarkers = monacoInstance.editor.getModelMarkers({ resource: model.uri });
-              for (const m of builtinMarkers) {
-                if (m.severity >= 8) allErrors.push(`${currentPath}:${m.startLineNumber}: ${m.message}`);
-                else if (m.severity >= 4) allWarnings.push(`${currentPath}:${m.startLineNumber}: ${m.message}`);
-              }
+              const mapped = validatePython(skillContent).map(m => ({
+                startLineNumber: m.line, endLineNumber: m.line,
+                startColumn: m.col, endColumn: 1000,
+                message: m.message,
+                severity: m.severity as unknown as MonacoNS.MarkerSeverity,
+              }));
+              monacoInstance.editor.setModelMarkers(model, "python-lint", mapped);
             }
           }
 
@@ -975,9 +985,11 @@ export default function SkillDetail() {
           } else {
             setValidationResult({ valid: allErrors.length === 0, errors: allErrors, warnings: allWarnings });
           }
+          setValidating(false);
         }}
+          disabled={validating}
           className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors disabled:opacity-50 ${isDark ? "text-gray-400 hover:text-green-400 hover:bg-green-900/30" : "text-gray-500 hover:text-green-600 hover:bg-green-50"}`}>
-          <ShieldCheck className="w-3.5 h-3.5" />
+          {validating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
           {t("common.validate")}
         </button>
         {hasPendingOps && (

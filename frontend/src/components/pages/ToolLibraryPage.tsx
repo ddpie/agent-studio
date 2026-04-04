@@ -2,43 +2,26 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import {
-  Wrench, Search, RefreshCw, Loader2, Plus, Code2, Lock, Cloud, BarChart3, Globe,
+  Wrench, Search, RefreshCw, Loader2, Plus, Code2,
 } from "lucide-react";
 import { useToolLibraryStore, type ToolTemplate } from "../../stores/tool-library-store";
 
-const CATEGORY_ICONS: Record<string, typeof Code2> = {
-  aws: Cloud,
-  data: BarChart3,
-  web: Globe,
-  custom: Wrench,
-};
-
 function ToolCard({ tool, onClick }: { tool: ToolTemplate; onClick: () => void }) {
-  const { t } = useTranslation();
   return (
     <div
       onClick={onClick}
-      className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:border-blue-300 hover:shadow-sm cursor-pointer transition-all text-left"
+      className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm cursor-pointer transition-all text-left"
     >
       <div className="flex items-center gap-2">
         <Code2 className="w-4 h-4 text-blue-500 flex-shrink-0" />
         <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 flex-1 truncate">
           {tool.name}
         </h3>
-        {tool.builtin && (
-          <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
-            <Lock className="w-2.5 h-2.5" />
-            {t("tools.builtin")}
-          </span>
-        )}
       </div>
       {tool.description && (
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">{tool.description}</p>
       )}
-      <div className="flex items-center gap-2 mt-2">
-        {(() => { const CatIcon = CATEGORY_ICONS[tool.category] || Wrench; return <CatIcon className="w-3 h-3 text-gray-400" />; })()}
-        <span className="text-[10px] text-gray-400">{tool.category}</span>
-        <span className="text-[10px] text-gray-300 dark:text-gray-600">·</span>
+      <div className="mt-2">
         <span className="text-[10px] text-gray-400 font-mono">{tool.id}</span>
       </div>
     </div>
@@ -54,29 +37,22 @@ export default function ToolLibraryPage() {
   const [createName, setCreateName] = useState("");
   const [createDesc, setCreateDesc] = useState("");
   const [creating, setCreating] = useState(false);
-  const [builtinCollapsed, setBuiltinCollapsed] = useState(true);
 
   useEffect(() => { fetchTools(); }, [fetchTools]);
 
   const refresh = useCallback(() => { fetchTools(); }, [fetchTools]);
 
-  const myTools = tools.filter((t) => !t.builtin);
-  const builtinTools = tools.filter((t) => t.builtin);
-
-  const filterFn = (t: ToolTemplate) =>
-    !search ||
-    t.name.toLowerCase().includes(search.toLowerCase()) ||
-    t.description.toLowerCase().includes(search.toLowerCase()) ||
-    t.id.toLowerCase().includes(search.toLowerCase());
-
-  const filteredMy = myTools.filter(filterFn);
-  const filteredBuiltin = builtinTools.filter(filterFn);
+  const filtered = tools.filter(
+    (t) => !search ||
+      t.name.toLowerCase().includes(search.toLowerCase()) ||
+      t.description.toLowerCase().includes(search.toLowerCase()) ||
+      t.id.toLowerCase().includes(search.toLowerCase())
+  );
 
   const handleCreate = async () => {
     if (!createName.trim()) return;
     setCreating(true);
     const id = createName.trim().replace(/[^a-zA-Z0-9_]/g, "_").toLowerCase();
-    // Navigate to detail page with "new" flag — ToolDetail handles the rest
     setCreating(false);
     setShowCreate(false);
     setCreateName("");
@@ -125,49 +101,19 @@ export default function ToolLibraryPage() {
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-gray-400">
+            <Wrench className="w-10 h-10 mb-3 opacity-30" />
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              {search ? t("tools.noMatching") : t("tools.noTools")}
+            </p>
+            {!search && <p className="text-xs mt-1">{t("tools.createHint")}</p>}
+          </div>
         ) : (
-          <div className="space-y-6">
-            {/* My Tools */}
-            <div>
-              <h3 className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
-                {t("tools.myTools")}
-              </h3>
-              {filteredMy.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-                  <Wrench className="w-10 h-10 mb-3 opacity-30" />
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                    {search ? t("tools.noMatching") : t("tools.noTools")}
-                  </p>
-                  {!search && <p className="text-xs mt-1">{t("tools.createHint")}</p>}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredMy.map((tool) => (
-                    <ToolCard key={tool.id} tool={tool} onClick={() => navigate(`/tools/${tool.id}`)} />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Built-in Tools */}
-            {filteredBuiltin.length > 0 && (
-              <div>
-                <button
-                  onClick={() => setBuiltinCollapsed(!builtinCollapsed)}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-                >
-                  <span className={`transition-transform ${builtinCollapsed ? "" : "rotate-90"}`}>▶</span>
-                  {t("tools.builtinTools")} ({filteredBuiltin.length})
-                </button>
-                {!builtinCollapsed && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredBuiltin.map((tool) => (
-                      <ToolCard key={tool.id} tool={tool} onClick={() => navigate(`/tools/${tool.id}`)} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map((tool) => (
+              <ToolCard key={tool.id} tool={tool} onClick={() => navigate(`/tools/${tool.id}`)} />
+            ))}
           </div>
         )}
       </div>
