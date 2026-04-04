@@ -9,10 +9,7 @@ import { invalidateToolCatalogCache, writeToolCatalog, type ToolCatalog } from "
 export type { ToolTemplate } from "../lib/tool-storage";
 
 function sortTools(tools: ToolTemplate[]): ToolTemplate[] {
-  return tools.sort((a, b) => {
-    if (a.builtin !== b.builtin) return a.builtin ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
+  return tools.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 interface ToolLibraryState {

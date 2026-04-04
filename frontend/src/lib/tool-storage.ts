@@ -117,7 +117,7 @@ export async function putToolItem(tool: ToolTemplate): Promise<void> {
       toolId: { S: tool.id },
       name: { S: tool.name },
       description: { S: tool.description },
-      category: { S: tool.category },
+      category: { S: tool.category || "custom" },
       code: { S: tool.code },
       builtin: { BOOL: false },
       owner: { S: username },
@@ -125,28 +125,28 @@ export async function putToolItem(tool: ToolTemplate): Promise<void> {
       created_at: { S: tool.created_at || now },
       updated_at: { S: now },
     },
-    // Prevent overwriting other users' tools or builtin tools
-    ConditionExpression: "attribute_not_exists(toolId) OR (builtin = :false AND #o = :owner)",
+    // Prevent overwriting other users' tools
+    ConditionExpression: "attribute_not_exists(toolId) OR #o = :owner OR #o = :builtin",
     ExpressionAttributeNames: { "#o": "owner" },
     ExpressionAttributeValues: {
-      ":false": { BOOL: false },
       ":owner": { S: username },
+      ":builtin": { S: "__builtin__" },
     },
   });
 }
 
-/** Delete a user-created tool (server-side protection: cannot delete builtin or other users' tools) */
+/** Delete a tool (allows deleting own tools and seed tools) */
 export async function deleteToolItem(toolId: string): Promise<void> {
   const { username } = await getCurrentUser();
 
   await ddbRequest("DeleteItem", {
     TableName: TABLE,
     Key: { toolId: { S: toolId } },
-    ConditionExpression: "builtin = :false AND #o = :owner",
+    ConditionExpression: "#o = :owner OR #o = :builtin",
     ExpressionAttributeNames: { "#o": "owner" },
     ExpressionAttributeValues: {
-      ":false": { BOOL: false },
       ":owner": { S: username },
+      ":builtin": { S: "__builtin__" },
     },
   });
 }
