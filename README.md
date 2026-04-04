@@ -6,23 +6,34 @@
 
 ```mermaid
 graph LR
-    User((用户)) --> FE[Web Console]
-    FE --> META[Meta-Agent]
+    User((用户))
 
-    META --> Agents
-    META --> Skills
-    META --> Tools[自定义工具]
-
-    subgraph 自然语言创建 / 编辑
-        Agents[Agents]
-        Skills[Skills]
-        Tools
+    subgraph 前端
+        FE[Web Console]
     end
 
-    Agents --- MCP[MCP Gateway]
-    Agents --- Skills
-    META --- S3[(S3)] & DDB[(DynamoDB)]
-    User -.->|对话| Agents
+    subgraph 编排
+        META[Meta-Agent]
+    end
+
+    subgraph 自然语言创建 / 编辑
+        Agents[客服 · 分析 · 更多 Agent]
+        Skills[Skills]
+        Tools[自定义工具]
+    end
+
+    subgraph 基础设施
+        MCP[MCP Gateway]
+        S3[(S3)]
+        DDB[(DynamoDB)]
+    end
+
+    User --> FE
+    FE --> META
+    FE -->|对话| Agents
+    META --> Agents & Skills & Tools
+    Agents --- Skills & Tools & MCP
+    META --- S3 & DDB
 ```
 
 - **Frontend** — React 19 + Vite + Tailwind + Zustand，Cognito 认证，SigV4 签名直连 AgentCore / S3
@@ -99,23 +110,34 @@ AI agent orchestration platform on AWS Bedrock AgentCore. Create, manage, and ru
 
 ```mermaid
 graph LR
-    User((User)) --> FE[Web Console]
-    FE --> META[Meta-Agent]
+    User((User))
 
-    META --> Agents
-    META --> Skills
-    META --> Tools[Custom Tools]
-
-    subgraph Create / Edit via Natural Language
-        Agents[Agents]
-        Skills[Skills]
-        Tools
+    subgraph Frontend
+        FE[Web Console]
     end
 
-    Agents --- MCP[MCP Gateway]
-    Agents --- Skills
-    META --- S3[(S3)] & DDB[(DynamoDB)]
-    User -.->|Chat| Agents
+    subgraph Orchestration
+        META[Meta-Agent]
+    end
+
+    subgraph Create / Edit via Natural Language
+        Agents[CS · Analyst · More Agents]
+        Skills[Skills]
+        Tools[Custom Tools]
+    end
+
+    subgraph Infrastructure
+        MCP[MCP Gateway]
+        S3[(S3)]
+        DDB[(DynamoDB)]
+    end
+
+    User --> FE
+    FE --> META
+    FE -->|Chat| Agents
+    META --> Agents & Skills & Tools
+    Agents --- Skills & Tools & MCP
+    META --- S3 & DDB
 ```
 
 ## Project Structure
