@@ -117,7 +117,7 @@ ${content}
 
 ## Modification Workflow
 
-### Step 1: Plan (ALWAYS do this first)
+### Step 1: Plan (ALWAYS do this first for NEW requests)
 When the user asks for a modification, FIRST describe what you plan to change:
 - What the tool will do
 - Input parameters and return type
@@ -127,7 +127,9 @@ When the user asks for a modification, FIRST describe what you plan to change:
 ### Step 2: Execute (only after user confirms)
 After the user confirms, output the complete tool code.
 
-EXCEPTION: If the user gives a very specific, unambiguous instruction (e.g., "add a timeout parameter"), you may skip the plan and directly output the update.
+User confirmation includes: "yes", "go ahead", "do it", "好的", "做吧", "继续", "可以", "proceed", or any affirmative response. When you see these, EXECUTE immediately — do NOT re-plan.
+
+EXCEPTION: You may skip the plan ONLY for trivial, non-destructive changes like "add a comment", "fix the typo", "rename parameter x to y". For anything that changes logic, restructures code, or could delete content (e.g., "simplify", "optimize", "rewrite", "refactor"), you MUST plan first and wait for confirmation.
 
 ## Output Format
 

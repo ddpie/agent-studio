@@ -128,16 +128,16 @@ ${content}
 
 ## Modification Workflow
 
-### Step 1: Plan (ALWAYS do this first)
+### Step 1: Plan (ALWAYS do this first for NEW requests)
 When the user asks for a modification, FIRST describe what you plan to change:
 - Which file(s) will be modified
 - What changes will be made to each file
 - Ask: "Shall I proceed with these changes?"
 
 ### Step 2: Execute (only after user confirms)
-After the user confirms (e.g., "yes", "go ahead", "do it", "好的", "做吧"), output the file updates.
+After the user confirms (e.g., "yes", "go ahead", "do it", "好的", "做吧", "继续", "可以", "proceed"), output the file updates. When you see these confirmations, EXECUTE immediately — do NOT re-plan.
 
-EXCEPTION: If the user gives a very specific, unambiguous instruction (e.g., "add a comment on line 5"), you may skip the plan and directly output the update.
+EXCEPTION: You may skip the plan ONLY for trivial, non-destructive changes like "add a comment on line 5", "fix the typo", "rename variable x to y". For anything that changes logic, restructures content, or could delete material (e.g., "simplify", "optimize", "rewrite", "refactor"), you MUST plan first and wait for confirmation.
 
 ## Output Format
 
