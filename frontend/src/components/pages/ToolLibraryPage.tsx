@@ -2,15 +2,15 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import {
-  Wrench, Search, RefreshCw, Loader2, Plus, Code2, Lock,
+  Wrench, Search, RefreshCw, Loader2, Plus, Code2, Lock, Cloud, BarChart3, Globe,
 } from "lucide-react";
 import { useToolLibraryStore, type ToolTemplate } from "../../stores/tool-library-store";
 
-const CATEGORY_ICONS: Record<string, string> = {
-  aws: "☁️",
-  data: "📊",
-  web: "🌐",
-  custom: "🔧",
+const CATEGORY_ICONS: Record<string, typeof Code2> = {
+  aws: Cloud,
+  data: BarChart3,
+  web: Globe,
+  custom: Wrench,
 };
 
 function ToolCard({ tool, onClick }: { tool: ToolTemplate; onClick: () => void }) {
@@ -36,9 +36,8 @@ function ToolCard({ tool, onClick }: { tool: ToolTemplate; onClick: () => void }
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">{tool.description}</p>
       )}
       <div className="flex items-center gap-2 mt-2">
-        <span className="text-[10px] text-gray-400">
-          {CATEGORY_ICONS[tool.category] || "🔧"} {tool.category}
-        </span>
+        {(() => { const CatIcon = CATEGORY_ICONS[tool.category] || Wrench; return <CatIcon className="w-3 h-3 text-gray-400" />; })()}
+        <span className="text-[10px] text-gray-400">{tool.category}</span>
         <span className="text-[10px] text-gray-300 dark:text-gray-600">·</span>
         <span className="text-[10px] text-gray-400 font-mono">{tool.id}</span>
       </div>

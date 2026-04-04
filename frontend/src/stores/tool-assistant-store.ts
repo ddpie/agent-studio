@@ -35,7 +35,7 @@ interface ToolAssistantState {
   clearHistory: () => void;
 }
 
-const S3_KEY = (toolId: string) => `tool-assistant/${toolId}/history.json`;
+const S3_KEY = (toolId: string) => `agents/tool-assistant/${toolId}/history.json`;
 
 let _abortController: AbortController | null = null;
 

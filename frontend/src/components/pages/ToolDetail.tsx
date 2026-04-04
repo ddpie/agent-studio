@@ -120,6 +120,8 @@ export default function ToolDetail() {
       setOriginalCode("");
       setIsBuiltin(false);
       setLoaded(true);
+      // Auto-open AI assistant for new tools
+      if (toolId) openPanel(toolId);
       return;
     }
 
@@ -208,14 +210,17 @@ export default function ToolDetail() {
       return;
     }
 
-    // Check builtin name conflict
+    // Check builtin name conflict (only for new tools or when function name changed)
     const builtinIds = tools.filter((t) => t.builtin).map((t) => t.id);
-    if (!isNew || toolId !== funcName) {
-      // For new tools or if function name changed, check conflicts
-      if (builtinIds.includes(funcName) && !(toolId === funcName && !isNew)) {
-        alert(t("tools.builtinConflict"));
-        return;
-      }
+    if (builtinIds.includes(funcName)) {
+      alert(t("tools.builtinConflict"));
+      return;
+    }
+    // Check conflict with other user tools (different from current)
+    const existingUserTool = tools.find((t) => t.id === funcName && !t.builtin);
+    if (existingUserTool && funcName !== toolId) {
+      alert(t("tools.nameConflict"));
+      return;
     }
 
     const tool: ToolTemplate = {

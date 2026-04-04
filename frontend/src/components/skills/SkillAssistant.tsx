@@ -2,6 +2,7 @@
  * Skill Assistant — AI sidebar for editing skill files via natural language.
  */
 import { useState, useRef, useEffect, memo, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useSkillAssistantStore, type SkillAssistantMessage } from "../../stores/skill-assistant-store";
 import { Loader2, Send, Trash2, X, Square, RefreshCw, Pencil, Check } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -81,6 +82,7 @@ export default function SkillAssistant({ skillId, currentPath, currentContent, a
     messages, isStreaming, loading, panelOpen, selectedModelId,
     closePanel, sendMessage, cancelStreaming, clearHistory, setModel, openPanel,
   } = useSkillAssistantStore();
+  const { t } = useTranslation();
 
   // Ensure panel loads history for this skill
   useEffect(() => {
@@ -214,7 +216,7 @@ export default function SkillAssistant({ skillId, currentPath, currentContent, a
         </div>
         <div className="flex items-center gap-1">
           {messages.length > 0 && (
-            <button onClick={clearHistory} className="p-1 text-gray-400 hover:text-red-500 transition-colors" title="Clear history">
+            <button onClick={clearHistory} className="p-1 text-gray-400 hover:text-red-500 transition-colors" title={t("assistant.clearHistory")}>
               <Trash2 className="w-3 h-3" />
             </button>
           )}
@@ -232,12 +234,12 @@ export default function SkillAssistant({ skillId, currentPath, currentContent, a
           </div>
         ) : messages.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-xs text-gray-400 mb-2">Ask me to modify this skill file.</p>
+            <p className="text-xs text-gray-400 mb-2">{t("skillEditor.askModify")}</p>
             <div className="space-y-1">
               {[
-                "Improve the skill description",
-                "Add error handling to the script",
-                "Translate to English",
+                t("skillEditor.suggestion1"),
+                t("skillEditor.suggestion2"),
+                t("skillEditor.suggestion3"),
               ].map((s) => (
                 <button
                   key={s}
@@ -315,7 +317,7 @@ export default function SkillAssistant({ skillId, currentPath, currentContent, a
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Describe what to change..."
+            placeholder={t("skillEditor.describeChange")}
             rows={1}
             className="flex-1 px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg resize-none outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             style={{ maxHeight: 80 }}
