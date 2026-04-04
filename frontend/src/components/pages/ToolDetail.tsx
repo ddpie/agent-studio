@@ -100,19 +100,29 @@ export default function ToolDetail() {
   const [notFound, setNotFound] = useState(false);
   const [isBuiltin, setIsBuiltin] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [fetchAttempted, setFetchAttempted] = useState(false);
 
   const editorRef = useRef<MonacoNS.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof MonacoNS | null>(null);
   const validateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveRef = useRef<(() => void) | undefined>(undefined);
 
   // Load tool data
   useEffect(() => {
-    if (tools.length === 0) {
+    if (tools.length === 0 && !fetchAttempted) {
+      setFetchAttempted(true);
       fetchTools();
       return;
     }
 
     if (isNew) {
+      // Guard against bookmark: if tool already exists, load it instead
+      const existing = tools.find((t) => t.id === toolId);
+      if (existing) {
+        navigate(`/tools/${toolId}`, { replace: true });
+        return;
+      }
       setName(paramName);
       setDescription(paramDesc);
       setCategory("custom");
@@ -120,7 +130,6 @@ export default function ToolDetail() {
       setOriginalCode("");
       setIsBuiltin(false);
       setLoaded(true);
-      // Auto-open AI assistant for new tools
       if (toolId) openPanel(toolId);
       return;
     }
@@ -141,11 +150,36 @@ export default function ToolDetail() {
     setLoaded(true);
   }, [tools, toolId, isNew, paramName, paramDesc, fetchTools]);
 
+  // Unsaved changes tracking (must be before effects that use it)
+  const hasChanges = code !== originalCode;
+
   // Preload Pyodide
   useEffect(() => { preloadPyodide(); }, []);
 
+  // Ctrl+S save shortcut
+  useEffect(() => {
+    saveRef.current = handleSave;
+  });
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        saveRef.current?.();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // beforeunload warning
+  useEffect(() => {
+    if (!hasChanges || isBuiltin) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [hasChanges, isBuiltin]);
+
   // Unsaved changes blocker
-  const hasChanges = code !== originalCode;
   const blocker = useBlocker(hasChanges && !isBuiltin);
 
   // Validate code in Monaco
@@ -206,22 +240,23 @@ export default function ToolDetail() {
 
     const funcName = extractFuncName(code);
     if (!funcName) {
-      alert(t("tools.missingDecorator"));
+      setValidationError(t("tools.missingDecorator"));
       return;
     }
 
     // Check builtin name conflict (only for new tools or when function name changed)
     const builtinIds = tools.filter((t) => t.builtin).map((t) => t.id);
     if (builtinIds.includes(funcName)) {
-      alert(t("tools.builtinConflict"));
+      setValidationError(t("tools.builtinConflict"));
       return;
     }
     // Check conflict with other user tools (different from current)
     const existingUserTool = tools.find((t) => t.id === funcName && !t.builtin);
     if (existingUserTool && funcName !== toolId) {
-      alert(t("tools.nameConflict"));
+      setValidationError(t("tools.nameConflict"));
       return;
     }
+    setValidationError(null);
 
     const tool: ToolTemplate = {
       id: funcName,
@@ -331,7 +366,7 @@ export default function ToolDetail() {
                 className={`p-1.5 rounded-lg transition-colors ${
                   panelOpen ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600" : "text-gray-400 hover:text-blue-600 hover:bg-gray-100 dark:hover:bg-gray-800"
                 }`}
-                title="AI Assistant"
+                title={t("assistant.title")}
               >
                 <Sparkles className="w-4 h-4" />
               </button>
@@ -438,11 +473,11 @@ export default function ToolDetail() {
           )}
         </div>
 
-        {/* Error bar */}
-        {error && (
+        {/* Error bar (validation + store errors) */}
+        {(error || validationError) && (
           <div className="px-4 py-2 bg-red-50 dark:bg-red-900/20 border-t border-red-200 dark:border-red-800 text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
-            <span>{error}</span>
-            <button onClick={clearError} className="text-red-400 hover:text-red-600 text-[10px]">{t("common.dismiss")}</button>
+            <span>{validationError || error}</span>
+            <button onClick={() => { setValidationError(null); clearError(); }} className="text-red-400 hover:text-red-600 text-[10px]">{t("common.dismiss")}</button>
           </div>
         )}
       </div>
@@ -461,7 +496,7 @@ export default function ToolDetail() {
 
       {/* Delete confirm */}
       {confirmDelete && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setConfirmDelete(false)}>
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setConfirmDelete(false)} onKeyDown={(e) => { if (e.key === "Escape") setConfirmDelete(false); }}>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-5 max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
             <p className="text-sm font-medium mb-1 text-gray-800 dark:text-gray-200">{t("common.delete")}?</p>
             <p className="text-xs text-gray-500 mb-4">{t("tools.deleteConfirm")}</p>
@@ -479,7 +514,7 @@ export default function ToolDetail() {
 
       {/* Unsaved changes blocker */}
       {blocker.state === "blocked" && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onKeyDown={(e) => { if (e.key === "Escape") blocker.reset?.(); }}>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-5 max-w-sm mx-4">
             <p className="text-sm font-medium mb-1 text-gray-800 dark:text-gray-200">{t("skillEditor.unsavedChanges")}</p>
             <p className="text-xs text-gray-500 mb-4">{t("skillEditor.unsavedDesc", { count: 1 })}</p>

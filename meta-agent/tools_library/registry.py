@@ -15,11 +15,16 @@ _ALL_TOOLS = [
 ]
 
 
+_ddb_client = None
+
 def _get_ddb_client():
-    """Lazy-init DynamoDB client."""
-    import boto3
-    from config import REGION
-    return boto3.client("dynamodb", region_name=REGION)
+    """Lazy-init and cache DynamoDB client."""
+    global _ddb_client
+    if _ddb_client is None:
+        import boto3
+        from config import REGION
+        _ddb_client = boto3.client("dynamodb", region_name=REGION)
+    return _ddb_client
 
 
 def _get_tools_table():
@@ -102,8 +107,8 @@ def get_tool_code_by_func_name(func_name: str) -> str | None:
         item = resp.get("Item")
         if item and "code" in item:
             return item["code"]["S"]
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Warning: DDB fallback failed for tool '{func_name}': {e}")
     return None
 
 

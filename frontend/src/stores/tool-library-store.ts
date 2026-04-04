@@ -8,6 +8,13 @@ import { invalidateToolCatalogCache, writeToolCatalog, type ToolCatalog } from "
 
 export type { ToolTemplate } from "../lib/tool-storage";
 
+function sortTools(tools: ToolTemplate[]): ToolTemplate[] {
+  return tools.sort((a, b) => {
+    if (a.builtin !== b.builtin) return a.builtin ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 interface ToolLibraryState {
   tools: ToolTemplate[];
   loading: boolean;
@@ -47,12 +54,7 @@ export const useToolLibraryStore = create<ToolLibraryState>((set) => ({
   fetchTools: async () => {
     set({ loading: true, error: null });
     try {
-      const tools = await scanAllTools();
-      tools.sort((a, b) => {
-        // Builtin first, then by name
-        if (a.builtin !== b.builtin) return a.builtin ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
+      const tools = sortTools(await scanAllTools());
       set({ tools, loading: false });
     } catch (err) {
       console.error("Failed to fetch tools:", err);
@@ -64,18 +66,12 @@ export const useToolLibraryStore = create<ToolLibraryState>((set) => ({
     set({ saving: true, error: null });
     try {
       await putToolItem(tool);
-      // Refresh list from DDB
-      const tools = await scanAllTools();
-      tools.sort((a, b) => {
-        if (a.builtin !== b.builtin) return a.builtin ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
+      const tools = sortTools(await scanAllTools());
       set({ tools, saving: false });
-      // Sync S3 catalog (non-blocking)
-      invalidateToolCatalogCache();
-      writeToolCatalog(buildCatalog(tools)).catch((e) =>
-        console.warn("Failed to sync S3 catalog:", e)
-      );
+      // Sync S3 catalog after write succeeds
+      writeToolCatalog(buildCatalog(tools))
+        .then(() => invalidateToolCatalogCache())
+        .catch((e) => console.warn("Failed to sync S3 catalog:", e));
     } catch (err) {
       console.error("Failed to save tool:", err);
       set({ saving: false, error: err instanceof Error ? err.message : "Failed to save tool" });
@@ -87,16 +83,11 @@ export const useToolLibraryStore = create<ToolLibraryState>((set) => ({
     set({ saving: true, error: null });
     try {
       await deleteToolItem(id);
-      const tools = await scanAllTools();
-      tools.sort((a, b) => {
-        if (a.builtin !== b.builtin) return a.builtin ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
+      const tools = sortTools(await scanAllTools());
       set({ tools, saving: false });
-      invalidateToolCatalogCache();
-      writeToolCatalog(buildCatalog(tools)).catch((e) =>
-        console.warn("Failed to sync S3 catalog:", e)
-      );
+      writeToolCatalog(buildCatalog(tools))
+        .then(() => invalidateToolCatalogCache())
+        .catch((e) => console.warn("Failed to sync S3 catalog:", e));
     } catch (err) {
       console.error("Failed to delete tool:", err);
       set({ saving: false, error: err instanceof Error ? err.message : "Failed to delete tool" });

@@ -13,6 +13,7 @@ import ReactMarkdown from "react-markdown";
 import EditAssistant from "./EditAssistant";
 import { useUISettings } from "../../stores/ui-settings-store";
 import { preloadPyodide, checkPythonSyntax, isPyodideReady } from "../../lib/pyodide-checker";
+import { useTranslation } from "react-i18next";
 
 function useIsDark() {
   const { theme } = useUISettings();
@@ -93,6 +94,7 @@ function ReviewChangesModal({ changes, onConfirm, onCancel, viewOnly }: {
   onCancel: () => void;
   viewOnly?: boolean;
 }) {
+  const { t } = useTranslation();
   const isDark = useIsDark();
   const entries = Object.entries(changes).filter(([k]) => !["tools", "tool_names", "created_at", "agent_id"].includes(k));
   const [activeIdx, setActiveIdx] = useState(0);
@@ -130,7 +132,7 @@ function ReviewChangesModal({ changes, onConfirm, onCancel, viewOnly }: {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onCancel} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>{viewOnly ? "Close" : "Cancel"}</button>
+            <button onClick={onCancel} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>{viewOnly ? "Close" : t("common.cancel")}</button>
             {!viewOnly && onConfirm && (
               <button onClick={onConfirm} className="px-4 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700">Confirm & Deploy</button>
             )}
@@ -173,11 +175,12 @@ function Section({ title, icon, action, children }: { title: string; icon?: Reac
 }
 
 function Field({ label, hint, changed, onOptimize, children }: { label: string; hint?: string; changed?: boolean; onOptimize?: () => void; children: React.ReactNode }) {
+  const { t } = useTranslation();
   return (
     <div>
       <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-0.5 flex items-center gap-1">
         {label}
-        {changed && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" title="Modified" />}
+        {changed && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" title={t("agentEditor.modified")} />}
         {onOptimize && (
           <button
             type="button"
@@ -199,6 +202,7 @@ const inputClass = "w-full px-2 py-1.5 border border-gray-200 dark:border-gray-7
 const disabledClass = "w-full px-2 py-1.5 border border-gray-100 dark:border-gray-700 rounded-lg text-[13px] bg-gray-50 dark:bg-gray-800 text-gray-400 cursor-not-allowed";
 
 export default function AgentEditForm() {
+  const { t } = useTranslation();
   const { agentId: routeAgentId } = useParams<{ agentId: string }>();
   const navigate = useNavigate();
   const {
@@ -282,7 +286,7 @@ export default function AgentEditForm() {
         setValidationResult(validation);
         setPendingStagingKey(stagingKey);
         if (validation.valid && validation.warnings.length === 0) {
-          setStatus("Validation passed — ready to deploy");
+          setStatus(t("agentEditor.validationPassed"));
         }
       } else {
         setStatus("Validation returned no result — Meta-Agent may not have called validate_agent");
@@ -410,7 +414,7 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
 
       setProgressStep(null);
       setProgressPct(failed ? 0 : 100);
-      setStatus(failed ? (isCreateMode ? "Create failed" : "Update failed") : (isCreateMode ? "Created successfully" : "Updated successfully"));
+      setStatus(failed ? (isCreateMode ? t("agentEditor.createFailed") : t("agentEditor.updateFailed")) : (isCreateMode ? t("agentEditor.createSuccess") : t("agentEditor.updateSuccess")));
 
       if (failed) {
         const errorMsg = deployResult!.error!;
@@ -490,7 +494,7 @@ tool_names should be: ${funcNames.join(",") || "(extract from @tool functions)"}
 
     setValidationResult(null);
     setAutoFixing(false);
-    setStatus("Auto-fix applied. Click Update to re-validate and deploy.");
+    setStatus(t("agentEditor.autoFixApplied"));
   };
 
   const handleOptimizeField = (fieldName: string, fieldLabel: string) => {
@@ -538,7 +542,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
         _agentName: agentName,
       };
       const ok = await writeJsonToS3(draftKey, draftData);
-      setStatus(ok ? "Draft saved" : "Failed to save draft");
+      setStatus(ok ? t("agentEditor.draftSaved") : t("agentEditor.draftFailed"));
     } catch (err) {
       setStatus(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
     } finally {
@@ -588,7 +592,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
             title="Validate configuration"
           >
             {validating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
-            Validate
+            {t("common.validate")}
           </button>
           <button
             onClick={handleSaveDraft}
@@ -597,14 +601,14 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
             title="Save draft"
           >
             {savingDraft ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
-            Draft
+            {t("agentEditor.draft")}
           </button>
           <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-0.5" />
           <button
             onClick={() => navigate(-1)}
             className="px-2.5 py-1.5 text-[12px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             onClick={() => handleSave()}
@@ -707,7 +711,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
                   onClick={() => { setValidationResult(null); setPendingStagingKey(null); }}
                   className="px-3 py-1 text-[12px] text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
                 >
-                  Dismiss
+                  {t("common.dismiss")}
                 </button>
                 <button
                   onClick={handleAutoFix}
@@ -715,7 +719,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
                   className="flex items-center gap-1 px-3 py-1 text-[12px] font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
                 >
                   {autoFixing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wrench className="w-3 h-3" />}
-                  {autoFixing ? "Fixing..." : "Auto-fix"}
+                  {autoFixing ? "Fixing..." : t("common.autoFix")}
                 </button>
                 <button
                   onClick={async () => {
@@ -741,14 +745,14 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
                   className="flex items-center gap-1 px-3 py-1 text-[12px] font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg disabled:opacity-50"
                 >
                   {previewLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Code2 className="w-3 h-3" />}
-                  View Code
+                  {t("agentEditor.viewCode")}
                 </button>
                 {validationResult.valid && pendingStagingKey && (
                   <button
                     onClick={() => { setValidationResult(null); doDeploy(pendingStagingKey!); setPendingStagingKey(null); }}
                     className="px-3 py-1 text-[12px] font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600"
                   >
-                    Deploy anyway
+                    {t("agentEditor.deployAnyway")}
                   </button>
                 )}
               </div>
@@ -757,9 +761,9 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
         )}
 
         {/* Basic Info */}
-        <Section title="Basic Info" icon={<Settings2 className="w-3.5 h-3.5" />}>
+        <Section title={t("agentEditor.basicInfo")} icon={<Settings2 className="w-3.5 h-3.5" />}>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Name" changed={!!changedFields.name} hint={isCreateMode ? "Alphanumeric only, max 36 chars" : "Cannot be changed after creation"}>
+            <Field label={t("agentEditor.name")} changed={!!changedFields.name} hint={isCreateMode ? t("agentEditor.nameHint") : t("agentEditor.nameFixed")}>
               <input
                 type="text"
                 value={formData.name || agentName || ""}
@@ -768,7 +772,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
                 className={isCreateMode ? inputClass : disabledClass}
               />
             </Field>
-            <Field label="Display Name" changed={!!changedFields.display_name} hint="Shown in sidebar and chat header" onOptimize={() => handleOptimizeField("display_name", "Display Name")}>
+            <Field label={t("agentEditor.displayName")} changed={!!changedFields.display_name} hint={t("agentEditor.displayNameHint")} onOptimize={() => handleOptimizeField("display_name", "Display Name")}>
               <input
                 type="text"
                 value={formData.display_name || ""}
@@ -778,20 +782,20 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
               />
             </Field>
           </div>
-          <Field label="Description" changed={!!changedFields.description} onOptimize={() => handleOptimizeField("description", "Description")}>
+          <Field label={t("agentEditor.description")} changed={!!changedFields.description} onOptimize={() => handleOptimizeField("description", "Description")}>
             <textarea
               value={formData.description || ""}
               onChange={(e) => updateField("description", e.target.value)}
               rows={2}
               className={inputClass + " resize-none"}
-              placeholder="Brief description of what this agent does"
+              placeholder={t("agentEditor.descriptionHint")}
             />
           </Field>
         </Section>
 
         {/* Chat Settings */}
-        <Section title="Chat Settings" icon={<MessageSquare className="w-3.5 h-3.5" />}>
-          <Field label="Welcome Message" changed={!!changedFields.welcome_message} hint="First message shown when user opens this agent" onOptimize={() => handleOptimizeField("welcome_message", "Welcome Message")}>
+        <Section title={t("agentEditor.chatSettings")} icon={<MessageSquare className="w-3.5 h-3.5" />}>
+          <Field label={t("agentEditor.welcomeMessage")} changed={!!changedFields.welcome_message} hint={t("agentEditor.welcomeMessageHint")} onOptimize={() => handleOptimizeField("welcome_message", "Welcome Message")}>
             <textarea
               value={formData.welcome_message || ""}
               onChange={(e) => updateField("welcome_message", e.target.value)}
@@ -800,7 +804,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
               placeholder="Hello! I can help you with..."
             />
           </Field>
-          <Field label="Suggested Prompts" changed={!!changedFields.suggestions} hint="One per line, shown as quick-start buttons" onOptimize={() => handleOptimizeField("suggestions", "Suggested Prompts")}>
+          <Field label={t("agentEditor.suggestions")} changed={!!changedFields.suggestions} hint={t("agentEditor.suggestionsHint")} onOptimize={() => handleOptimizeField("suggestions", "Suggested Prompts")}>
             <textarea
               value={(Array.isArray(formData.suggestions) ? formData.suggestions : (formData.suggestions || "").split("|").filter(Boolean)).join("\n")}
               onChange={(e) => updateField("suggestions", e.target.value.split("\n").filter(Boolean))}
@@ -812,7 +816,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
         </Section>
 
         {/* Agent Behavior */}
-        <Section title="Agent Behavior" icon={<Settings2 className="w-3.5 h-3.5" />}>
+        <Section title={t("agentEditor.agentBehavior")} icon={<Settings2 className="w-3.5 h-3.5" />}>
           <div className="grid grid-cols-3 gap-4">
             <Field label="Template" changed={!!changedFields.template_id}>
               <select
@@ -825,7 +829,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
                 ))}
               </select>
             </Field>
-            <Field label="Default Model" changed={!!changedFields.default_model_id} hint="Auto-selected when chatting">
+            <Field label="Default Model" changed={!!changedFields.default_model_id} hint={t("agentEditor.modelHint")}>
               <select
                 value={formData.default_model_id || ""}
                 onChange={(e) => updateField("default_model_id", e.target.value)}
@@ -847,23 +851,23 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
                   onChange={(e) => updateField("supports_images", e.target.checked)}
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                <span className="text-[13px]">{formData.supports_images ? "Multimodal (enabled)" : "Multimodal"}</span>
+                <span className="text-[13px]">{formData.supports_images ? `${t("agentEditor.multimodal")} (enabled)` : t("agentEditor.multimodal")}</span>
               </label>
             </Field>
           </div>
-          <Field label="System Prompt" changed={!!changedFields.system_prompt} hint="Defines the agent's personality and behavior. Changes trigger a redeploy (1-2 min)." onOptimize={() => handleOptimizeField("system_prompt", "System Prompt")}>
+          <Field label={t("agentEditor.systemPrompt")} changed={!!changedFields.system_prompt} hint={t("agentEditor.systemPromptHint")} onOptimize={() => handleOptimizeField("system_prompt", "System Prompt")}>
             <textarea
               value={formData.system_prompt || ""}
               onChange={(e) => updateField("system_prompt", e.target.value)}
               rows={14}
               className={inputClass + " font-mono text-xs leading-relaxed resize-y"}
-              placeholder="You are a helpful assistant that..."
+              placeholder={t("agentEditor.systemPromptPlaceholder")}
             />
           </Field>
         </Section>
 
         {/* Tools */}
-        <Section title="Tools" icon={<Code2 className="w-3.5 h-3.5" />} action={
+        <Section title={t("agentEditor.tools")} icon={<Code2 className="w-3.5 h-3.5" />} action={
           <button
             onClick={() => handleOptimizeField("tool_definitions", "Tools")}
             className="p-0.5 text-gray-300 hover:text-purple-500 transition-colors"
@@ -1021,6 +1025,7 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
   onChange: (defs: string, names: string) => void;
   onOptimizeTool?: (toolName: string, toolCode: string) => void;
 }) {
+  const { t } = useTranslation();
   const isDark = useIsDark();
   const [blocks, setBlocks] = useState<string[]>(() => {
     const initial = splitTools(value);
@@ -1102,7 +1107,7 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
             onClick={() => setFullscreenIdx(null)}
             className="flex items-center gap-1 px-2 py-1 text-xs text-gray-400 hover:text-white bg-gray-700 rounded hover:bg-gray-600 transition-colors"
           >
-            <Minimize2 className="w-3.5 h-3.5" /> Exit Fullscreen
+            <Minimize2 className="w-3.5 h-3.5" /> {t("agentEditor.exitFullscreen")}
           </button>
         </div>
         <div className="flex-1 overflow-hidden">
@@ -1149,7 +1154,7 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
   return (
     <div className="space-y-3">
       {blocks.length === 0 && (
-        <p className="text-xs text-gray-400 italic">No tools defined. Click "Add Tool" to get started.</p>
+        <p className="text-xs text-gray-400 italic">{t("agentEditor.noTools")}</p>
       )}
       {blocks.map((code, idx) => {
         const name = extractFuncName(code);
@@ -1186,7 +1191,7 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
                 <button
                   onClick={(e) => { e.stopPropagation(); removeBlock(idx); }}
                   className="p-1 text-gray-500 hover:text-red-400 transition-colors"
-                  title="Remove tool"
+                  title={t("agentEditor.removeTool")}
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -1238,7 +1243,7 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
         onClick={addBlock}
         className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 px-3 py-2 border border-dashed border-blue-300 rounded-lg hover:bg-blue-50 transition-colors w-full justify-center"
       >
-        <Plus className="w-3.5 h-3.5" /> Add Tool
+        <Plus className="w-3.5 h-3.5" /> {t("agentEditor.addTool")}
       </button>
       {/* Delete confirmation modal */}
       {confirmDeleteIdx !== null && (
@@ -1246,10 +1251,10 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-5 max-w-sm mx-4" onClick={e => e.stopPropagation()}>
             <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">Delete tool?</p>
             <p className="text-xs text-gray-500 mb-4">
-              Remove <span className="font-mono font-medium text-gray-700 dark:text-gray-300">{extractFuncName(blocks[confirmDeleteIdx])}</span> from this agent. This cannot be undone.
+              {t("agentEditor.deleteToolConfirm")}
             </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmDeleteIdx(null)} className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">Cancel</button>
+              <button onClick={() => setConfirmDeleteIdx(null)} className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">{t("common.cancel")}</button>
               <button onClick={confirmRemove} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">Delete</button>
             </div>
           </div>

@@ -2,6 +2,7 @@
  * Edit Assistant — AI sidebar for editing agent config via natural language.
  */
 import { useState, useRef, useEffect, memo, useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { useEditAssistantStore, type AssistantMessage } from "../../stores/edit-assistant-store";
 import { useAgentEditStore } from "../../stores/agent-edit-store";
 import { Loader2, Send, Trash2, X, Square, RefreshCw, Pencil, Check, Eye } from "lucide-react";
@@ -132,6 +133,7 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
   onEdit?: (id: string) => void;
   onShowPreview?: () => void;
 }) {
+  const { t } = useTranslation();
   const isUser = msg.role === "user";
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-2 group animate-[fadeSlideIn_0.2s_ease-out]`}>
@@ -190,7 +192,7 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
           </div>
         ) : (
           <span className="text-gray-400 flex items-center gap-1">
-            <Loader2 className="w-3 h-3 animate-spin" /> Thinking...
+            <Loader2 className="w-3 h-3 animate-spin" /> {t("assistant.thinking")}
           </span>
         )}
         {/* Streaming indicator on last assistant message */}
@@ -198,7 +200,7 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
           <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-gray-200 text-[11px] text-blue-500 animate-pulse">
             <span className="flex items-center gap-2">
               <Loader2 className="w-3 h-3 animate-spin" />
-              Generating...
+              {t("assistant.generating")}
             </span>
             <button
               onClick={() => onShowPreview?.()}
@@ -214,6 +216,7 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
 });
 
 export default function EditAssistant() {
+  const { t } = useTranslation();
   const {
     messages, isStreaming, loading, panelOpen, selectedModelId,
     closePanel, sendMessage, cancelStreaming, clearHistory, setModel,
@@ -357,7 +360,7 @@ export default function EditAssistant() {
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">AI Assistant</span>
+          <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t("assistant.title")}</span>
           {/* Model picker */}
           <div className="relative">
             <button
@@ -391,7 +394,7 @@ export default function EditAssistant() {
             <button
               onClick={clearHistory}
               className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-              title="Clear history"
+              title={t("assistant.clearHistory")}
             >
               <Trash2 className="w-3 h-3" />
             </button>
@@ -399,7 +402,7 @@ export default function EditAssistant() {
           <button
             onClick={closePanel}
             className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-            title="Close"
+            title={t("common.close")}
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -450,8 +453,8 @@ export default function EditAssistant() {
                       className="w-full px-2 py-1.5 rounded-lg border-2 border-blue-400 text-xs focus:outline-none resize-none"
                     />
                     <div className="flex justify-end gap-1 mt-0.5">
-                      <button onClick={() => setEditingMsgId(null)} className="text-[10px] px-1.5 py-0.5 text-gray-500 hover:bg-gray-100 rounded">Cancel</button>
-                      <button onClick={submitEdit} className="text-[10px] px-1.5 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700">Send</button>
+                      <button onClick={() => setEditingMsgId(null)} className="text-[10px] px-1.5 py-0.5 text-gray-500 hover:bg-gray-100 rounded">{t("common.cancel")}</button>
+                      <button onClick={submitEdit} className="text-[10px] px-1.5 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700">{t("common.send")}</button>
                     </div>
                   </div>
                 </div>
@@ -476,7 +479,7 @@ export default function EditAssistant() {
               onClick={handleRegenerate}
               className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-600 transition-colors"
             >
-              <RefreshCw className="w-3 h-3" /> Regenerate
+              <RefreshCw className="w-3 h-3" /> {t("common.regenerate")}
             </button>
           </div>
         )}
@@ -490,7 +493,7 @@ export default function EditAssistant() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Describe what to change..."
+            placeholder={t("skillEditor.describeChange")}
             rows={1}
             className="flex-1 px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg resize-none outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             style={{ maxHeight: 80 }}
@@ -499,7 +502,7 @@ export default function EditAssistant() {
             <button
               onClick={cancelStreaming}
               className="p-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-              title="Stop"
+              title={t("common.stop")}
             >
               <Square className="w-3.5 h-3.5" />
             </button>

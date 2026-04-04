@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
+import { useTranslation } from "react-i18next";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { useAgentEditStore } from "../../stores/agent-edit-store";
 import { Bot, RefreshCw, Loader2, MessageSquare, Settings2, Archive, ChevronDown, RotateCcw, Trash2 } from "lucide-react";
@@ -7,6 +8,7 @@ import ConfirmDialog from "../ui/ConfirmDialog";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
 
 export default function AgentList({ collapsed = false }: { collapsed?: boolean }) {
+  const { t } = useTranslation();
   const { agents, archivedAgents, loading, fetchAgents } = useAgentListStore();
   const navigate = useNavigate();
   const { agentId } = useParams();
@@ -57,7 +59,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
               ? "bg-blue-100 text-blue-600"
               : "text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-600"
           }`}
-          title="Meta Agent"
+          title={t("agents.metaAgent")}
         >
           <MessageSquare className="w-4 h-4" />
         </button>
@@ -122,7 +124,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">My Agents</h3>
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t("agents.title")}</h3>
         <button
           onClick={fetchAgents}
           disabled={loading}
@@ -150,14 +152,14 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
           <div className="flex items-center gap-2">
             <MessageSquare className="w-4 h-4 text-blue-600 flex-shrink-0" />
             <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Meta Agent</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">Create & manage agents</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{t("agents.metaAgent")}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{t("agents.metaAgentDesc")}</p>
             </div>
           </div>
         </button>
 
         {agents.length > 0 && (
-          <div className="text-xs text-gray-400 px-1 pt-2">Created Agents</div>
+          <div className="text-xs text-gray-400 px-1 pt-2">{t("agents.createdAgents")}</div>
         )}
 
         {agents.map((agent) => (
@@ -213,7 +215,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
         {agents.length === 0 && !loading && (
           <div className="text-center text-gray-400 text-xs mt-4">
             <Bot className="w-6 h-6 mx-auto mb-1 opacity-30" />
-            <p>No agents yet</p>
+            <p>{t("agents.noAgents")}</p>
           </div>
         )}
 
@@ -273,16 +275,16 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
 
       <ConfirmDialog
         open={!!confirmAction}
-        title={confirmAction?.type === "archive" ? "Archive Agent" : confirmAction?.type === "restore" ? "Restore Agent" : "Permanently Delete"}
+        title={confirmAction?.type === "archive" ? t("agents.archive") : confirmAction?.type === "restore" ? t("agents.restore") : t("agents.deleteForever")}
         message={
           confirmAction?.type === "archive"
-            ? `Archive "${confirmAction.agentName}"? The runtime will be deleted but data is preserved for recovery.`
+            ? t("agents.archiveConfirm", { name: confirmAction.agentName })
             : confirmAction?.type === "restore"
-            ? `Restore "${confirmAction?.agentName}"? A new runtime will be created from saved data.`
-            : `Permanently delete "${confirmAction?.agentName}"? All data will be removed. This cannot be undone.`
+            ? t("agents.restoreConfirm", { name: confirmAction?.agentName })
+            : t("agents.permanentDeleteConfirm", { name: confirmAction?.agentName })
         }
-        confirmLabel={confirmAction?.type === "archive" ? "Archive" : confirmAction?.type === "restore" ? "Restore" : "Delete Forever"}
-        cancelLabel="Cancel"
+        confirmLabel={confirmAction?.type === "archive" ? t("agents.archive") : confirmAction?.type === "restore" ? t("agents.restore") : t("agents.deleteForever")}
+        cancelLabel={t("common.cancel")}
         danger={confirmAction?.type !== "restore"}
         onConfirm={() => confirmAction && executeAgentAction(confirmAction.agentId, confirmAction.type)}
         onCancel={() => setConfirmAction(null)}

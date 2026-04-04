@@ -48,7 +48,7 @@ function ToolCard({ tool, onClick }: { tool: ToolTemplate; onClick: () => void }
 export default function ToolLibraryPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { tools, loading, fetchTools } = useToolLibraryStore();
+  const { tools, loading, fetchTools, error, clearError } = useToolLibraryStore();
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState("");
@@ -171,6 +171,14 @@ export default function ToolLibraryPage() {
           </div>
         )}
       </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mx-6 mt-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={clearError} className="text-red-400 hover:text-red-600 text-[10px]">{t("common.dismiss")}</button>
+        </div>
+      )}
 
       {/* Create dialog */}
       {showCreate && (
