@@ -267,6 +267,7 @@
     "namePlaceholder": "my-tool",
     "description": "描述",
     "descPlaceholder": "这个工具做什么？",
+    "seed": "预置",
     "toolNotFound": "工具未找到",
     "deleteConfirm": "删除此工具？此操作不可撤销。",
     "saveFailed": "保存工具失败",

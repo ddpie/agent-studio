@@ -267,6 +267,7 @@
     "namePlaceholder": "my-tool",
     "description": "Description",
     "descPlaceholder": "What does this tool do?",
+    "seed": "Seed",
     "toolNotFound": "Tool not found",
     "deleteConfirm": "Delete this tool? This cannot be undone.",
     "saveFailed": "Failed to save tool",

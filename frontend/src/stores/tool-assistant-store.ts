@@ -130,10 +130,24 @@ After the user confirms, output the complete tool code.
 EXCEPTION: If the user gives a very specific, unambiguous instruction (e.g., "add a timeout parameter"), you may skip the plan and directly output the update.
 
 ## Output Format
-When outputting updated code, use this exact format:
+
+### Option A: Full replacement (for new tools or major rewrites)
 \`\`\`__tool_update
 (complete @tool function code — every line, not just changes)
 \`\`\`
+
+### Option B: Incremental edit (for small fixes — PREFERRED for auto-fix)
+\`\`\`__tool_edit
+<<<<<<< SEARCH
+(exact lines to find)
+=======
+(replacement lines)
+>>>>>>> REPLACE
+\`\`\`
+
+You can include multiple SEARCH/REPLACE pairs in one __tool_edit block.
+Use Option B when fixing specific issues (syntax errors, adding a missing colon, etc.) — it is faster and preserves the rest of the code.
+Use Option A only when rewriting the entire function.
 
 After the code block, add 1-2 sentences explaining what you changed.
 
@@ -234,18 +248,61 @@ def my_tool(query: str, max_results: int = 5) -> str:
       if (flushTimer) clearTimeout(flushTimer);
       flushPending();
 
-      // Extract __tool_update block
+      // Extract __tool_update block (full replacement)
       const updateRegex = /```__tool_update\s*\n([\s\S]*?)```/g;
-      const match = updateRegex.exec(fullText);
-      if (match) {
-        const newCode = match[1].trimEnd();
+      const updateMatch = updateRegex.exec(fullText);
+      let cleanedContent = fullText;
+      let updated = false;
+
+      if (updateMatch) {
+        const newCode = updateMatch[1].trimEnd();
         onCodeUpdate(newCode);
-        // Clean message: remove code block, add indicator
-        const cleanedContent = fullText.replace(match[0], "").replace(/\n{3,}/g, "\n\n").trim();
+        cleanedContent = cleanedContent.replace(updateMatch[0], "");
+        updated = true;
+      }
+
+      // Extract __tool_edit blocks (incremental search/replace)
+      const editRegex = /```__tool_edit\s*\n([\s\S]*?)```/g;
+      let editMatch;
+      while ((editMatch = editRegex.exec(fullText)) !== null) {
+        const editBlock = editMatch[1];
+        const pairRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
+        let pairMatch;
+        let currentCode = toolContext.code;
+        let applied = false;
+        const failedSearches: string[] = [];
+
+        while ((pairMatch = pairRegex.exec(editBlock)) !== null) {
+          const searchText = pairMatch[1];
+          const replaceText = pairMatch[2];
+          if (currentCode.includes(searchText)) {
+            currentCode = currentCode.split(searchText).join(replaceText);
+            applied = true;
+          } else {
+            failedSearches.push(searchText.slice(0, 50) + (searchText.length > 50 ? "..." : ""));
+          }
+        }
+
+        if (applied) {
+          onCodeUpdate(currentCode);
+          updated = true;
+        }
+        if (failedSearches.length > 0) {
+          const notice = `\n\n> ${failedSearches.length} search/replace block(s) failed to match`;
+          set((s) => ({
+            messages: s.messages.map((m) =>
+              m.id === assistantMsg.id ? { ...m, content: m.content + notice } : m
+            ),
+          }));
+        }
+        cleanedContent = cleanedContent.replace(editMatch[0], "");
+      }
+
+      if (updated) {
         set((s) => ({
           messages: s.messages.map((m) =>
             m.id === assistantMsg.id
-              ? { ...m, content: cleanedContent + "\n\n---tool-updated---\n\n" }
+              ? { ...m, content: cleanedContent.replace(/\n{3,}/g, "\n\n").trim() + "\n\n---tool-updated---\n\n" }
               : m
           ),
         }));

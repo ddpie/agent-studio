@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams, useBlocker } from "react-router";
 import { useTranslation } from "react-i18next";
 import {
-  ChevronLeft, Loader2, Save, Trash2, GitCompare, Sparkles, Code2, ShieldCheck, X, User,
+  ChevronLeft, Loader2, Save, Trash2, GitCompare, Sparkles, Code2, ShieldCheck, X,
 } from "lucide-react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import type * as MonacoNS from "monaco-editor";
@@ -163,9 +163,7 @@ export default function ToolDetail() {
   // Permission: can edit if mine, seed, or new
   const isMine = currentUser && toolOwner === currentUser;
   const isSeed = toolOwner === "__builtin__";
-  const isOthers = !isNew && !isMine && !isSeed && toolOwner !== "";
   const canEdit = isNew || isMine || isSeed;
-  const canDelete = isMine;
 
   useEffect(() => { preloadPyodide(); }, []);
 
@@ -484,6 +482,32 @@ export default function ToolDetail() {
             {validationResult.warnings.map((w, i) => (
               <p key={`w${i}`} className="text-[11px] text-amber-600 mt-1">&#x26A0; {w}</p>
             ))}
+            {canEdit && (validationResult.errors.length > 0 || validationResult.warnings.length > 0) && (
+              <button
+                onClick={() => {
+                  const issues = [
+                    ...validationResult.errors.map(e => `Error: ${e}`),
+                    ...validationResult.warnings.map(w => `Warning: ${w}`),
+                  ].join("\n");
+                  if (toolId) {
+                    openPanel(toolId);
+                    setTimeout(() => {
+                      const store = useToolAssistantStore.getState();
+                      store.sendMessage(
+                        `## Auto-Fix Task\nFix the following validation issues in this tool code:\n${issues}\n\nOutput the complete fixed code.`,
+                        { name, description, category: "custom", code },
+                        handleCodeUpdate,
+                      );
+                    }, 100);
+                  }
+                  setValidationResult(null);
+                }}
+                className={`mt-2 flex items-center gap-1 px-2 py-1 text-[11px] rounded transition-colors ${isDark ? "text-blue-400 hover:bg-blue-900/30" : "text-blue-600 hover:bg-blue-50"}`}
+              >
+                <Sparkles className="w-3 h-3" />
+                {t("common.autoFix")}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -549,7 +573,7 @@ export default function ToolDetail() {
 
       {/* Diff modal — matches SkillDetail style */}
       {showDiff && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center" onClick={() => setShowDiff(false)}>
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center" onClick={() => setShowDiff(false)} onKeyDown={(e) => { if (e.key === "Escape") setShowDiff(false); }} tabIndex={-1}>
           <div className={`w-[90vw] h-[80vh] rounded-xl shadow-2xl flex flex-col overflow-hidden ${isDark ? "bg-gray-900" : "bg-white"}`} onClick={(e) => e.stopPropagation()}>
             <div className={`flex items-center justify-between px-4 py-2 border-b ${isDark ? "border-gray-700" : "border-gray-200"}`}>
               <span className={`text-sm font-medium ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.changes")}</span>

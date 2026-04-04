@@ -118,7 +118,10 @@ ${fileContext.content}
 \`\`\`
 
 ## All Files in This Skill
-${fileContext.allFiles.map(f => `- ${f}`).join("\\n")}
+${fileContext.allFiles.map(f => {
+  const c = f === fileContext.path ? null : fileContext.getFileContent(f);
+  return c ? `### ${f}\n\`\`\`\n${c}\n\`\`\`` : `- ${f}`;
+}).join("\\n")}
 
 ## User Request
 ${content}
