@@ -973,29 +973,32 @@ export default function SkillDetail() {
             setValidationResult({ valid: allErrors.length === 0, errors: allErrors, warnings: allWarnings });
           }
         }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors">
+          className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors disabled:opacity-50 ${isDark ? "text-gray-400 hover:text-green-400 hover:bg-green-900/30" : "text-gray-500 hover:text-green-600 hover:bg-green-50"}`}>
           <ShieldCheck className="w-3.5 h-3.5" />
           Validate
         </button>
         {hasPendingOps && (
           <button onClick={() => setShowDiff(true)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${isDark ? "text-gray-300 border-gray-600 hover:bg-gray-800" : "text-gray-600 border-gray-300 hover:bg-gray-100"}`}>
+            className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${isDark ? "text-gray-400 hover:text-blue-400 hover:bg-blue-900/30" : "text-gray-500 hover:text-blue-600 hover:bg-blue-50"}`}>
             <GitCompare className="w-3.5 h-3.5" />
             Diff ({pendingCount})
           </button>
         )}
         {hasPendingOps && (
           <button onClick={handleDiscard}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"}`}>
+            className={`px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${isDark ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"}`}>
             Discard
           </button>
         )}
         {hasPendingOps && (
+          <>
+          <div className={`w-px h-5 ${isDark ? "bg-gray-700" : "bg-gray-200"} mx-0.5`} />
           <button onClick={handleSaveAll} disabled={saving}
-            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 shadow-sm transition-all">
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
             Save ({pendingCount})
           </button>
+          </>
         )}
         <button onClick={() => setShowDeleteConfirm(true)} className={`p-1.5 rounded transition-colors ${isDark ? "text-red-400 hover:bg-red-900/20" : "text-red-400 hover:text-red-600 hover:bg-red-50"}`}>
           <Trash2 className="w-4 h-4" />
@@ -1006,12 +1009,12 @@ export default function SkillDetail() {
           if (store.panelOpen) store.closePanel();
           else store.openPanel(skillId);
         }}
-          className={`p-1.5 rounded transition-colors ${useSkillAssistantStore.getState().panelOpen
-            ? "text-blue-500 bg-blue-50 dark:bg-blue-900/20"
-            : isDark ? "text-gray-400 hover:text-blue-400 hover:bg-blue-900/20" : "text-gray-400 hover:text-blue-500 hover:bg-blue-50"
+          className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${useSkillAssistantStore.getState().panelOpen
+            ? isDark ? "bg-purple-900/30 text-purple-400" : "bg-purple-50 text-purple-600"
+            : isDark ? "text-gray-400 hover:text-purple-400 hover:bg-purple-900/30" : "text-gray-500 hover:text-purple-600 hover:bg-purple-50"
           }`}
           title="AI Assistant">
-          <Sparkles className="w-4 h-4" />
+          <Sparkles className="w-3.5 h-3.5" />
         </button>
       </div>
 
