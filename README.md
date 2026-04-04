@@ -5,30 +5,24 @@
 ## 架构
 
 ```mermaid
-graph TB
-    User((用户))
-    FE[Web Console]
-    META[Meta-Agent]
+graph LR
+    User((用户)) --> FE[Web Console]
+    FE --> META[Meta-Agent]
+
+    META --> Agents
+    META --> Skills
+    META --> Tools[自定义工具]
 
     subgraph 自然语言创建 / 编辑
-        A1[客服 Agent]
-        A2[数据分析 Agent]
-        A3[...]
+        Agents[Agents]
         Skills[Skills]
-        Tools[自定义工具]
+        Tools
     end
 
-    MCP[MCP Gateway]
-    S3[(S3)]
-    DDB[(DynamoDB)]
-
-    User --> FE --> META
-    META --> A1 & A2 & A3
-    META --> Skills & Tools
-    META --- S3 & DDB
-    A1 & A2 --- MCP
-    A1 & A2 --- Skills
-    User -->|对话| A1
+    Agents --- MCP[MCP Gateway]
+    Agents --- Skills
+    META --- S3[(S3)] & DDB[(DynamoDB)]
+    User -.->|对话| Agents
 ```
 
 - **Frontend** — React 19 + Vite + Tailwind + Zustand，Cognito 认证，SigV4 签名直连 AgentCore / S3
@@ -104,30 +98,24 @@ AI agent orchestration platform on AWS Bedrock AgentCore. Create, manage, and ru
 ## Architecture
 
 ```mermaid
-graph TB
-    User((User))
-    FE[Web Console]
-    META[Meta-Agent]
+graph LR
+    User((User)) --> FE[Web Console]
+    FE --> META[Meta-Agent]
+
+    META --> Agents
+    META --> Skills
+    META --> Tools[Custom Tools]
 
     subgraph Create / Edit via Natural Language
-        A1[Customer Service Agent]
-        A2[Data Analyst Agent]
-        A3[...]
+        Agents[Agents]
         Skills[Skills]
-        Tools[Custom Tools]
+        Tools
     end
 
-    MCP[MCP Gateway]
-    S3[(S3)]
-    DDB[(DynamoDB)]
-
-    User --> FE --> META
-    META --> A1 & A2 & A3
-    META --> Skills & Tools
-    META --- S3 & DDB
-    A1 & A2 --- MCP
-    A1 & A2 --- Skills
-    User -->|Chat| A1
+    Agents --- MCP[MCP Gateway]
+    Agents --- Skills
+    META --- S3[(S3)] & DDB[(DynamoDB)]
+    User -.->|Chat| Agents
 ```
 
 ## Project Structure
