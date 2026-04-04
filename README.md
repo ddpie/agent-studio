@@ -190,19 +190,6 @@ cd frontend && npm test                                      # Frontend (45 test
 | `AGENT_STUDIO_COGNITO_IDENTITY_POOL_ID` | Cognito Identity Pool ID |
 | `AGENT_STUDIO_S3_BUCKET` | S3 Bucket（部署包 + 配置 + Skill） |
 
-## 代码规模
-
-~13,000 行源码（不含测试/依赖/构建产物）
-
-| 模块 | 行数 | 说明 |
-|------|------|------|
-| Frontend 组件 | 5,200+ | 17 个组件，最大 SkillDetail (1,373) / AgentEditForm (1,267) / ChatPanel (959) |
-| Frontend Store/Lib | 2,900+ | 8 个 Zustand store + 7 个 lib 工具 |
-| Meta-Agent Tools | 2,300+ | 25 个工具函数 |
-| Templates | 830+ | 代码生成模板 + 5 种 prompt 模板 |
-| Tools Library | 700+ | 6 个预构建工具 + registry |
-| Scripts | 200+ | 部署/构建/测试脚本 |
-
 ---
 
 # Agent Studio (English)
@@ -325,16 +312,3 @@ Covered modules: validate_agent (syntax/permission/security checks), prompt_temp
 | `AGENT_STUDIO_COGNITO_CLIENT_ID` | Cognito App Client ID |
 | `AGENT_STUDIO_COGNITO_IDENTITY_POOL_ID` | Cognito Identity Pool ID |
 | `AGENT_STUDIO_S3_BUCKET` | S3 Bucket for packages, config, and skills |
-
-## Codebase
-
-~13,000 lines of source code (excluding tests, dependencies, build artifacts)
-
-| Module | Lines | Notes |
-|--------|-------|-------|
-| Frontend Components | 5,200+ | 17 components; largest: SkillDetail (1,373) / AgentEditForm (1,267) / ChatPanel (959) |
-| Frontend Store/Lib | 2,900+ | 8 Zustand stores + 7 lib utilities |
-| Meta-Agent Tools | 2,300+ | 25 tool functions |
-| Templates | 830+ | Code generation templates + 5 prompt templates |
-| Tools Library | 700+ | 6 built-in tools + registry |
-| Scripts | 200+ | Deploy / build / test scripts |
