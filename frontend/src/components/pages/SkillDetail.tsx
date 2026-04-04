@@ -234,6 +234,14 @@ function DiffModal({ changes, onClose, isDark }: {
 }) {
   const entries = [...changes.entries()];
   const [activeIdx, setActiveIdx] = useState(0);
+
+  // ESC to close
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
   if (entries.length === 0) return null;
 
   const [path, { original, edited }] = entries[activeIdx];
@@ -924,7 +932,9 @@ export default function SkillDetail() {
               const errors = allMarkers.filter(m => m.severity >= 8);
               const warnings = allMarkers.filter(m => m.severity >= 4 && m.severity < 8);
               if (errors.length === 0 && warnings.length === 0 && customMarkers.length === 0) {
-                setValidationResult({ valid: true, errors: [], warnings: ["No issues found"] });
+                setValidationResult({ valid: true, errors: [], warnings: [] });
+                // Auto-dismiss success after 2s
+                setTimeout(() => setValidationResult(null), 2000);
               } else {
                 setValidationResult({
                   valid: errors.length === 0,
@@ -983,12 +993,27 @@ export default function SkillDetail() {
       </div>
 
       {/* Validation results */}
-      {validationResult && (validationResult.errors.length > 0 || validationResult.warnings.length > 0) && (
-        <div className={`mx-6 mt-2 rounded-lg text-sm border ${!validationResult.valid ? isDark ? "bg-red-900/20 border-red-800" : "bg-red-50 border-red-200" : isDark ? "bg-amber-900/20 border-amber-800" : "bg-amber-50 border-amber-200"}`}>
+      {validationResult && (
+        <div className={`mx-6 mt-2 rounded-lg text-sm border ${
+          !validationResult.valid
+            ? isDark ? "bg-red-900/20 border-red-800" : "bg-red-50 border-red-200"
+            : validationResult.errors.length === 0 && validationResult.warnings.length === 0
+              ? isDark ? "bg-green-900/20 border-green-800" : "bg-green-50 border-green-200"
+              : isDark ? "bg-amber-900/20 border-amber-800" : "bg-amber-50 border-amber-200"
+        }`}>
           <div className="px-4 py-2">
             <div className="flex items-center justify-between">
-              <p className={`text-xs font-medium ${!validationResult.valid ? "text-red-500" : "text-amber-600"}`}>
-                {!validationResult.valid ? "Validation failed — fix errors before saving" : "Warnings"}
+              <p className={`text-xs font-medium ${
+                !validationResult.valid ? "text-red-500"
+                  : validationResult.errors.length === 0 && validationResult.warnings.length === 0
+                    ? isDark ? "text-green-400" : "text-green-600"
+                    : "text-amber-600"
+              }`}>
+                {!validationResult.valid
+                  ? "Validation failed — fix errors before saving"
+                  : validationResult.errors.length === 0 && validationResult.warnings.length === 0
+                    ? "No issues found"
+                    : "Warnings"}
               </p>
               <button onClick={() => setValidationResult(null)} className="text-[10px] text-gray-400 hover:text-gray-600">Dismiss</button>
             </div>
