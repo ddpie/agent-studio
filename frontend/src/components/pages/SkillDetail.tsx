@@ -919,10 +919,16 @@ export default function SkillDetail() {
           allErrors.push(...skillResult.errors);
           allWarnings.push(...skillResult.warnings);
 
-          // 2. Validate all Python/Shell files
+          // 2. Validate all Python/Shell files (fetch from S3 if not loaded)
           const allFiles = ["SKILL.md", ...virtualFiles];
           for (const filePath of allFiles) {
-            const content = editedContents.get(filePath) ?? originalContents.get(filePath);
+            if (!filePath.endsWith(".py") && !filePath.endsWith(".sh") && !filePath.endsWith(".bash")) continue;
+            let content = editedContents.get(filePath) ?? originalContents.get(filePath) ?? null;
+            // Fetch from S3 if not in memory
+            if (content === null && skillId) {
+              content = await getSkillFile(skillId, filePath);
+              if (content !== null) originalContents.set(filePath, content);
+            }
             if (!content) continue;
             if (filePath.endsWith(".py")) {
               const pyErrors = validatePython(content);
@@ -1032,7 +1038,6 @@ export default function SkillDetail() {
                     ? "No issues found"
                     : "Warnings"}
               </p>
-              <button onClick={() => setValidationResult(null)} className="text-[10px] text-gray-400 hover:text-gray-600">Dismiss</button>
             </div>
             {validationResult.errors.map((e, i) => (
               <p key={`e${i}`} className="text-[11px] text-red-500 mt-1">&#x2716; {e}</p>
@@ -1040,6 +1045,36 @@ export default function SkillDetail() {
             {validationResult.warnings.map((w, i) => (
               <p key={`w${i}`} className="text-[11px] text-amber-600 mt-1">&#x26A0; {w}</p>
             ))}
+            {(validationResult.errors.length > 0 || validationResult.warnings.length > 0) && (
+              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                <button onClick={() => {
+                  if (!skillId) return;
+                  const store = useSkillAssistantStore.getState();
+                  if (!store.panelOpen) store.openPanel(skillId);
+                  const issues = [...validationResult.errors, ...validationResult.warnings].join("\n");
+                  const autoFixPrompt = `## Auto-Fix Task\nFix ALL of the following validation issues:\n${issues}\n\nFix each issue precisely. Do not rewrite files from scratch — use search/replace for small fixes.`;
+                  store.sendMessage(
+                    autoFixPrompt,
+                    { path: currentPath, content: skillContent ?? "", allFiles: ["SKILL.md", ...virtualFiles], getFileContent: (p: string) => editedContents.get(p) ?? originalContents.get(p) ?? null },
+                    (path: string, newContent: string) => {
+                      editedContents.set(path, newContent);
+                      const orig = originalContents.get(path);
+                      const next = new Set(changedFiles);
+                      if (orig !== undefined && newContent !== orig) next.add(path);
+                      else if (orig === undefined) { pendingCreates.set(path, ""); next.add(path); }
+                      setChangedFiles(next);
+                      if (path === currentPath) setSkillContent(newContent);
+                    },
+                  );
+                  setValidationResult(null);
+                }}
+                  className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-green-600 text-white rounded hover:bg-green-700 transition-colors">
+                  <Sparkles className="w-3 h-3" />
+                  Auto-fix
+                </button>
+                <button onClick={() => setValidationResult(null)} className="text-[10px] text-gray-400 hover:text-gray-600">Dismiss</button>
+              </div>
+            )}
           </div>
         </div>
       )}
