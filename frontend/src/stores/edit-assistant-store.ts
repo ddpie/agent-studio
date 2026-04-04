@@ -6,6 +6,7 @@ import { create } from "zustand";
 import { readJsonFromS3, writeJsonToS3 } from "../lib/s3-storage";
 import { invokeMetaAgent } from "../lib/agentcore-client";
 import { useUISettings } from "./ui-settings-store";
+import { writeAgentSkillFile, readAllAgentSkillFiles, computeSkillHash } from "../lib/agent-skill-storage";
 
 export interface AssistantMessage {
   id: string;
@@ -149,6 +150,23 @@ You are an AI assistant that helps users edit agent configurations. You modify a
 ${(formContext.system_prompt as string || "(empty)")}
 
 ${toolDefs ? `## Current Tool Code (source of truth)\n\`\`\`python\n${toolDefs}\n\`\`\`` : "## Tools\nNo tools defined yet."}
+
+${(() => {
+  const skills = (formContext.skills as Array<{ id: string; name: string; description: string; files: string[] }>) || [];
+  if (skills.length === 0) return "";
+  return `## Bound Skills
+${skills.map(s => `- ${s.name}: ${s.description} (files: ${s.files.join(", ")})`).join("\n")}
+
+When the user asks to modify a skill file, use __skill_edit format:
+\`\`\`__skill_edit:{skillId}:{filePath}
+<<<<<<< SEARCH
+exact text to find
+=======
+replacement text
+>>>>>>> REPLACE
+\`\`\`
+`;
+})()}
 
 ## User Request
 ${content}
@@ -371,6 +389,54 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
           editedFields.push(fieldName);
         }
         processedText = processedText.replace(fieldEditMatch[0], "");
+      }
+
+      // Post-stream: extract __skill_edit blocks (search/replace for skill files)
+      const skillEditRegex = /```__skill_edit:([^:]+):([^\n]*)\n([\s\S]*?)```/g;
+      let skillEditMatch;
+      const editedSkillFiles: string[] = [];
+
+      while ((skillEditMatch = skillEditRegex.exec(fullText)) !== null) {
+        const skillId = skillEditMatch[1].trim();
+        const filePath = skillEditMatch[2].trim();
+        const editBlock = skillEditMatch[3];
+        const pairRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
+        let pairMatch;
+
+        const skills = (formContext.skills as Array<{ id: string; files: string[] }>) || [];
+        const skill = skills.find(s => s.id === skillId);
+        if (!skill) continue;
+
+        const currentAgentId = get().agentId;
+        if (!currentAgentId) continue;
+
+        const { readAgentSkillFile: readFile } = await import("../lib/agent-skill-storage");
+        let currentContent = await readFile(currentAgentId, skillId, filePath);
+        if (currentContent === null) continue;
+
+        let applied = false;
+        while ((pairMatch = pairRegex.exec(editBlock)) !== null) {
+          const searchText = pairMatch[1];
+          const replaceText = pairMatch[2];
+          if (currentContent!.includes(searchText)) {
+            currentContent = currentContent!.split(searchText).join(replaceText);
+            applied = true;
+          }
+        }
+
+        if (applied) {
+          await writeAgentSkillFile(currentAgentId, skillId, filePath, currentContent!);
+          const allFiles = await readAllAgentSkillFiles(currentAgentId, skillId);
+          allFiles[filePath] = currentContent!;
+          const newHash = await computeSkillHash(allFiles);
+          onUpdate({ [`__skill_hash_${skillId}`]: newHash });
+          editedSkillFiles.push(`${skill.id}/${filePath}`);
+        }
+        processedText = processedText.replace(skillEditMatch[0], "");
+      }
+
+      if (editedSkillFiles.length > 0) {
+        editedFields.push(...editedSkillFiles.map(f => `skill:${f}`));
       }
 
       // Post-stream: extract __update JSON from the complete response

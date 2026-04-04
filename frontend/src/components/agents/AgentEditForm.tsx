@@ -14,6 +14,9 @@ import EditAssistant from "./EditAssistant";
 import { useUISettings } from "../../stores/ui-settings-store";
 import { preloadPyodide, checkPythonSyntax, isPyodideReady } from "../../lib/pyodide-checker";
 import { useTranslation } from "react-i18next";
+import SkillsSection from "./SkillsSection"
+import SkillDiffModal from "./SkillDiffModal"
+import type { AgentSkillEntry } from "../../lib/agent-metadata"
 
 function useIsDark() {
   const { theme } = useUISettings();
@@ -223,6 +226,7 @@ export default function AgentEditForm() {
   const [autoFixing, setAutoFixing] = useState(false);
   const [previewCode, setPreviewCode] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [diffSkill, setDiffSkill] = useState<AgentSkillEntry | null>(null)
 
   // Track which fields have changed
   const changedFields = useMemo(() => {
@@ -236,6 +240,16 @@ export default function AgentEditForm() {
     }
     preloadPyodide();
   }, [agentId]);
+
+  // Listen for skill diff modal open events from SkillsSection
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (detail?.skill) setDiffSkill(detail.skill)
+    }
+    window.addEventListener("open-skill-diff", handler)
+    return () => window.removeEventListener("open-skill-diff", handler)
+  }, [])
 
   // Load agent data when route param changes
   useEffect(() => {
@@ -877,6 +891,13 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
           </Field>
         </Section>
 
+        {/* Skills */}
+        <SkillsSection
+          skills={formData.skills || []}
+          agentId={agentId!}
+          deployedHashes={formData.deployedSkillHashes}
+        />
+
         {/* Tools */}
         <Section title={t("agentEditor.tools")} icon={<Code2 className="w-3.5 h-3.5" />} action={
           <button
@@ -971,6 +992,15 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
         </div>
       </div>
     )}
+      {/* Skill Diff Modal */}
+      {diffSkill && agentId && (
+        <SkillDiffModal
+          open={!!diffSkill}
+          onClose={() => setDiffSkill(null)}
+          agentId={agentId}
+          skill={diffSkill}
+        />
+      )}
     </div>
   );
 }

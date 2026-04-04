@@ -290,6 +290,13 @@ export default function EditAssistant() {
 
   const onUpdateHandler = (updates: Record<string, unknown>) => {
     for (const [key, value] of Object.entries(updates)) {
+      // Handle skill hash updates from __skill_edit
+      if (key.startsWith("__skill_hash_") && typeof value === "string") {
+        const skillId = key.replace("__skill_hash_", "");
+        const { updateSkillEntry } = useAgentEditStore.getState();
+        updateSkillEntry(skillId, { contentHash: value });
+        continue;
+      }
       if (key === "tool_definitions" && typeof value === "string" && formData?.tool_definitions) {
         // Sanitize: strip any non-@tool code (template boilerplate like _stream_with_tools, @app.entrypoint)
         const sanitized = (value as string)
