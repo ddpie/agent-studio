@@ -470,11 +470,20 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
       const { sendMessage, openPanel } = useEditAssistantStore.getState();
       openPanel(agentId!);
       const fixPrompt = `## Auto-Fix Task
-Fix these validation issues:
+Fix ONLY the following validation issues. Do NOT remove or rewrite any existing content.
 
+Issues:
 ${allIssues.map((issue, i) => `${i + 1}. ${issue}`).join("\n")}
 
-tool_names should be: ${funcNames.join(",") || "(extract from @tool functions)"}`;
+tool_names should be: ${funcNames.join(",") || "(extract from @tool functions)"}
+
+Rules:
+- Use __field_edit (search/replace) for system_prompt and tool_definitions. Do NOT use __update for these fields.
+- Use __update JSON ONLY for short fields (tool_names, description, etc.).
+- Fix ONLY the specific issues listed above.
+- NEVER delete existing content, sections, or descriptions.
+- NEVER shorten or summarize existing text.
+- Make minimal, surgical changes.`;
 
       await sendMessage(fixPrompt, { ...formData }, (updates) => {
         for (const [key, value] of Object.entries(updates)) {

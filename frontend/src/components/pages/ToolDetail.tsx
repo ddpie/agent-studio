@@ -494,7 +494,7 @@ export default function ToolDetail() {
                     setTimeout(() => {
                       const store = useToolAssistantStore.getState();
                       store.sendMessage(
-                        `## Auto-Fix Task\nFix the following validation issues in this tool code:\n${issues}\n\nOutput the complete fixed code.`,
+                        `## Auto-Fix Task\nFix the following validation issues using incremental edits (__tool_edit with SEARCH/REPLACE blocks):\n${issues}\n\nUse __tool_edit format, NOT __tool_update. Only change the lines that need fixing.`,
                         { name, description, category: "custom", code },
                         handleCodeUpdate,
                       );
