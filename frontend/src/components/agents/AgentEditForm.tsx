@@ -6,11 +6,13 @@ import { Loader2, Save, Plus, Trash2, Eye, EyeOff, Code2, MessageSquare, Setting
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router";
 import MonacoEditor, { DiffEditor } from "@monaco-editor/react";
+import type * as MonacoNS from "monaco-editor";
 import { MODEL_GROUPS } from "../../lib/models";
 import { writeJsonToS3 } from "../../lib/s3-storage";
 import ReactMarkdown from "react-markdown";
 import EditAssistant from "./EditAssistant";
 import { useUISettings } from "../../stores/ui-settings-store";
+import { preloadPyodide, checkPythonSyntax, isPyodideReady } from "../../lib/pyodide-checker";
 
 function useIsDark() {
   const { theme } = useUISettings();
@@ -220,6 +222,7 @@ export default function AgentEditForm() {
     if (agentId) {
       openPanel(agentId);
     }
+    preloadPyodide();
   }, [agentId]);
 
   // Load agent data when route param changes
@@ -1100,6 +1103,20 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
             onChange={(v) => { if (v !== undefined && v !== code) updateBlock(fullscreenIdx, v); }}
             language="python"
             theme="vs-dark"
+            onValidate={() => {
+              if (!isPyodideReady() || !code) return;
+              const monacoInstance = (window as unknown as { monaco?: typeof MonacoNS }).monaco;
+              if (!monacoInstance) return;
+              const model = monacoInstance.editor.getModels().find(m => m.getValue() === code);
+              if (!model) return;
+              const errors = checkPythonSyntax(code).map(e => ({
+                startLineNumber: e.line, endLineNumber: e.line,
+                startColumn: e.col || 1, endColumn: 1000,
+                message: e.msg,
+                severity: 8 as unknown as MonacoNS.MarkerSeverity,
+              }));
+              monacoInstance.editor.setModelMarkers(model, "python-lint", errors);
+            }}
             options={{ fontSize: 13, minimap: { enabled: true }, scrollBeyondLastLine: false, automaticLayout: true }}
           />
         </div>
@@ -1160,6 +1177,20 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
                   onChange={(v) => { if (v !== undefined && v !== code) updateBlock(idx, v); }}
                   language="python"
                   theme={isDark ? "vs-dark" : "light"}
+                  onValidate={() => {
+                    if (!isPyodideReady() || !code) return;
+                    const monacoInstance = (window as unknown as { monaco?: typeof MonacoNS }).monaco;
+                    if (!monacoInstance) return;
+                    const model = monacoInstance.editor.getModels().find(m => m.getValue() === code);
+                    if (!model) return;
+                    const errors = checkPythonSyntax(code).map(e => ({
+                      startLineNumber: e.line, endLineNumber: e.line,
+                      startColumn: e.col || 1, endColumn: 1000,
+                      message: e.msg,
+                      severity: 8 as unknown as MonacoNS.MarkerSeverity,
+                    }));
+                    monacoInstance.editor.setModelMarkers(model, "python-lint", errors);
+                  }}
                   options={{ fontSize: 12, minimap: { enabled: false }, scrollBeyondLastLine: false, automaticLayout: true, tabSize: 4 }}
                 />
               </div>
