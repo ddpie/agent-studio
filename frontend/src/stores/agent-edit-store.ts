@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { fetchAgentMetadata, type AgentMetadata } from "../lib/agent-metadata";
+import { fetchAgentMetadata, type AgentMetadata, type AgentSkillEntry } from "../lib/agent-metadata";
 import { extractToolsFromDeployment } from "../lib/tool-extractor";
 import { fetchAuthSession } from "aws-amplify/auth";
 import { agentConfig } from "../config";
@@ -20,6 +20,9 @@ interface AgentEditState {
   hasChanges: () => boolean;
   markSaved: () => void;
   getChangedFields: () => Record<string, { old: string; new: string }>;
+  addSkill: (entry: AgentSkillEntry) => void;
+  removeSkill: (skillId: string) => void;
+  updateSkillEntry: (skillId: string, updates: Partial<AgentSkillEntry>) => void;
 }
 
 /**
@@ -136,6 +139,7 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     }
 
     const data: Partial<AgentMetadata> = metadata || { name: agentName };
+    if (!data.skills) data.skills = [];
 
     // Extract tools from deployment.zip if:
     // 1. No tool_definitions at all, OR
@@ -161,6 +165,7 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
 
   openNewWithData: (data: Partial<AgentMetadata>) => {
     const draftId = `draft-${crypto.randomUUID().slice(0, 8)}`;
+    if (!data.skills) data.skills = [];
     // Inject built-in tool code async, update formData when done
     set({
       agentId: draftId,
@@ -203,5 +208,28 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
       }
     }
     return changes;
+  },
+
+  addSkill: (entry: AgentSkillEntry) => {
+    const { formData } = get();
+    if (!formData) return;
+    const skills = [...(formData.skills || []), entry];
+    set({ formData: { ...formData, skills } });
+  },
+
+  removeSkill: (skillId: string) => {
+    const { formData } = get();
+    if (!formData) return;
+    const skills = (formData.skills || []).filter(s => s.id !== skillId);
+    set({ formData: { ...formData, skills } });
+  },
+
+  updateSkillEntry: (skillId: string, updates: Partial<AgentSkillEntry>) => {
+    const { formData } = get();
+    if (!formData) return;
+    const skills = (formData.skills || []).map(s =>
+      s.id === skillId ? { ...s, ...updates } : s
+    );
+    set({ formData: { ...formData, skills } });
   },
 }));
