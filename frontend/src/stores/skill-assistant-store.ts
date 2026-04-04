@@ -35,7 +35,7 @@ interface SkillAssistantState {
   clearHistory: () => void;
 }
 
-const S3_KEY = (skillId: string) => `skills/${skillId}/assistant-history.json`;
+const S3_KEY = (skillId: string) => `skill-assistant/${skillId}/history.json`;
 
 let _abortController: AbortController | null = null;
 

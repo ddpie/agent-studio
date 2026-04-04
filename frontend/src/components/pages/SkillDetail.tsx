@@ -391,6 +391,8 @@ export default function SkillDetail() {
       }
       setLoadingContent(false);
     });
+    // Auto-open AI assistant
+    useSkillAssistantStore.getState().openPanel(skillId);
   }, [skillId]);
 
   const loadFile = useCallback(async (path: string) => {
