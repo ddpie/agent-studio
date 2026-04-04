@@ -492,76 +492,89 @@ export default function SkillDetail() {
     if (!result.valid) return; // Block save on errors
 
     setSaving(true);
+    const errors: string[] = [];
 
-    // 1. Execute deletes (individual files)
-    for (const path of pendingDeletes) {
-      await deleteSkillFile(skillId, path);
-    }
-
-    // 1b. Execute directory deletes (all files under dir)
-    for (const dir of pendingDeleteDirs) {
-      const dirFiles = skillFiles.filter(f => f.startsWith(dir + "/"));
-      for (const f of dirFiles) {
-        await deleteSkillFile(skillId, f);
+    try {
+      // 1. Execute deletes (individual files)
+      for (const path of pendingDeletes) {
+        try { await deleteSkillFile(skillId, path); }
+        catch { errors.push(`Failed to delete ${path}`); }
       }
-    }
 
-    // 2. Execute renames (copy + delete)
-    for (const [oldPath, newPath] of pendingRenames) {
-      if (!pendingDeletes.has(oldPath)) {
-        await renameSkillFile(skillId, oldPath, newPath);
+      // 1b. Execute directory deletes (all files under dir)
+      for (const dir of pendingDeleteDirs) {
+        const dirFiles = skillFiles.filter(f => f.startsWith(dir + "/"));
+        for (const f of dirFiles) {
+          try { await deleteSkillFile(skillId, f); }
+          catch { errors.push(`Failed to delete ${f}`); }
+        }
       }
-    }
 
-    // 3. Save created files
-    for (const [path, content] of pendingCreates) {
-      const edited = editedContents.get(path) ?? content;
-      await writeSkillFile(skillId, path, edited);
-    }
-
-    // 4. Save edited existing files
-    for (const path of changedFiles) {
-      if (pendingCreates.has(path) || pendingDeletes.has(path)) continue;
-      const content = editedContents.get(path);
-      if (content === undefined) continue;
-      // If renamed, save to new path
-      const actualPath = pendingRenames.get(path) ?? path;
-      await writeSkillFile(skillId, actualPath, content);
-    }
-
-    pendingCreates.clear();
-    pendingDeletes.clear();
-    pendingDeleteDirs.clear();
-    pendingRenames.clear();
-    editedContents.clear();
-    originalContents.clear();
-    setChangedFiles(new Set());
-    setPendingDeletes(new Set());
-    setPendingDeleteDirs(new Set());
-
-    // Refresh from S3
-    const [files, content] = await Promise.all([
-      listSkillFiles(skillId),
-      getSkillContent(skillId),
-    ]);
-    setSkillFiles(files);
-    if (content !== null) {
-      originalContents.set("SKILL.md", content);
-      if (currentPath === "SKILL.md") setSkillContent(content);
-      // Update header
-      const { parseFrontmatter } = await import("../../lib/skill-storage");
-      const meta = parseFrontmatter(content);
-      if (meta && skill) setSkill({ ...skill, name: meta.name, description: meta.description });
-    }
-    // Reload current file if not SKILL.md
-    if (currentPath !== "SKILL.md") {
-      const fc = await getSkillFile(skillId, currentPath);
-      if (fc !== null) {
-        setSkillContent(fc);
-        originalContents.set(currentPath, fc);
+      // 2. Execute renames (copy + delete)
+      for (const [oldPath, newPath] of pendingRenames) {
+        if (!pendingDeletes.has(oldPath)) {
+          try { await renameSkillFile(skillId, oldPath, newPath); }
+          catch { errors.push(`Failed to rename ${oldPath} → ${newPath}`); }
+        }
       }
+
+      // 3. Save created files
+      for (const [path, content] of pendingCreates) {
+        const edited = editedContents.get(path) ?? content;
+        try { await writeSkillFile(skillId, path, edited); }
+        catch { errors.push(`Failed to create ${path}`); }
+      }
+
+      // 4. Save edited existing files
+      for (const path of changedFiles) {
+        if (pendingCreates.has(path) || pendingDeletes.has(path)) continue;
+        const content = editedContents.get(path);
+        if (content === undefined) continue;
+        const actualPath = pendingRenames.get(path) ?? path;
+        try { await writeSkillFile(skillId, actualPath, content); }
+        catch { errors.push(`Failed to save ${actualPath}`); }
+      }
+
+      if (errors.length > 0) {
+        setValidationResult({ valid: false, errors, warnings: [] });
+        setSaving(false);
+        return; // Don't clear state — let user retry
+      }
+
+      // Success — clear staging state
+      pendingCreates.clear();
+      pendingDeletes.clear();
+      pendingDeleteDirs.clear();
+      pendingRenames.clear();
+      editedContents.clear();
+      originalContents.clear();
+      setChangedFiles(new Set());
+      setPendingDeletes(new Set());
+      setPendingDeleteDirs(new Set());
+
+      // Refresh from S3
+      const [files, content] = await Promise.all([
+        listSkillFiles(skillId),
+        getSkillContent(skillId),
+      ]);
+      setSkillFiles(files);
+      if (content !== null) {
+        originalContents.set("SKILL.md", content);
+        if (currentPath === "SKILL.md") setSkillContent(content);
+        const { parseFrontmatter } = await import("../../lib/skill-storage");
+        const meta = parseFrontmatter(content);
+        if (meta && skill) setSkill({ ...skill, name: meta.name, description: meta.description });
+      }
+      if (currentPath !== "SKILL.md") {
+        const fc = await getSkillFile(skillId, currentPath);
+        if (fc !== null) {
+          setSkillContent(fc);
+          originalContents.set(currentPath, fc);
+        }
+      }
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const handleDiscard = () => {
@@ -624,16 +637,24 @@ export default function SkillDetail() {
 
   const handleNewFile = async () => {
     if (!dialogInput.trim()) return;
+    const name = dialogInput.trim();
+    // Validate filename
+    if (/[<>:"|?*\\]/.test(name) || name.includes("..")) {
+      setValidationResult({ valid: false, errors: [`Invalid filename: ${name}`], warnings: [] });
+      return;
+    }
     const dir = newFileDialog?.parentDir;
-    const path = dir ? `${dir}/${dialogInput.trim()}` : dialogInput.trim();
-    // Stage locally — don't write to S3
+    const path = dir ? `${dir}/${name}` : name;
+    // Check for duplicates
+    if (virtualFiles.includes(path) || pendingCreates.has(path)) {
+      setValidationResult({ valid: false, errors: [`File already exists: ${path}`], warnings: [] });
+      return;
+    }
     pendingCreates.set(path, "");
     editedContents.set(path, "");
     setNewFileDialog(null);
     setDialogInput("");
-    // Trigger re-render
     setChangedFiles(new Set([...changedFiles, path]));
-    // Open the new file
     setSearchParams({ file: path });
     setSkillContent("");
   };
@@ -696,9 +717,18 @@ export default function SkillDetail() {
   const handleRename = async () => {
     if (!renameDialog || !dialogInput.trim()) return;
     const oldPath = renameDialog.path;
+    const name = dialogInput.trim();
+    if (/[<>:"|?*\\]/.test(name) || name.includes("..")) {
+      setValidationResult({ valid: false, errors: [`Invalid filename: ${name}`], warnings: [] });
+      return;
+    }
     const parts = oldPath.split("/");
-    parts[parts.length - 1] = dialogInput.trim();
+    parts[parts.length - 1] = name;
     const newPath = parts.join("/");
+    if (newPath !== oldPath && (virtualFiles.includes(newPath) || pendingCreates.has(newPath))) {
+      setValidationResult({ valid: false, errors: [`File already exists: ${newPath}`], warnings: [] });
+      return;
+    }
     stageMove(oldPath, newPath);
     setRenameDialog(null);
     setDialogInput("");
@@ -753,6 +783,18 @@ export default function SkillDetail() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [changedFiles.size]);
+
+  // Ctrl+S to save
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        if (hasPendingOps && !saving) handleSaveAll();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [hasPendingOps, saving]);
 
   // Sidebar collapse
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);

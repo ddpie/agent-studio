@@ -33,9 +33,15 @@ export async function getSkillContent(id: string): Promise<string | null> {
   return getSkillFile(id, "SKILL.md");
 }
 
+/** Validate file path to prevent traversal attacks */
+function sanitizePath(path: string): string {
+  return path.replace(/\.\./g, "").replace(/\/\//g, "/").replace(/^\//, "");
+}
+
 /** Read any file from a skill directory */
 export async function getSkillFile(id: string, path: string): Promise<string | null> {
   try {
+    const safePath = sanitizePath(path);
     const { credentials } = await fetchAuthSession();
     if (!credentials) return null;
 
@@ -54,7 +60,7 @@ export async function getSkillFile(id: string, path: string): Promise<string | n
     });
 
     const url = new URL(
-      `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/skills/${id}/${path}`
+      `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/skills/${id}/${safePath}`
     );
     const signed = await signer.sign({
       method: "GET",
@@ -92,6 +98,7 @@ export async function listSkillFiles(id: string): Promise<string[]> {
 /** Write any file to a skill directory. If writing SKILL.md, syncs index.json from frontmatter. */
 export async function writeSkillFile(id: string, path: string, content: string): Promise<boolean> {
   try {
+    const safePath = sanitizePath(path);
     const { credentials } = await fetchAuthSession();
     if (!credentials) return false;
 
@@ -110,12 +117,12 @@ export async function writeSkillFile(id: string, path: string, content: string):
     });
 
     const url = new URL(
-      `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/skills/${id}/${path}`
+      `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/skills/${id}/${safePath}`
     );
     const body = new TextEncoder().encode(content);
-    const contentType = path.endsWith(".py") ? "text/x-python"
-      : path.endsWith(".json") ? "application/json"
-      : path.endsWith(".md") ? "text/markdown"
+    const contentType = safePath.endsWith(".py") ? "text/x-python"
+      : safePath.endsWith(".json") ? "application/json"
+      : safePath.endsWith(".md") ? "text/markdown"
       : "text/plain";
 
     const signed = await signer.sign({
@@ -157,7 +164,7 @@ export async function writeSkillFile(id: string, path: string, content: string):
 
 /** Delete a single file from a skill directory */
 export async function deleteSkillFile(id: string, path: string): Promise<boolean> {
-  return deleteFromS3(`skills/${id}/${path}`);
+  return deleteFromS3(`skills/${id}/${sanitizePath(path)}`);
 }
 
 /** Rename/move a file within a skill directory (copy + delete, S3 has no rename) */

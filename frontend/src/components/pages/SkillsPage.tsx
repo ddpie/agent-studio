@@ -87,7 +87,7 @@ ${desc || "TODO: Add skill instructions here."}
 
   const filtered = (showTrash ? trashedSkills : skills).filter(
     (s) => !search || s.name.toLowerCase().includes(search.toLowerCase())
-      || s.description.toLowerCase().includes(search.toLowerCase())
+      || (s.description || "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
