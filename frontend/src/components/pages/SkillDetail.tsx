@@ -1157,6 +1157,7 @@ export default function SkillDetail() {
                 </pre>
               </div>
             )}
+            </div>
           ) : (
             <p className="text-sm text-gray-400 p-6">Failed to load content.</p>
           )}
