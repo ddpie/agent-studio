@@ -5,6 +5,7 @@
 import { create } from "zustand";
 import { readJsonFromS3, writeJsonToS3 } from "../lib/s3-storage";
 import { invokeMetaAgent } from "../lib/agentcore-client";
+import { useUISettings } from "./ui-settings-store";
 
 export interface AssistantMessage {
   id: string;
@@ -281,6 +282,14 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
 - Respond in the same language the user uses.
 - Be professional and concise.`;
 
+    // Inject language instruction based on user settings
+    const lang = useUISettings.getState().language;
+    const LANG_INSTRUCTIONS: Record<string, string> = {
+      zh: "\n\n## Language\n请用中文回复。所有解释、计划确认、错误提示都用中文。代码和技术标识符保持英文。",
+      en: "\n\n## Language\nRespond in English. All explanations, plan confirmations, and error messages in English. Keep code and technical identifiers as-is.",
+    };
+    const finalPrompt = contextPrompt + (LANG_INSTRUCTIONS[lang] ?? LANG_INSTRUCTIONS.en);
+
     // Build history (exclude tool_definitions from context to save tokens)
     const history = get()
       .messages.filter((m) => m.id !== assistantMsg.id && m.content)
@@ -290,7 +299,7 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
       }));
 
     try {
-      const stream = invokeMetaAgent(contextPrompt, history, undefined, undefined, undefined, get().selectedModelId || undefined);
+      const stream = invokeMetaAgent(finalPrompt, history, undefined, undefined, undefined, get().selectedModelId || undefined);
 
       let pendingText = "";
       let flushTimer: ReturnType<typeof setTimeout> | null = null;

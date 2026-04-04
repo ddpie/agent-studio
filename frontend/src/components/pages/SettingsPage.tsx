@@ -1,11 +1,13 @@
 import { Settings, User, Download, Trash2, Database, Shield, Sun, Moon, Monitor, Languages } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useUISettings } from "../../stores/ui-settings-store";
 
 export default function SettingsPage() {
+  const { t } = useTranslation();
   const { sidebarWidth, inputHeight, theme, language, setSidebarWidth, setInputHeight, setTheme, setLanguage } = useUISettings();
 
   const clearLocalStorage = () => {
-    if (window.confirm("Clear all local data? This will reset chat history, sessions, and UI settings.")) {
+    if (window.confirm(t("settings.clearConfirm"))) {
       localStorage.clear();
       window.location.reload();
     }
@@ -27,36 +29,36 @@ export default function SettingsPage() {
   return (
     <div className="max-w-2xl mx-auto p-6">
       <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2 mb-5">
-        <Settings className="w-4 h-4" /> Settings
+        <Settings className="w-4 h-4" /> {t("settings.title")}
       </h2>
 
       <div className="space-y-4">
         {/* UI Preferences */}
         <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-          <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3">Interface</h3>
+          <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3">{t("settings.interface")}</h3>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Sidebar width</p>
-                <p className="text-[10px] text-gray-400">Current: {sidebarWidth}px</p>
+                <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{t("settings.sidebarWidth")}</p>
+                <p className="text-[10px] text-gray-400">{t("settings.currentValue", { value: sidebarWidth })}</p>
               </div>
               <button
                 onClick={() => setSidebarWidth(224)}
                 className="text-[10px] px-2 py-1 border border-gray-200 dark:border-gray-700 rounded text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
               >
-                Reset to default
+                {t("common.reset")}
               </button>
             </div>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-gray-700 dark:text-gray-300">Input area height</p>
-                <p className="text-[10px] text-gray-400">Current: {inputHeight}px</p>
+                <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{t("settings.inputHeight")}</p>
+                <p className="text-[10px] text-gray-400">{t("settings.currentValue", { value: inputHeight })}</p>
               </div>
               <button
                 onClick={() => setInputHeight(44)}
                 className="text-[10px] px-2 py-1 border border-gray-200 dark:border-gray-700 rounded text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
               >
-                Reset to default
+                {t("common.reset")}
               </button>
             </div>
           </div>
@@ -64,12 +66,12 @@ export default function SettingsPage() {
 
         {/* Theme */}
         <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-          <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3">Theme</h3>
+          <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3">{t("settings.theme")}</h3>
           <div className="flex gap-2">
             {([
-              { id: "light" as const, icon: Sun, label: "Light" },
-              { id: "dark" as const, icon: Moon, label: "Dark" },
-              { id: "system" as const, icon: Monitor, label: "System" },
+              { id: "light" as const, icon: Sun, label: t("settings.light") },
+              { id: "dark" as const, icon: Moon, label: t("settings.dark") },
+              { id: "system" as const, icon: Monitor, label: t("settings.system") },
             ]).map(({ id, icon: Icon, label }) => (
               <button
                 key={id}
@@ -89,9 +91,9 @@ export default function SettingsPage() {
         {/* Language */}
         <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-            <Languages className="w-3.5 h-3.5" /> Language
+            <Languages className="w-3.5 h-3.5" /> {t("settings.language")}
           </h3>
-          <p className="text-[10px] text-gray-400 mb-2">Display and AI response language</p>
+          <p className="text-[10px] text-gray-400 mb-2">{t("settings.languageDesc")}</p>
           <div className="flex gap-2">
             {([
               { id: "zh" as const, label: "中文" },
@@ -115,27 +117,27 @@ export default function SettingsPage() {
         {/* Profile */}
         <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-            <User className="w-3.5 h-3.5" /> Account
+            <User className="w-3.5 h-3.5" /> {t("settings.account")}
           </h3>
-          <p className="text-xs text-gray-500">Managed by Amazon Cognito. Sign out from the top bar to switch accounts.</p>
+          <p className="text-xs text-gray-500">{t("settings.accountDesc")}</p>
         </section>
 
         {/* Infrastructure Info */}
         <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-            <Database className="w-3.5 h-3.5" /> Infrastructure
+            <Database className="w-3.5 h-3.5" /> {t("settings.infrastructure")}
           </h3>
           <div className="space-y-1.5 text-xs text-gray-500">
             <div className="flex justify-between">
-              <span>Region</span>
+              <span>{t("settings.region")}</span>
               <span className="font-mono text-gray-700 dark:text-gray-300">{import.meta.env.VITE_AGENTCORE_REGION || "—"}</span>
             </div>
             <div className="flex justify-between">
-              <span>Storage</span>
+              <span>{t("settings.storage")}</span>
               <span className="font-mono text-gray-700 dark:text-gray-300">S3 + DynamoDB</span>
             </div>
             <div className="flex justify-between">
-              <span>Auth</span>
+              <span>{t("settings.auth")}</span>
               <span className="font-mono text-gray-700 dark:text-gray-300">Cognito</span>
             </div>
           </div>
@@ -144,20 +146,20 @@ export default function SettingsPage() {
         {/* Data */}
         <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
           <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-            <Shield className="w-3.5 h-3.5" /> Data
+            <Shield className="w-3.5 h-3.5" /> {t("settings.data")}
           </h3>
           <div className="flex gap-2">
             <button
               onClick={exportAgents}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
-              <Download className="w-3.5 h-3.5" /> Export local data
+              <Download className="w-3.5 h-3.5" /> {t("settings.exportLocal")}
             </button>
             <button
               onClick={clearLocalStorage}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-red-200 rounded-lg text-red-600 hover:bg-red-50"
             >
-              <Trash2 className="w-3.5 h-3.5" /> Clear local data
+              <Trash2 className="w-3.5 h-3.5" /> {t("settings.clearLocal")}
             </button>
           </div>
         </section>
