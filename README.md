@@ -7,37 +7,28 @@
 ```mermaid
 graph TB
     User((用户))
+    FE[Web Console]
+    META[Meta-Agent]
 
-    subgraph 前端
-        FE[Web Console]
-    end
-
-    subgraph AgentCore Runtime
-        META[Meta-Agent]
+    subgraph 自然语言创建 / 编辑
         A1[客服 Agent]
         A2[数据分析 Agent]
-        A3[... 更多 Agent]
+        A3[...]
+        Skills[Skills]
+        Tools[自定义工具]
     end
 
-    subgraph 能力
-        Skills[Skill 系统]
-        Tools[预构建工具库]
-        MCP[MCP Gateway]
-    end
+    MCP[MCP Gateway]
+    S3[(S3)]
+    DDB[(DynamoDB)]
 
-    subgraph AWS 服务
-        S3[(S3)]
-        DDB[(DynamoDB)]
-        CW[CloudWatch]
-    end
-
-    User -->|自然语言创建 / 编辑| FE
-    User -->|对话| A1 & A2
-    FE --> META
-    META -->|创建 / 管理| A1 & A2 & A3
-    META --- S3 & DDB & CW
-    A1 & A2 & A3 --- Skills & Tools & MCP
-    Skills & Tools --- S3
+    User --> FE --> META
+    META --> A1 & A2 & A3
+    META --> Skills & Tools
+    META --- S3 & DDB
+    A1 & A2 --- MCP
+    A1 & A2 --- Skills
+    User -->|对话| A1
 ```
 
 - **Frontend** — React 19 + Vite + Tailwind + Zustand，Cognito 认证，SigV4 签名直连 AgentCore / S3
@@ -115,37 +106,28 @@ AI agent orchestration platform on AWS Bedrock AgentCore. Create, manage, and ru
 ```mermaid
 graph TB
     User((User))
+    FE[Web Console]
+    META[Meta-Agent]
 
-    subgraph Frontend
-        FE[Web Console]
-    end
-
-    subgraph AgentCore Runtime
-        META[Meta-Agent]
+    subgraph Create / Edit via Natural Language
         A1[Customer Service Agent]
         A2[Data Analyst Agent]
-        A3[... more Agents]
+        A3[...]
+        Skills[Skills]
+        Tools[Custom Tools]
     end
 
-    subgraph Capabilities
-        Skills[Skill System]
-        Tools[Built-in Tool Library]
-        MCP[MCP Gateway]
-    end
+    MCP[MCP Gateway]
+    S3[(S3)]
+    DDB[(DynamoDB)]
 
-    subgraph AWS Services
-        S3[(S3)]
-        DDB[(DynamoDB)]
-        CW[CloudWatch]
-    end
-
-    User -->|Create / Edit via NL| FE
-    User -->|Chat| A1 & A2
-    FE --> META
-    META -->|Create / Manage| A1 & A2 & A3
-    META --- S3 & DDB & CW
-    A1 & A2 & A3 --- Skills & Tools & MCP
-    Skills & Tools --- S3
+    User --> FE --> META
+    META --> A1 & A2 & A3
+    META --> Skills & Tools
+    META --- S3 & DDB
+    A1 & A2 --- MCP
+    A1 & A2 --- Skills
+    User -->|Chat| A1
 ```
 
 ## Project Structure
