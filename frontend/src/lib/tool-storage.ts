@@ -125,28 +125,26 @@ export async function putToolItem(tool: ToolTemplate): Promise<void> {
       created_at: { S: tool.created_at || now },
       updated_at: { S: now },
     },
-    // Prevent overwriting other users' tools
-    ConditionExpression: "attribute_not_exists(toolId) OR #o = :owner OR #o = :builtin",
+    // Prevent overwriting other users' tools (seed tools with owner=__builtin__ are protected)
+    ConditionExpression: "attribute_not_exists(toolId) OR #o = :owner",
     ExpressionAttributeNames: { "#o": "owner" },
     ExpressionAttributeValues: {
       ":owner": { S: username },
-      ":builtin": { S: "__builtin__" },
     },
   });
 }
 
-/** Delete a tool (allows deleting own tools and seed tools) */
+/** Delete a tool (only own tools — seed tools must be edited first to take ownership) */
 export async function deleteToolItem(toolId: string): Promise<void> {
   const { username } = await getCurrentUser();
 
   await ddbRequest("DeleteItem", {
     TableName: TABLE,
     Key: { toolId: { S: toolId } },
-    ConditionExpression: "#o = :owner OR #o = :builtin",
+    ConditionExpression: "#o = :owner",
     ExpressionAttributeNames: { "#o": "owner" },
     ExpressionAttributeValues: {
       ":owner": { S: username },
-      ":builtin": { S: "__builtin__" },
     },
   });
 }
