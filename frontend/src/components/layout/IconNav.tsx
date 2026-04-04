@@ -1,10 +1,11 @@
 // src/components/layout/IconNav.tsx
 import { NavLink } from "react-router";
-import { Bot, Package, Plug, Settings } from "lucide-react";
+import { Bot, Package, Wrench, Plug, Settings } from "lucide-react";
 
 const navItems = [
   { to: "/agents", icon: Bot, label: "Agents" },
   { to: "/skills", icon: Package, label: "Skills" },
+  { to: "/tools", icon: Wrench, label: "Tools" },
   { to: "/mcp", icon: Plug, label: "MCP" },
 ] as const;
 

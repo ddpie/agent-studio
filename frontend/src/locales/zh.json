@@ -229,5 +229,41 @@
     "fileTooLarge": "文件 {{name}} 太大（最大 5MB）",
     "uploadFailed": "{{name}} 上传失败",
     "clickDownload": "点击下载"
+  },
+  "tools": {
+    "title": "工具库",
+    "subtitle": "为你的 Agent 提供可复用的工具模板",
+    "searchPlaceholder": "搜索工具...",
+    "myTools": "我的工具",
+    "builtinTools": "内置工具",
+    "noTools": "暂无自定义工具",
+    "noMatching": "没有匹配的工具",
+    "createHint": "点击「创建」来构建你的第一个工具",
+    "createTool": "创建工具",
+    "name": "名称",
+    "namePlaceholder": "my-tool",
+    "description": "描述",
+    "descPlaceholder": "这个工具做什么？",
+    "category": "分类",
+    "builtin": "内置",
+    "custom": "自定义",
+    "readOnly": "内置工具为只读",
+    "toolNotFound": "工具未找到",
+    "deleteConfirm": "删除此工具？此操作不可撤销。",
+    "saveFailed": "保存工具失败",
+    "deleteFailed": "删除工具失败",
+    "nameConflict": "已存在同名工具",
+    "builtinConflict": "不能使用与内置工具相同的名称",
+    "missingDecorator": "代码必须包含 @tool 装饰器函数",
+    "showChanges": "查看更改",
+    "hideChanges": "隐藏更改"
+  },
+  "toolEditor": {
+    "describeChange": "描述你想构建或修改的内容...",
+    "askModify": "让我帮你编写或修改这个工具。",
+    "suggestion1": "编写一个从 API 获取数据的工具",
+    "suggestion2": "添加输入验证和错误处理",
+    "suggestion3": "优化工具性能",
+    "toolUpdated": "工具代码已更新"
   }
 }

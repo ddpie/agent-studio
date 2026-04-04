@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate, useSearchParams, useBlocker } from "react-router";
+import { useTranslation } from "react-i18next";
 import {
   ChevronLeft, Trash2, Loader2, Save, GitCompare,
   FileText, FolderOpen, FolderClosed, File, ChevronRight as ChevronRightIcon,
@@ -232,6 +233,7 @@ function DiffModal({ changes, onClose, isDark }: {
   onClose: () => void;
   isDark: boolean;
 }) {
+  const { t } = useTranslation();
   const entries = [...changes.entries()];
   const [activeIdx, setActiveIdx] = useState(0);
 
@@ -252,7 +254,7 @@ function DiffModal({ changes, onClose, isDark }: {
         <div className={`flex items-center justify-between px-4 py-3 border-b ${isDark ? "border-gray-700" : "border-gray-200"}`}>
           <div className="flex items-center gap-3">
             <GitCompare className="w-4 h-4 text-blue-600" />
-            <span className={`text-sm font-semibold ${isDark ? "text-gray-200" : "text-gray-800"}`}>Changes</span>
+            <span className={`text-sm font-semibold ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.changes")}</span>
             <div className="flex items-center gap-1">
               {entries.map(([p], i) => (
                 <button key={p} onClick={() => setActiveIdx(i)}
@@ -293,6 +295,7 @@ export default function SkillDetail() {
   const { skillId } = useParams<{ skillId: string }>();
   const navigate = useNavigate();
   const isDark = useIsDark();
+  const { t } = useTranslation();
   const [skill, setSkill] = useState<SkillIndexEntry | null>(null);
   const [skillContent, setSkillContent] = useState<string | null>(null);
   const [skillFiles, setSkillFiles] = useState<string[]>([]);
@@ -881,8 +884,8 @@ export default function SkillDetail() {
         )}
         {getFileIcon(node.data.name, isFolder, node.isOpen)}
         <span className="truncate flex-1">{node.data.name}</span>
-        {isNew && <span className="text-[9px] text-green-500 font-medium">NEW</span>}
-        {isDeleted && <span className="text-[9px] text-red-400 font-medium">DEL</span>}
+        {isNew && <span className="text-[9px] text-green-500 font-medium">{t("skillEditor.newTag")}</span>}
+        {isDeleted && <span className="text-[9px] text-red-400 font-medium">{t("skillEditor.delTag")}</span>}
         {isChanged && !isDeleted && !isNew && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />}
       </div>
     );
@@ -900,7 +903,7 @@ export default function SkillDetail() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className={`flex items-center gap-3 px-6 py-3 border-b ${isDark ? "border-gray-700" : "border-gray-200"}`}>
-        <button onClick={() => navigate("/skills")} className={`p-1 rounded ${isDark ? "hover:bg-gray-800 text-gray-300" : "hover:bg-gray-100 text-gray-600"}`}>
+        <button onClick={() => navigate("/skills")} className={`p-1 rounded ${isDark ? "hover:bg-gray-800 text-gray-300" : "hover:bg-gray-100 text-gray-600"}`} title={t("common.back")}>
           <ChevronLeft className="w-4 h-4" />
         </button>
         <div className="flex-1 min-w-0">
@@ -975,19 +978,19 @@ export default function SkillDetail() {
         }}
           className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors disabled:opacity-50 ${isDark ? "text-gray-400 hover:text-green-400 hover:bg-green-900/30" : "text-gray-500 hover:text-green-600 hover:bg-green-50"}`}>
           <ShieldCheck className="w-3.5 h-3.5" />
-          Validate
+          {t("common.validate")}
         </button>
         {hasPendingOps && (
           <button onClick={() => setShowDiff(true)}
             className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${isDark ? "text-gray-400 hover:text-blue-400 hover:bg-blue-900/30" : "text-gray-500 hover:text-blue-600 hover:bg-blue-50"}`}>
             <GitCompare className="w-3.5 h-3.5" />
-            Diff ({pendingCount})
+            {t("skillEditor.diff", { count: pendingCount })}
           </button>
         )}
         {hasPendingOps && (
           <button onClick={handleDiscard}
             className={`px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${isDark ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"}`}>
-            Discard
+            {t("common.discard")}
           </button>
         )}
         {hasPendingOps && (
@@ -996,7 +999,7 @@ export default function SkillDetail() {
           <button onClick={handleSaveAll} disabled={saving}
             className="flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 shadow-sm transition-all">
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-            Save ({pendingCount})
+            {t("skillEditor.save", { count: pendingCount })}
           </button>
           </>
         )}
@@ -1036,10 +1039,10 @@ export default function SkillDetail() {
                     : "text-amber-600"
               }`}>
                 {!validationResult.valid
-                  ? "Validation failed — fix errors before saving"
+                  ? t("validation.failed")
                   : validationResult.errors.length === 0 && validationResult.warnings.length === 0
-                    ? "No issues found"
-                    : "Warnings"}
+                    ? t("validation.noIssues")
+                    : t("validation.warnings")}
               </p>
             </div>
             {validationResult.errors.map((e, i) => (
@@ -1073,9 +1076,9 @@ export default function SkillDetail() {
                 }}
                   className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-green-600 text-white rounded hover:bg-green-700 transition-colors">
                   <Sparkles className="w-3 h-3" />
-                  Auto-fix
+                  {t("common.autoFix")}
                 </button>
-                <button onClick={() => setValidationResult(null)} className="text-[10px] text-gray-400 hover:text-gray-600">Dismiss</button>
+                <button onClick={() => setValidationResult(null)} className="text-[10px] text-gray-400 hover:text-gray-600">{t("common.dismiss")}</button>
               </div>
             )}
           </div>
@@ -1091,17 +1094,17 @@ export default function SkillDetail() {
               <div className="flex items-center gap-0.5">
                 <button onClick={() => { setNewFileDialog({ parentDir: "" }); setDialogInput(""); }}
                   className={`p-0.5 rounded ${isDark ? "hover:bg-gray-600 text-gray-500 hover:text-gray-300" : "hover:bg-gray-200 text-gray-400 hover:text-gray-600"}`}
-                  title="New file">
+                  title={t("skillEditor.newFile")}>
                   <Plus className="w-3.5 h-3.5" />
                 </button>
                 <button onClick={() => { setNewFolderDialog(true); setNewFolderParent(""); setDialogInput(""); }}
                   className={`p-0.5 rounded ${isDark ? "hover:bg-gray-600 text-gray-500 hover:text-gray-300" : "hover:bg-gray-200 text-gray-400 hover:text-gray-600"}`}
-                  title="New folder">
+                  title={t("skillEditor.newFolder")}>
                   <FolderPlus className="w-3.5 h-3.5" />
                 </button>
                 <button onClick={() => setSidebarCollapsed(true)}
                   className={`p-0.5 rounded ${isDark ? "hover:bg-gray-600 text-gray-500 hover:text-gray-300" : "hover:bg-gray-200 text-gray-400 hover:text-gray-600"}`}
-                  title="Hide sidebar">
+                  title={t("skillEditor.hideSidebar")}>
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -1138,7 +1141,7 @@ export default function SkillDetail() {
         {sidebarCollapsed && (
           <button onClick={() => setSidebarCollapsed(false)}
             className={`flex-shrink-0 px-1 py-4 border-r ${isDark ? "border-gray-700 bg-[#252526] text-gray-500 hover:text-gray-300" : "border-gray-200 bg-gray-50 text-gray-400 hover:text-gray-600"}`}
-            title="Show sidebar">
+            title={t("skillEditor.showSidebar")}>
             <ChevronRightIcon className="w-3.5 h-3.5" />
           </button>
         )}
@@ -1186,10 +1189,10 @@ export default function SkillDetail() {
                     className={`ml-2 flex items-center gap-1 px-2 py-0.5 text-[11px] rounded ${
                       isDark ? "text-green-400 hover:bg-green-900/30" : "text-green-600 hover:bg-green-50"
                     } transition-colors disabled:opacity-50`}
-                    title="Run script via Meta-Agent"
+                    title={t("skillEditor.runScript")}
                   >
                     {running ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-                    Run
+                    {t("common.run")}
                   </button>
                 )}
               </div>
@@ -1282,8 +1285,8 @@ export default function SkillDetail() {
               {runOutput !== null && (
                 <div className={`border-t flex-shrink-0 ${isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-gray-50"} max-h-48 overflow-auto`}>
                   <div className={`flex items-center justify-between px-3 py-1 ${isDark ? "bg-gray-800" : "bg-gray-100"}`}>
-                    <span className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? "text-gray-500" : "text-gray-400"}`}>Output</span>
-                    <button onClick={() => setRunOutput(null)} className={`text-[10px] ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-600"}`}>Close</button>
+                    <span className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? "text-gray-500" : "text-gray-400"}`}>{t("skillEditor.output")}</span>
+                    <button onClick={() => setRunOutput(null)} className={`text-[10px] ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-600"}`}>{t("common.close")}</button>
                   </div>
                   <pre className={`px-3 py-2 text-[11px] font-mono whitespace-pre-wrap ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                     {runOutput}
@@ -1331,13 +1334,13 @@ export default function SkillDetail() {
       {blocker.state === "blocked" && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
           <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-xl shadow-2xl p-5 max-w-sm mx-4`}>
-            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>Unsaved changes</p>
+            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.unsavedChanges")}</p>
             <p className="text-xs text-gray-500 mb-4">
-              You have {changedFiles.size} unsaved file{changedFiles.size > 1 ? "s" : ""}. Leaving will discard your changes.
+              {t("skillEditor.unsavedDesc", { count: changedFiles.size })}
             </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => blocker.reset?.()} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>Stay</button>
-              <button onClick={() => blocker.proceed?.()} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">Discard & Leave</button>
+              <button onClick={() => blocker.reset?.()} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>{t("skillEditor.stay")}</button>
+              <button onClick={() => blocker.proceed?.()} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">{t("skillEditor.discardLeave")}</button>
             </div>
           </div>
         </div>
@@ -1346,13 +1349,13 @@ export default function SkillDetail() {
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setShowDeleteConfirm(false)}>
           <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-xl shadow-2xl p-5 max-w-sm mx-4`} onClick={e => e.stopPropagation()}>
-            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>Move to trash?</p>
+            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.moveToTrash")}</p>
             <p className="text-xs text-gray-500 mb-4">
               <span className={`font-mono font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>{skill?.name}</span> will be moved to trash. You can restore it later from the Skills page.
             </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setShowDeleteConfirm(false)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>Cancel</button>
-              <button onClick={handleDelete} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">Move to Trash</button>
+              <button onClick={() => setShowDeleteConfirm(false)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>{t("common.cancel")}</button>
+              <button onClick={handleDelete} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">{t("skillEditor.moveToTrashBtn")}</button>
             </div>
           </div>
         </div>
@@ -1413,7 +1416,7 @@ export default function SkillDetail() {
               value={dialogInput}
               onChange={e => setDialogInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") handleNewFile(); if (e.key === "Escape") setNewFileDialog(null); }}
-              placeholder="filename.py"
+              placeholder={t("skillEditor.filenamePlaceholder")}
               className={`w-full px-2.5 py-1.5 text-xs border rounded-lg outline-none ${isDark ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-800"} focus:ring-1 focus:ring-blue-500`}
             />
             <div className="flex justify-end gap-2 mt-3">
@@ -1434,7 +1437,7 @@ export default function SkillDetail() {
               value={dialogInput}
               onChange={e => setDialogInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") handleNewFolder(); if (e.key === "Escape") setNewFolderDialog(false); }}
-              placeholder="folder-name"
+              placeholder={t("skillEditor.folderPlaceholder")}
               className={`w-full px-2.5 py-1.5 text-xs border rounded-lg outline-none ${isDark ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-800"} focus:ring-1 focus:ring-blue-500`}
             />
             <div className="flex justify-end gap-2 mt-3">

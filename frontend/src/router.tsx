@@ -5,6 +5,8 @@ import ChatPanel from "./components/chat/ChatPanel";
 import AgentEditForm from "./components/agents/AgentEditForm";
 import SkillsPage from "./components/pages/SkillsPage";
 import SkillDetail from "./components/pages/SkillDetail";
+import ToolLibraryPage from "./components/pages/ToolLibraryPage";
+import ToolDetail from "./components/pages/ToolDetail";
 import McpPage from "./components/pages/McpPage";
 import SettingsPage from "./components/pages/SettingsPage";
 
@@ -29,6 +31,8 @@ export function createRouter(
         },
         { path: "skills", element: <SkillsPage /> },
         { path: "skills/:skillId", element: <SkillDetail /> },
+        { path: "tools", element: <ToolLibraryPage /> },
+        { path: "tools/:toolId", element: <ToolDetail /> },
         { path: "mcp", element: <McpPage /> },
         { path: "settings", element: <SettingsPage /> },
       ],

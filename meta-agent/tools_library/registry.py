@@ -15,6 +15,18 @@ _ALL_TOOLS = [
 ]
 
 
+def _get_ddb_client():
+    """Lazy-init DynamoDB client."""
+    import boto3
+    from config import REGION
+    return boto3.client("dynamodb", region_name=REGION)
+
+
+def _get_tools_table():
+    from config import TOOLS_TABLE
+    return TOOLS_TABLE
+
+
 @tool
 def list_tool_library() -> str:
     """List all pre-built tools available in the tool library.
@@ -73,10 +85,25 @@ def get_tool_library_code(tool_ids: str) -> str:
 
 
 def get_tool_code_by_func_name(func_name: str) -> str | None:
-    """Get the Python code for a tool by its function name (e.g., 's3_read')."""
+    """Get the Python code for a tool by its function name (e.g., 's3_read').
+
+    Checks in-memory registry first, then falls back to DynamoDB for user-created tools.
+    """
     for mod in _ALL_TOOLS:
         if func_name in [n.strip() for n in mod.TOOL_NAMES.split(",")]:
             return mod.TOOL_CODE
+    # Fallback: check DynamoDB for user-created tools
+    try:
+        ddb = _get_ddb_client()
+        resp = ddb.get_item(
+            TableName=_get_tools_table(),
+            Key={"toolId": {"S": func_name}},
+        )
+        item = resp.get("Item")
+        if item and "code" in item:
+            return item["code"]["S"]
+    except Exception:
+        pass
     return None
 
 
@@ -128,16 +155,73 @@ def build_tool_catalog() -> dict:
                 "description": meta["description"],
                 "category": meta["category"],
                 "code": mod.TOOL_CODE.strip(),
+                "builtin": True,
             }
     return catalog
 
 
 def upload_tool_catalog():
-    """Generate and upload tool-catalog.json to S3."""
+    """Sync built-in tools to DynamoDB, then generate and upload tool-catalog.json to S3.
+
+    1. Upsert built-in tools to DDB (only overwrite existing builtin entries, not user tools)
+    2. Scan all tools from DDB (builtin + user-created)
+    3. Upload combined catalog to S3
+    """
     import boto3
     from config import REGION, S3_BUCKET
 
-    catalog = build_tool_catalog()
+    ddb = _get_ddb_client()
+    table = _get_tools_table()
+    now = __import__("datetime").datetime.utcnow().isoformat() + "Z"
+
+    # 1. Upsert built-in tools to DDB
+    for mod in _ALL_TOOLS:
+        meta = mod.TOOL_META
+        for func_name in [n.strip() for n in mod.TOOL_NAMES.split(",") if n.strip()]:
+            try:
+                ddb.put_item(
+                    TableName=table,
+                    Item={
+                        "toolId": {"S": func_name},
+                        "name": {"S": meta["name"]},
+                        "description": {"S": meta["description"]},
+                        "category": {"S": meta["category"]},
+                        "code": {"S": mod.TOOL_CODE.strip()},
+                        "builtin": {"BOOL": True},
+                        "owner": {"S": ""},
+                        "visibility": {"S": "shared"},
+                        "created_at": {"S": now},
+                        "updated_at": {"S": now},
+                    },
+                    ConditionExpression="attribute_not_exists(toolId) OR builtin = :true",
+                    ExpressionAttributeValues={":true": {"BOOL": True}},
+                )
+            except ddb.exceptions.ConditionalCheckFailedException:
+                # User has a tool with the same name — don't overwrite
+                pass
+            except Exception as e:
+                print(f"Warning: Failed to upsert tool '{func_name}' to DDB: {e}")
+
+    # 2. Scan all tools from DDB to build catalog
+    catalog = {}
+    try:
+        paginator = ddb.get_paginator("scan")
+        for page in paginator.paginate(TableName=table):
+            for item in page.get("Items", []):
+                tool_id = item["toolId"]["S"]
+                catalog[tool_id] = {
+                    "id": tool_id,
+                    "name": item.get("name", {}).get("S", tool_id),
+                    "description": item.get("description", {}).get("S", ""),
+                    "category": item.get("category", {}).get("S", "custom"),
+                    "code": item.get("code", {}).get("S", ""),
+                    "builtin": item.get("builtin", {}).get("BOOL", False),
+                }
+    except Exception as e:
+        print(f"Warning: DDB scan failed, falling back to in-memory catalog: {e}")
+        catalog = build_tool_catalog()
+
+    # 3. Upload to S3
     s3 = boto3.client("s3", region_name=REGION)
     s3.put_object(
         Bucket=S3_BUCKET,

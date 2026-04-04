@@ -229,5 +229,41 @@
     "fileTooLarge": "File {{name}} is too large (max 5MB)",
     "uploadFailed": "Upload failed for {{name}}",
     "clickDownload": "Click to download"
+  },
+  "tools": {
+    "title": "Tool Library",
+    "subtitle": "Reusable tool templates for your agents",
+    "searchPlaceholder": "Search tools...",
+    "myTools": "My Tools",
+    "builtinTools": "Built-in Tools",
+    "noTools": "No custom tools yet",
+    "noMatching": "No matching tools",
+    "createHint": "Click \"Create\" to build your first tool",
+    "createTool": "Create Tool",
+    "name": "Name",
+    "namePlaceholder": "my-tool",
+    "description": "Description",
+    "descPlaceholder": "What does this tool do?",
+    "category": "Category",
+    "builtin": "Built-in",
+    "custom": "Custom",
+    "readOnly": "Built-in tools are read-only",
+    "toolNotFound": "Tool not found",
+    "deleteConfirm": "Delete this tool? This cannot be undone.",
+    "saveFailed": "Failed to save tool",
+    "deleteFailed": "Failed to delete tool",
+    "nameConflict": "A tool with this function name already exists",
+    "builtinConflict": "Cannot use the same name as a built-in tool",
+    "missingDecorator": "Code must contain an @tool decorated function",
+    "showChanges": "Show changes",
+    "hideChanges": "Hide changes"
+  },
+  "toolEditor": {
+    "describeChange": "Describe what to build or change...",
+    "askModify": "Ask me to write or modify this tool.",
+    "suggestion1": "Write a tool that fetches data from an API",
+    "suggestion2": "Add input validation and error handling",
+    "suggestion3": "Optimize the tool for better performance",
+    "toolUpdated": "Tool code updated"
   }
 }
