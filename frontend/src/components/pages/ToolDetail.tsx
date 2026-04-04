@@ -97,6 +97,14 @@ export default function ToolDetail() {
   const [code, setCode] = useState("");
   const [originalCode, setOriginalCode] = useState("");
   const [showDiff, setShowDiff] = useState(false);
+
+  // ESC to close diff modal
+  useEffect(() => {
+    if (!showDiff) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowDiff(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showDiff]);
   const [loaded, setLoaded] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -258,12 +266,12 @@ export default function ToolDetail() {
 
     // Check docstring
     if (funcName && !code.includes('"""')) {
-      warnings.push("Missing docstring (recommended for tool discovery)");
+      warnings.push(t("tools.missingDocstring"));
     }
 
     // Check return type hint
     if (funcName && !code.match(/def\s+\w+\([^)]*\)\s*->\s*str/)) {
-      warnings.push("Missing return type hint '-> str'");
+      warnings.push(t("tools.missingReturnType"));
     }
 
     if (errors.length === 0 && warnings.length === 0) {
@@ -494,7 +502,7 @@ export default function ToolDetail() {
                     setTimeout(() => {
                       const store = useToolAssistantStore.getState();
                       store.sendMessage(
-                        `## Auto-Fix Task\nFix the following validation issues using incremental edits (__tool_edit with SEARCH/REPLACE blocks):\n${issues}\n\nUse __tool_edit format, NOT __tool_update. Only change the lines that need fixing.`,
+                        `## Auto-Fix Task\nFix ONLY the following validation issues. Do NOT remove or rewrite any existing content.\n\nIssues:\n${issues}\n\nRules:\n- Use __tool_edit (search/replace) ONLY. Do NOT use __tool_update.\n- Fix ONLY the specific issues listed above.\n- NEVER delete existing content, sections, or descriptions.\n- NEVER shorten or summarize existing text.\n- Make minimal, surgical changes.\n- If an issue appears already fixed in the current code, skip it and say so.\n- If SEARCH text cannot be found, the issue may have been fixed already — do NOT attempt alternative fixes.`,
                         { name, description, category: "custom", code },
                         handleCodeUpdate,
                       );
@@ -571,14 +579,20 @@ export default function ToolDetail() {
         )}
       </div>
 
-      {/* Diff modal — matches SkillDetail style */}
+      {/* Diff modal */}
       {showDiff && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center" onClick={() => setShowDiff(false)} onKeyDown={(e) => { if (e.key === "Escape") setShowDiff(false); }} tabIndex={-1}>
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center" onClick={() => setShowDiff(false)}>
           <div className={`w-[90vw] h-[80vh] rounded-xl shadow-2xl flex flex-col overflow-hidden ${isDark ? "bg-gray-900" : "bg-white"}`} onClick={(e) => e.stopPropagation()}>
             <div className={`flex items-center justify-between px-4 py-2 border-b ${isDark ? "border-gray-700" : "border-gray-200"}`}>
-              <span className={`text-sm font-medium ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.changes")}</span>
-              <button onClick={() => setShowDiff(false)} className={`p-1 rounded ${isDark ? "hover:bg-gray-800 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}>
-                <X className="w-4 h-4" />
+              <div className="flex items-center gap-2">
+                <GitCompare className={`w-4 h-4 ${isDark ? "text-blue-400" : "text-blue-500"}`} />
+                <span className={`text-sm font-medium ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.changes")}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-mono ${isDark ? "bg-blue-900/40 text-blue-300" : "bg-blue-100 text-blue-700"}`}>
+                  {extractFuncName(code) || toolId}
+                </span>
+              </div>
+              <button onClick={() => setShowDiff(false)} className={`text-[12px] px-2 py-1 rounded ${isDark ? "text-gray-400 hover:text-gray-200 hover:bg-gray-800" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"}`}>
+                {t("common.close")}
               </button>
             </div>
             <div className="flex-1 min-h-0">

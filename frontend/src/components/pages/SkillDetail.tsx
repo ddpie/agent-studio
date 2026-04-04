@@ -1079,7 +1079,7 @@ export default function SkillDetail() {
                   const store = useSkillAssistantStore.getState();
                   if (!store.panelOpen) store.openPanel(skillId);
                   const issues = [...validationResult.errors, ...validationResult.warnings].join("\n");
-                  const autoFixPrompt = `## Auto-Fix Task\nFix ONLY the following validation issues. Do NOT remove or rewrite any existing content.\n\nIssues:\n${issues}\n\nRules:\n- Use __file_edit (search/replace) ONLY. Do NOT use __file_update.\n- Fix ONLY the specific issues listed above.\n- NEVER delete existing content, sections, or descriptions.\n- NEVER shorten or summarize existing text.\n- Make minimal, surgical changes.`;
+                  const autoFixPrompt = `## Auto-Fix Task\nFix ONLY the following validation issues. Do NOT remove or rewrite any existing content.\n\nIssues:\n${issues}\n\nRules:\n- Use __file_edit (search/replace) ONLY. Do NOT use __file_update.\n- Fix ONLY the specific issues listed above.\n- NEVER delete existing content, sections, or descriptions.\n- NEVER shorten or summarize existing text.\n- Make minimal, surgical changes.\n- If an issue appears already fixed in the current file content, skip it and say so.\n- If SEARCH text cannot be found, the issue may have been fixed already — do NOT attempt alternative fixes.`;
                   store.sendMessage(
                     autoFixPrompt,
                     { path: currentPath, content: skillContent ?? "", allFiles: allFilesList, getFileContent: (p: string) => editedContents.get(p) ?? originalContents.get(p) ?? null },

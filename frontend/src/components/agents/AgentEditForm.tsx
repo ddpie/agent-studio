@@ -483,7 +483,9 @@ Rules:
 - Fix ONLY the specific issues listed above.
 - NEVER delete existing content, sections, or descriptions.
 - NEVER shorten or summarize existing text.
-- Make minimal, surgical changes.`;
+- Make minimal, surgical changes.
+- If an issue appears already fixed in the current content, skip it and say so.
+- If SEARCH text cannot be found, the issue may have been fixed already — do NOT attempt alternative fixes.`;
 
       await sendMessage(fixPrompt, { ...formData }, (updates) => {
         for (const [key, value] of Object.entries(updates)) {

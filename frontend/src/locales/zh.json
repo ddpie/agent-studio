@@ -274,6 +274,8 @@
     "deleteFailed": "删除工具失败",
     "nameConflict": "已存在同名工具",
     "missingDecorator": "代码必须包含 @tool 装饰器函数",
+    "missingDocstring": "缺少 docstring（建议添加以便工具发现）",
+    "missingReturnType": "缺少返回类型标注 '-> str'",
     "showChanges": "查看更改",
     "hideChanges": "隐藏更改"
   },

@@ -274,6 +274,8 @@
     "deleteFailed": "Failed to delete tool",
     "nameConflict": "A tool with this function name already exists",
     "missingDecorator": "Code must contain an @tool decorated function",
+    "missingDocstring": "Missing docstring (recommended for tool discovery)",
+    "missingReturnType": "Missing return type hint '-> str'",
     "showChanges": "Show changes",
     "hideChanges": "Hide changes"
   },
