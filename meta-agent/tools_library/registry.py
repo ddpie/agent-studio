@@ -193,7 +193,7 @@ def upload_tool_catalog():
                         "category": {"S": meta["category"]},
                         "code": {"S": mod.TOOL_CODE.strip()},
                         "builtin": {"BOOL": True},
-                        "owner": {"S": ""},
+                        "owner": {"S": "__builtin__"},
                         "visibility": {"S": "shared"},
                         "created_at": {"S": now},
                         "updated_at": {"S": now},

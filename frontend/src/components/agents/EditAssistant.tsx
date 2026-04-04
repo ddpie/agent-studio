@@ -149,7 +149,7 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
           <button
             onClick={() => onEdit(msg.id)}
             className="absolute -bottom-1 -left-1 w-4 h-4 bg-white border border-gray-200 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-            title="Edit"
+            title={t("common.edit")}
           >
             <Pencil className="w-2 h-2 text-gray-400" />
           </button>

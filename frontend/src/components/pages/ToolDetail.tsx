@@ -285,6 +285,11 @@ export default function ToolDetail() {
   // Delete
   const handleDelete = async () => {
     if (!toolId || isBuiltin) return;
+    // New unsaved tool — just navigate back
+    if (isNew || !originalCode) {
+      navigate("/tools");
+      return;
+    }
     try {
       await deleteTool(toolId);
       navigate("/tools");

@@ -571,7 +571,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
           <button
             onClick={() => openPanel(agentId!)}
             className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${panelOpen ? "bg-purple-50 text-purple-600" : "text-gray-500 hover:text-purple-600 hover:bg-purple-50"}`}
-            title="AI Assistant"
+            title={t("assistant.title")}
           >
             <Sparkles className="w-3.5 h-3.5" />
           </button>
@@ -579,7 +579,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
             <button
               onClick={() => setShowReview("view")}
               className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-              title="View changes diff"
+              title={t("agentEditor.viewCode")}
             >
               <GitCompare className="w-3.5 h-3.5" />
               Diff
@@ -589,7 +589,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
             onClick={handleValidateOnly}
             disabled={saving || validating}
             className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
-            title="Validate configuration"
+            title={t("common.validate")}
           >
             {validating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
             {t("common.validate")}
@@ -598,7 +598,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
             onClick={handleSaveDraft}
             disabled={savingDraft}
             className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
-            title="Save draft"
+            title={t("agentEditor.draft")}
           >
             {savingDraft ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
             {t("agentEditor.draft")}
@@ -801,7 +801,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
               onChange={(e) => updateField("welcome_message", e.target.value)}
               rows={2}
               className={inputClass + " resize-none"}
-              placeholder="Hello! I can help you with..."
+              placeholder={t("agentEditor.welcomeMessageHint")}
             />
           </Field>
           <Field label={t("agentEditor.suggestions")} changed={!!changedFields.suggestions} hint={t("agentEditor.suggestionsHint")} onOptimize={() => handleOptimizeField("suggestions", "Suggested Prompts")}>
@@ -871,7 +871,7 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
           <button
             onClick={() => handleOptimizeField("tool_definitions", "Tools")}
             className="p-0.5 text-gray-300 hover:text-purple-500 transition-colors"
-            title="AI optimize tools"
+            title={t("agentEditor.optimize", { label: "tools" })}
           >
             <Sparkles className="w-3 h-3" />
           </button>
@@ -1176,7 +1176,7 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
                   <button
                     onClick={(e) => { e.stopPropagation(); onOptimizeTool(name, code); }}
                     className="p-1 text-gray-500 hover:text-purple-400 transition-colors"
-                    title="AI optimize this tool"
+                    title={t("agentEditor.optimize", { label: "tool" })}
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                   </button>
@@ -1184,7 +1184,7 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
                 <button
                   onClick={(e) => { e.stopPropagation(); setFullscreenIdx(idx); }}
                   className="p-1 text-gray-500 hover:text-white transition-colors"
-                  title="Fullscreen"
+                  title={t("agentEditor.fullscreen")}
                 >
                   <Maximize2 className="w-3.5 h-3.5" />
                 </button>

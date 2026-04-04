@@ -89,7 +89,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
             <button
               onClick={(e) => { e.stopPropagation(); navigate(`/agents/edit/${agent.id}`); }}
               className="absolute -top-1 -right-1 w-4 h-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-              title="Edit"
+              title={t("common.edit")}
             >
               <Settings2 className="w-2.5 h-2.5 text-gray-400" />
             </button>
@@ -101,14 +101,14 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
           onClick={fetchAgents}
           disabled={loading}
           className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-          title="Refresh"
+          title={t("common.refresh")}
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
         </button>
 
         <ConfirmDialog
           open={!!pendingAction}
-          title="Unsaved changes"
+          title={t("skillEditor.unsavedChanges")}
           message="You have unsaved changes in the editor. Discard and switch?"
           confirmLabel="Discard"
           cancelLabel="Stay"
@@ -129,7 +129,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
           onClick={fetchAgents}
           disabled={loading}
           className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-400 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-          title="Refresh"
+          title={t("common.refresh")}
         >
           {loading ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -184,14 +184,14 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
                 <button
                   onClick={(e) => { e.stopPropagation(); navigate(`/agents/edit/${agent.id}`); }}
                   className="p-1 text-gray-300 hover:text-blue-600 rounded transition-colors"
-                  title="Edit agent"
+                  title={t("common.edit")}
                 >
                   <Settings2 className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); setConfirmAction({ agentId: agent.id, agentName: agent.displayName, type: "archive" }); }}
                   className="p-1 text-gray-300 hover:text-orange-500 rounded transition-colors"
-                  title="Archive agent"
+                  title={t("agents.archive")}
                   disabled={actionLoading === agent.id}
                 >
                   {actionLoading === agent.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
@@ -241,7 +241,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
                     <button
                       onClick={() => setConfirmAction({ agentId: agent.id, agentName: agent.displayName, type: "restore" })}
                       className="p-1 text-gray-400 hover:text-green-600 rounded transition-colors"
-                      title="Restore agent"
+                      title={t("agents.restore")}
                       disabled={actionLoading === agent.id}
                     >
                       {actionLoading === agent.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
@@ -249,7 +249,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
                     <button
                       onClick={() => setConfirmAction({ agentId: agent.id, agentName: agent.displayName, type: "purge" })}
                       className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors"
-                      title="Permanently delete"
+                      title={t("agents.deleteForever")}
                       disabled={actionLoading === agent.id}
                     >
                       <Trash2 className="w-3 h-3" />
@@ -264,7 +264,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
 
       <ConfirmDialog
         open={!!pendingAction}
-        title="Unsaved changes"
+        title={t("skillEditor.unsavedChanges")}
         message="You have unsaved changes in the editor. Discard and switch?"
         confirmLabel="Discard"
         cancelLabel="Stay"
