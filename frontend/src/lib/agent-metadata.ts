@@ -4,6 +4,16 @@ import { agentConfig } from "../config";
 const BUCKET = agentConfig.s3Bucket;
 const S3_ENDPOINT = `https://s3.${agentConfig.region}.amazonaws.com`;
 
+export interface AgentSkillEntry {
+  id: string                 // agent 私有 skill 唯一 ID
+  sourceSkillId: string      // 来源全局 skill ID（溯源）
+  sourceContentHash: string  // 复制时源 skill 的联合 hash
+  name: string               // skill 名称
+  description: string        // 一句话描述
+  contentHash: string        // 当前副本所有文件的联合 hash
+  files: string[]            // 文件列表，如 ["SKILL.md", "scripts/validate.py"]
+}
+
 export interface AgentMetadata {
   name: string;
   display_name: string;
@@ -19,6 +29,8 @@ export interface AgentMetadata {
   template_id: string;
   supports_images: boolean;
   created_at: string;
+  skills: AgentSkillEntry[];
+  deployedSkillHashes?: Record<string, string>;
 }
 
 /**

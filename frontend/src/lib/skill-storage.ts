@@ -8,10 +8,25 @@ import { agentConfig } from "../config";
 
 const INDEX_KEY = "skills/index.json";
 
+/**
+ * Compute a deterministic content hash from file contents.
+ * Sorts files by name, concatenates "filename:content", SHA-256, takes first 8 hex chars.
+ */
+export async function computeContentHash(files: Record<string, string>): Promise<string> {
+  const sorted = Object.keys(files).sort()
+  const combined = sorted.map(f => `${f}:${files[f]}`).join("\n")
+  const data = new TextEncoder().encode(combined)
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 8)
+}
+
 export interface SkillIndexEntry {
   id: string;
   name: string;
   description: string;
+  contentHash?: string;    // 每次保存时更新
+  files?: string[];        // 文件列表
   deleted?: boolean;
   deletedAt?: number;
 }
@@ -158,6 +173,17 @@ export async function writeSkillFile(id: string, path: string, content: string):
         if (entry) {
           entry.name = meta.name;
           entry.description = meta.description;
+          // Recompute contentHash: read all files for this skill
+          const allFiles = await listSkillFiles(id);
+          const fileContents: Record<string, string> = { "SKILL.md": content };
+          for (const f of allFiles) {
+            if (f !== "SKILL.md") {
+              const fc = await getSkillFile(id, f);
+              if (fc !== null) fileContents[f] = fc;
+            }
+          }
+          entry.contentHash = await computeContentHash(fileContents);
+          entry.files = Object.keys(fileContents).sort();
           await writeJsonToS3(INDEX_KEY, index);
         }
       }
@@ -309,9 +335,12 @@ export async function importSkill(
   });
   if (!resp.ok) return null;
 
+  // Compute initial contentHash
+  const initialHash = await computeContentHash({ "SKILL.md": skillMd });
+
   // Update index
   const index = (await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY)) ?? [];
-  index.push({ id, name: skillName, description: skillDesc });
+  index.push({ id, name: skillName, description: skillDesc, contentHash: initialHash, files: ["SKILL.md"] });
   await writeJsonToS3(INDEX_KEY, index);
 
   return { id, name: skillName, description: skillDesc };
