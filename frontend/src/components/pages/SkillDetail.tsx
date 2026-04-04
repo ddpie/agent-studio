@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { getSkillContent, getSkillFile, listSkillFiles, deleteSkill, writeSkillFile, deleteSkillFile, renameSkillFile, listSkills, type SkillIndexEntry } from "../../lib/skill-storage";
 import Editor, { DiffEditor } from "@monaco-editor/react";
+import type * as MonacoNS from "monaco-editor";
 import { Tree, type NodeRendererProps } from "react-arborist";
 import { useUISettings } from "../../stores/ui-settings-store";
 
@@ -23,11 +24,105 @@ function getMonacoLanguage(filename: string): string {
   return "plaintext";
 }
 
+/** Basic Python validation (bracket balance + indentation consistency) */
+function validatePython(code: string): { line: number; col: number; message: string; severity: number }[] {
+  const markers: { line: number; col: number; message: string; severity: number }[] = [];
+  const lines = code.split("\n");
+
+  let parens = 0, brackets = 0, braces = 0;
+  for (const line of lines) {
+    for (const ch of line) {
+      if (ch === "(") parens++; else if (ch === ")") parens--;
+      else if (ch === "[") brackets++; else if (ch === "]") brackets--;
+      else if (ch === "{") braces++; else if (ch === "}") braces--;
+    }
+  }
+  if (parens !== 0) markers.push({ line: lines.length, col: 1, message: `Unbalanced parentheses`, severity: 8 });
+  if (brackets !== 0) markers.push({ line: lines.length, col: 1, message: `Unbalanced brackets`, severity: 8 });
+  if (braces !== 0) markers.push({ line: lines.length, col: 1, message: `Unbalanced braces`, severity: 8 });
+
+  // Indentation consistency
+  let useTabs: boolean | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) continue;
+    const ws = line.match(/^(\s+)/);
+    if (ws) {
+      if (useTabs === null) useTabs = ws[1].includes("\t");
+      if (useTabs && ws[1].includes(" ") && !ws[1].includes("\t")) {
+        markers.push({ line: i + 1, col: 1, message: "Mixed indentation: expected tabs", severity: 4 });
+      } else if (!useTabs && ws[1].includes("\t")) {
+        markers.push({ line: i + 1, col: 1, message: "Mixed indentation: expected spaces", severity: 4 });
+      }
+    }
+  }
+  return markers;
+}
+
 function useIsDark() {
   const { theme } = useUISettings();
   if (theme === "dark") return true;
   if (theme === "light") return false;
   return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+// --- Skill validation ---
+
+interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+function validateSkill(
+  skillMdContent: string,
+  virtualFiles: string[],
+  pendingDeletes: Set<string>,
+): ValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // 1. Check frontmatter exists
+  if (!skillMdContent.startsWith("---")) {
+    errors.push("SKILL.md must start with YAML frontmatter (---)");
+    return { valid: false, errors, warnings };
+  }
+  const parts = skillMdContent.split("---", 3);
+  if (parts.length < 3) {
+    errors.push("SKILL.md frontmatter is incomplete (missing closing ---)");
+    return { valid: false, errors, warnings };
+  }
+
+  // 2. Parse frontmatter fields
+  const fm = parts[1].trim();
+  const fields: Record<string, string> = {};
+  for (const line of fm.split("\n")) {
+    const match = line.match(/^(\w[\w-]*):\s*(.*)/);
+    if (match) fields[match[1]] = match[2].trim().replace(/^["']|["']$/g, "");
+  }
+
+  if (!fields.name) errors.push("Missing required field: name");
+  if (!fields.description) warnings.push("Missing field: description (recommended)");
+  if (fields.name && !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(fields.name)) {
+    warnings.push("Skill name should be alphanumeric with hyphens/underscores");
+  }
+
+  // 3. Check files referenced in frontmatter
+  if (fields.files || fm.includes("files:")) {
+    const fileLines = fm.split("\n").filter(l => l.trim().startsWith("- "));
+    for (const fl of fileLines) {
+      const ref = fl.trim().replace(/^-\s*/, "").trim();
+      if (ref && !virtualFiles.includes(ref) || pendingDeletes.has(ref)) {
+        errors.push(`Referenced file not found: ${ref}`);
+      }
+    }
+  }
+
+  // 4. Check body is not empty
+  const body = parts[2].trim();
+  if (!body) warnings.push("SKILL.md body is empty");
+
+  return { valid: errors.length === 0, errors, warnings };
 }
 
 // --- Tree data helpers ---
@@ -137,6 +232,7 @@ export default function SkillDetail() {
   const [saving, setSaving] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(224);
   const dragging = useRef(false);
 
@@ -264,6 +360,13 @@ export default function SkillDetail() {
 
   const handleSaveAll = async () => {
     if (!skillId || !hasPendingOps) return;
+
+    // Validate SKILL.md before saving
+    const skillMd = editedContents.get("SKILL.md") ?? originalContents.get("SKILL.md") ?? "";
+    const result = validateSkill(skillMd, virtualFiles, pendingDeletes);
+    setValidationResult(result);
+    if (!result.valid) return; // Block save on errors
+
     setSaving(true);
 
     // 1. Execute deletes (individual files)
@@ -631,6 +734,26 @@ export default function SkillDetail() {
         </button>
       </div>
 
+      {/* Validation results */}
+      {validationResult && (validationResult.errors.length > 0 || validationResult.warnings.length > 0) && (
+        <div className={`mx-6 mt-2 rounded-lg text-sm border ${!validationResult.valid ? isDark ? "bg-red-900/20 border-red-800" : "bg-red-50 border-red-200" : isDark ? "bg-amber-900/20 border-amber-800" : "bg-amber-50 border-amber-200"}`}>
+          <div className="px-4 py-2">
+            <div className="flex items-center justify-between">
+              <p className={`text-xs font-medium ${!validationResult.valid ? "text-red-500" : "text-amber-600"}`}>
+                {!validationResult.valid ? "Validation failed — fix errors before saving" : "Warnings"}
+              </p>
+              <button onClick={() => setValidationResult(null)} className="text-[10px] text-gray-400 hover:text-gray-600">Dismiss</button>
+            </div>
+            {validationResult.errors.map((e, i) => (
+              <p key={`e${i}`} className="text-[11px] text-red-500 mt-1">&#x2716; {e}</p>
+            ))}
+            {validationResult.warnings.map((w, i) => (
+              <p key={`w${i}`} className="text-[11px] text-amber-600 mt-1">&#x26A0; {w}</p>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar: react-arborist file tree */}
         {!sidebarCollapsed && (
@@ -662,9 +785,51 @@ export default function SkillDetail() {
               width={sidebarWidth}
               rowHeight={28}
               indent={16}
-              disableDrag
-              disableDrop
               disableEdit
+              disableDrag={(node) => node.id === "SKILL.md" || pendingDeletes.has(node.id)}
+              disableDrop={(args) => {
+                // Can't drop onto files, only folders or root
+                if (args.parentNode && !args.parentNode.isInternal) return true;
+                return false;
+              }}
+              onMove={({ dragIds, parentId }) => {
+                for (const id of dragIds) {
+                  if (id === "SKILL.md" || id.startsWith("__dir__")) continue;
+                  const fileName = id.split("/").pop()!;
+                  const newDir = parentId?.replace("__dir__", "") ?? "";
+                  const newPath = newDir ? `${newDir}/${fileName}` : fileName;
+                  if (newPath === id) continue;
+
+                  if (pendingCreates.has(id)) {
+                    const content = editedContents.get(id) ?? pendingCreates.get(id) ?? "";
+                    pendingCreates.delete(id);
+                    pendingCreates.set(newPath, content);
+                    if (editedContents.has(id)) {
+                      editedContents.set(newPath, editedContents.get(id)!);
+                      editedContents.delete(id);
+                    }
+                  } else {
+                    pendingRenames.set(id, newPath);
+                    if (editedContents.has(id)) {
+                      editedContents.set(newPath, editedContents.get(id)!);
+                      editedContents.delete(id);
+                    }
+                    if (originalContents.has(id)) {
+                      originalContents.set(newPath, originalContents.get(id)!);
+                      originalContents.delete(id);
+                    }
+                  }
+
+                  const next = new Set(changedFiles);
+                  next.delete(id);
+                  next.add(newPath);
+                  setChangedFiles(next);
+
+                  if (id === currentPath) {
+                    setSearchParams({ file: newPath });
+                  }
+                }
+              }}
             >
               {FileNode}
             </Tree>
@@ -704,6 +869,47 @@ export default function SkillDetail() {
                   onChange={handleEditorChange}
                   language={getMonacoLanguage(currentPath)}
                   theme={isDark ? "vs-dark" : "light"}
+                  onValidate={(markers) => {
+                    // Monaco fires onValidate for JSON/JS/TS automatically
+                    // For Python, add our custom markers
+                    if (currentPath.endsWith(".py") && skillContent) {
+                      const monacoInstance = (window as unknown as { monaco?: typeof MonacoNS }).monaco;
+                      if (monacoInstance) {
+                        const model = monacoInstance.editor.getModels().find(m => m.getValue() === skillContent);
+                        if (model) {
+                          const pyMarkers = validatePython(skillContent).map(m => ({
+                            startLineNumber: m.line,
+                            endLineNumber: m.line,
+                            startColumn: m.col,
+                            endColumn: 1000,
+                            message: m.message,
+                            severity: m.severity as unknown as MonacoNS.MarkerSeverity,
+                          }));
+                          if (pyMarkers.length > 0) {
+                            monacoInstance.editor.setModelMarkers(model, "python-lint", pyMarkers);
+                          }
+                        }
+                      }
+                    }
+                    void markers; // use built-in markers for JSON/JS/TS
+                  }}
+                  beforeMount={(monaco) => {
+                    // Enable JSON validation
+                    monaco.languages.json?.jsonDefaults?.setDiagnosticsOptions?.({
+                      validate: true,
+                      allowComments: false,
+                      schemaValidation: "error",
+                    });
+                    // Enable JS/TS validation
+                    monaco.languages.typescript?.javascriptDefaults?.setDiagnosticsOptions?.({
+                      noSemanticValidation: false,
+                      noSyntaxValidation: false,
+                    });
+                    monaco.languages.typescript?.typescriptDefaults?.setDiagnosticsOptions?.({
+                      noSemanticValidation: false,
+                      noSyntaxValidation: false,
+                    });
+                  }}
                   options={{
                     fontSize: 12,
                     minimap: { enabled: true },
