@@ -28,8 +28,8 @@ interface SkillAssistantState {
   loadHistory: (skillId: string) => Promise<void>;
   sendMessage: (
     content: string,
-    fileContext: { path: string; content: string; allFiles: string[] },
-    onFileUpdate: (newContent: string) => void,
+    fileContext: { path: string; content: string; allFiles: string[]; getFileContent: (path: string) => string | null },
+    onFileUpdate: (path: string, newContent: string) => void,
   ) => Promise<void>;
   cancelStreaming: () => void;
   clearHistory: () => void;
@@ -102,7 +102,8 @@ export const useSkillAssistantStore = create<SkillAssistantState>((set, get) => 
 You are an AI assistant that helps users edit skill files in Agent Studio. Skills follow the AgentSkills.io format (SKILL.md with YAML frontmatter).
 
 ## Capabilities
-- Edit file content (add, modify, remove sections)
+- Edit ANY file in the skill (not just the currently open file)
+- Create new files within the skill
 - Fix syntax errors in Python/JSON/YAML
 - Translate content between languages
 - Improve descriptions, documentation, and code quality
@@ -110,25 +111,51 @@ You are an AI assistant that helps users edit skill files in Agent Studio. Skill
 
 ## Current File
 - Path: ${fileContext.path}
-- All files in this skill: ${fileContext.allFiles.join(", ") || "SKILL.md only"}
-
-## File Content
+- Content:
 \`\`\`
 ${fileContext.content}
 \`\`\`
 
+## All Files in This Skill
+${fileContext.allFiles.map(f => `- ${f}`).join("\\n")}
+
 ## User Request
 ${content}
 
+## Modification Workflow
+
+### Step 1: Plan (ALWAYS do this first)
+When the user asks for a modification, FIRST describe what you plan to change:
+- Which file(s) will be modified
+- What changes will be made to each file
+- Ask: "Shall I proceed with these changes?"
+
+### Step 2: Execute (only after user confirms)
+After the user confirms (e.g., "yes", "go ahead", "do it", "好的", "做吧"), output the file updates.
+
+EXCEPTION: If the user gives a very specific, unambiguous instruction (e.g., "add a comment on line 5"), you may skip the plan and directly output the update.
+
 ## Output Format
-When the user asks you to modify the file, output the COMPLETE updated file content wrapped in a single code block:
-\`\`\`__file_update
+For each file you want to update, output a code block with the target path:
+\`\`\`__file_update:PATH
 (entire file content here — every line, not just changes)
 \`\`\`
 
-Then add 1-2 sentences explaining what you changed.
+You can update MULTIPLE files in a single response. Each file gets its own block:
+\`\`\`__file_update:SKILL.md
+(complete SKILL.md content)
+\`\`\`
 
-When the user asks a question or for advice (not a modification), respond with text only — no code block.
+\`\`\`__file_update:scripts/clean_csv.py
+(complete script content)
+\`\`\`
+
+After the code blocks, add 1-2 sentences explaining what you changed.
+
+When the user asks a question or for advice (not a modification), respond with text only — no code blocks.
+
+## Reading Other Files
+If you need to see a file that is not the current file, tell the user to switch to it, OR if the file content was provided in the conversation history, use that.
 
 ## Anti-Patterns
 
@@ -139,7 +166,7 @@ Added content here.
 \`\`\`
 
 RIGHT (complete file — preserves everything):
-\`\`\`
+\`\`\`__file_update:SKILL.md
 ---
 name: "my-skill"
 description: "..."
@@ -156,9 +183,8 @@ Added content here.
 
 ## Constraints
 - NEVER output a __file_update for SKILL.md without valid YAML frontmatter (---\\nname: ...\\n---). Missing frontmatter will break the skill.
-- NEVER output multiple __file_update blocks. Only ONE per response.
-- NEVER modify files other than the current file. If the user asks to change a different file, tell them to switch to that file first.
-- Respond in the SAME LANGUAGE the user uses. If the user writes in Chinese, respond in Chinese.
+- For multi-file changes, ALWAYS describe the plan first and wait for confirmation.
+- Respond in the SAME LANGUAGE the user uses.
 - For SKILL.md: preserve all valid YAML frontmatter fields (name, description, type, source, user-invocable, files).
 - For Python files: ensure valid syntax, include docstrings and type hints.
 - Be concise and professional.
@@ -166,8 +192,9 @@ Added content here.
 ## Recognize Your Excuses
 You may be tempted to take shortcuts. Recognize these:
 - "The file is long, I'll just show the changed part" — NO. Output the COMPLETE file. The frontend replaces the entire file with your output. Partial output = data loss.
-- "I'll describe the changes instead of outputting code" — If the user asked for a modification, you MUST output the __file_update block. Descriptions alone don't apply changes.
-- "The frontmatter looks fine, I'll skip it" — ALWAYS include frontmatter in SKILL.md updates. Missing frontmatter breaks the skill.`;
+- "I'll describe the changes instead of outputting code" — If the user confirmed changes, you MUST output the __file_update block(s).
+- "The frontmatter looks fine, I'll skip it" — ALWAYS include frontmatter in SKILL.md updates.
+- "I'll make all the changes without asking" — For multi-file changes, ALWAYS plan first.`;
 
     const history = get()
       .messages.filter((m) => m.id !== assistantMsg.id && m.content)
@@ -210,22 +237,29 @@ You may be tempted to take shortcuts. Recognize these:
       if (flushTimer) clearTimeout(flushTimer);
       flushPending();
 
-      // Extract __file_update block
-      const updateMatch = fullText.match(/```__file_update\n([\s\S]*?)```/);
-      if (updateMatch) {
-        const newContent = updateMatch[1].trimEnd();
-        onFileUpdate(newContent);
+      // Extract __file_update blocks (supports __file_update:PATH and legacy __file_update)
+      const updateRegex = /```__file_update(?::([^\n]*))?\n([\s\S]*?)```/g;
+      let match;
+      const updatedPaths: string[] = [];
+      let cleanedContent = fullText;
 
-        // Clean the message: remove the code block, add update indicator
+      while ((match = updateRegex.exec(fullText)) !== null) {
+        const targetPath = match[1]?.trim() || fileContext.path;
+        const newContent = match[2].trimEnd();
+        onFileUpdate(targetPath, newContent);
+        updatedPaths.push(targetPath);
+        cleanedContent = cleanedContent.replace(match[0], "");
+      }
+
+      if (updatedPaths.length > 0) {
         set((s) => ({
           messages: s.messages.map((m) =>
             m.id === assistantMsg.id
               ? {
                   ...m,
-                  content: m.content
-                    .replace(/```__file_update\n[\s\S]*?```/, "")
+                  content: cleanedContent
                     .replace(/\n{3,}/g, "\n\n")
-                    .trim() + `\n\n---file-updated:${fileContext.path}---\n\n`,
+                    .trim() + `\n\n---file-updated:${updatedPaths.join(", ")}---\n\n`,
                 }
               : m
           ),

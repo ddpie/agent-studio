@@ -1170,8 +1170,23 @@ export default function SkillDetail() {
             currentPath={currentPath}
             currentContent={skillContent ?? ""}
             allFiles={["SKILL.md", ...virtualFiles]}
-            onFileUpdate={(newContent) => {
-              handleEditorChange(newContent);
+            getFileContent={(path) => editedContents.get(path) ?? originalContents.get(path) ?? null}
+            onFileUpdate={(path, newContent) => {
+              editedContents.set(path, newContent);
+              const original = originalContents.get(path);
+              const next = new Set(changedFiles);
+              if (original !== undefined && newContent !== original) {
+                next.add(path);
+              } else if (original === undefined) {
+                // New file created by assistant
+                if (!pendingCreates.has(path)) pendingCreates.set(path, "");
+                next.add(path);
+              }
+              setChangedFiles(next);
+              // If updating the currently open file, refresh editor
+              if (path === currentPath) {
+                setSkillContent(newContent);
+              }
             }}
           />
         )}

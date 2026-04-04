@@ -72,10 +72,11 @@ interface SkillAssistantProps {
   currentPath: string;
   currentContent: string;
   allFiles: string[];
-  onFileUpdate: (newContent: string) => void;
+  onFileUpdate: (path: string, newContent: string) => void;
+  getFileContent: (path: string) => string | null;
 }
 
-export default function SkillAssistant({ skillId, currentPath, currentContent, allFiles, onFileUpdate }: SkillAssistantProps) {
+export default function SkillAssistant({ skillId, currentPath, currentContent, allFiles, onFileUpdate, getFileContent }: SkillAssistantProps) {
   const {
     messages, isStreaming, loading, panelOpen, selectedModelId,
     closePanel, sendMessage, cancelStreaming, clearHistory, setModel, openPanel,
@@ -147,7 +148,7 @@ export default function SkillAssistant({ skillId, currentPath, currentContent, a
     const text = input.trim();
     if (!text || isStreaming) return;
     setInput("");
-    sendMessage(text, { path: currentPath, content: currentContent, allFiles }, onFileUpdate);
+    sendMessage(text, { path: currentPath, content: currentContent, allFiles, getFileContent }, onFileUpdate);
   };
 
   const startEdit = (msgId: string) => {
@@ -165,7 +166,7 @@ export default function SkillAssistant({ skillId, currentPath, currentContent, a
     const store = useSkillAssistantStore.getState();
     const trimmed = messages.slice(0, msgIdx);
     useSkillAssistantStore.setState({ messages: trimmed });
-    store.sendMessage(newContent, { path: currentPath, content: currentContent, allFiles }, onFileUpdate);
+    store.sendMessage(newContent, { path: currentPath, content: currentContent, allFiles, getFileContent }, onFileUpdate);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
