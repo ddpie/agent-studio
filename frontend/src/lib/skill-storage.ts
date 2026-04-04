@@ -35,7 +35,14 @@ export async function getSkillContent(id: string): Promise<string | null> {
 
 /** Validate file path to prevent traversal attacks */
 function sanitizePath(path: string): string {
-  return path.replace(/\.\./g, "").replace(/\/\//g, "/").replace(/^\//, "");
+  const decoded = decodeURIComponent(path);
+  const normalized = decoded
+    .replace(/\\/g, "/")       // backslash → forward slash
+    .replace(/\.\./g, "")      // remove ..
+    .replace(/\/\//g, "/")     // collapse //
+    .replace(/^\//, "");       // no leading /
+  if (!normalized || normalized.startsWith("/")) return "invalid";
+  return normalized;
 }
 
 /** Read any file from a skill directory */
@@ -173,7 +180,7 @@ export async function renameSkillFile(id: string, oldPath: string, newPath: stri
   if (content === null) return false;
   const written = await writeSkillFile(id, newPath, content);
   if (!written) return false;
-  return deleteFromS3(`skills/${id}/${oldPath}`);
+  return deleteFromS3(`skills/${id}/${sanitizePath(oldPath)}`);
 }
 
 /** Soft-delete a skill (move to trash) */

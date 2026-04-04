@@ -85,7 +85,7 @@ export default function SkillAssistant({ skillId, currentPath, currentContent, a
   // Ensure panel loads history for this skill
   useEffect(() => {
     if (panelOpen) openPanel(skillId);
-  }, [skillId]);
+  }, [skillId, panelOpen]);
 
   const [input, setInput] = useState("");
   const [showModelPicker, setShowModelPicker] = useState(false);

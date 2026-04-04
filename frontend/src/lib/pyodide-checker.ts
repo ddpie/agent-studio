@@ -44,7 +44,7 @@ export function checkPythonSyntax(code: string): PythonError[] {
   if (!pyodide) return [];
   try {
     // Escape the code for embedding in Python string
-    const escaped = code.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, "\\n");
+    const escaped = code.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t");
     const result = pyodide.runPython(
       `import json\n` +
       `_code = '${escaped}'\n` +

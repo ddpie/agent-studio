@@ -144,7 +144,7 @@ ${desc || "TODO: Add skill instructions here."}
             <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
               {search ? "No matching skills" : showTrash ? "Trash is empty" : "No skills yet"}
             </p>
-            {!showTrash && <p className="text-xs mt-1">Create skills through the Meta Agent chat</p>}
+            {!showTrash && <p className="text-xs mt-1">Click "Create" or import a file to get started</p>}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

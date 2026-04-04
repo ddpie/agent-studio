@@ -299,7 +299,8 @@ You may be tempted to take shortcuts. Recognize these:
           const searchText = pairMatch[1];
           const replaceText = pairMatch[2];
           if (fileContent.includes(searchText)) {
-            fileContent = fileContent.replace(searchText, replaceText);
+            // Replace ALL occurrences, not just the first
+            fileContent = fileContent.split(searchText).join(replaceText);
             applied = true;
           }
         }
@@ -339,7 +340,7 @@ You may be tempted to take shortcuts. Recognize these:
       set({ isStreaming: false });
       const { skillId, messages } = get();
       if (skillId) {
-        writeJsonToS3(S3_KEY(skillId), messages);
+        try { await writeJsonToS3(S3_KEY(skillId), messages); } catch { /* best effort */ }
       }
     }
   },
