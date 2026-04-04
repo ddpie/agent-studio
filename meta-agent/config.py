@@ -15,6 +15,7 @@ AGENT_ROLE_ARN = os.getenv(
 BASE_DEPLOYMENT_KEY = "base/deployment.zip"
 MODEL_ID = os.getenv("AGENT_STUDIO_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
 AGENTS_TABLE = os.getenv("AGENT_STUDIO_AGENTS_TABLE", "agent-studio-agents")
+TOOLS_TABLE = os.getenv("AGENT_STUDIO_TOOLS_TABLE", "agent-studio-tools")
 
 # Permission tier → IAM Role mapping
 PERMISSION_TIER_ROLES = {

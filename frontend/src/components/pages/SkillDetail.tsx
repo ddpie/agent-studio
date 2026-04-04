@@ -1144,19 +1144,18 @@ export default function SkillDetail() {
                   }}
                 />
               </div>
-            </div>
-            {/* Run output panel */}
-            {runOutput !== null && (
-              <div className={`border-t flex-shrink-0 ${isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-gray-50"} max-h-48 overflow-auto`}>
-                <div className={`flex items-center justify-between px-3 py-1 ${isDark ? "bg-gray-800" : "bg-gray-100"}`}>
-                  <span className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? "text-gray-500" : "text-gray-400"}`}>Output</span>
-                  <button onClick={() => setRunOutput(null)} className={`text-[10px] ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-600"}`}>Close</button>
+              {/* Run output panel */}
+              {runOutput !== null && (
+                <div className={`border-t flex-shrink-0 ${isDark ? "border-gray-700 bg-gray-900" : "border-gray-200 bg-gray-50"} max-h-48 overflow-auto`}>
+                  <div className={`flex items-center justify-between px-3 py-1 ${isDark ? "bg-gray-800" : "bg-gray-100"}`}>
+                    <span className={`text-[10px] font-semibold uppercase tracking-wider ${isDark ? "text-gray-500" : "text-gray-400"}`}>Output</span>
+                    <button onClick={() => setRunOutput(null)} className={`text-[10px] ${isDark ? "text-gray-500 hover:text-gray-300" : "text-gray-400 hover:text-gray-600"}`}>Close</button>
+                  </div>
+                  <pre className={`px-3 py-2 text-[11px] font-mono whitespace-pre-wrap ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+                    {runOutput}
+                  </pre>
                 </div>
-                <pre className={`px-3 py-2 text-[11px] font-mono whitespace-pre-wrap ${isDark ? "text-gray-300" : "text-gray-700"}`}>
-                  {runOutput}
-                </pre>
-              </div>
-            )}
+              )}
             </div>
           ) : (
             <p className="text-sm text-gray-400 p-6">Failed to load content.</p>

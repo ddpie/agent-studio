@@ -296,7 +296,7 @@ export default function SkillAssistant({ skillId, currentPath, currentContent, a
                     const content = messages[lastUserIdx].content;
                     const trimmed = messages.slice(0, lastUserIdx);
                     useSkillAssistantStore.setState({ messages: trimmed });
-                    sendMessage(content, { path: currentPath, content: currentContent, allFiles }, onFileUpdate);
+                    sendMessage(content, { path: currentPath, content: currentContent, allFiles, getFileContent }, onFileUpdate);
                   }}
                   className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-600 transition-colors"
                 >
