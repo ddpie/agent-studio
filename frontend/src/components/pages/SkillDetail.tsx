@@ -1065,15 +1065,30 @@ export default function SkillDetail() {
             ))}
             {(validationResult.errors.length > 0 || validationResult.warnings.length > 0) && (
               <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                <button onClick={() => {
+                <button onClick={async () => {
                   if (!skillId) return;
+                  // Pre-load ALL file contents into memory so AI can fix across files
+                  const allFilesList = ["SKILL.md", ...virtualFiles];
+                  for (const filePath of allFilesList) {
+                    if (editedContents.has(filePath) || originalContents.has(filePath)) continue;
+                    const content = filePath === "SKILL.md"
+                      ? await getSkillContent(skillId)
+                      : await getSkillFile(skillId, filePath);
+                    if (content !== null) originalContents.set(filePath, content);
+                  }
+                  // Build file context summary for the prompt
+                  const filesSummary = allFilesList.map(f => {
+                    const c = editedContents.get(f) ?? originalContents.get(f) ?? "";
+                    return `### ${f}\n\`\`\`\n${c.slice(0, 2000)}\n\`\`\``;
+                  }).join("\n\n");
+
                   const store = useSkillAssistantStore.getState();
                   if (!store.panelOpen) store.openPanel(skillId);
                   const issues = [...validationResult.errors, ...validationResult.warnings].join("\n");
-                  const autoFixPrompt = `## Auto-Fix Task\nFix ALL of the following validation issues:\n${issues}\n\nFix each issue precisely. Do not rewrite files from scratch — use search/replace for small fixes.`;
+                  const autoFixPrompt = `## Auto-Fix Task\nFix ALL of the following validation issues:\n${issues}\n\n## All Files\n${filesSummary}\n\nFix each issue precisely. You can update multiple files in one response. Use search/replace for small fixes.`;
                   store.sendMessage(
                     autoFixPrompt,
-                    { path: currentPath, content: skillContent ?? "", allFiles: ["SKILL.md", ...virtualFiles], getFileContent: (p: string) => editedContents.get(p) ?? originalContents.get(p) ?? null },
+                    { path: currentPath, content: skillContent ?? "", allFiles: allFilesList, getFileContent: (p: string) => editedContents.get(p) ?? originalContents.get(p) ?? null },
                     (path: string, newContent: string) => {
                       editedContents.set(path, newContent);
                       const orig = originalContents.get(path);
