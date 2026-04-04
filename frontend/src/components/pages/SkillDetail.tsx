@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate, useSearchParams, useBlocker } from "react-router";
 import {
-  Package, ChevronLeft, Trash2, Loader2, Save, GitCompare,
+  ChevronLeft, Trash2, Loader2, Save, GitCompare,
   FileText, FolderOpen, FolderClosed, File, ChevronRight as ChevronRightIcon,
   Plus, Pencil, FolderPlus, ArrowRightLeft, Sparkles, ShieldCheck, Play,
 } from "lucide-react";
@@ -899,18 +899,17 @@ export default function SkillDetail() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-        <button onClick={() => navigate("/skills")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-600 dark:text-gray-300">
+      <div className={`flex items-center gap-3 px-6 py-3 border-b ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+        <button onClick={() => navigate("/skills")} className={`p-1 rounded ${isDark ? "hover:bg-gray-800 text-gray-300" : "hover:bg-gray-100 text-gray-600"}`}>
           <ChevronLeft className="w-4 h-4" />
         </button>
-        <Package className="w-4 h-4 text-blue-500" />
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{skill?.name}</h2>
-        {skill?.description && (
-          <span className="text-xs text-gray-400 ml-2 truncate">{skill.description}</span>
-        )}
-        <div className="flex-1" />
+        <div className="flex-1 min-w-0">
+          <h2 className={`text-base font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{skill?.name}</h2>
+          {skill?.description && (
+            <p className="text-xs text-gray-400 truncate">{skill.description}</p>
+          )}
+        </div>
         <button onClick={() => {
-          // Run validation on current file
           const content = skillContent ?? "";
           const monacoInstance = (window as unknown as { monaco?: typeof MonacoNS }).monaco;
           if (monacoInstance) {
@@ -927,13 +926,11 @@ export default function SkillDetail() {
               }));
               const owner = currentPath.endsWith(".py") ? "python-lint" : "shell-lint";
               monacoInstance.editor.setModelMarkers(model, owner, mapped);
-              // Also get Monaco's built-in markers
               const allMarkers = monacoInstance.editor.getModelMarkers({ resource: model.uri });
               const errors = allMarkers.filter(m => m.severity >= 8);
               const warnings = allMarkers.filter(m => m.severity >= 4 && m.severity < 8);
               if (errors.length === 0 && warnings.length === 0 && customMarkers.length === 0) {
                 setValidationResult({ valid: true, errors: [], warnings: [] });
-                // Auto-dismiss success after 2s
                 setTimeout(() => setValidationResult(null), 2000);
               } else {
                 setValidationResult({
@@ -944,37 +941,36 @@ export default function SkillDetail() {
               }
             }
           }
-          // Also run skill-level validation if on SKILL.md
           if (currentPath === "SKILL.md") {
             const result = validateSkill(content, virtualFiles, pendingDeletes);
             setValidationResult(result);
           }
         }}
-          className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-colors">
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors">
           <ShieldCheck className="w-3.5 h-3.5" />
           Validate
         </button>
         {hasPendingOps && (
           <button onClick={() => setShowDiff(true)}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors">
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${isDark ? "text-gray-300 border-gray-600 hover:bg-gray-800" : "text-gray-600 border-gray-300 hover:bg-gray-100"}`}>
             <GitCompare className="w-3.5 h-3.5" />
             Diff ({pendingCount})
           </button>
         )}
         {hasPendingOps && (
           <button onClick={handleDiscard}
-            className="px-2.5 py-1.5 text-[12px] text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"}`}>
             Discard
           </button>
         )}
         {hasPendingOps && (
           <button onClick={handleSaveAll} disabled={saving}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">
+            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
             Save ({pendingCount})
           </button>
         )}
-        <button onClick={() => setShowDeleteConfirm(true)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
+        <button onClick={() => setShowDeleteConfirm(true)} className={`p-1.5 rounded transition-colors ${isDark ? "text-red-400 hover:bg-red-900/20" : "text-red-400 hover:text-red-600 hover:bg-red-50"}`}>
           <Trash2 className="w-4 h-4" />
         </button>
         <button onClick={() => {
@@ -985,7 +981,7 @@ export default function SkillDetail() {
         }}
           className={`p-1.5 rounded transition-colors ${useSkillAssistantStore.getState().panelOpen
             ? "text-blue-500 bg-blue-50 dark:bg-blue-900/20"
-            : "text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+            : isDark ? "text-gray-400 hover:text-blue-400 hover:bg-blue-900/20" : "text-gray-400 hover:text-blue-500 hover:bg-blue-50"
           }`}
           title="AI Assistant">
           <Sparkles className="w-4 h-4" />
