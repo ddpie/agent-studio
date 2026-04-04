@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams, useBlocker } from "react-route
 import {
   Package, ChevronLeft, Trash2, Loader2, Save, GitCompare,
   FileText, FolderOpen, FolderClosed, File, ChevronRight as ChevronRightIcon,
-  Plus, Pencil, FolderPlus,
+  Plus, Pencil, FolderPlus, ArrowRightLeft,
 } from "lucide-react";
 import { getSkillContent, getSkillFile, listSkillFiles, deleteSkill, writeSkillFile, deleteSkillFile, renameSkillFile, listSkills, type SkillIndexEntry } from "../../lib/skill-storage";
 import Editor, { DiffEditor } from "@monaco-editor/react";
@@ -135,22 +135,46 @@ type TreeNode = {
 
 function buildTreeData(files: string[]): TreeNode[] {
   const root: TreeNode[] = [{ id: "SKILL.md", name: "SKILL.md" }];
-  const dirMap = new Map<string, TreeNode>();
+
+  // Build a nested map: each level maps name → { files, subdirs }
+  interface DirEntry { children: Map<string, DirEntry>; files: { id: string; name: string }[] }
+  const rootDir: DirEntry = { children: new Map(), files: [] };
 
   for (const f of files) {
     const parts = f.split("/");
     if (parts.length === 1) {
-      root.push({ id: f, name: f });
+      rootDir.files.push({ id: f, name: f });
     } else {
-      const dirName = parts[0];
-      if (!dirMap.has(dirName)) {
-        const dirNode: TreeNode = { id: `__dir__${dirName}`, name: dirName, children: [] };
-        dirMap.set(dirName, dirNode);
-        root.push(dirNode);
+      let current = rootDir;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!current.children.has(parts[i])) {
+          current.children.set(parts[i], { children: new Map(), files: [] });
+        }
+        current = current.children.get(parts[i])!;
       }
-      dirMap.get(dirName)!.children!.push({ id: f, name: parts.slice(1).join("/") });
+      current.files.push({ id: f, name: parts[parts.length - 1] });
     }
   }
+
+  function buildLevel(dir: DirEntry, prefix: string): TreeNode[] {
+    const nodes: TreeNode[] = [];
+    // Subdirectories first
+    for (const [name, sub] of [...dir.children.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const dirPath = prefix ? `${prefix}/${name}` : name;
+      nodes.push({
+        id: `__dir__${dirPath}`,
+        name,
+        children: buildLevel(sub, dirPath),
+      });
+    }
+    // Then files
+    for (const f of dir.files.sort((a, b) => a.name.localeCompare(b.name))) {
+      nodes.push({ id: f.id, name: f.name });
+    }
+    return nodes;
+  }
+
+  root.push(...buildLevel(rootDir, ""));
   return root;
 }
 
@@ -266,6 +290,62 @@ export default function SkillDetail() {
   const [pendingRenames] = useState(() => new Map<string, string>()); // oldPath → newPath
 
   const currentPath = activeFile || "SKILL.md";
+
+  /** Shared helper: stage a file move/rename. Handles chained renames correctly. */
+  const stageMove = useCallback((oldPath: string, newPath: string) => {
+    if (newPath === oldPath) return;
+
+    if (pendingCreates.has(oldPath)) {
+      // Move a pending create — just relocate in memory
+      const content = editedContents.get(oldPath) ?? pendingCreates.get(oldPath) ?? "";
+      pendingCreates.delete(oldPath);
+      pendingCreates.set(newPath, content);
+      if (editedContents.has(oldPath)) {
+        editedContents.set(newPath, editedContents.get(oldPath)!);
+        editedContents.delete(oldPath);
+      }
+    } else {
+      // Check if oldPath is already the TARGET of an existing rename (chained move)
+      let originalKey: string | null = null;
+      for (const [k, v] of pendingRenames) {
+        if (v === oldPath) { originalKey = k; break; }
+      }
+
+      if (originalKey !== null) {
+        // Update the existing rename chain
+        if (newPath === originalKey) {
+          // Moved back to original location — cancel the rename
+          pendingRenames.delete(originalKey);
+        } else {
+          pendingRenames.set(originalKey, newPath);
+        }
+      } else {
+        // New rename
+        pendingRenames.set(oldPath, newPath);
+      }
+
+      // Migrate edit/original contents
+      if (editedContents.has(oldPath)) {
+        editedContents.set(newPath, editedContents.get(oldPath)!);
+        editedContents.delete(oldPath);
+      }
+      if (originalContents.has(oldPath)) {
+        originalContents.set(newPath, originalContents.get(oldPath)!);
+        originalContents.delete(oldPath);
+      }
+    }
+
+    const next = new Set(changedFiles);
+    next.delete(oldPath);
+    next.add(newPath);
+    setChangedFiles(next);
+
+    if (oldPath === currentPath) {
+      setSearchParams({ file: newPath });
+      const content = editedContents.get(newPath) ?? originalContents.get(newPath) ?? "";
+      setSkillContent(content);
+    }
+  }, [currentPath, changedFiles, editedContents, originalContents, pendingCreates, pendingRenames]);
 
   // Compute virtual file list: real files + renames + creates (keep deletes for strikethrough)
   const virtualFiles = useMemo(() => {
@@ -495,6 +575,7 @@ export default function SkillDetail() {
   const [newFolderParent, setNewFolderParent] = useState("");
   const [renameDialog, setRenameDialog] = useState<{ path: string; currentName: string } | null>(null);
   const [deleteFileDialog, setDeleteFileDialog] = useState<string | null>(null);
+  const [moveFileDialog, setMoveFileDialog] = useState<string | null>(null);
   const [dialogInput, setDialogInput] = useState("");
 
   const handleNewFile = async () => {
@@ -574,43 +655,37 @@ export default function SkillDetail() {
     const parts = oldPath.split("/");
     parts[parts.length - 1] = dialogInput.trim();
     const newPath = parts.join("/");
-    if (newPath === oldPath) { setRenameDialog(null); return; }
-
-    if (pendingCreates.has(oldPath)) {
-      // Rename a pending create — just move in memory
-      const content = editedContents.get(oldPath) ?? pendingCreates.get(oldPath) ?? "";
-      pendingCreates.delete(oldPath);
-      pendingCreates.set(newPath, content);
-      if (editedContents.has(oldPath)) {
-        editedContents.set(newPath, editedContents.get(oldPath)!);
-        editedContents.delete(oldPath);
-      }
-    } else {
-      // Stage rename for existing file
-      pendingRenames.set(oldPath, newPath);
-      if (editedContents.has(oldPath)) {
-        editedContents.set(newPath, editedContents.get(oldPath)!);
-        editedContents.delete(oldPath);
-      }
-      if (originalContents.has(oldPath)) {
-        originalContents.set(newPath, originalContents.get(oldPath)!);
-        originalContents.delete(oldPath);
-      }
-    }
-
-    const next = new Set(changedFiles);
-    next.delete(oldPath);
-    next.add(newPath);
-    setChangedFiles(next);
-
-    if (oldPath === currentPath) {
-      setSearchParams({ file: newPath });
-      const content = editedContents.get(newPath) ?? originalContents.get(newPath) ?? "";
-      setSkillContent(content);
-    }
+    stageMove(oldPath, newPath);
     setRenameDialog(null);
     setDialogInput("");
   };
+
+  const handleMoveFile = () => {
+    if (!moveFileDialog || !dialogInput.trim()) return;
+    const oldPath = moveFileDialog;
+    const fileName = oldPath.split("/").pop()!;
+    const targetDir = dialogInput.trim();
+    const newPath = targetDir === "(root)" ? fileName : `${targetDir}/${fileName}`;
+    stageMove(oldPath, newPath);
+    setMoveFileDialog(null);
+    setDialogInput("");
+  };
+
+  // Compute available directories for move dialog
+  const availableDirs = useMemo(() => {
+    const dirs = new Set<string>();
+    dirs.add("(root)");
+    for (const f of virtualFiles) {
+      const idx = f.indexOf("/");
+      if (idx > 0) dirs.add(f.slice(0, idx));
+    }
+    // Also include pending create dirs
+    for (const path of pendingCreates.keys()) {
+      const idx = path.indexOf("/");
+      if (idx > 0) dirs.add(path.slice(0, idx));
+    }
+    return [...dirs].sort();
+  }, [virtualFiles, pendingCreates, changedFiles]);
 
   const handleContextMenu = (e: React.MouseEvent, nodeId: string, isFolder: boolean) => {
     e.preventDefault();
@@ -798,36 +873,7 @@ export default function SkillDetail() {
                   const fileName = id.split("/").pop()!;
                   const newDir = parentId?.replace("__dir__", "") ?? "";
                   const newPath = newDir ? `${newDir}/${fileName}` : fileName;
-                  if (newPath === id) continue;
-
-                  if (pendingCreates.has(id)) {
-                    const content = editedContents.get(id) ?? pendingCreates.get(id) ?? "";
-                    pendingCreates.delete(id);
-                    pendingCreates.set(newPath, content);
-                    if (editedContents.has(id)) {
-                      editedContents.set(newPath, editedContents.get(id)!);
-                      editedContents.delete(id);
-                    }
-                  } else {
-                    pendingRenames.set(id, newPath);
-                    if (editedContents.has(id)) {
-                      editedContents.set(newPath, editedContents.get(id)!);
-                      editedContents.delete(id);
-                    }
-                    if (originalContents.has(id)) {
-                      originalContents.set(newPath, originalContents.get(id)!);
-                      originalContents.delete(id);
-                    }
-                  }
-
-                  const next = new Set(changedFiles);
-                  next.delete(id);
-                  next.add(newPath);
-                  setChangedFiles(next);
-
-                  if (id === currentPath) {
-                    setSearchParams({ file: newPath });
-                  }
+                  stageMove(id, newPath);
                 }
               }}
             >
@@ -950,13 +996,13 @@ export default function SkillDetail() {
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setShowDeleteConfirm(false)}>
           <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-xl shadow-2xl p-5 max-w-sm mx-4`} onClick={e => e.stopPropagation()}>
-            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>Delete skill?</p>
+            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>Move to trash?</p>
             <p className="text-xs text-gray-500 mb-4">
-              Remove <span className={`font-mono font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>{skill?.name}</span> and all its files. This cannot be undone.
+              <span className={`font-mono font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>{skill?.name}</span> will be moved to trash. You can restore it later from the Skills page.
             </p>
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowDeleteConfirm(false)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>Cancel</button>
-              <button onClick={handleDelete} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">Delete</button>
+              <button onClick={handleDelete} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">Move to Trash</button>
             </div>
           </div>
         </div>
@@ -990,6 +1036,12 @@ export default function SkillDetail() {
             <button onClick={() => { setRenameDialog({ path: contextMenu.nodeId, currentName: contextMenu.nodeId.split("/").pop()! }); setDialogInput(contextMenu.nodeId.split("/").pop()!); setContextMenu(null); }}
               className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${isDark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`}>
               <Pencil className="w-3 h-3" /> Rename
+            </button>
+          )}
+          {!contextMenu.isFolder && (
+            <button onClick={() => { setMoveFileDialog(contextMenu.nodeId); setDialogInput(""); setContextMenu(null); }}
+              className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${isDark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`}>
+              <ArrowRightLeft className="w-3 h-3" /> Move to...
             </button>
           )}
           <button onClick={() => { setDeleteFileDialog(contextMenu.nodeId); setContextMenu(null); }}
@@ -1074,6 +1126,42 @@ export default function SkillDetail() {
             <div className="flex justify-end gap-2">
               <button onClick={() => setDeleteFileDialog(null)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>Cancel</button>
               <button onClick={handleDeleteFile} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Move file dialog */}
+      {moveFileDialog && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setMoveFileDialog(null)}>
+          <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-xl shadow-2xl p-5 max-w-sm mx-4 w-80`} onClick={e => e.stopPropagation()}>
+            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>Move file</p>
+            <p className="text-xs text-gray-500 mb-3">
+              Move <span className={`font-mono font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>{moveFileDialog.split("/").pop()}</span> to:
+            </p>
+            <div className="space-y-1 max-h-40 overflow-y-auto mb-3">
+              {availableDirs.map(dir => {
+                const currentDir = moveFileDialog.includes("/") ? moveFileDialog.slice(0, moveFileDialog.indexOf("/")) : "(root)";
+                const isCurrent = dir === currentDir;
+                return (
+                  <button key={dir} onClick={() => setDialogInput(dir)}
+                    className={`w-full text-left px-2.5 py-1.5 text-xs rounded-lg flex items-center gap-2 ${
+                      dialogInput === dir
+                        ? "bg-blue-600 text-white"
+                        : isCurrent
+                          ? isDark ? "bg-gray-700 text-gray-400" : "bg-gray-100 text-gray-400"
+                          : isDark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"
+                    }`}>
+                    {dir === "(root)" ? <File className="w-3 h-3" /> : <FolderClosed className="w-3 h-3 text-yellow-500" />}
+                    {dir === "(root)" ? "Root" : dir}
+                    {isCurrent && <span className="text-[9px] ml-auto opacity-60">current</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setMoveFileDialog(null)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>Cancel</button>
+              <button onClick={handleMoveFile} disabled={!dialogInput} className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">Move</button>
             </div>
           </div>
         </div>

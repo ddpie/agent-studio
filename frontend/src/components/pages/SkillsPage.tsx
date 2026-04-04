@@ -1,21 +1,28 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router";
 import {
-  Package, Search, RefreshCw, Loader2, FileText, Upload,
+  Package, Search, RefreshCw, Loader2, FileText, Upload, Trash2, RotateCcw, X,
 } from "lucide-react";
-import { listSkills, importSkill, type SkillIndexEntry } from "../../lib/skill-storage";
+import { listSkills, listDeletedSkills, importSkill, restoreSkill, permanentlyDeleteSkill, type SkillIndexEntry } from "../../lib/skill-storage";
 
 export default function SkillsPage() {
   const navigate = useNavigate();
   const [skills, setSkills] = useState<SkillIndexEntry[]>([]);
+  const [trashedSkills, setTrashedSkills] = useState<SkillIndexEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [importing, setImporting] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
+  const [confirmPermanentDelete, setConfirmPermanentDelete] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => {
     setLoading(true);
-    listSkills().then((s) => { setSkills(s); setLoading(false); });
+    Promise.all([listSkills(), listDeletedSkills()]).then(([s, t]) => {
+      setSkills(s);
+      setTrashedSkills(t);
+      setLoading(false);
+    });
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -36,7 +43,18 @@ export default function SkillsPage() {
     }
   };
 
-  const filtered = skills.filter(
+  const handleRestore = async (id: string) => {
+    await restoreSkill(id);
+    refresh();
+  };
+
+  const handlePermanentDelete = async (id: string) => {
+    await permanentlyDeleteSkill(id);
+    setConfirmPermanentDelete(null);
+    refresh();
+  };
+
+  const filtered = (showTrash ? trashedSkills : skills).filter(
     (s) => !search || s.name.toLowerCase().includes(search.toLowerCase())
       || s.description.toLowerCase().includes(search.toLowerCase())
   );
@@ -55,16 +73,28 @@ export default function SkillsPage() {
               placeholder="Search skills..."
               className="pl-7 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg w-48 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400" />
           </div>
+          <button onClick={() => setShowTrash(!showTrash)}
+            className={`p-1.5 rounded-lg transition-colors ${showTrash
+              ? "text-red-500 bg-red-50 dark:bg-red-900/20"
+              : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            }`}
+            title={showTrash ? "Back to skills" : "Trash"}>
+            <Trash2 className="w-4 h-4" />
+          </button>
           <button onClick={refresh}
             className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           </button>
-          <input ref={fileInputRef} type="file" accept=".md,.txt,.cursorrules" className="hidden" onChange={handleFileImport} />
-          <button onClick={() => fileInputRef.current?.click()} disabled={importing}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">
-            {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-            Import
-          </button>
+          {!showTrash && (
+            <>
+              <input ref={fileInputRef} type="file" accept=".md,.txt,.cursorrules" className="hidden" onChange={handleFileImport} />
+              <button onClick={() => fileInputRef.current?.click()} disabled={importing}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">
+                {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                Import
+              </button>
+            </>
+          )}
         </div>
       </div>
       <div className="flex-1 overflow-y-auto p-6">
@@ -76,27 +106,67 @@ export default function SkillsPage() {
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <Package className="w-12 h-12 mb-3 opacity-30" />
             <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-              {search ? "No matching skills" : "No skills yet"}
+              {search ? "No matching skills" : showTrash ? "Trash is empty" : "No skills yet"}
             </p>
-            <p className="text-xs mt-1">Create skills through the Meta Agent chat</p>
+            {!showTrash && <p className="text-xs mt-1">Create skills through the Meta Agent chat</p>}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((skill) => (
-              <button key={skill.id} onClick={() => navigate(`/skills/${skill.id}`)}
-                className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:border-blue-300 hover:shadow-sm transition-all text-left">
+              <div key={skill.id}
+                className={`border rounded-lg p-4 transition-all text-left ${showTrash
+                  ? "border-gray-200 dark:border-gray-700 opacity-60"
+                  : "border-gray-200 dark:border-gray-700 hover:border-blue-300 hover:shadow-sm cursor-pointer"
+                }`}
+                onClick={showTrash ? undefined : () => navigate(`/skills/${skill.id}`)}
+              >
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                  <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">{skill.name}</h3>
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 flex-1 truncate">{skill.name}</h3>
+                  {showTrash && (
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => handleRestore(skill.id)}
+                        className="p-1 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
+                        title="Restore">
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => setConfirmPermanentDelete(skill.id)}
+                        className="p-1 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                        title="Delete permanently">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 {skill.description && (
                   <p className="text-xs text-gray-500 mt-2 line-clamp-2">{skill.description}</p>
                 )}
-              </button>
+                {showTrash && skill.deletedAt && (
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    Deleted {new Date(skill.deletedAt).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Permanent delete confirm */}
+      {confirmPermanentDelete && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setConfirmPermanentDelete(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-5 max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium mb-1 text-gray-800 dark:text-gray-200">Permanently delete?</p>
+            <p className="text-xs text-gray-500 mb-4">
+              This will remove the skill and all its files. This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setConfirmPermanentDelete(null)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancel</button>
+              <button onClick={() => handlePermanentDelete(confirmPermanentDelete)} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">Delete Forever</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

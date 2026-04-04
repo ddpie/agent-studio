@@ -12,12 +12,20 @@ export interface SkillIndexEntry {
   id: string;
   name: string;
   description: string;
+  deleted?: boolean;
+  deletedAt?: number;
 }
 
-/** List all skills from index.json */
+/** List all skills from index.json (excludes deleted) */
 export async function listSkills(): Promise<SkillIndexEntry[]> {
   const index = await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY);
-  return index ?? [];
+  return (index ?? []).filter(s => !s.deleted);
+}
+
+/** List deleted (trashed) skills */
+export async function listDeletedSkills(): Promise<SkillIndexEntry[]> {
+  const index = await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY);
+  return (index ?? []).filter(s => s.deleted);
 }
 
 /** Read full SKILL.md content */
@@ -161,10 +169,41 @@ export async function renameSkillFile(id: string, oldPath: string, newPath: stri
   return deleteFromS3(`skills/${id}/${oldPath}`);
 }
 
-/** Delete a skill and update index */
+/** Soft-delete a skill (move to trash) */
 export async function deleteSkill(id: string): Promise<boolean> {
-  const deleted = await deleteFromS3(`skills/${id}/SKILL.md`);
-  if (!deleted) return false;
+  const index = (await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY)) ?? [];
+  const entry = index.find((s) => s.id === id);
+  if (!entry) return false;
+  entry.deleted = true;
+  entry.deletedAt = Date.now();
+  await writeJsonToS3(INDEX_KEY, index);
+  return true;
+}
+
+/** Restore a soft-deleted skill */
+export async function restoreSkill(id: string): Promise<boolean> {
+  const index = (await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY)) ?? [];
+  const entry = index.find((s) => s.id === id);
+  if (!entry) return false;
+  delete entry.deleted;
+  delete entry.deletedAt;
+  await writeJsonToS3(INDEX_KEY, index);
+  return true;
+}
+
+/** Permanently delete a skill (remove files + index entry) */
+export async function permanentlyDeleteSkill(id: string): Promise<boolean> {
+  // Delete SKILL.md and all files
+  try {
+    const { listS3Keys } = await import("./s3-storage");
+    const keys = await listS3Keys(`skills/${id}/`);
+    for (const key of keys) {
+      await deleteFromS3(key);
+    }
+  } catch {
+    // If listing fails, at least delete SKILL.md
+    await deleteFromS3(`skills/${id}/SKILL.md`);
+  }
 
   const index = (await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY)) ?? [];
   const updated = index.filter((s) => s.id !== id);
