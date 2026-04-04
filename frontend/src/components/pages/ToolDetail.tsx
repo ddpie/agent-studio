@@ -111,6 +111,9 @@ export default function ToolDetail() {
   const validateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveRef = useRef<(() => void) | undefined>(undefined);
 
+  // Load current user
+  useEffect(() => { getCurrentUser().then(u => setCurrentUser(u.username)).catch(() => {}); }, []);
+
   // Load tool data
   useEffect(() => {
     if (tools.length === 0 && !fetchAttempted) {
@@ -131,6 +134,7 @@ export default function ToolDetail() {
       setOriginalDescription(paramDesc);
       setCode(TOOL_TEMPLATE);
       setOriginalCode("");
+      setToolOwner("");
       setLoaded(true);
       if (toolId) openPanel(toolId);
       return;
@@ -149,11 +153,19 @@ export default function ToolDetail() {
     setOriginalDescription(tool.description);
     setCode(tool.code);
     setOriginalCode(tool.code);
+    setToolOwner(tool.owner);
     setLoaded(true);
     if (toolId) openPanel(toolId);
   }, [tools, toolId, isNew, paramName, paramDesc, fetchTools]);
 
   const hasChanges = code !== originalCode || name !== originalName || description !== originalDescription;
+
+  // Permission: can edit if mine, seed, or new
+  const isMine = currentUser && toolOwner === currentUser;
+  const isSeed = toolOwner === "__builtin__";
+  const isOthers = !isNew && !isMine && !isSeed && toolOwner !== "";
+  const canEdit = isNew || isMine || isSeed;
+  const canDelete = isMine;
 
   useEffect(() => { preloadPyodide(); }, []);
 
