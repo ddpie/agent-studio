@@ -10,6 +10,7 @@ import { useToolLibraryStore, type ToolTemplate } from "../../stores/tool-librar
 import { useToolAssistantStore } from "../../stores/tool-assistant-store";
 import { useUISettings } from "../../stores/ui-settings-store";
 import { preloadPyodide, isPyodideReady, checkPythonSyntax } from "../../lib/pyodide-checker";
+import { invokeMetaAgent } from "../../lib/agentcore-client";
 import { getCurrentUser } from "aws-amplify/auth";
 import ToolAssistant from "../tools/ToolAssistant";
 
@@ -110,6 +111,7 @@ export default function ToolDetail() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+  const [validating, setValidating] = useState(false);
   const [fetchAttempted, setFetchAttempted] = useState(false);
   const [currentUser, setCurrentUser] = useState("");
   const [toolOwner, setToolOwner] = useState("");
@@ -241,7 +243,8 @@ export default function ToolDetail() {
   }, [runValidation, code]);
 
   // Validate button handler
-  const handleValidate = () => {
+  const handleValidate = async () => {
+    setValidating(true);
     const errors: string[] = [];
     const warnings: string[] = [];
 
@@ -274,12 +277,35 @@ export default function ToolDetail() {
       warnings.push(t("tools.missingReturnType"));
     }
 
+    // AI quality check (only if local checks pass)
+    if (errors.length === 0) {
+      try {
+        const lang = useUISettings.getState().language;
+        const langHint = lang === "zh" ? "用中文回复。" : "Respond in English.";
+        const validatePrompt = `${langHint}\nValidate this @tool function. Check for:\n- Docstring quality (Args/Returns documented?)\n- Input validation and error handling\n- Edge cases (empty input, wrong types)\n- Code quality and best practices\n\nCode:\n\`\`\`python\n${code}\n\`\`\`\n\nRespond with ONLY a JSON block:\n\`\`\`json\n{"valid": true/false, "errors": ["..."], "warnings": ["..."]}\n\`\`\``;
+        let result = "";
+        for await (const chunk of invokeMetaAgent(validatePrompt, [])) {
+          const cleaned = chunk.replace(/\{"__tool"[^}]*\}/g, "");
+          if (cleaned) result += cleaned;
+        }
+        const jsonMatch = result.match(/\{[\s\S]*"valid"[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (Array.isArray(parsed.errors)) errors.push(...parsed.errors);
+            if (Array.isArray(parsed.warnings)) warnings.push(...parsed.warnings);
+          } catch { /* JSON parse failed */ }
+        }
+      } catch { /* Meta-Agent call failed */ }
+    }
+
     if (errors.length === 0 && warnings.length === 0) {
       setValidationResult({ valid: true, errors: [], warnings: [] });
       setTimeout(() => setValidationResult(null), 2000);
     } else {
       setValidationResult({ valid: errors.length === 0, errors, warnings });
     }
+    setValidating(false);
   };
 
   // Save
@@ -387,9 +413,10 @@ export default function ToolDetail() {
         {/* Validate */}
         <button
           onClick={handleValidate}
-          className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${isDark ? "text-gray-400 hover:text-green-400 hover:bg-green-900/30" : "text-gray-500 hover:text-green-600 hover:bg-green-50"}`}
+          disabled={validating}
+          className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors disabled:opacity-50 ${isDark ? "text-gray-400 hover:text-green-400 hover:bg-green-900/30" : "text-gray-500 hover:text-green-600 hover:bg-green-50"}`}
         >
-          <ShieldCheck className="w-3.5 h-3.5" />
+          {validating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
           {t("common.validate")}
         </button>
 

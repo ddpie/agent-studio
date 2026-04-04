@@ -5,32 +5,70 @@
 ## 架构
 
 ```mermaid
-graph TD
-    FE[Frontend<br/>React + Cognito Auth]
-    META[Meta-Agent<br/>Strands SDK]
-    SUB[Sub-Agents<br/>AgentCore Runtime]
-    S3[(S3<br/>部署包 / 配置 / Skill)]
-    DDB[(DynamoDB<br/>归属 / 权限)]
-    MCP[MCP Gateway]
+graph TB
+    User((用户))
 
-    FE -->|SigV4 Streaming| META
-    META -->|boto3| SUB
-    META --- S3
-    META --- DDB
-    SUB --- MCP
-    SUB --- S3
+    subgraph 前端
+        FE[Web Console]
+    end
+
+    subgraph AgentCore Runtime
+        META[Meta-Agent]
+        A1[客服 Agent]
+        A2[数据分析 Agent]
+        A3[... 更多 Agent]
+    end
+
+    subgraph 能力
+        Skills[Skill 系统]
+        Tools[预构建工具库]
+        MCP[MCP Gateway]
+    end
+
+    subgraph AWS 服务
+        S3[(S3)]
+        DDB[(DynamoDB)]
+        CW[CloudWatch]
+    end
+
+    User -->|自然语言创建 / 编辑| FE
+    User -->|对话| A1 & A2
+    FE --> META
+    META -->|创建 / 管理| A1 & A2 & A3
+    META --- S3 & DDB & CW
+    A1 & A2 & A3 --- Skills & Tools & MCP
+    Skills & Tools --- S3
 ```
 
 - **Frontend** — React 19 + Vite + Tailwind + Zustand，Cognito 认证，SigV4 签名直连 AgentCore / S3
 - **Meta-Agent** — 跑在 AgentCore Runtime 上的编排 Agent，25 个工具管理 Sub-Agent 全生命周期
 - **Sub-Agent** — 每个 Agent 独立部署（main.py + tools.py + prompt.txt + config.json）
 
+## 项目结构
+
+```
+agent-studio/
+├── frontend/              # Web Console (React 19 + Vite + Tailwind 4)
+│   └── src/
+│       ├── components/    # 页面与 UI 组件 (chat, agents, skills, tools, layout)
+│       ├── stores/        # Zustand 状态管理
+│       └── lib/           # AgentCore client, S3 操作, 工具函数
+├── meta-agent/            # 编排引擎 (Strands Agent on AgentCore Runtime)
+│   ├── main.py            # Meta-Agent 入口
+│   ├── tools/             # Agent 生命周期工具 (CRUD, 校验, 日志, Skill, MCP, Secrets)
+│   ├── tools_library/     # 预构建工具库 (web_search, s3_read, chart 等)
+│   ├── templates/         # 代码生成模板 + 提示词模板
+│   └── tests/             # 单元测试
+├── scripts/               # 部署 / 构建 / 测试脚本
+└── .env.example
+```
+
 ## 功能
 
 - 自然语言创建/编辑 Agent，表单直接改配置，部署前自动校验
 - 流式对话 + tool-use 可视化，多 session，多模态（图片）
 - Skill 系统（AgentSkills.io 格式），多文件编辑，运行时按需加载
-- 预构建工具库（web_search / s3_read / sql_readonly / chart 等）+ MCP Gateway 集成
+- 预构建工具库 + MCP Gateway 集成
 - 权限三档（basic / readonly / data-access），DynamoDB 归属控制
 - Claude 4.6/4.5/4/3.x 多模型运行时切换
 
@@ -65,3 +103,101 @@ bash scripts/run-tests.sh          # 全部测试 + 覆盖率
 | `AGENT_STUDIO_COGNITO_CLIENT_ID` | Cognito App Client ID |
 | `AGENT_STUDIO_COGNITO_IDENTITY_POOL_ID` | Cognito Identity Pool ID |
 | `AGENT_STUDIO_S3_BUCKET` | S3 Bucket（部署包 + 配置 + Skill） |
+
+---
+
+# Agent Studio (English)
+
+AI agent orchestration platform on AWS Bedrock AgentCore. Create, manage, and run AI agents through natural language.
+
+## Architecture
+
+```mermaid
+graph TB
+    User((User))
+
+    subgraph Frontend
+        FE[Web Console]
+    end
+
+    subgraph AgentCore Runtime
+        META[Meta-Agent]
+        A1[Customer Service Agent]
+        A2[Data Analyst Agent]
+        A3[... more Agents]
+    end
+
+    subgraph Capabilities
+        Skills[Skill System]
+        Tools[Built-in Tool Library]
+        MCP[MCP Gateway]
+    end
+
+    subgraph AWS Services
+        S3[(S3)]
+        DDB[(DynamoDB)]
+        CW[CloudWatch]
+    end
+
+    User -->|Create / Edit via NL| FE
+    User -->|Chat| A1 & A2
+    FE --> META
+    META -->|Create / Manage| A1 & A2 & A3
+    META --- S3 & DDB & CW
+    A1 & A2 & A3 --- Skills & Tools & MCP
+    Skills & Tools --- S3
+```
+
+## Project Structure
+
+```
+agent-studio/
+├── frontend/              # Web Console (React 19 + Vite + Tailwind 4)
+│   └── src/
+│       ├── components/    # Pages & UI (chat, agents, skills, tools, layout)
+│       ├── stores/        # Zustand state management
+│       └── lib/           # AgentCore client, S3 ops, utilities
+├── meta-agent/            # Orchestration engine (Strands Agent on AgentCore Runtime)
+│   ├── main.py            # Meta-Agent entrypoint
+│   ├── tools/             # Agent lifecycle tools (CRUD, validation, logs, skills, MCP, secrets)
+│   ├── tools_library/     # Built-in tools (web_search, s3_read, chart, etc.)
+│   ├── templates/         # Code generation + prompt templates
+│   └── tests/             # Unit tests
+├── scripts/               # Deploy / build / test scripts
+└── .env.example
+```
+
+## Features
+
+- Natural language agent creation/editing, form-based config, pre-deploy validation
+- Streaming chat + tool-use visualization, multi-session, multimodal (images)
+- Skill system (AgentSkills.io format), multi-file editing, runtime on-demand loading
+- Built-in tool library + MCP Gateway integration
+- Permission tiers (basic / readonly / data-access), DynamoDB ownership control
+- Claude 4.6/4.5/4/3.x runtime model switching
+
+## Quick Start
+
+```bash
+cp .env.example .env       # Configure AWS credentials (see env table below)
+bash scripts/deploy-agentcore.sh   # Deploy Meta-Agent
+cd frontend && npm install && npm run dev   # Start frontend
+```
+
+## Testing
+
+```bash
+bash scripts/run-tests.sh  # All tests + coverage
+```
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `AGENT_STUDIO_REGION` | AWS Region |
+| `AGENT_STUDIO_ACCOUNT_ID` | AWS Account ID |
+| `AGENT_STUDIO_META_AGENT_ID` | Meta-Agent Runtime ID |
+| `AGENT_STUDIO_COGNITO_USER_POOL_ID` | Cognito User Pool ID |
+| `AGENT_STUDIO_COGNITO_CLIENT_ID` | Cognito App Client ID |
+| `AGENT_STUDIO_COGNITO_IDENTITY_POOL_ID` | Cognito Identity Pool ID |
+| `AGENT_STUDIO_S3_BUCKET` | S3 Bucket for packages, config, and skills |
