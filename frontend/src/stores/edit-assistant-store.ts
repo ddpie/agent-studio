@@ -153,15 +153,42 @@ ${toolDefs ? `## Current Tool Code (source of truth)\n\`\`\`python\n${toolDefs}\
 ${content}
 
 ## Output Format
-When the user asks for a plan, approach, or opinion (e.g., "怎么做", "你打算", "你觉得", "how would you", "what's your plan"), respond with ONLY text explanation. Do NOT output any __update JSON block. Wait for the user to confirm before making changes.
+When the user asks for a plan, approach, or opinion (e.g., "怎么做", "你打算", "你觉得", "how would you", "what's your plan"), respond with ONLY text explanation. Do NOT output any __update or __field_edit block. Wait for the user to confirm before making changes.
 
-When the user gives a clear instruction to change something (e.g., "改一下", "优化", "添加", "add", "fix", "update"), output EXACTLY one JSON block, then 1-2 sentences explaining what you changed:
+When the user gives a clear instruction to change something, choose the appropriate format:
+
+### For small changes to long fields (system_prompt, tool_definitions): use __field_edit
+\`\`\`__field_edit:FIELD_NAME
+<<<<<<< SEARCH
+exact text to find (copy verbatim from the field)
+=======
+replacement text
+>>>>>>> REPLACE
+\`\`\`
+
+You can include multiple SEARCH/REPLACE blocks and multiple __field_edit blocks:
+\`\`\`__field_edit:system_prompt
+<<<<<<< SEARCH
+old section
+=======
+new section
+>>>>>>> REPLACE
+\`\`\`
+
+### For short fields or new values: use __update JSON
 \`\`\`json
 {"__update": {"field_name": "new_value", ...}}
 \`\`\`
 
+### Rules for choosing format
+- Changing < 30% of system_prompt or tool_definitions → use __field_edit (saves tokens)
+- Setting short fields (name, description, welcome_message, suggestions, tool_names) → use __update
+- Creating entirely new system_prompt or tool_definitions → use __update
+- You can mix both in one response: __field_edit for long fields + __update for short fields
+- SEARCH text must match the field content EXACTLY (whitespace matters)
+
 WRONG: {"system_prompt": "..."} (missing __update wrapper)
-CORRECT: {"__update": {"system_prompt": "...", "tool_names": "..."}}
+CORRECT: {"__update": {"description": "...", "tool_names": "..."}}
 
 ## Tool Update Rules
 
@@ -304,9 +331,42 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
       if (flushTimer) clearTimeout(flushTimer);
       flushPending();
 
+      // Post-stream: extract __field_edit blocks (search/replace for long fields)
+      const fieldEditRegex = /```__field_edit:([^\n]*)\n([\s\S]*?)```/g;
+      let fieldEditMatch;
+      const editedFields: string[] = [];
+      let processedText = fullText;
+
+      while ((fieldEditMatch = fieldEditRegex.exec(fullText)) !== null) {
+        const fieldName = fieldEditMatch[1].trim();
+        const editBlock = fieldEditMatch[2];
+        const pairRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
+        let pairMatch;
+
+        // Get current field value from formContext
+        const currentValue = String(formContext[fieldName] ?? "");
+        let newValue = currentValue;
+        let applied = false;
+
+        while ((pairMatch = pairRegex.exec(editBlock)) !== null) {
+          const searchText = pairMatch[1];
+          const replaceText = pairMatch[2];
+          if (newValue.includes(searchText)) {
+            newValue = newValue.split(searchText).join(replaceText);
+            applied = true;
+          }
+        }
+
+        if (applied) {
+          onUpdate({ [fieldName]: newValue });
+          editedFields.push(fieldName);
+        }
+        processedText = processedText.replace(fieldEditMatch[0], "");
+      }
+
       // Post-stream: extract __update JSON from the complete response
-      // Strip markdown code fences that may wrap the JSON
-      const cleanedText = fullText.replace(/```(?:json)?\s*/g, "").replace(/```/g, "");
+      // Strip __field_edit blocks and markdown code fences
+      const cleanedText = processedText.replace(/```(?:json)?\s*/g, "").replace(/```/g, "");
       // Match with optional whitespace: { "__update" or {"__update"
       const updateMatch = cleanedText.match(/\{\s*"__update"/);
       const updateIdx = updateMatch ? updateMatch.index! : -1;
@@ -338,13 +398,24 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
               set((s) => ({
                 messages: s.messages.map((m) =>
                   m.id === assistantMsg.id
-                    ? { ...m, content: (removeStr ? m.content.replace(removeStr, "") : m.content).replace(/\n{3,}/g, "\n\n").trim() + `\n\n---updated:${fields.join(",")}---\n\n` }
+                    ? { ...m, content: (removeStr ? m.content.replace(removeStr, "") : m.content).replace(/\n{3,}/g, "\n\n").trim() + `\n\n---updated:${[...fields, ...editedFields].join(",")}---\n\n` }
                     : m
                 ),
               }));
             }
           } catch { /* JSON parse failed */ }
         }
+      }
+
+      // If only __field_edit was used (no __update JSON), still show indicator
+      if (editedFields.length > 0 && updateIdx === -1) {
+        set((s) => ({
+          messages: s.messages.map((m) =>
+            m.id === assistantMsg.id
+              ? { ...m, content: processedText.replace(/\n{3,}/g, "\n\n").trim() + `\n\n---updated:${editedFields.join(",")}---\n\n` }
+              : m
+          ),
+        }));
       }
     } catch (err) {
       if (!signal.aborted) {
