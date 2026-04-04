@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
+import { useTranslation } from "react-i18next";
 import { useParams } from "react-router";
 import { useChatStore, type Message } from "../../stores/chat-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
@@ -147,6 +148,7 @@ const mdComponents: Components = {
 };
 
 function CodeBlock({ language, code }: { language: string; code: string }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const handleCopy = async () => {
     await navigator.clipboard.writeText(code);
@@ -157,7 +159,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
     <div className="relative group/code">
       <div className="absolute top-1 right-1 flex items-center gap-1 opacity-0 group-hover/code:opacity-100 transition-opacity z-10">
         <span className="text-[10px] text-gray-400 bg-white/80 dark:bg-gray-800/80 px-1 rounded">{language}</span>
-        <button onClick={handleCopy} className="p-1 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded border border-gray-200 dark:border-gray-700" title="Copy code">
+        <button onClick={handleCopy} className="p-1 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded border border-gray-200 dark:border-gray-700" title={t("chat.copyCode")}>
           {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3 text-gray-400" />}
         </button>
       </div>
@@ -171,6 +173,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
 import { MODEL_GROUPS, DEFAULT_MODEL_ID, findModelLabel } from "../../lib/models";
 
 function CopyButtons({ content, contentRef }: { content: string; contentRef?: React.RefObject<HTMLDivElement | null> }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState<"text" | "md" | "rich" | null>(null);
 
   const stripNonContent = (s: string) => s
@@ -258,13 +261,13 @@ function CopyButtons({ content, contentRef }: { content: string; contentRef?: Re
 
   return (
     <div className="absolute -top-1 right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700 p-0.5">
-      <button onClick={() => copyAs("text")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title="Copy as plain text">
+      <button onClick={() => copyAs("text")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("chat.copyPlain")}>
         {copied === "text" ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3 text-gray-400" />}
       </button>
-      <button onClick={() => copyAs("md")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title="Copy as Markdown">
+      <button onClick={() => copyAs("md")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("chat.copyMarkdown")}>
         {copied === "md" ? <Check className="w-3 h-3 text-green-500" /> : <FileText className="w-3 h-3 text-gray-400" />}
       </button>
-      <button onClick={() => copyAs("rich")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title="Copy as rich text (with charts)">
+      <button onClick={() => copyAs("rich")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("chat.copyRich")}>
         {copied === "rich" ? <Check className="w-3 h-3 text-green-500" /> : <ImageIcon className="w-3 h-3 text-gray-400" />}
       </button>
     </div>
@@ -272,6 +275,7 @@ function CopyButtons({ content, contentRef }: { content: string; contentRef?: Re
 }
 
 const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStreaming }: { message: Message; isLastAssistant: boolean; isStreaming: boolean }) {
+  const { t } = useTranslation();
   const isUser = message.role === "user";
   const showTypingIndicator = isLastAssistant && isStreaming && message.role === "assistant";
   const showCopy = !isUser && message.content && !showTypingIndicator;
@@ -343,7 +347,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
           <button
             onClick={startEdit}
             className="absolute -bottom-1 -left-1 w-5 h-5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-            title="Edit message"
+            title={t("chat.editMessage")}
           >
             <Pencil className="w-2.5 h-2.5 text-gray-400" />
           </button>
@@ -374,7 +378,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
                   } catch { /* ignore */ }
                 }}
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] border cursor-pointer transition-colors ${isUser ? "bg-white/10 border-white/20 text-white/90 hover:bg-white/20" : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
-                title="Click to download"
+                title={t("chat.clickDownload")}
               >
                 <FileText className="w-3.5 h-3.5 flex-shrink-0" />
                 <span className="font-medium max-w-40 truncate">{f.name}</span>
@@ -409,6 +413,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
 });
 
 export default function ChatPanel() {
+  const { t } = useTranslation();
   const { agentId } = useParams();
   const {
     messages, isStreaming, statusText, sendMessage, cancelStreaming,
@@ -570,7 +575,7 @@ export default function ChatPanel() {
     const sessionId = activeSessionId || "tmp-" + Date.now();
     for (const file of files) {
       if (file.size > 5 * 1024 * 1024) {
-        alert(`File ${file.name} is too large (max 5MB)`);
+        alert(t("chat.fileTooLarge", { name: file.name }));
         continue;
       }
       // Add placeholder with uploading state
@@ -584,7 +589,7 @@ export default function ChatPanel() {
       } catch (err) {
         console.error("File upload failed:", err);
         setAttachedFiles((prev) => prev.filter((f) => f !== placeholder));
-        alert(`Upload failed for ${file.name}`);
+        alert(t("chat.uploadFailed", { name: file.name }));
       }
     }
     e.target.value = "";
@@ -702,7 +707,7 @@ export default function ChatPanel() {
             <button
               onClick={() => setShowHistory(!showHistory)}
               className={`p-1.5 rounded-lg ${showHistory ? "text-blue-600 bg-blue-50" : "text-gray-400 hover:text-blue-600 hover:bg-blue-50"}`}
-              title="Session history"
+              title={t("chat.sessionHistory")}
             >
               <History className="w-4 h-4" />
             </button>
@@ -734,7 +739,7 @@ export default function ChatPanel() {
                       <button
                         onClick={(e) => { e.stopPropagation(); deleteSession(session.id); }}
                         className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Delete session"
+                        title={t("chat.deleteSession")}
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
@@ -768,7 +773,7 @@ export default function ChatPanel() {
                 URL.revokeObjectURL(url);
               }}
               className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50"
-              title="Export as Markdown"
+              title={t("chat.exportMarkdown")}
             >
               <Download className="w-4 h-4" />
             </button>
@@ -777,7 +782,7 @@ export default function ChatPanel() {
           <button
             onClick={newSession}
             className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50"
-            title="New session"
+            title={t("chat.newSession")}
           >
             <Plus className="w-4 h-4" />
           </button>
@@ -829,7 +834,7 @@ export default function ChatPanel() {
             <button
               onClick={regenerateLastMessage}
               className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              title="Regenerate response"
+              title={t("chat.regenerate")}
             >
               <RefreshCw className="w-3 h-3" />
               Regenerate
@@ -865,7 +870,7 @@ export default function ChatPanel() {
           onMouseDown={onInputDragStart}
           onDoubleClick={() => setInputHeight(inputHeight > 60 ? 44 : 160)}
           className="h-1 cursor-row-resize bg-transparent hover:bg-blue-400/30 active:bg-blue-400/50 border-t border-gray-200 dark:border-gray-700 transition-colors"
-          title="Drag up to expand, double-click to toggle"
+          title={t("chat.dragExpand")}
         />
         <div className="px-4 py-2">
         {/* Pasted image previews */}
@@ -917,7 +922,7 @@ export default function ChatPanel() {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             className="p-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0"
-            title="Attach file"
+            title={t("chat.attachFile")}
           >
             <Paperclip className="w-4 h-4" />
           </button>
@@ -927,7 +932,7 @@ export default function ChatPanel() {
             onChange={(e) => { setInput(e.target.value); setHistoryIdx(-1); }}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={imagesAllowed ? "Type a message... (Shift+Enter for new line, paste images)" : "Type a message... (Shift+Enter for new line)"}
+            placeholder={imagesAllowed ? t("chat.placeholder") + " (Shift+Enter for new line, paste images)" : t("chat.placeholder") + " (Shift+Enter for new line)"}
             rows={1}
             style={{ height: inputHeight }}
             className="flex-1 px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none overflow-auto"
@@ -938,7 +943,7 @@ export default function ChatPanel() {
               type="button"
               onClick={cancelStreaming}
               className="p-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 flex-shrink-0"
-              title="Stop generating"
+              title={t("chat.stopGenerating")}
             >
               <Square className="w-4 h-4" />
             </button>
