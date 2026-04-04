@@ -1,12 +1,16 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { getCurrentUser } from "aws-amplify/auth";
 import {
-  Wrench, Search, RefreshCw, Loader2, Plus, Code2,
+  Wrench, Search, RefreshCw, Loader2, Plus, Code2, User,
 } from "lucide-react";
 import { useToolLibraryStore, type ToolTemplate } from "../../stores/tool-library-store";
 
-function ToolCard({ tool, onClick }: { tool: ToolTemplate; onClick: () => void }) {
+function ToolCard({ tool, onClick, currentUser }: { tool: ToolTemplate; onClick: () => void; currentUser: string }) {
+  const { t } = useTranslation();
+  const isMine = tool.owner === currentUser;
+  const isSeed = tool.owner === "__builtin__";
   return (
     <div
       onClick={onClick}
@@ -21,8 +25,16 @@ function ToolCard({ tool, onClick }: { tool: ToolTemplate; onClick: () => void }
       {tool.description && (
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">{tool.description}</p>
       )}
-      <div className="mt-2">
+      <div className="flex items-center gap-2 mt-2">
         <span className="text-[10px] text-gray-400 font-mono">{tool.id}</span>
+        {isSeed && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">{t("tools.seed")}</span>
+        )}
+        {!isMine && !isSeed && (
+          <span className="flex items-center gap-0.5 text-[9px] text-gray-400">
+            <User className="w-2.5 h-2.5" />{tool.owner}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -37,8 +49,10 @@ export default function ToolLibraryPage() {
   const [createName, setCreateName] = useState("");
   const [createDesc, setCreateDesc] = useState("");
   const [creating, setCreating] = useState(false);
+  const [currentUser, setCurrentUser] = useState("");
 
   useEffect(() => { fetchTools(); }, [fetchTools]);
+  useEffect(() => { getCurrentUser().then(u => setCurrentUser(u.username)).catch(() => {}); }, []);
 
   const refresh = useCallback(() => { fetchTools(); }, [fetchTools]);
 
@@ -112,7 +126,7 @@ export default function ToolLibraryPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((tool) => (
-              <ToolCard key={tool.id} tool={tool} onClick={() => navigate(`/tools/${tool.id}`)} />
+              <ToolCard key={tool.id} tool={tool} currentUser={currentUser} onClick={() => navigate(`/tools/${tool.id}`)} />
             ))}
           </div>
         )}

@@ -125,11 +125,12 @@ export async function putToolItem(tool: ToolTemplate): Promise<void> {
       created_at: { S: tool.created_at || now },
       updated_at: { S: now },
     },
-    // Prevent overwriting other users' tools (seed tools with owner=__builtin__ are protected)
-    ConditionExpression: "attribute_not_exists(toolId) OR #o = :owner",
+    // Allow: new tool, own tool, or seed tool (takes ownership on save)
+    ConditionExpression: "attribute_not_exists(toolId) OR #o = :owner OR #o = :seed",
     ExpressionAttributeNames: { "#o": "owner" },
     ExpressionAttributeValues: {
       ":owner": { S: username },
+      ":seed": { S: "__builtin__" },
     },
   });
 }

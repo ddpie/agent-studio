@@ -1076,16 +1076,10 @@ export default function SkillDetail() {
                       : await getSkillFile(skillId, filePath);
                     if (content !== null) originalContents.set(filePath, content);
                   }
-                  // Build file context summary for the prompt
-                  const filesSummary = allFilesList.map(f => {
-                    const c = editedContents.get(f) ?? originalContents.get(f) ?? "";
-                    return `### ${f}\n\`\`\`\n${c.slice(0, 2000)}\n\`\`\``;
-                  }).join("\n\n");
-
                   const store = useSkillAssistantStore.getState();
                   if (!store.panelOpen) store.openPanel(skillId);
                   const issues = [...validationResult.errors, ...validationResult.warnings].join("\n");
-                  const autoFixPrompt = `## Auto-Fix Task\nFix ALL of the following validation issues:\n${issues}\n\n## All Files\n${filesSummary}\n\nFix each issue precisely. You can update multiple files in one response. Use search/replace for small fixes.`;
+                  const autoFixPrompt = `## Auto-Fix Task\nFix ONLY the following validation issues. Do NOT remove or rewrite any existing content.\n\nIssues:\n${issues}\n\nRules:\n- Use __file_edit (search/replace) ONLY. Do NOT use __file_update.\n- Fix ONLY the specific issues listed above.\n- NEVER delete existing content, sections, or descriptions.\n- NEVER shorten or summarize existing text.\n- Make minimal, surgical changes.`;
                   store.sendMessage(
                     autoFixPrompt,
                     { path: currentPath, content: skillContent ?? "", allFiles: allFilesList, getFileContent: (p: string) => editedContents.get(p) ?? originalContents.get(p) ?? null },

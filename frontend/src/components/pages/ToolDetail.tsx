@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams, useBlocker } from "react-router";
 import { useTranslation } from "react-i18next";
 import {
-  ChevronLeft, Loader2, Save, Trash2, GitCompare, Sparkles, Code2,
+  ChevronLeft, Loader2, Save, Trash2, GitCompare, Sparkles, Code2, ShieldCheck, X, User,
 } from "lucide-react";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import type * as MonacoNS from "monaco-editor";
@@ -10,6 +10,7 @@ import { useToolLibraryStore, type ToolTemplate } from "../../stores/tool-librar
 import { useToolAssistantStore } from "../../stores/tool-assistant-store";
 import { useUISettings } from "../../stores/ui-settings-store";
 import { preloadPyodide, isPyodideReady, checkPythonSyntax } from "../../lib/pyodide-checker";
+import { getCurrentUser } from "aws-amplify/auth";
 import ToolAssistant from "../tools/ToolAssistant";
 
 const TOOL_TEMPLATE = `@tool
@@ -69,6 +70,12 @@ function extractFuncName(code: string): string | null {
   return match ? match[1] : null;
 }
 
+interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
 export default function ToolDetail() {
   const { t } = useTranslation();
   const { toolId } = useParams<{ toolId: string }>();
@@ -85,6 +92,8 @@ export default function ToolDetail() {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [originalName, setOriginalName] = useState("");
+  const [originalDescription, setOriginalDescription] = useState("");
   const [code, setCode] = useState("");
   const [originalCode, setOriginalCode] = useState("");
   const [showDiff, setShowDiff] = useState(false);
@@ -92,7 +101,10 @@ export default function ToolDetail() {
   const [notFound, setNotFound] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [fetchAttempted, setFetchAttempted] = useState(false);
+  const [currentUser, setCurrentUser] = useState("");
+  const [toolOwner, setToolOwner] = useState("");
 
   const editorRef = useRef<MonacoNS.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof MonacoNS | null>(null);
@@ -115,6 +127,8 @@ export default function ToolDetail() {
       }
       setName(paramName);
       setDescription(paramDesc);
+      setOriginalName(paramName);
+      setOriginalDescription(paramDesc);
       setCode(TOOL_TEMPLATE);
       setOriginalCode("");
       setLoaded(true);
@@ -131,13 +145,15 @@ export default function ToolDetail() {
 
     setName(tool.name);
     setDescription(tool.description);
+    setOriginalName(tool.name);
+    setOriginalDescription(tool.description);
     setCode(tool.code);
     setOriginalCode(tool.code);
     setLoaded(true);
     if (toolId) openPanel(toolId);
   }, [tools, toolId, isNew, paramName, paramDesc, fetchTools]);
 
-  const hasChanges = code !== originalCode;
+  const hasChanges = code !== originalCode || name !== originalName || description !== originalDescription;
 
   useEffect(() => { preloadPyodide(); }, []);
 
@@ -164,7 +180,7 @@ export default function ToolDetail() {
 
   const blocker = useBlocker(hasChanges);
 
-  // Validation
+  // Monaco validation
   const runValidation = useCallback((value: string) => {
     if (!monacoRef.current || !editorRef.current) return;
     const monaco = monacoRef.current;
@@ -206,6 +222,48 @@ export default function ToolDetail() {
     setTimeout(() => runValidation(code), 300);
   }, [runValidation, code]);
 
+  // Validate button handler
+  const handleValidate = () => {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    // Structural checks
+    for (const err of validatePython(code)) {
+      if (err.severity >= 8) errors.push(`Line ${err.line}: ${err.message}`);
+      else warnings.push(`Line ${err.line}: ${err.message}`);
+    }
+
+    // Pyodide compile check
+    if (isPyodideReady()) {
+      for (const err of checkPythonSyntax(code)) {
+        errors.push(`Line ${err.line}: ${err.msg}`);
+      }
+    }
+
+    // Check @tool function name
+    const funcName = extractFuncName(code);
+    if (!funcName) {
+      errors.push(t("tools.missingDecorator"));
+    }
+
+    // Check docstring
+    if (funcName && !code.includes('"""')) {
+      warnings.push("Missing docstring (recommended for tool discovery)");
+    }
+
+    // Check return type hint
+    if (funcName && !code.match(/def\s+\w+\([^)]*\)\s*->\s*str/)) {
+      warnings.push("Missing return type hint '-> str'");
+    }
+
+    if (errors.length === 0 && warnings.length === 0) {
+      setValidationResult({ valid: true, errors: [], warnings: [] });
+      setTimeout(() => setValidationResult(null), 2000);
+    } else {
+      setValidationResult({ valid: errors.length === 0, errors, warnings });
+    }
+  };
+
   // Save
   const handleSave = async () => {
     clearError();
@@ -214,7 +272,6 @@ export default function ToolDetail() {
       setValidationError(t("tools.missingDecorator"));
       return;
     }
-    // Check name conflict with other tools
     const existing = tools.find((t) => t.id === funcName);
     if (existing && funcName !== toolId) {
       setValidationError(t("tools.nameConflict"));
@@ -238,6 +295,8 @@ export default function ToolDetail() {
     try {
       await saveTool(tool);
       setOriginalCode(code);
+      setOriginalName(name || funcName);
+      setOriginalDescription(description);
       if (isNew || funcName !== toolId) {
         navigate(`/tools/${funcName}`, { replace: true });
       }
@@ -259,6 +318,14 @@ export default function ToolDetail() {
     } catch {
       // error is set in store
     }
+  };
+
+  // Discard
+  const handleDiscard = () => {
+    setCode(originalCode);
+    setName(originalName);
+    setDescription(originalDescription);
+    setShowDiff(false);
   };
 
   const handleCodeUpdate = useCallback((newCode: string) => {
@@ -299,29 +366,37 @@ export default function ToolDetail() {
           {description && <p className="text-xs text-gray-400 truncate">{description}</p>}
         </div>
 
+        {/* Validate */}
+        <button
+          onClick={handleValidate}
+          className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${isDark ? "text-gray-400 hover:text-green-400 hover:bg-green-900/30" : "text-gray-500 hover:text-green-600 hover:bg-green-50"}`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5" />
+          {t("common.validate")}
+        </button>
+
+        {/* Diff */}
         {hasChanges && (
           <button
-            onClick={() => setShowDiff(!showDiff)}
-            className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${
-              showDiff
-                ? isDark ? "bg-blue-900/30 text-blue-400" : "bg-blue-50 text-blue-600"
-                : isDark ? "text-gray-400 hover:text-blue-400 hover:bg-blue-900/30" : "text-gray-500 hover:text-blue-600 hover:bg-blue-50"
-            }`}
+            onClick={() => setShowDiff(true)}
+            className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${isDark ? "text-gray-400 hover:text-blue-400 hover:bg-blue-900/30" : "text-gray-500 hover:text-blue-600 hover:bg-blue-50"}`}
           >
             <GitCompare className="w-3.5 h-3.5" />
-            {showDiff ? t("tools.hideChanges") : t("tools.showChanges")}
+            {t("tools.showChanges")}
           </button>
         )}
 
+        {/* Discard */}
         {hasChanges && (
           <button
-            onClick={() => { setCode(originalCode); setShowDiff(false); }}
+            onClick={handleDiscard}
             className={`px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${isDark ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"}`}
           >
             {t("common.discard")}
           </button>
         )}
 
+        {/* Save */}
         {hasChanges && (
           <>
             <div className={`w-px h-5 ${isDark ? "bg-gray-700" : "bg-gray-200"} mx-0.5`} />
@@ -336,6 +411,7 @@ export default function ToolDetail() {
           </>
         )}
 
+        {/* Delete */}
         <button
           onClick={() => setConfirmDelete(true)}
           className={`p-1.5 rounded transition-colors ${isDark ? "text-red-400 hover:bg-red-900/20" : "text-red-400 hover:text-red-600 hover:bg-red-50"}`}
@@ -344,6 +420,7 @@ export default function ToolDetail() {
           <Trash2 className="w-4 h-4" />
         </button>
 
+        {/* AI Assistant toggle */}
         <button
           onClick={() => {
             if (toolId) {
@@ -361,6 +438,43 @@ export default function ToolDetail() {
           <Sparkles className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {/* Validation results */}
+      {validationResult && (
+        <div className={`mx-6 mt-2 rounded-lg text-sm border ${
+          !validationResult.valid
+            ? isDark ? "bg-red-900/20 border-red-800" : "bg-red-50 border-red-200"
+            : validationResult.errors.length === 0 && validationResult.warnings.length === 0
+              ? isDark ? "bg-green-900/20 border-green-800" : "bg-green-50 border-green-200"
+              : isDark ? "bg-amber-900/20 border-amber-800" : "bg-amber-50 border-amber-200"
+        }`}>
+          <div className="px-4 py-2">
+            <div className="flex items-center justify-between">
+              <p className={`text-xs font-medium ${
+                !validationResult.valid ? "text-red-500"
+                  : validationResult.errors.length === 0 && validationResult.warnings.length === 0
+                    ? isDark ? "text-green-400" : "text-green-600"
+                    : "text-amber-600"
+              }`}>
+                {!validationResult.valid
+                  ? t("validation.failed")
+                  : validationResult.errors.length === 0 && validationResult.warnings.length === 0
+                    ? t("validation.noIssues")
+                    : t("validation.passedWithWarnings", { count: validationResult.warnings.length })}
+              </p>
+              <button onClick={() => setValidationResult(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            {validationResult.errors.map((e, i) => (
+              <p key={`e${i}`} className="text-[11px] text-red-500 mt-1">&#x2716; {e}</p>
+            ))}
+            {validationResult.warnings.map((w, i) => (
+              <p key={`w${i}`} className="text-[11px] text-amber-600 mt-1">&#x26A0; {w}</p>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Body */}
       <div className="flex flex-1 min-h-0">
@@ -389,24 +503,14 @@ export default function ToolDetail() {
 
           {/* Editor */}
           <div className="flex-1 min-h-0">
-            {showDiff && originalCode ? (
-              <DiffEditor
-                original={originalCode}
-                modified={code}
-                language="python"
-                theme={isDark ? "vs-dark" : "light"}
-                options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, lineNumbers: "on", scrollBeyondLastLine: false, renderSideBySide: true }}
-              />
-            ) : (
-              <Editor
-                language="python"
-                theme={isDark ? "vs-dark" : "light"}
-                value={code}
-                onChange={handleCodeChange}
-                onMount={handleEditorMount}
-                options={{ minimap: { enabled: false }, fontSize: 13, lineNumbers: "on", scrollBeyondLastLine: false, tabSize: 4, insertSpaces: true, wordWrap: "on", automaticLayout: true }}
-              />
-            )}
+            <Editor
+              language="python"
+              theme={isDark ? "vs-dark" : "light"}
+              value={code}
+              onChange={handleCodeChange}
+              onMount={handleEditorMount}
+              options={{ minimap: { enabled: false }, fontSize: 13, lineNumbers: "on", scrollBeyondLastLine: false, tabSize: 4, insertSpaces: true, wordWrap: "on", automaticLayout: true }}
+            />
           </div>
 
           {/* Error bar */}
@@ -430,6 +534,29 @@ export default function ToolDetail() {
           />
         )}
       </div>
+
+      {/* Diff modal — matches SkillDetail style */}
+      {showDiff && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center" onClick={() => setShowDiff(false)}>
+          <div className={`w-[90vw] h-[80vh] rounded-xl shadow-2xl flex flex-col overflow-hidden ${isDark ? "bg-gray-900" : "bg-white"}`} onClick={(e) => e.stopPropagation()}>
+            <div className={`flex items-center justify-between px-4 py-2 border-b ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+              <span className={`text-sm font-medium ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.changes")}</span>
+              <button onClick={() => setShowDiff(false)} className={`p-1 rounded ${isDark ? "hover:bg-gray-800 text-gray-400" : "hover:bg-gray-100 text-gray-500"}`}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <DiffEditor
+                original={originalCode}
+                modified={code}
+                language="python"
+                theme={isDark ? "vs-dark" : "light"}
+                options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, lineNumbers: "on", scrollBeyondLastLine: false, renderSideBySide: true }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirm */}
       {confirmDelete && (
