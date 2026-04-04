@@ -67,24 +67,43 @@ source_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in dir() e
 
 print(f"  Packaging {source_dir}...")
 
-# Build zip from source directory (flat structure)
+# Download base zip (contains dependencies: strands, boto3, etc.)
+s3 = boto3.client("s3", region_name=region)
+base_key = "base/deployment.zip"
+print(f"  Downloading base zip from s3://{bucket}/{base_key}...")
+base_resp = s3.get_object(Bucket=bucket, Key=base_key)
+base_data = base_resp["Body"].read()
+print(f"  Base zip: {len(base_data) / 1024 / 1024:.1f} MB")
+
+# Collect source files
+source_files = {}
+for root, dirs, files in os.walk(source_dir):
+    dirs[:] = [d for d in dirs if d not in {
+        "__pycache__", ".venv", ".git", ".bedrock_agentcore",
+        "agent_studio_meta_agent.egg-info", "node_modules",
+    }]
+    for f in files:
+        if f.endswith((".pyc", ".egg-info")):
+            continue
+        full = os.path.join(root, f)
+        arcname = os.path.relpath(full, source_dir)
+        source_files[arcname] = full
+
+# Clone base zip + overlay source files
 buf = io.BytesIO()
-with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-    for root, dirs, files in os.walk(source_dir):
-        # Skip non-deployable directories
-        dirs[:] = [d for d in dirs if d not in {
-            "__pycache__", ".venv", ".git", ".bedrock_agentcore",
-            "agent_studio_meta_agent.egg-info", "node_modules",
-        }]
-        for f in files:
-            if f.endswith((".pyc", ".egg-info")):
+with zipfile.ZipFile(io.BytesIO(base_data), "r") as base_zip:
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Copy base dependencies (skip files we'll replace with source)
+        for item in base_zip.namelist():
+            if item in source_files:
                 continue
-            full = os.path.join(root, f)
-            arcname = os.path.relpath(full, source_dir)
+            zf.writestr(item, base_zip.read(item))
+        # Add source files on top
+        for arcname, full in source_files.items():
             zf.write(full, arcname)
 
 package = buf.getvalue()
-print(f"  Package size: {len(package) / 1024:.0f} KB")
+print(f"  Package size: {len(package) / 1024 / 1024:.1f} MB ({len(source_files)} source files)")
 
 # Upload to S3
 s3 = boto3.client("s3", region_name=region)
