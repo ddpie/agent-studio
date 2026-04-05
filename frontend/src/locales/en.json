@@ -83,6 +83,7 @@
     "urlExtracting": "Extracting files...",
     "urlFetchingBackend": "Rate limited, using backend...",
     "urlWriting": "Writing {{count}} files to storage...",
+    "urlWritingProgress": "Writing {{current}}/{{total}} files...",
     "deleted": "Deleted {{date}}"
   },
   "skillEditor": {
@@ -324,5 +325,56 @@
     "suggestion2": "Add input validation and error handling",
     "suggestion3": "Optimize the tool for better performance",
     "toolUpdated": "Tool code updated"
+  },
+  "nav": {
+    "agents": "Agents",
+    "skills": "Skills",
+    "tools": "Tools",
+    "mcp": "MCP",
+    "settings": "Settings"
+  },
+  "appShell": {
+    "title": "Agent Studio",
+    "signOut": "Sign out"
+  },
+  "secrets": {
+    "title": "Secrets",
+    "description": "API keys stored in AWS Secrets Manager. Values are never shown after saving.",
+    "keyPlaceholder": "KEY_NAME",
+    "valuePlaceholder": "value",
+    "addSecret": "Add secret",
+    "show": "Show",
+    "hide": "Hide",
+    "saveSecrets": "Save secrets",
+    "saved": "Secrets saved",
+    "saveFailed": "Failed to save secrets"
+  },
+  "reviewChanges": {
+    "title": "Review Changes",
+    "viewTitle": "Changes",
+    "confirmDeploy": "Confirm & Deploy"
+  },
+  "agentList": {
+    "unsavedMessage": "You have unsaved changes in the editor. Discard and switch?",
+    "archived": "Archived ({{count}})"
+  },
+  "agentFormSections": {
+    "autoInherit": "Auto (inherit)",
+    "registeredTools": "Registered Tools",
+    "registeredToolsHint": "Auto-synced from tool code. Shows which tools will be available at runtime.",
+    "importedFrom": "Imported from {{name}}"
+  },
+  "layout": {
+    "dragToResize": "Drag to resize, double-click to toggle"
+  },
+  "editAssistant": {
+    "generating": "Generating",
+    "preview": "Preview",
+    "applyingChanges": "Applying changes...",
+    "view": "View",
+    "askModify": "Ask me to modify this agent's config.",
+    "suggestion1": "Translate the system prompt to English",
+    "suggestion2": "Add a region parameter to all tools",
+    "suggestion3": "Make the description more concise"
   }
 }

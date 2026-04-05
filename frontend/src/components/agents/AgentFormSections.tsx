@@ -99,7 +99,7 @@ export default function AgentFormSections({
       {/* Agent Behavior */}
       <Section title={t("agentEditor.agentBehavior")} icon={<Settings2 className="w-3.5 h-3.5" />}>
         <div className="grid grid-cols-3 gap-4">
-          <Field label="Template" changed={!!changedFields.template_id}>
+          <Field label={t("agentEditor.template")} changed={!!changedFields.template_id}>
             <select
               value={formData.template_id || ""}
               onChange={(e) => updateField("template_id", e.target.value)}
@@ -110,13 +110,13 @@ export default function AgentFormSections({
               ))}
             </select>
           </Field>
-          <Field label="Default Model" changed={!!changedFields.default_model_id} hint={t("agentEditor.modelHint")}>
+          <Field label={t("agentEditor.defaultModel")} changed={!!changedFields.default_model_id} hint={t("agentEditor.modelHint")}>
             <select
               value={formData.default_model_id || ""}
               onChange={(e) => updateField("default_model_id", e.target.value)}
               className={inputClass}
             >
-              <option value="">Auto (inherit)</option>
+              <option value="">{t("agentFormSections.autoInherit")}</option>
               {MODEL_GROUPS.map((g) =>
                 g.models.map((m) => (
                   <option key={m.id} value={m.id}>{m.label}</option>
@@ -124,7 +124,7 @@ export default function AgentFormSections({
               )}
             </select>
           </Field>
-          <Field label="Image Support" changed={!!changedFields.supports_images}>
+          <Field label={t("agentEditor.imageSupport")} changed={!!changedFields.supports_images}>
             <label className={`flex items-center gap-2 h-[34px] px-3 border rounded-lg cursor-pointer transition-colors ${formData.supports_images ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"}`}>
               <input
                 type="checkbox"
@@ -195,7 +195,7 @@ export default function AgentFormSections({
             );
           }}
         />
-        <Field label="Registered Tools" changed={!!changedFields.tool_names} hint="Auto-synced from tool code. Shows which tools will be available at runtime.">
+        <Field label={t("agentFormSections.registeredTools")} changed={!!changedFields.tool_names} hint={t("agentFormSections.registeredToolsHint")}>
           <div className={`w-full px-2 py-1.5 border border-gray-100 dark:border-gray-700 rounded-lg text-[12px] bg-gray-50 dark:bg-gray-800 min-h-[28px] flex flex-wrap gap-1 ${!formData.tool_names ? "italic text-gray-400" : ""}`}>
             {formData.tool_names
               ? (() => {

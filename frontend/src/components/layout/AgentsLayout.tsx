@@ -1,9 +1,11 @@
 import { Outlet } from "react-router";
+import { useTranslation } from "react-i18next";
 import AgentList from "../agents/AgentList";
 import { useUISettings } from "../../stores/ui-settings-store";
 import { useCallback, useRef } from "react";
 
 export default function AgentsLayout() {
+  const { t } = useTranslation();
   const { sidebarWidth, setSidebarWidth } = useUISettings();
   const dragging = useRef(false);
 
@@ -39,7 +41,7 @@ export default function AgentsLayout() {
         onMouseDown={onDragStart}
         onDoubleClick={() => setSidebarWidth(sidebarWidth > 100 ? 56 : 224)}
         className="w-1 cursor-col-resize bg-transparent hover:bg-blue-400/30 active:bg-blue-400/50 flex-shrink-0 transition-colors"
-        title="Drag to resize, double-click to toggle"
+        title={t("layout.dragToResize")}
       />
       <main className="flex-1 overflow-hidden">
         <Outlet />

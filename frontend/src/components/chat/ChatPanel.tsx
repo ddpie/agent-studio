@@ -92,10 +92,10 @@ function AgentProposalCard({ json }: { json: string }) {
   };
 
   return (
-    <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 my-2 text-xs not-prose">
+    <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/20 p-3 my-2 text-xs not-prose">
       <div className="flex items-center justify-between mb-2">
-        <span className="font-semibold text-blue-900">{name}</span>
-        <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded">{tier}</span>
+        <span className="font-semibold text-blue-900 dark:text-blue-100">{name}</span>
+        <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300 rounded">{tier}</span>
       </div>
       {desc && <p className="text-gray-600 dark:text-gray-400 mb-2">{desc}</p>}
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-gray-500 mb-2">
@@ -121,7 +121,7 @@ function AgentProposalCard({ json }: { json: string }) {
       {toolDefs && (
         <details className="mb-2">
           <summary className="text-[11px] text-gray-500 cursor-pointer select-none">{t("chat.proposalToolDefs")}</summary>
-          <pre className="mt-1 p-2 bg-gray-900 text-green-300 rounded text-[11px] whitespace-pre-wrap max-h-48 overflow-y-auto">{toolDefs}</pre>
+          <pre className="mt-1 p-2 bg-gray-900 dark:bg-gray-950 text-green-300 rounded text-[11px] whitespace-pre-wrap max-h-48 overflow-y-auto">{toolDefs}</pre>
         </details>
       )}
       <button

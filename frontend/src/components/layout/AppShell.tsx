@@ -1,4 +1,5 @@
 import { Outlet } from "react-router";
+import { useTranslation } from "react-i18next";
 import IconNav from "./IconNav";
 
 interface AppShellProps {
@@ -7,16 +8,17 @@ interface AppShellProps {
 }
 
 export default function AppShell({ signOut, user }: AppShellProps) {
+  const { t } = useTranslation();
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-gray-950">
       <header className="flex items-center justify-between px-4 py-2 bg-gray-900 text-white">
         <div className="flex items-center gap-2">
           <img src="/logo.svg" alt="Agent Studio" className="w-5 h-5" />
-          <span className="font-semibold text-sm">Agent Studio</span>
+          <span className="font-semibold text-sm">{t("appShell.title")}</span>
         </div>
         <div className="flex items-center gap-3 text-xs">
           <span className="text-gray-400">{user?.signInDetails?.loginId}</span>
-          <button onClick={signOut} className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600">Sign out</button>
+          <button onClick={signOut} className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600">{t("appShell.signOut")}</button>
         </div>
       </header>
       <div className="flex flex-1 overflow-hidden">

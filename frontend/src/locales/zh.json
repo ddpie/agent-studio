@@ -83,6 +83,7 @@
     "urlExtracting": "正在解压文件...",
     "urlFetchingBackend": "已限流，使用后端导入...",
     "urlWriting": "正在写入 {{count}} 个文件...",
+    "urlWritingProgress": "正在写入 {{current}}/{{total}} 个文件...",
     "deleted": "删除于 {{date}}"
   },
   "skillEditor": {
@@ -324,5 +325,56 @@
     "suggestion2": "添加输入验证和错误处理",
     "suggestion3": "优化工具性能",
     "toolUpdated": "工具代码已更新"
+  },
+  "nav": {
+    "agents": "Agent",
+    "skills": "技能",
+    "tools": "工具",
+    "mcp": "MCP",
+    "settings": "设置"
+  },
+  "appShell": {
+    "title": "Agent Studio",
+    "signOut": "退出登录"
+  },
+  "secrets": {
+    "title": "密钥",
+    "description": "API 密钥存储在 AWS Secrets Manager 中。保存后不会再显示值。",
+    "keyPlaceholder": "KEY_NAME",
+    "valuePlaceholder": "值",
+    "addSecret": "添加密钥",
+    "show": "显示",
+    "hide": "隐藏",
+    "saveSecrets": "保存密钥",
+    "saved": "密钥已保存",
+    "saveFailed": "保存密钥失败"
+  },
+  "reviewChanges": {
+    "title": "审查更改",
+    "viewTitle": "更改",
+    "confirmDeploy": "确认并部署"
+  },
+  "agentList": {
+    "unsavedMessage": "编辑器中有未保存的更改。放弃并切换？",
+    "archived": "已归档 ({{count}})"
+  },
+  "agentFormSections": {
+    "autoInherit": "自动（继承）",
+    "registeredTools": "已注册工具",
+    "registeredToolsHint": "从工具代码自动同步。显示运行时可用的工具。",
+    "importedFrom": "从 {{name}} 导入"
+  },
+  "layout": {
+    "dragToResize": "拖动调整大小，双击切换"
+  },
+  "editAssistant": {
+    "generating": "生成中",
+    "preview": "预览",
+    "applyingChanges": "正在应用更改...",
+    "view": "查看",
+    "askModify": "让我帮你修改这个 Agent 的配置。",
+    "suggestion1": "将系统提示词翻译为英文",
+    "suggestion2": "给所有工具添加 region 参数",
+    "suggestion3": "让描述更简洁"
   }
 }

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import {
-  Package, Search, RefreshCw, Loader2, FileText, Upload, Trash2, RotateCcw, X, Plus, Link,
+  Package, Search, RefreshCw, Loader2, FileText, Upload, Trash2, RotateCcw, X, Plus, Link, ChevronLeft,
 } from "lucide-react";
 import { listSkills, listDeletedSkills, importSkill, restoreSkill, permanentlyDeleteSkill, type SkillIndexEntry } from "../../lib/skill-storage";
 import { importSkillFromUrl } from "../../lib/skill-url-import";
@@ -47,7 +47,7 @@ export default function SkillsPage() {
     try {
       const content = await file.text();
       const name = file.name.replace(/\.(md|txt|cursorrules)$/i, "").replace(/[^a-zA-Z0-9-]/g, "-").toLowerCase();
-      const result = await importSkill(content, name, `Imported from ${file.name}`);
+      const result = await importSkill(content, name, t("agentFormSections.importedFrom", { name: file.name }));
       if (result) refresh();
       else alert(t("skills.importFailed"));
     } finally {
@@ -128,9 +128,18 @@ ${desc || "TODO: Add skill instructions here."}
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-        <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{t("skills.title")}</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400">{t("skills.subtitle")}</p>
+        <div className="flex items-center gap-2">
+          {showTrash && (
+            <button onClick={() => setShowTrash(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("common.back")}>
+              <ChevronLeft className="w-4 h-4 text-gray-500" />
+            </button>
+          )}
+          <div>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+              {showTrash ? t("skills.trash") : t("skills.title")}
+            </h2>
+            {!showTrash && <p className="text-xs text-gray-500 dark:text-gray-400">{t("skills.subtitle")}</p>}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -139,14 +148,13 @@ ${desc || "TODO: Add skill instructions here."}
               placeholder={t("skills.searchPlaceholder")}
               className="pl-7 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg w-48 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400" />
           </div>
-          <button onClick={() => setShowTrash(!showTrash)}
-            className={`p-1.5 rounded-lg transition-colors ${showTrash
-              ? "text-red-500 bg-red-50 dark:bg-red-900/20"
-              : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-            }`}
-            title={showTrash ? t("common.back") : t("skills.trash")}>
-            <Trash2 className="w-4 h-4" />
-          </button>
+          {!showTrash && (
+            <button onClick={() => setShowTrash(true)}
+              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+              title={t("skills.trash")}>
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
           <button onClick={refresh}
             className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
@@ -215,7 +223,7 @@ ${desc || "TODO: Add skill instructions here."}
                   )}
                 </div>
                 {skill.description && (
-                  <p className="text-xs text-gray-500 mt-2 line-clamp-2">{skill.description}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">{skill.description}</p>
                 )}
                 {showTrash && skill.deletedAt && (
                   <p className="text-[10px] text-gray-400 mt-1">

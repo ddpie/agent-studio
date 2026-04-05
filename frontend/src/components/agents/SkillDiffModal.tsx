@@ -135,11 +135,11 @@ export default function SkillDiffModal({ open, onClose, agentId, skill }: SkillD
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center animate-[fadeSlideIn_0.15s_ease-out]" onClick={onClose}>
-      <div className={`${isDark ? "bg-gray-900" : "bg-white"} rounded-xl w-[85vw] h-[80vh] flex flex-col shadow-2xl`} onClick={e => e.stopPropagation()}>
+      <div className="bg-white dark:bg-gray-900 rounded-xl w-[85vw] h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className={`flex items-center justify-between px-4 py-3 border-b ${isDark ? "border-gray-700" : "border-gray-200"}`}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-3">
-            <span className={`text-sm font-semibold ${isDark ? "text-gray-200" : "text-gray-800"}`}>
+            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
               {t("agentSkills.templateUpdatesTitle", { name: skill.name })}
             </span>
             <div className="flex items-center gap-1">
@@ -150,7 +150,7 @@ export default function SkillDiffModal({ open, onClose, agentId, skill }: SkillD
                   className={`px-2 py-0.5 text-[11px] rounded ${
                     activeFile === f
                       ? "bg-blue-600 text-white"
-                      : isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"
+                      : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}
                 >
                   {f}
@@ -161,7 +161,7 @@ export default function SkillDiffModal({ open, onClose, agentId, skill }: SkillD
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}
+              className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
             >
               {t("common.cancel")}
             </button>
@@ -177,7 +177,7 @@ export default function SkillDiffModal({ open, onClose, agentId, skill }: SkillD
         </div>
 
         {/* Labels */}
-        <div className={`px-4 py-1.5 text-xs border-b flex ${isDark ? "text-gray-400 border-gray-700 bg-gray-800/50" : "text-gray-600 border-gray-200 bg-gray-50"}`}>
+        <div className="px-4 py-1.5 text-xs border-b flex text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
           <span className="flex-1">{t("agentSkills.globalTemplate")}</span>
           <span className="flex-1 text-right">{t("agentSkills.myVersion")}</span>
         </div>

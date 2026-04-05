@@ -109,9 +109,9 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
         <ConfirmDialog
           open={!!pendingAction}
           title={t("skillEditor.unsavedChanges")}
-          message="You have unsaved changes in the editor. Discard and switch?"
-          confirmLabel="Discard"
-          cancelLabel="Stay"
+          message={t("agentList.unsavedMessage")}
+          confirmLabel={t("common.discard")}
+          cancelLabel={t("skillEditor.stay")}
           danger
           onConfirm={() => { pendingAction?.(); setPendingAction(null); }}
           onCancel={() => setPendingAction(null)}
@@ -228,7 +228,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
             >
               <ChevronDown className={`w-3 h-3 transition-transform ${showArchived ? "" : "-rotate-90"}`} />
               <Archive className="w-3 h-3" />
-              Archived ({archivedAgents.length})
+              {t("agentList.archived", { count: archivedAgents.length })}
             </button>
             {showArchived && archivedAgents.map((agent) => (
               <div key={agent.id} className="group w-full text-left p-2.5 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors">
@@ -265,9 +265,9 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
       <ConfirmDialog
         open={!!pendingAction}
         title={t("skillEditor.unsavedChanges")}
-        message="You have unsaved changes in the editor. Discard and switch?"
-        confirmLabel="Discard"
-        cancelLabel="Stay"
+        message={t("agentList.unsavedMessage")}
+        confirmLabel={t("common.discard")}
+        cancelLabel={t("skillEditor.stay")}
         danger
         onConfirm={() => { pendingAction?.(); setPendingAction(null); }}
         onCancel={() => setPendingAction(null)}

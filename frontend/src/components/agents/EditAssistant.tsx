@@ -53,6 +53,7 @@ function extractFieldFromJson(raw: string, field: string): string | null {
 
 /** Preview modal for streaming code generation */
 function CodePreviewModal({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
   const { previewContent, isStreaming: assistantStreaming } = useEditAssistantStore();
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUp = useRef(false);
@@ -85,31 +86,31 @@ function CodePreviewModal({ onClose }: { onClose: () => void }) {
   // Extract readable content from the raw JSON stream
   const { label, content: displayContent } = useMemo(() => {
     if (!previewContent && !assistantStreaming) return { label: "", content: null };
-    if (!previewContent) return { label: "Generating", content: "" };
+    if (!previewContent) return { label: t("editAssistant.generating"), content: "" };
 
     // Try fields in priority order
     const fields = [
-      { key: "tool_definitions", label: "Tools" },
-      { key: "system_prompt", label: "System Prompt" },
-      { key: "description", label: "Description" },
-      { key: "welcome_message", label: "Welcome Message" },
+      { key: "tool_definitions", label: t("agentEditor.tools") },
+      { key: "system_prompt", label: t("agentEditor.systemPrompt") },
+      { key: "description", label: t("agentEditor.description") },
+      { key: "welcome_message", label: t("agentEditor.welcomeMessage") },
     ];
     for (const f of fields) {
       const val = extractFieldFromJson(previewContent, f.key);
       if (val && val.length > 10) return { label: f.label, content: val };
     }
-    return { label: "Output", content: previewContent };
+    return { label: t("skillEditor.output"), content: previewContent };
   }, [previewContent, assistantStreaming]);
 
   if (displayContent === null) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center animate-[fadeSlideIn_0.15s_ease-out]" onClick={onClose}>
-      <div className="bg-gray-900 rounded-xl w-[80vw] h-[70vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-gray-900 dark:bg-gray-950 rounded-xl w-[80vw] h-[70vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
           <span className="text-xs text-gray-400 flex items-center gap-2">
             {assistantStreaming && <Loader2 className="w-3 h-3 animate-spin" />}
-            {assistantStreaming ? `Generating ${label}...` : `${label} Preview`}
+            {assistantStreaming ? `${t("editAssistant.generating")} ${label}...` : `${label} ${t("editAssistant.preview")}`}
           </span>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
             <X className="w-4 h-4" />
@@ -162,16 +163,16 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
             {msg.content.split(/(\n\n---(?:applying-changes|updated:[^-]+)---\n\n)/).map((part, i) => {
               if (part.includes("---applying-changes---")) {
                 return (
-                  <div key={i} className="flex items-center justify-between my-2 px-2 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-blue-600 text-[11px] animate-pulse">
+                  <div key={i} className="flex items-center justify-between my-2 px-2 py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-blue-600 dark:text-blue-400 text-[11px] animate-pulse">
                     <span className="flex items-center gap-2">
                       <Loader2 className="w-3 h-3 animate-spin" />
-                      Applying changes...
+                      {t("editAssistant.applyingChanges")}
                     </span>
                     <button
                       onClick={() => onShowPreview?.()}
-                      className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 hover:bg-blue-200 rounded text-[10px] font-medium transition-colors animate-none"
+                      className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-100 dark:bg-blue-800 hover:bg-blue-200 dark:hover:bg-blue-700 rounded text-[10px] font-medium transition-colors animate-none"
                     >
-                      <Eye className="w-3 h-3" /> View
+                      <Eye className="w-3 h-3" /> {t("editAssistant.view")}
                     </button>
                   </div>
                 );
@@ -180,9 +181,9 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
               if (updatedMatch) {
                 const fields = updatedMatch[1].split(",");
                 return (
-                  <div key={i} className="flex items-center gap-2 my-2 px-2 py-1.5 bg-green-50 border border-green-200 rounded-lg text-green-600 text-[11px]">
+                  <div key={i} className="flex items-center gap-2 my-2 px-2 py-1.5 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-600 dark:text-green-400 text-[11px]">
                     <Check className="w-3 h-3" />
-                    Updated: {fields.join(", ")}
+                    {t("assistant.updated", { fields: fields.join(", ") })}
                   </div>
                 );
               }
@@ -424,12 +425,12 @@ export default function EditAssistant() {
           </div>
         ) : messages.length === 0 ? (
           <div className="text-center py-8">
-            <p className="text-xs text-gray-400 mb-2">Ask me to modify this agent's config.</p>
+            <p className="text-xs text-gray-400 mb-2">{t("editAssistant.askModify")}</p>
             <div className="space-y-1">
               {[
-                "Translate the system prompt to English",
-                "Add a region parameter to all tools",
-                "Make the description more concise",
+                t("editAssistant.suggestion1"),
+                t("editAssistant.suggestion2"),
+                t("editAssistant.suggestion3"),
               ].map((s) => (
                 <button
                   key={s}
