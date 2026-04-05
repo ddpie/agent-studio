@@ -274,7 +274,7 @@ export const useChatStore = create<ChatState>()(
                   try { out = m.output ? new TextDecoder().decode(Uint8Array.from(atob(m.output), c => c.charCodeAt(0))) : ""; } catch { out = m.output || ""; }
                   let detailContent = `\n\n<details class="tool-call"><summary>Called <strong>${m.name}</strong></summary>\n\n`;
                   if (inp) detailContent += `**Input:**\n\`\`\`json\n${inp}\n\`\`\`\n`;
-                  const isHtml = out && out.trimStart().startsWith("<");
+                  const isHtml = out && out.trimStart().startsWith("<") && m.name !== "load_skill";
                   if (out && !isHtml) {
                     // Truncate long output and escape backticks to prevent breaking code blocks
                     const maxDisplay = 2000;
