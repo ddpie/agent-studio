@@ -154,31 +154,37 @@ export async function deleteToolItem(toolId: string): Promise<void> {
   });
 }
 
-/** Soft-delete a tool (mark as deleted) */
+/** Soft-delete a tool (mark as deleted via PutItem — no UpdateItem permission needed) */
 export async function softDeleteToolItem(toolId: string): Promise<void> {
   const { username } = await getCurrentUser();
   const now = new Date().toISOString();
 
-  await ddbRequest("UpdateItem", {
+  // Read current item first
+  const data = await ddbRequest("GetItem", {
     TableName: TABLE,
     Key: { toolId: { S: toolId } },
-    UpdateExpression: "SET deleted = :d, deleted_at = :t",
-    ConditionExpression: "#o = :owner OR #o = :seed",
-    ExpressionAttributeNames: { "#o": "owner" },
-    ExpressionAttributeValues: {
-      ":d": { BOOL: true },
-      ":t": { S: now },
-      ":owner": { S: username },
-      ":seed": { S: "__builtin__" },
-    },
-  });
+  }) as { Item?: Record<string, Record<string, unknown>> };
+
+  if (!data.Item) throw new Error("Tool not found");
+  const owner = (data.Item.owner?.S as string) || "";
+  if (owner !== username && owner !== "__builtin__") throw new Error("Not authorized");
+
+  // Write back with deleted flag
+  data.Item.deleted = { BOOL: true };
+  data.Item.deleted_at = { S: now };
+  await ddbRequest("PutItem", { TableName: TABLE, Item: data.Item });
 }
 
-/** Restore a soft-deleted tool */
+/** Restore a soft-deleted tool (remove deleted flag via PutItem) */
 export async function restoreToolItem(toolId: string): Promise<void> {
-  await ddbRequest("UpdateItem", {
+  const data = await ddbRequest("GetItem", {
     TableName: TABLE,
     Key: { toolId: { S: toolId } },
-    UpdateExpression: "REMOVE deleted, deleted_at",
-  });
+  }) as { Item?: Record<string, Record<string, unknown>> };
+
+  if (!data.Item) throw new Error("Tool not found");
+
+  delete data.Item.deleted;
+  delete data.Item.deleted_at;
+  await ddbRequest("PutItem", { TableName: TABLE, Item: data.Item });
 }
