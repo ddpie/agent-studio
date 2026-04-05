@@ -6,7 +6,8 @@ import {
   FileText, FolderOpen, FolderClosed, File, ChevronRight as ChevronRightIcon,
   Plus, Pencil, FolderPlus, ArrowRightLeft, Sparkles, ShieldCheck, Play,
 } from "lucide-react";
-import { getSkillContent, getSkillFile, listSkillFiles, deleteSkill, writeSkillFile, deleteSkillFile, renameSkillFile, listSkills, type SkillIndexEntry } from "../../lib/skill-storage";
+import { deleteSkill, listSkills, type SkillIndexEntry } from "../../lib/skill-storage";
+import { useSkillStorage } from "../../hooks/useSkillStorage";
 import Editor, { DiffEditor } from "@monaco-editor/react";
 import type * as MonacoNS from "monaco-editor";
 import { Tree, type NodeRendererProps } from "react-arborist";
@@ -300,6 +301,9 @@ export default function SkillDetail() {
   const [skillContent, setSkillContent] = useState<string | null>(null);
   const [skillFiles, setSkillFiles] = useState<string[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
+  const agentId = searchParams.get("agentId");
+  const agentSkillId = searchParams.get("agentSkillId");
+  const storage = useSkillStorage(skillId!, agentId, agentSkillId);
   const activeFile = searchParams.get("file");
   const [loadingContent, setLoadingContent] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -429,8 +433,8 @@ export default function SkillDetail() {
     const fileParam = searchParams.get("file");
     Promise.all([
       listSkills(),
-      fileParam ? getSkillFile(skillId, fileParam) : getSkillContent(skillId),
-      listSkillFiles(skillId),
+      fileParam ? storage.getFile(fileParam) : storage.getContent(),
+      storage.listFiles(),
     ]).then(([skills, content, files]) => {
       const found = skills.find(s => s.id === skillId) || null;
       setSkill(found);
@@ -445,7 +449,7 @@ export default function SkillDetail() {
     useSkillAssistantStore.getState().openPanel(skillId);
     // Warm up Pyodide for Python syntax checking
     preloadPyodide();
-  }, [skillId]);
+  }, [skillId, storage]);
 
   const loadingPathRef = useRef<string | null>(null);
 
@@ -462,8 +466,8 @@ export default function SkillDetail() {
     loadingPathRef.current = path;
     setLoadingContent(true);
     const content = path === "SKILL.md"
-      ? await getSkillContent(skillId)
-      : await getSkillFile(skillId, path);
+      ? await storage.getContent()
+      : await storage.getFile(path);
     // Only apply if this is still the file we're loading (prevents race condition)
     if (loadingPathRef.current !== path) return;
     setSkillContent(content);
@@ -471,7 +475,7 @@ export default function SkillDetail() {
       originalContents.set(path, content);
     }
     setLoadingContent(false);
-  }, [skillId, editedContents, originalContents, pendingCreates]);
+  }, [skillId, editedContents, originalContents, pendingCreates, storage]);
 
   const handleNodeClick = async (nodeId: string) => {
     if (nodeId.startsWith("__dir__")) return;
@@ -540,7 +544,7 @@ export default function SkillDetail() {
     try {
       // 1. Execute deletes (individual files)
       for (const path of pendingDeletes) {
-        try { await deleteSkillFile(skillId, path); }
+        try { await storage.deleteFile(path); }
         catch { errors.push(`Failed to delete ${path}`); }
       }
 
@@ -548,7 +552,7 @@ export default function SkillDetail() {
       for (const dir of pendingDeleteDirs) {
         const dirFiles = skillFiles.filter(f => f.startsWith(dir + "/"));
         for (const f of dirFiles) {
-          try { await deleteSkillFile(skillId, f); }
+          try { await storage.deleteFile(f); }
           catch { errors.push(`Failed to delete ${f}`); }
         }
       }
@@ -556,7 +560,7 @@ export default function SkillDetail() {
       // 2. Execute renames (copy + delete)
       for (const [oldPath, newPath] of pendingRenames) {
         if (!pendingDeletes.has(oldPath)) {
-          try { await renameSkillFile(skillId, oldPath, newPath); }
+          try { await storage.renameFile(oldPath, newPath); }
           catch { errors.push(`Failed to rename ${oldPath} → ${newPath}`); }
         }
       }
@@ -564,7 +568,7 @@ export default function SkillDetail() {
       // 3. Save created files
       for (const [path, content] of pendingCreates) {
         const edited = editedContents.get(path) ?? content;
-        try { await writeSkillFile(skillId, path, edited); }
+        try { await storage.writeFile(path, edited); }
         catch { errors.push(`Failed to create ${path}`); }
       }
 
@@ -574,7 +578,7 @@ export default function SkillDetail() {
         const content = editedContents.get(path);
         if (content === undefined) continue;
         const actualPath = pendingRenames.get(path) ?? path;
-        try { await writeSkillFile(skillId, actualPath, content); }
+        try { await storage.writeFile(actualPath, content); }
         catch { errors.push(`Failed to save ${actualPath}`); }
       }
 
@@ -597,8 +601,8 @@ export default function SkillDetail() {
 
       // Refresh from S3
       const [files, content] = await Promise.all([
-        listSkillFiles(skillId),
-        getSkillContent(skillId),
+        storage.listFiles(),
+        storage.getContent(),
       ]);
       setSkillFiles(files);
       if (content !== null) {
@@ -609,7 +613,7 @@ export default function SkillDetail() {
         if (meta && skill) setSkill({ ...skill, name: meta.name, description: meta.description });
       }
       if (currentPath !== "SKILL.md") {
-        const fc = await getSkillFile(skillId, currentPath);
+        const fc = await storage.getFile(currentPath);
         if (fc !== null) {
           setSkillContent(fc);
           originalContents.set(currentPath, fc);
@@ -904,7 +908,7 @@ export default function SkillDetail() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className={`flex items-center gap-3 px-6 py-3 border-b ${isDark ? "border-gray-700" : "border-gray-200"}`}>
-        <button onClick={() => navigate("/skills")} className={`p-1 rounded ${isDark ? "hover:bg-gray-800 text-gray-300" : "hover:bg-gray-100 text-gray-600"}`} title={t("common.back")}>
+        <button onClick={() => storage.isAgentMode ? navigate(`/agents/edit/${agentId}`) : navigate("/skills")} className={`p-1 rounded ${isDark ? "hover:bg-gray-800 text-gray-300" : "hover:bg-gray-100 text-gray-600"}`} title={t("common.back")}>
           <ChevronLeft className="w-4 h-4" />
         </button>
         <div className="flex-1 min-w-0">
@@ -930,7 +934,7 @@ export default function SkillDetail() {
             if (!filePath.endsWith(".py") && !filePath.endsWith(".sh") && !filePath.endsWith(".bash")) continue;
             let content = editedContents.get(filePath) ?? originalContents.get(filePath) ?? null;
             if (content === null && skillId) {
-              content = await getSkillFile(skillId, filePath);
+              content = await storage.getFile(filePath);
               if (content !== null) originalContents.set(filePath, content);
             }
             if (!content) continue;
@@ -1103,8 +1107,8 @@ Respond with ONLY a JSON block:
                   for (const filePath of allFilesList) {
                     if (editedContents.has(filePath) || originalContents.has(filePath)) continue;
                     const content = filePath === "SKILL.md"
-                      ? await getSkillContent(skillId)
-                      : await getSkillFile(skillId, filePath);
+                      ? await storage.getContent()
+                      : await storage.getFile(filePath);
                     if (content !== null) originalContents.set(filePath, content);
                   }
                   const store = useSkillAssistantStore.getState();
