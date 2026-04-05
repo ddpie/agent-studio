@@ -63,6 +63,7 @@ export async function computeSkillHash(files: Record<string, string>): Promise<s
 export async function copySkillToAgent(
   agentId: string,
   globalSkill: SkillIndexEntry,
+  onProgress?: (done: number, total: number) => void,
 ): Promise<AgentSkillEntry> {
   const newId = crypto.randomUUID().slice(0, 8)
 
@@ -83,16 +84,22 @@ export async function copySkillToAgent(
     if (content !== null) allFiles[file] = content
   }
 
-  // Write all files in parallel
+  // Write all files in parallel with progress tracking
+  const entries = Object.entries(allFiles)
+  const total = entries.length
+  let done = 0
+  onProgress?.(0, total)
+
   const writeResults = await Promise.all(
-    Object.entries(allFiles).map(async ([filePath, content]) => ({
-      filePath,
-      success: await writeAgentSkillFile(agentId, newId, filePath, content),
-    }))
+    entries.map(async ([filePath, content]) => {
+      const success = await writeAgentSkillFile(agentId, newId, filePath, content)
+      done++
+      onProgress?.(done, total)
+      return { filePath, success }
+    })
   )
   const failed = writeResults.filter(r => !r.success)
   if (failed.length > 0) {
-    // Rollback: delete all written files
     const written = writeResults.filter(r => r.success).map(r => r.filePath)
     await Promise.all(written.map(f => deleteFromS3(`agents/${agentId}/skills/${newId}/${f}`)))
     throw new Error(`Failed to write: ${failed.map(r => r.filePath).join(", ")}`)

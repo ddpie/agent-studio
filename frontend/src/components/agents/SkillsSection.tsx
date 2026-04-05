@@ -25,6 +25,7 @@ export default function SkillsSection({ skills, agentId, deployedHashes, onEditS
   const { addSkill, removeSkill } = useAgentEditStore()
   const [pickerOpen, setPickerOpen] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [addProgress, setAddProgress] = useState<{ done: number; total: number } | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [globalSkills, setGlobalSkills] = useState<SkillIndexEntry[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -42,14 +43,18 @@ export default function SkillsSection({ skills, agentId, deployedHashes, onEditS
 
   const handleAddSkill = useCallback(async (globalSkill: SkillIndexEntry) => {
     setAdding(true)
+    setAddProgress(null)
     setError(null)
     try {
-      const entry = await copySkillToAgent(agentId, globalSkill)
+      const entry = await copySkillToAgent(agentId, globalSkill, (done, total) => {
+        setAddProgress({ done, total })
+      })
       addSkill(entry)
     } catch (err) {
       setError(err instanceof Error ? err.message : t("agentSkills.failedToAdd"))
     } finally {
       setAdding(false)
+      setAddProgress(null)
     }
   }, [agentId, addSkill, t])
 
@@ -78,10 +83,22 @@ export default function SkillsSection({ skills, agentId, deployedHashes, onEditS
           <button
             onClick={() => setPickerOpen(true)}
             disabled={adding}
-            className="flex items-center gap-1 px-2 py-0.5 text-[11px] text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors disabled:opacity-50"
+            className="flex items-center gap-1 px-2 py-0.5 text-[11px] text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-70"
           >
-            {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-            {t("agentSkills.add")}
+            {adding ? (
+              addProgress ? (
+                <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                  {addProgress.done}/{addProgress.total}
+                </span>
+              ) : (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              )
+            ) : (
+              <Plus className="w-3 h-3" />
+            )}
+            {adding && addProgress
+              ? t("agentSkills.adding", `${Math.round(addProgress.done / addProgress.total * 100)}%`)
+              : t("agentSkills.add")}
           </button>
         </span>
       </div>
