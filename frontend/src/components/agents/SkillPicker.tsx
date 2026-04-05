@@ -2,6 +2,7 @@
  * SkillPicker — Modal to browse and select skills from the global skill library.
  */
 import { useState, useEffect } from "react"
+import { useTranslation } from "react-i18next"
 import { X, Search, Package, Loader2 } from "lucide-react"
 import { listSkills, type SkillIndexEntry } from "../../lib/skill-storage"
 
@@ -13,6 +14,7 @@ interface SkillPickerProps {
 }
 
 export default function SkillPicker({ open, onClose, onSelect, existingSkillSourceIds }: SkillPickerProps) {
+  const { t } = useTranslation()
   const [skills, setSkills] = useState<SkillIndexEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState("")
@@ -50,7 +52,7 @@ export default function SkillPicker({ open, onClose, onSelect, existingSkillSour
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-2">
             <Package className="w-4 h-4 text-blue-500" />
-            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">Add Skill</span>
+            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{t("agentSkills.addSkill")}</span>
           </div>
           <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
             <X className="w-4 h-4" />
@@ -65,7 +67,7 @@ export default function SkillPicker({ open, onClose, onSelect, existingSkillSour
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search skills..."
+              placeholder={t("agentSkills.searchSkills")}
               autoFocus
               className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             />
@@ -80,7 +82,7 @@ export default function SkillPicker({ open, onClose, onSelect, existingSkillSour
             </div>
           ) : filtered.length === 0 ? (
             <p className="text-center text-xs text-gray-400 py-8">
-              {search ? "No skills match your search" : "No skills available"}
+              {search ? t("agentSkills.noMatch") : t("agentSkills.noAvailable")}
             </p>
           ) : (
             <div className="grid grid-cols-2 gap-2">
@@ -105,11 +107,11 @@ export default function SkillPicker({ open, onClose, onSelect, existingSkillSour
                       <Package className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                       <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{skill.name}</span>
                       {alreadyBound && (
-                        <span className="ml-auto text-[10px] text-gray-400 flex-shrink-0">Added</span>
+                        <span className="ml-auto text-[10px] text-gray-400 flex-shrink-0">{t("agentSkills.added")}</span>
                       )}
                     </div>
                     <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 ml-5.5">
-                      {skill.description || "No description"}
+                      {skill.description || t("skills.descPlaceholder")}
                     </p>
                   </button>
                 )

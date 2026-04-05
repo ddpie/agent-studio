@@ -3,6 +3,7 @@
  * Left: global template latest (readonly). Right: agent's version (editable).
  */
 import { useState, useEffect, useCallback } from "react"
+import { useTranslation } from "react-i18next"
 import { Save, Loader2 } from "lucide-react"
 import { DiffEditor } from "@monaco-editor/react"
 import { useUISettings } from "../../stores/ui-settings-store"
@@ -31,6 +32,7 @@ interface SkillDiffModalProps {
 }
 
 export default function SkillDiffModal({ open, onClose, agentId, skill }: SkillDiffModalProps) {
+  const { t } = useTranslation()
   const isDark = useIsDark()
   const { updateSkillEntry } = useAgentEditStore()
   const [activeFile, setActiveFile] = useState("SKILL.md")
@@ -90,7 +92,7 @@ export default function SkillDiffModal({ open, onClose, agentId, skill }: SkillD
       for (const [filePath, content] of Object.entries(modifiedContent)) {
         if (content !== localContent[filePath]) {
           const success = await writeAgentSkillFile(agentId, skill.id, filePath, content)
-          if (!success) throw new Error(`Failed to save ${filePath}`)
+          if (!success) throw new Error(t("agentSkills.failedToSaveFile", { file: filePath }))
         }
       }
 
@@ -111,7 +113,7 @@ export default function SkillDiffModal({ open, onClose, agentId, skill }: SkillD
 
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save changes")
+      setError(err instanceof Error ? err.message : t("agentSkills.failedToSaveChanges"))
     } finally {
       setSaving(false)
     }
@@ -138,7 +140,7 @@ export default function SkillDiffModal({ open, onClose, agentId, skill }: SkillD
         <div className={`flex items-center justify-between px-4 py-3 border-b ${isDark ? "border-gray-700" : "border-gray-200"}`}>
           <div className="flex items-center gap-3">
             <span className={`text-sm font-semibold ${isDark ? "text-gray-200" : "text-gray-800"}`}>
-              Template Updates: {skill.name}
+              {t("agentSkills.templateUpdatesTitle", { name: skill.name })}
             </span>
             <div className="flex items-center gap-1">
               {allFileNames.map(f => (
@@ -161,7 +163,7 @@ export default function SkillDiffModal({ open, onClose, agentId, skill }: SkillD
               onClick={onClose}
               className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-800" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               onClick={handleSave}
@@ -169,15 +171,15 @@ export default function SkillDiffModal({ open, onClose, agentId, skill }: SkillD
               className="flex items-center gap-1 px-4 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
               {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-              Save
+              {t("agentSkills.save")}
             </button>
           </div>
         </div>
 
         {/* Labels */}
         <div className={`px-4 py-1.5 text-xs border-b flex ${isDark ? "text-gray-400 border-gray-700 bg-gray-800/50" : "text-gray-600 border-gray-200 bg-gray-50"}`}>
-          <span className="flex-1">Global Template (latest)</span>
-          <span className="flex-1 text-right">My Version (editable)</span>
+          <span className="flex-1">{t("agentSkills.globalTemplate")}</span>
+          <span className="flex-1 text-right">{t("agentSkills.myVersion")}</span>
         </div>
 
         {error && (
