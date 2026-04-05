@@ -264,6 +264,11 @@ def update_agent(
                 }
             },
             networkConfiguration={"networkMode": "PUBLIC"},
+            filesystemConfigurations=[{
+                "sessionStorage": {
+                    "mountPath": "/mnt/workspace"
+                }
+            }],
         )
 
         status = wait_for_ready(agent_id)
