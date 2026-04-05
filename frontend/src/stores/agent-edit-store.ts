@@ -12,6 +12,7 @@ interface AgentEditState {
   originalData: Partial<AgentMetadata> | null;
   loading: boolean;
   saving: boolean;
+  pendingSkillFiles: Record<string, Record<string, string>>;
 
   loadAgent: (agentId: string, agentName: string) => Promise<void>;
   openNewWithData: (data: Partial<AgentMetadata>) => void;
@@ -23,6 +24,9 @@ interface AgentEditState {
   addSkill: (entry: AgentSkillEntry) => void;
   removeSkill: (skillId: string) => void;
   updateSkillEntry: (skillId: string, updates: Partial<AgentSkillEntry>) => void;
+  setPendingSkillFiles: (skillId: string, files: Record<string, string>) => void;
+  getPendingSkillFiles: (skillId: string) => Record<string, string> | undefined;
+  clearPendingSkillFiles: (skillId: string) => void;
 }
 
 /**
@@ -118,6 +122,7 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   originalData: null,
   loading: false,
   saving: false,
+  pendingSkillFiles: {},
 
   hasChanges: () => {
     const { formData, originalData } = get();
@@ -221,10 +226,12 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   },
 
   removeSkill: (skillId: string) => {
-    const { formData } = get();
+    const { formData, pendingSkillFiles } = get();
     if (!formData) return;
     const skills = (formData.skills || []).filter(s => s.id !== skillId);
-    set({ formData: { ...formData, skills } });
+    const next = { ...pendingSkillFiles };
+    delete next[skillId];
+    set({ formData: { ...formData, skills }, pendingSkillFiles: next });
   },
 
   updateSkillEntry: (skillId: string, updates: Partial<AgentSkillEntry>) => {
@@ -234,5 +241,21 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
       s.id === skillId ? { ...s, ...updates } : s
     );
     set({ formData: { ...formData, skills } });
+  },
+
+  setPendingSkillFiles: (skillId, files) => {
+    const { pendingSkillFiles } = get();
+    set({ pendingSkillFiles: { ...pendingSkillFiles, [skillId]: files } });
+  },
+
+  getPendingSkillFiles: (skillId) => {
+    return get().pendingSkillFiles[skillId];
+  },
+
+  clearPendingSkillFiles: (skillId) => {
+    const { pendingSkillFiles } = get();
+    const next = { ...pendingSkillFiles };
+    delete next[skillId];
+    set({ pendingSkillFiles: next });
   },
 }));

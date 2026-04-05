@@ -31,7 +31,7 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
   const { t } = useTranslation()
   const isDark = useIsDark()
   const storage = useSkillStorage(skill.sourceSkillId, agentId, skill.id)
-  const { updateSkillEntry } = useAgentEditStore()
+  const { updateSkillEntry, getPendingSkillFiles, clearPendingSkillFiles } = useAgentEditStore()
 
   const editor = useFileEditor({ storage })
 
@@ -52,6 +52,13 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
 
   // --- Load all files on mount ---
   useEffect(() => {
+    // Check if files are in memory (newly added, not yet saved to S3)
+    const pendingFiles = getPendingSkillFiles(skill.id)
+    if (pendingFiles && Object.keys(pendingFiles).length > 0) {
+      editor.loadFromMemory(pendingFiles)
+      return
+    }
+    // Otherwise load from S3
     editor.loadInitial().catch(() => {
       setError(t("agentSkills.failedToLoad"))
     })
@@ -113,6 +120,9 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
       else setError(result.errors.join(", "))
       return
     }
+
+    // Clear pending files — they're now in S3
+    clearPendingSkillFiles(skill.id)
 
     // Recompute hash and update agent-edit-store
     const allFiles: Record<string, string> = {}

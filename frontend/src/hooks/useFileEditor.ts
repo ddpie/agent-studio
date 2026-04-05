@@ -35,6 +35,7 @@ interface UseFileEditorReturn {
 
   // Actions
   loadInitial: (initialFile?: string) => Promise<{ files: string[]; content: string | null }>
+  loadFromMemory: (files: Record<string, string>) => void
   selectFile: (path: string) => Promise<void>
   setCurrentFile: (path: string) => void
   setFiles: (files: string[]) => void
@@ -125,6 +126,29 @@ export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): U
 
     return { files: fileList, content: fileContent }
   }, [storage, originalContents, editedContents, pendingCreates, pendingDeletes, pendingRenames, setCurrentFile])
+
+  const loadFromMemory = useCallback((memFiles: Record<string, string>) => {
+    originalContents.clear()
+    editedContents.clear()
+    pendingCreates.clear()
+    pendingDeletes.clear()
+    pendingRenames.clear()
+
+    const fileList = Object.keys(memFiles).filter(f => f !== "SKILL.md").sort()
+    setFiles(fileList)
+
+    // Mark ALL files as pending creates — they need to be written to S3 on save
+    for (const [path, content] of Object.entries(memFiles)) {
+      pendingCreates.set(path, content)
+    }
+
+    setContent(memFiles["SKILL.md"] || null)
+    setCurrentFile("SKILL.md")
+    setLoadingContent(false)
+    setChangedFiles(new Set())
+    setPendingDeletes(new Set())
+    setPendingDeleteDirs(new Set())
+  }, [originalContents, editedContents, pendingCreates, pendingDeletes, pendingRenames, setCurrentFile])
 
   const selectFile = useCallback(async (path: string) => {
     if (pendingCreates.has(path)) {
@@ -451,6 +475,7 @@ export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): U
     pendingRenames,
 
     loadInitial,
+    loadFromMemory,
     selectFile,
     setCurrentFile,
     setFiles,

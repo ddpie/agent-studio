@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next"
 import { Package, Plus, Trash2, RefreshCw, Loader2 } from "lucide-react"
 import { useAgentEditStore } from "../../stores/agent-edit-store"
 import {
-  copySkillToAgent,
+  readGlobalSkillFiles,
   deleteAgentSkill,
 } from "../../lib/agent-skill-storage"
 import { listSkills, type SkillIndexEntry } from "../../lib/skill-storage"
@@ -22,7 +22,7 @@ interface SkillsSectionProps {
 
 export default function SkillsSection({ skills, agentId, deployedHashes, onEditSkill }: SkillsSectionProps) {
   const { t } = useTranslation()
-  const { addSkill, removeSkill } = useAgentEditStore()
+  const { addSkill, removeSkill, setPendingSkillFiles } = useAgentEditStore()
   const [pickerOpen, setPickerOpen] = useState(false)
   const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -44,14 +44,15 @@ export default function SkillsSection({ skills, agentId, deployedHashes, onEditS
     setAdding(true)
     setError(null)
     try {
-      const entry = await copySkillToAgent(agentId, globalSkill)
+      const { entry, files } = await readGlobalSkillFiles(globalSkill)
       addSkill(entry)
+      setPendingSkillFiles(entry.id, files)
     } catch (err) {
       setError(err instanceof Error ? err.message : t("agentSkills.failedToAdd"))
     } finally {
       setAdding(false)
     }
-  }, [agentId, addSkill, t])
+  }, [addSkill, setPendingSkillFiles, t])
 
   const handleDeleteSkill = useCallback(async (skillId: string) => {
     if (!confirm(t("agentSkills.removeConfirm"))) return

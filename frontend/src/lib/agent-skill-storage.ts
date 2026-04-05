@@ -240,6 +240,50 @@ export async function listAgentSkillFiles(
   }
 }
 
+/**
+ * Read all files from a global skill without writing anywhere.
+ * Returns { entry: AgentSkillEntry, files: Record<string, string> }
+ */
+export async function readGlobalSkillFiles(
+  globalSkill: SkillIndexEntry,
+): Promise<{ entry: AgentSkillEntry; files: Record<string, string> }> {
+  const newId = crypto.randomUUID().slice(0, 8)
+
+  const [skillMd, extraFileList] = await Promise.all([
+    getSkillFile(globalSkill.id, "SKILL.md"),
+    listGlobalSkillFiles(globalSkill.id),
+  ])
+
+  const allFiles: Record<string, string> = {}
+  if (skillMd) allFiles["SKILL.md"] = skillMd
+
+  // Read extra files with concurrency limit of 5
+  for (let i = 0; i < extraFileList.length; i += 5) {
+    const batch = extraFileList.slice(i, i + 5)
+    const results = await Promise.all(
+      batch.map(async f => ({ file: f, content: await getSkillFile(globalSkill.id, f) }))
+    )
+    for (const { file, content } of results) {
+      if (content !== null) allFiles[file] = content
+    }
+  }
+
+  const contentHash = await computeSkillHash(allFiles)
+  const sourceContentHash = globalSkill.contentHash || contentHash
+
+  const entry: AgentSkillEntry = {
+    id: newId,
+    sourceSkillId: globalSkill.id,
+    sourceContentHash,
+    name: globalSkill.name,
+    description: globalSkill.description,
+    contentHash,
+    files: Object.keys(allFiles).sort(),
+  }
+
+  return { entry, files: allFiles }
+}
+
 /** Read all files for an agent skill and return as a map */
 export async function readAllAgentSkillFiles(
   agentId: string,
