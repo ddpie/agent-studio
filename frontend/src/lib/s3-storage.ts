@@ -176,18 +176,21 @@ export async function listS3Keys(prefix: string): Promise<string[]> {
 /** Download a file from S3 and return a blob URL for browser download. */
 export async function generateDownloadUrl(key: string): Promise<string> {
   const signer = await getSigner();
-  const url = new URL(`${S3_ENDPOINT}/${BUCKET}/${key}`);
+  // Encode each path segment individually to handle Chinese/special chars
+  const encodedKey = key.split("/").map(s => encodeURIComponent(s)).join("/");
+  const path = `/${BUCKET}/${encodedKey}`;
+  const hostname = `s3.${agentConfig.region}.amazonaws.com`;
 
   const signed = await signer.sign({
     method: "GET",
-    protocol: url.protocol,
-    hostname: url.hostname,
-    path: url.pathname,
+    protocol: "https:",
+    hostname,
+    path,
     query: {},
-    headers: { Host: url.host },
+    headers: { Host: hostname },
   });
 
-  const resp = await fetch(url.toString(), {
+  const resp = await fetch(`https://${hostname}${path}`, {
     method: "GET",
     headers: signed.headers as Record<string, string>,
   });
