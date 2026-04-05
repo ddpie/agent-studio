@@ -641,7 +641,11 @@ export default function SkillDetail() {
   const handleDelete = async () => {
     if (!skillId) return;
     await deleteSkill(skillId);
-    navigate("/skills");
+    if (storage.isAgentMode) {
+      navigate(`/agents/edit/${agentId}`);
+    } else {
+      navigate("/skills");
+    }
   };
 
   const getDiffChanges = (): Map<string, { original: string; edited: string }> => {
@@ -912,7 +916,14 @@ export default function SkillDetail() {
           <ChevronLeft className="w-4 h-4" />
         </button>
         <div className="flex-1 min-w-0">
-          <h2 className={`text-base font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{skill?.name}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className={`text-base font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{skill?.name}</h2>
+            {storage.isAgentMode && (
+              <span className="text-[10px] px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">
+                Agent Copy
+              </span>
+            )}
+          </div>
           {skill?.description && (
             <p className="text-xs text-gray-400 truncate">{skill.description}</p>
           )}
@@ -1050,9 +1061,11 @@ Respond with ONLY a JSON block:
           </button>
           </>
         )}
+        {!storage.isAgentMode && (
         <button onClick={() => setShowDeleteConfirm(true)} className={`p-1.5 rounded transition-colors ${isDark ? "text-red-400 hover:bg-red-900/20" : "text-red-400 hover:text-red-600 hover:bg-red-50"}`}>
           <Trash2 className="w-4 h-4" />
         </button>
+        )}
         <button onClick={() => {
           if (!skillId) return;
           const store = useSkillAssistantStore.getState();
