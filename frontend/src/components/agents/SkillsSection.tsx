@@ -25,6 +25,7 @@ export default function SkillsSection({ skills, agentId, deployedHashes, onEditS
   const { addSkill, removeSkill, setPendingSkillFiles } = useAgentEditStore()
   const [pickerOpen, setPickerOpen] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [addProgress, setAddProgress] = useState("")
   const [deleting, setDeleting] = useState<string | null>(null)
   const [globalSkills, setGlobalSkills] = useState<SkillIndexEntry[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -42,15 +43,19 @@ export default function SkillsSection({ skills, agentId, deployedHashes, onEditS
 
   const handleAddSkill = useCallback(async (globalSkill: SkillIndexEntry) => {
     setAdding(true)
+    setAddProgress("")
     setError(null)
     try {
-      const { entry, files } = await readGlobalSkillFiles(globalSkill)
+      const { entry, files } = await readGlobalSkillFiles(globalSkill, (done, total) => {
+        setAddProgress(`${done}/${total}`)
+      })
       addSkill(entry)
       setPendingSkillFiles(entry.id, files)
     } catch (err) {
       setError(err instanceof Error ? err.message : t("agentSkills.failedToAdd"))
     } finally {
       setAdding(false)
+      setAddProgress("")
     }
   }, [addSkill, setPendingSkillFiles, t])
 
@@ -82,7 +87,7 @@ export default function SkillsSection({ skills, agentId, deployedHashes, onEditS
             className="flex items-center gap-1 px-2 py-0.5 text-[11px] text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-70"
           >
             {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-            {t("agentSkills.add")}
+            {adding && addProgress ? addProgress : t("agentSkills.add")}
           </button>
         </span>
       </div>

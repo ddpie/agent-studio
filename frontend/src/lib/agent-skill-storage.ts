@@ -246,6 +246,7 @@ export async function listAgentSkillFiles(
  */
 export async function readGlobalSkillFiles(
   globalSkill: SkillIndexEntry,
+  onProgress?: (done: number, total: number) => void,
 ): Promise<{ entry: AgentSkillEntry; files: Record<string, string> }> {
   const newId = crypto.randomUUID().slice(0, 8)
 
@@ -257,6 +258,10 @@ export async function readGlobalSkillFiles(
   const allFiles: Record<string, string> = {}
   if (skillMd) allFiles["SKILL.md"] = skillMd
 
+  const total = extraFileList.length
+  let done = 0
+  onProgress?.(0, total)
+
   // Read extra files with concurrency limit of 5
   for (let i = 0; i < extraFileList.length; i += 5) {
     const batch = extraFileList.slice(i, i + 5)
@@ -266,6 +271,8 @@ export async function readGlobalSkillFiles(
     for (const { file, content } of results) {
       if (content !== null) allFiles[file] = content
     }
+    done += batch.length
+    onProgress?.(done, total)
   }
 
   const contentHash = await computeSkillHash(allFiles)
