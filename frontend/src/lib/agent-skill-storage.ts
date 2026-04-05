@@ -63,11 +63,11 @@ export async function computeSkillHash(files: Record<string, string>): Promise<s
 export async function copySkillToAgent(
   agentId: string,
   globalSkill: SkillIndexEntry,
-  onProgress?: (done: number, total: number) => void,
+  onProgress?: (done: number, total: number, phase: "read" | "write") => void,
 ): Promise<AgentSkillEntry> {
   const newId = crypto.randomUUID().slice(0, 8)
 
-  // Read all files from global skill (parallel)
+  // Phase 1: Read all files from global skill
   const [skillMd, extraFiles] = await Promise.all([
     getSkillFile(globalSkill.id, "SKILL.md"),
     listGlobalSkillFiles(globalSkill.id),
@@ -76,28 +76,43 @@ export async function copySkillToAgent(
   const allFiles: Record<string, string> = {}
   if (skillMd) allFiles["SKILL.md"] = skillMd
 
-  // Read extra files in parallel
-  const extraResults = await Promise.all(
-    extraFiles.map(async f => ({ file: f, content: await getSkillFile(globalSkill.id, f) }))
-  )
-  for (const { file, content } of extraResults) {
-    if (content !== null) allFiles[file] = content
+  const readTotal = extraFiles.length
+  let readDone = 0
+  onProgress?.(0, readTotal, "read")
+
+  // Read extra files with concurrency limit of 5
+  for (let i = 0; i < extraFiles.length; i += 5) {
+    const batch = extraFiles.slice(i, i + 5)
+    const results = await Promise.all(
+      batch.map(async f => ({ file: f, content: await getSkillFile(globalSkill.id, f) }))
+    )
+    for (const { file, content } of results) {
+      if (content !== null) allFiles[file] = content
+    }
+    readDone += batch.length
+    onProgress?.(readDone, readTotal, "read")
   }
 
-  // Write all files in parallel with progress tracking
+  // Phase 2: Write all files with concurrency limit of 5
   const entries = Object.entries(allFiles)
-  const total = entries.length
-  let done = 0
-  onProgress?.(0, total)
+  const writeTotal = entries.length
+  let writeDone = 0
+  onProgress?.(0, writeTotal, "write")
 
-  const writeResults = await Promise.all(
-    entries.map(async ([filePath, content]) => {
-      const success = await writeAgentSkillFile(agentId, newId, filePath, content)
-      done++
-      onProgress?.(done, total)
-      return { filePath, success }
-    })
-  )
+  const writeResults: { filePath: string; success: boolean }[] = []
+  for (let i = 0; i < entries.length; i += 5) {
+    const batch = entries.slice(i, i + 5)
+    const batchResults = await Promise.all(
+      batch.map(async ([filePath, content]) => ({
+        filePath,
+        success: await writeAgentSkillFile(agentId, newId, filePath, content),
+      }))
+    )
+    writeResults.push(...batchResults)
+    writeDone += batch.length
+    onProgress?.(writeDone, writeTotal, "write")
+  }
+
   const failed = writeResults.filter(r => !r.success)
   if (failed.length > 0) {
     const written = writeResults.filter(r => r.success).map(r => r.filePath)
