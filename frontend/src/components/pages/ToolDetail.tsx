@@ -15,6 +15,7 @@ import { getCurrentUser } from "aws-amplify/auth";
 import ToolAssistant from "../tools/ToolAssistant";
 import useIsDark from "../../hooks/useIsDark";
 import type { ValidationResult } from "../../lib/types/validation";
+import { validatePython } from "../../lib/validators/python-validator";
 
 const TOOL_TEMPLATE = `@tool
 def my_tool(query: str) -> str:
@@ -28,38 +29,6 @@ def my_tool(query: str) -> str:
     """
     return "result"
 `;
-
-function validatePython(code: string): { line: number; col: number; message: string; severity: number }[] {
-  const markers: { line: number; col: number; message: string; severity: number }[] = [];
-  const lines = code.split("\n");
-
-  let parens = 0, brackets = 0, braces = 0;
-  for (const line of lines) {
-    for (const ch of line) {
-      if (ch === "(") parens++; else if (ch === ")") parens--;
-      else if (ch === "[") brackets++; else if (ch === "]") brackets--;
-      else if (ch === "{") braces++; else if (ch === "}") braces--;
-    }
-  }
-  if (parens !== 0) markers.push({ line: lines.length, col: 1, message: "Unbalanced parentheses", severity: 8 });
-  if (brackets !== 0) markers.push({ line: lines.length, col: 1, message: "Unbalanced brackets", severity: 8 });
-  if (braces !== 0) markers.push({ line: lines.length, col: 1, message: "Unbalanced braces", severity: 8 });
-
-  if (!code.includes("@tool")) {
-    markers.push({ line: 1, col: 1, message: "Missing @tool decorator", severity: 8 });
-  }
-
-  let tripleCount = 0;
-  for (const line of lines) {
-    const matches = line.match(/"""/g);
-    if (matches) tripleCount += matches.length;
-  }
-  if (tripleCount % 2 !== 0) {
-    markers.push({ line: lines.length, col: 1, message: "Unterminated triple-quoted string", severity: 8 });
-  }
-
-  return markers;
-}
 
 function extractFuncName(code: string): string | null {
   const match = code.match(/@tool\s*\ndef\s+(\w+)\s*\(/);
