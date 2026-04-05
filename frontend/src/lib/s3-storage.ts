@@ -173,27 +173,26 @@ export async function listS3Keys(prefix: string): Promise<string[]> {
   }
 }
 
-/** Generate a pre-signed GET URL for downloading a file from S3. Valid for 15 minutes. */
+/** Download a file from S3 and return a blob URL for browser download. */
 export async function generateDownloadUrl(key: string): Promise<string> {
   const signer = await getSigner();
-  const expires = 900; // 15 minutes
   const url = new URL(`${S3_ENDPOINT}/${BUCKET}/${key}`);
-  url.searchParams.set("X-Amz-Expires", String(expires));
 
-  const signed = await signer.presign({
+  const signed = await signer.sign({
     method: "GET",
     protocol: url.protocol,
     hostname: url.hostname,
     path: url.pathname,
-    query: Object.fromEntries(url.searchParams),
+    query: {},
     headers: { Host: url.host },
-  }, { expiresIn: expires });
+  });
 
-  const result = new URL(`${url.protocol}//${url.hostname}${signed.path}`);
-  if (signed.query) {
-    for (const [k, v] of Object.entries(signed.query)) {
-      if (typeof v === "string") result.searchParams.set(k, v);
-    }
-  }
-  return result.toString();
+  const resp = await fetch(url.toString(), {
+    method: "GET",
+    headers: signed.headers as Record<string, string>,
+  });
+
+  if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
+  const blob = await resp.blob();
+  return URL.createObjectURL(blob);
 }

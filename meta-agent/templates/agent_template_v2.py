@@ -394,6 +394,8 @@ def run_command(command: str, language: str = "python") -> str:
     import subprocess as _sp
 
     timeout = 30
+    # Use persistent workspace if available, fallback to /tmp
+    cwd = "/mnt/workspace" if _os.path.isdir("/mnt/workspace") else "/tmp"
 
     if language == "python":
         try:

@@ -204,6 +204,11 @@ def create_runtime(agent_name: str, description: str, s3_key: str, role_arn: str
         },
         networkConfiguration={"networkMode": "PUBLIC"},
         protocolConfiguration={"serverProtocol": "HTTP"},
+        filesystemConfigurations=[{
+            "sessionStorage": {
+                "mountPath": "/mnt/workspace"
+            }
+        }],
     )
 
     return {
