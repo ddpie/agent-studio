@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useParams } from "react-router";
 import { useChatStore, type Message } from "../../stores/chat-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
+import { generateDownloadUrl } from "../../lib/s3-storage";
 import { Send, Loader2, Trash2, X, Plus, History, Clock, Square, Copy, FileText, Check, RefreshCw, Download, Pencil, Paperclip, Image as ImageIcon } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -390,12 +391,45 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
           </div>
         )}
         {message.content ? (
+          <>
+          {/* S3 download buttons */}
+          {(() => {
+            const downloads = [...(message.content.matchAll(/__S3_DOWNLOAD__:([^:]+):([^\s"}\]]+)/g))];
+            if (downloads.length === 0) return null;
+            return (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {downloads.map(([, key, filename], i) => (
+                  <button
+                    key={i}
+                    onClick={async () => {
+                      try {
+                        const url = await generateDownloadUrl(key);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = filename;
+                        a.click();
+                      } catch (err) {
+                        console.error("Download failed:", err);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    {filename}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
           <div ref={contentDivRef} className={`prose prose-sm max-w-none ${isUser ? "prose-invert" : "dark:prose-invert"}`}>
             <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]} components={mdComponents}>{
-              // Strip [Attached file: ...] lines from display — file cards handle this
-              message.attachments?.length
-                ? message.content.replace(/\n\n\[Attached file:[^\]]*\]/g, "").trim()
-                : message.content
+              // Strip [Attached file: ...] lines and __S3_DOWNLOAD__ markers from display
+              (() => {
+                let text = message.content;
+                if (message.attachments?.length) text = text.replace(/\n\n\[Attached file:[^\]]*\]/g, "").trim();
+                text = text.replace(/__S3_DOWNLOAD__:[^:]+:[^\s"}\]]+/g, "").trim();
+                return text;
+              })()
             }</ReactMarkdown>
             {showTypingIndicator && (
               <span className="inline-flex items-center gap-1 text-gray-400 text-xs mt-2">
@@ -403,6 +437,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
               </span>
             )}
           </div>
+          </>
         ) : (
           <span className="inline-flex items-center gap-1 text-gray-400 text-sm">
             <Loader2 className="w-3 h-3 animate-spin" /> {t("assistant.thinking")}

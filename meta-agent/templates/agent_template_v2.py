@@ -48,7 +48,7 @@ async def invoke(payload, context):
     agent = Agent(
         model=BedrockModel(model_id=model_id),
         system_prompt=prompt,
-        tools=_ALL_TOOLS + [_builtin.load_skill, _builtin.run_command],
+        tools=_ALL_TOOLS + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3],
     )
     async for chunk in _stream_with_tools(agent, _build_input(payload)):
         yield chunk
@@ -420,4 +420,62 @@ def run_command(command: str, language: str = "python") -> str:
 
     else:
         return _json.dumps({"error": f"Unsupported language: {language}. Use 'python' or 'shell'."})
+
+
+@_tool
+def upload_to_s3(local_path: str, filename: str = "") -> str:
+    """Upload a local file to S3 for user download. Use this after generating files (e.g. PPTX, PDF, CSV).
+
+    The file will be stored permanently. The user's browser will generate a download link on demand.
+
+    Args:
+        local_path: Absolute path to the file on the local filesystem (e.g. /tmp/output.pptx).
+        filename: Optional display filename. If empty, uses the original filename.
+
+    Returns:
+        JSON with s3_key for the uploaded file, or error message.
+    """
+    import os as _os2
+    import time as _time
+
+    if not _os2.path.isfile(local_path):
+        return _json.dumps({"error": f"File not found: {local_path}"})
+
+    fname = filename or _os2.path.basename(local_path)
+    # Determine agent ID from environment or use generic path
+    agent_id = _os.getenv("AGENT_RUNTIME_ID", "unknown")
+    timestamp = int(_time.time())
+    s3_key = f"agents/{agent_id}/outputs/{timestamp}_{fname}"
+
+    try:
+        # Detect content type
+        ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+        content_types = {
+            "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "pdf": "application/pdf",
+            "csv": "text/csv",
+            "json": "application/json",
+            "txt": "text/plain",
+            "md": "text/markdown",
+            "png": "image/png",
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "svg": "image/svg+xml",
+            "zip": "application/zip",
+            "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }
+        content_type = content_types.get(ext, "application/octet-stream")
+
+        _s3.upload_file(
+            local_path, _S3_BUCKET, s3_key,
+            ExtraArgs={"ContentType": content_type, "ContentDisposition": f'attachment; filename="{fname}"'},
+        )
+
+        return _json.dumps({
+            "s3_key": s3_key,
+            "filename": fname,
+            "download_marker": f"__S3_DOWNLOAD__:{s3_key}:{fname}",
+        })
+    except Exception as e:
+        return _json.dumps({"error": f"Upload failed: {e}"})
 '''
