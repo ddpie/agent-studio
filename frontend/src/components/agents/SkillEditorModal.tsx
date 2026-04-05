@@ -169,7 +169,7 @@ export default function SkillEditorModal({ open, onClose, agentId, skillId, sour
           <FileText className="w-4 h-4 text-blue-500" />
           <span className={`text-sm font-semibold ${isDark ? "text-gray-200" : "text-gray-800"}`}>{skillName}</span>
           <span className="text-[10px] px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">
-            Agent Copy
+            {t("agentSkills.agentCopy", "Agent Copy")}
           </span>
           <div className="flex-1" />
           {error && (
