@@ -210,18 +210,20 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     for (const key of keys) {
       if (skipKeys.has(key)) continue;
       if (key === "skills") {
-        // Serialize skills as readable YAML-like format for diff
-        const oldSkills = ((originalData as Record<string, unknown>).skills as Array<{ name: string; description: string; files: string[]; sourceSkillId: string }>) || [];
-        const newSkills = ((formData as Record<string, unknown>).skills as Array<{ name: string; description: string; files: string[]; sourceSkillId: string }>) || [];
-        const serialize = (arr: Array<{ name: string; description: string; files: string[]; sourceSkillId: string }>) =>
-          arr.length === 0 ? "(none)" : arr.map(s =>
-            `- ${s.name}\n  ${s.description}\n  source: ${s.sourceSkillId}\n  files: [${(s.files || []).join(", ")}]`
-          ).join("\n");
-        const oldVal = serialize(oldSkills);
-        const newVal = serialize(newSkills);
-        if (oldVal !== newVal) {
-          changes[key] = { old: oldVal, new: newVal };
-        }
+        // Show skill add/remove summary for diff
+        const oldSkills = ((originalData as Record<string, unknown>).skills as Array<{ id: string; name: string; files: string[] }>) || [];
+        const newSkills = ((formData as Record<string, unknown>).skills as Array<{ id: string; name: string; files: string[] }>) || [];
+        const oldIds = new Set(oldSkills.map(s => s.id));
+        const newIds = new Set(newSkills.map(s => s.id));
+        const added = newSkills.filter(s => !oldIds.has(s.id));
+        const removed = oldSkills.filter(s => !newIds.has(s.id));
+        if (added.length === 0 && removed.length === 0) continue;
+        const oldLines = oldSkills.map(s => `  ${s.name} (${(s.files || []).length} files)`).join("\n") || "(none)";
+        const newLines = newSkills.map(s => {
+          const isNew = !oldIds.has(s.id);
+          return `${isNew ? "+ " : "  "}${s.name} (${(s.files || []).length} files)`;
+        }).join("\n") || "(none)";
+        changes[key] = { old: oldLines, new: newLines };
         continue;
       }
       if (key === "suggestions") {
