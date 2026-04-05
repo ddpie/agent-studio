@@ -13,6 +13,8 @@ import { preloadPyodide, isPyodideReady, checkPythonSyntax } from "../../lib/pyo
 import { invokeMetaAgent } from "../../lib/agentcore-client";
 import { getCurrentUser } from "aws-amplify/auth";
 import ToolAssistant from "../tools/ToolAssistant";
+import useIsDark from "../../hooks/useIsDark";
+import type { ValidationResult } from "../../lib/types/validation";
 
 const TOOL_TEMPLATE = `@tool
 def my_tool(query: str) -> str:
@@ -26,13 +28,6 @@ def my_tool(query: str) -> str:
     """
     return "result"
 `;
-
-function useIsDark() {
-  const { theme } = useUISettings();
-  if (theme === "dark") return true;
-  if (theme === "light") return false;
-  return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
 
 function validatePython(code: string): { line: number; col: number; message: string; severity: number }[] {
   const markers: { line: number; col: number; message: string; severity: number }[] = [];
@@ -69,12 +64,6 @@ function validatePython(code: string): { line: number; col: number; message: str
 function extractFuncName(code: string): string | null {
   const match = code.match(/@tool\s*\ndef\s+(\w+)\s*\(/);
   return match ? match[1] : null;
-}
-
-interface ValidationResult {
-  valid: boolean;
-  errors: string[];
-  warnings: string[];
 }
 
 export default function ToolDetail() {

@@ -345,3 +345,35 @@ export async function importSkill(
 
   return { id, name: skillName, description: skillDesc };
 }
+
+/**
+ * Import a multi-file skill. Writes all files to S3 and updates index.
+ * files: Record<path, content> — must include "SKILL.md".
+ */
+export async function importSkillFromFiles(
+  files: Record<string, string>,
+): Promise<{ id: string; name: string; description: string } | null> {
+  const skillMd = files["SKILL.md"];
+  if (!skillMd) return null;
+
+  const meta = parseFrontmatter(skillMd);
+  const skillName = meta?.name ?? "imported-skill";
+  const skillDesc = meta?.description ?? "";
+
+  const id = crypto.randomUUID().slice(0, 8);
+
+  // Write all files to S3
+  for (const [path, content] of Object.entries(files)) {
+    const ok = await writeSkillFile(id, path, content);
+    if (!ok && path === "SKILL.md") return null;
+  }
+
+  // Compute hash and update index
+  const contentHash = await computeContentHash(files);
+  const extraFiles = Object.keys(files).filter(f => f !== "SKILL.md").sort();
+  const index = (await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY)) ?? [];
+  index.push({ id, name: skillName, description: skillDesc, contentHash, files: extraFiles });
+  await writeJsonToS3(INDEX_KEY, index);
+
+  return { id, name: skillName, description: skillDesc };
+}

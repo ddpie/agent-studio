@@ -16,19 +16,11 @@ import { useSkillAssistantStore } from "../../stores/skill-assistant-store";
 import SkillAssistant from "../skills/SkillAssistant";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
 import { preloadPyodide, checkPythonSyntax, isPyodideReady } from "../../lib/pyodide-checker";
+import { getMonacoLanguage } from "../../lib/monaco-helpers";
+import type { ValidationResult } from "../../lib/types/validation";
+import useIsDark from "../../hooks/useIsDark";
 
-// --- Language helpers ---
-
-function getMonacoLanguage(filename: string): string {
-  if (filename.endsWith(".py")) return "python";
-  if (filename.endsWith(".md")) return "markdown";
-  if (filename.endsWith(".json")) return "json";
-  if (filename.endsWith(".js")) return "javascript";
-  if (filename.endsWith(".ts")) return "typescript";
-  if (filename.endsWith(".yaml") || filename.endsWith(".yml")) return "yaml";
-  if (filename.endsWith(".sh")) return "shell";
-  return "plaintext";
-}
+// --- Validators ---
 
 /** Python validation using Pyodide compile() if available, fallback to basic checks */
 function validatePython(code: string): { line: number; col: number; message: string; severity: number }[] {
@@ -99,20 +91,7 @@ function validateShell(code: string): { line: number; col: number; message: stri
   return markers;
 }
 
-function useIsDark() {
-  const { theme } = useUISettings();
-  if (theme === "dark") return true;
-  if (theme === "light") return false;
-  return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
-
 // --- Skill validation ---
-
-interface ValidationResult {
-  valid: boolean;
-  errors: string[];
-  warnings: string[];
-}
 
 function validateSkill(
   skillMdContent: string,

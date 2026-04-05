@@ -2,9 +2,10 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import {
-  Package, Search, RefreshCw, Loader2, FileText, Upload, Trash2, RotateCcw, X, Plus,
+  Package, Search, RefreshCw, Loader2, FileText, Upload, Trash2, RotateCcw, X, Plus, Link,
 } from "lucide-react";
 import { listSkills, listDeletedSkills, importSkill, restoreSkill, permanentlyDeleteSkill, type SkillIndexEntry } from "../../lib/skill-storage";
+import { importSkillFromUrl } from "../../lib/skill-url-import";
 
 export default function SkillsPage() {
   const navigate = useNavigate();
@@ -20,6 +21,10 @@ export default function SkillsPage() {
   const [createName, setCreateName] = useState("");
   const [createDesc, setCreateDesc] = useState("");
   const [creating, setCreating] = useState(false);
+  const [showUrlImport, setShowUrlImport] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [urlImporting, setUrlImporting] = useState(false);
+  const [urlImportError, setUrlImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => {
@@ -58,6 +63,24 @@ export default function SkillsPage() {
     await permanentlyDeleteSkill(id);
     setConfirmPermanentDelete(null);
     refresh();
+  };
+
+  const handleUrlImport = async () => {
+    const url = importUrl.trim();
+    if (!url) return;
+    setUrlImporting(true);
+    setUrlImportError(null);
+    try {
+      const result = await importSkillFromUrl(url);
+      setShowUrlImport(false);
+      setImportUrl("");
+      refresh();
+      navigate(`/skills/${result.id}`);
+    } catch (err) {
+      setUrlImportError(err instanceof Error ? err.message : t("skills.urlImportError", { error: "Unknown error" }));
+    } finally {
+      setUrlImporting(false);
+    }
   };
 
   const handleCreate = async () => {
@@ -125,6 +148,11 @@ ${desc || "TODO: Add skill instructions here."}
                 className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50">
                 {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                 {t("common.import")}
+              </button>
+              <button onClick={() => setShowUrlImport(true)}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700">
+                <Link className="w-3.5 h-3.5" />
+                {t("skills.importUrl")}
               </button>
               <button onClick={() => setShowCreate(true)}
                 className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600">
@@ -239,6 +267,44 @@ ${desc || "TODO: Add skill instructions here."}
               <button onClick={handleCreate} disabled={!createName.trim() || creating}
                 className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">
                 {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t("common.create")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* URL import dialog */}
+      {showUrlImport && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => { if (!urlImporting) { setShowUrlImport(false); setUrlImportError(null); } }}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-5 max-w-md mx-4 w-96" onClick={e => e.stopPropagation()}>
+            <p className="text-sm font-medium mb-3 text-gray-800 dark:text-gray-200">{t("skills.importUrl")}</p>
+            <input
+              autoFocus
+              value={importUrl}
+              onChange={e => { setImportUrl(e.target.value); setUrlImportError(null); }}
+              onKeyDown={e => {
+                if (e.key === "Enter" && importUrl.trim() && !urlImporting) handleUrlImport();
+                if (e.key === "Escape" && !urlImporting) { setShowUrlImport(false); setUrlImportError(null); }
+              }}
+              placeholder={t("skills.urlPlaceholder")}
+              className="w-full px-2.5 py-2 text-xs border rounded-lg outline-none bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:ring-1 focus:ring-blue-500 font-mono"
+            />
+            {urlImportError && (
+              <p className="text-[11px] text-red-500 mt-2">{urlImportError}</p>
+            )}
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => { setShowUrlImport(false); setUrlImportError(null); }}
+                disabled={urlImporting}
+                className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-50"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={handleUrlImport}
+                disabled={!importUrl.trim() || urlImporting}
+                className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
+              >
+                {urlImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t("common.import")}
               </button>
             </div>
           </div>
