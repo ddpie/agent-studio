@@ -199,7 +199,7 @@ async def _stream_with_tools(agent, input_data):
                     if output_text.lstrip().startswith("<"):
                         max_out = 50000
                     elif t_name == "load_skill":
-                        max_out = 50000
+                        max_out = 10000
                     else:
                         max_out = 5000
                     if len(output_text) > max_out:
