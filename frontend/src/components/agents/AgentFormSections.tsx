@@ -125,7 +125,7 @@ export default function AgentFormSections({
             </select>
           </Field>
           <Field label="Image Support" changed={!!changedFields.supports_images}>
-            <label className={`flex items-center gap-2 h-[34px] px-3 border rounded-lg cursor-pointer transition-colors ${formData.supports_images ? "bg-blue-50 border-blue-300 text-blue-700" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}>
+            <label className={`flex items-center gap-2 h-[34px] px-3 border rounded-lg cursor-pointer transition-colors ${formData.supports_images ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"}`}>
               <input
                 type="checkbox"
                 checked={formData.supports_images || false}
@@ -201,12 +201,12 @@ export default function AgentFormSections({
               ? (() => {
                   const allNames = formData.tool_names!.split(",").map(t => t.trim()).filter(Boolean);
                   return allNames.map(name => (
-                    <span key={name} className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono bg-blue-50 text-blue-700 border border-blue-200">
+                    <span key={name} className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                       {name}
                     </span>
                   ));
                 })()
-              : "No tools registered"}
+              : t("agentEditor.noTools")}
           </div>
         </Field>
       </Section>
