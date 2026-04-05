@@ -45,7 +45,7 @@ async def invoke(payload, context):
             + skills_listing
             + "\\n\\nUse load_skill(name) to load a skill\\'s full instructions when needed."
         )
-    prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files."
+    prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files. After uploading, the download button appears automatically — do NOT create markdown links like [filename](url) for downloads."
     agent = Agent(
         model=BedrockModel(model_id=model_id),
         system_prompt=prompt,
@@ -127,7 +127,7 @@ async def invoke(payload, context):
             + skills_listing
             + "\\n\\nUse load_skill(name) to load a skill\\'s full instructions when needed."
         )
-    prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files."
+    prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files. After uploading, the download button appears automatically — do NOT create markdown links like [filename](url) for downloads."
     with mcp_client as mcp:
         mcp_tools = mcp.list_tools_sync()
         agent = Agent(
@@ -557,8 +557,15 @@ def upload_to_s3(local_path: str, filename: str = "") -> str:
         return _json.dumps({"error": f"File not found: {local_path}"})
 
     fname = filename or _os2.path.basename(local_path)
-    # Determine agent ID from environment or use generic path
-    agent_id = _os.getenv("AGENT_RUNTIME_ID", "unknown")
+    # Determine agent ID from available environment variables
+    agent_id = _os.getenv("AGENT_RUNTIME_ID", "") or _os.getenv("BEDROCK_AGENTCORE_RUNTIME_ID", "") or _os.getenv("AWS_LAMBDA_FUNCTION_NAME", "")
+    if not agent_id:
+        # Try to extract from runtime ARN if available
+        arn = _os.getenv("AGENT_RUNTIME_ARN", "") or _os.getenv("AWS_EXECUTION_ENV", "")
+        if "/" in arn:
+            agent_id = arn.rsplit("/", 1)[-1]
+    if not agent_id:
+        agent_id = "shared"
     timestamp = int(_time.time())
     s3_key = f"agents/{agent_id}/outputs/{timestamp}_{fname}"
 
