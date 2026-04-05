@@ -84,7 +84,7 @@ export default function ToolDetail() {
   const navigate = useNavigate();
   const isDark = useIsDark();
 
-  const { tools, fetchTools, saveTool, deleteTool, saving, error, clearError } = useToolLibraryStore();
+  const { tools, fetchTools, saveTool, softDeleteTool, saving, error, clearError } = useToolLibraryStore();
   const { panelOpen, openPanel } = useToolAssistantStore();
 
   const isNew = searchParams.get("new") === "1";
@@ -387,7 +387,7 @@ Respond with ONLY a JSON block:
       return;
     }
     try {
-      await deleteTool(toolId);
+      await softDeleteTool(toolId);
       navigate("/tools");
     } catch {
       // error is set in store

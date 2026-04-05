@@ -16,6 +16,8 @@ export interface ToolTemplate {
   visibility: string;
   created_at: string;
   updated_at: string;
+  deleted?: boolean;
+  deleted_at?: string;
 }
 
 const TABLE = "agent-studio-tools";
@@ -80,6 +82,8 @@ function itemToTool(item: Record<string, Record<string, unknown>>): ToolTemplate
     visibility: (item.visibility?.S as string) || "shared",
     created_at: (item.created_at?.S as string) || "",
     updated_at: (item.updated_at?.S as string) || "",
+    deleted: (item.deleted?.BOOL as boolean) || false,
+    deleted_at: (item.deleted_at?.S as string) || "",
   };
 }
 
@@ -147,5 +151,34 @@ export async function deleteToolItem(toolId: string): Promise<void> {
     ExpressionAttributeValues: {
       ":owner": { S: username },
     },
+  });
+}
+
+/** Soft-delete a tool (mark as deleted) */
+export async function softDeleteToolItem(toolId: string): Promise<void> {
+  const { username } = await getCurrentUser();
+  const now = new Date().toISOString();
+
+  await ddbRequest("UpdateItem", {
+    TableName: TABLE,
+    Key: { toolId: { S: toolId } },
+    UpdateExpression: "SET deleted = :d, deleted_at = :t",
+    ConditionExpression: "#o = :owner OR #o = :seed",
+    ExpressionAttributeNames: { "#o": "owner" },
+    ExpressionAttributeValues: {
+      ":d": { BOOL: true },
+      ":t": { S: now },
+      ":owner": { S: username },
+      ":seed": { S: "__builtin__" },
+    },
+  });
+}
+
+/** Restore a soft-deleted tool */
+export async function restoreToolItem(toolId: string): Promise<void> {
+  await ddbRequest("UpdateItem", {
+    TableName: TABLE,
+    Key: { toolId: { S: toolId } },
+    UpdateExpression: "REMOVE deleted, deleted_at",
   });
 }
