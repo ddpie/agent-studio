@@ -66,31 +66,36 @@ export async function copySkillToAgent(
 ): Promise<AgentSkillEntry> {
   const newId = crypto.randomUUID().slice(0, 8)
 
-  // Read all files from global skill
-  const skillMd = await getSkillFile(globalSkill.id, "SKILL.md")
-  const extraFiles = await listGlobalSkillFiles(globalSkill.id)
+  // Read all files from global skill (parallel)
+  const [skillMd, extraFiles] = await Promise.all([
+    getSkillFile(globalSkill.id, "SKILL.md"),
+    listGlobalSkillFiles(globalSkill.id),
+  ])
 
   const allFiles: Record<string, string> = {}
   if (skillMd) allFiles["SKILL.md"] = skillMd
-  for (const f of extraFiles) {
-    const content = await getSkillFile(globalSkill.id, f)
-    if (content !== null) allFiles[f] = content
+
+  // Read extra files in parallel
+  const extraResults = await Promise.all(
+    extraFiles.map(async f => ({ file: f, content: await getSkillFile(globalSkill.id, f) }))
+  )
+  for (const { file, content } of extraResults) {
+    if (content !== null) allFiles[file] = content
   }
 
-  // Write all files with rollback on failure
-  const writtenFiles: string[] = []
-  try {
-    for (const [filePath, content] of Object.entries(allFiles)) {
-      const success = await writeAgentSkillFile(agentId, newId, filePath, content)
-      if (!success) throw new Error(`Failed to write ${filePath}`)
-      writtenFiles.push(filePath)
-    }
-  } catch (err) {
+  // Write all files in parallel
+  const writeResults = await Promise.all(
+    Object.entries(allFiles).map(async ([filePath, content]) => ({
+      filePath,
+      success: await writeAgentSkillFile(agentId, newId, filePath, content),
+    }))
+  )
+  const failed = writeResults.filter(r => !r.success)
+  if (failed.length > 0) {
     // Rollback: delete all written files
-    for (const f of writtenFiles) {
-      await deleteFromS3(`agents/${agentId}/skills/${newId}/${f}`)
-    }
-    throw err
+    const written = writeResults.filter(r => r.success).map(r => r.filePath)
+    await Promise.all(written.map(f => deleteFromS3(`agents/${agentId}/skills/${newId}/${f}`)))
+    throw new Error(`Failed to write: ${failed.map(r => r.filePath).join(", ")}`)
   }
 
   // Compute hash
