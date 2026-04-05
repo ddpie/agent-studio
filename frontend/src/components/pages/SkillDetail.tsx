@@ -15,81 +15,12 @@ import { useUISettings } from "../../stores/ui-settings-store";
 import { useSkillAssistantStore } from "../../stores/skill-assistant-store";
 import SkillAssistant from "../skills/SkillAssistant";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
-import { preloadPyodide, checkPythonSyntax, isPyodideReady } from "../../lib/pyodide-checker";
+import { preloadPyodide } from "../../lib/pyodide-checker";
 import { getMonacoLanguage } from "../../lib/monaco-helpers";
 import type { ValidationResult } from "../../lib/types/validation";
 import useIsDark from "../../hooks/useIsDark";
-
-// --- Validators ---
-
-/** Python validation using Pyodide compile() if available, fallback to basic checks */
-function validatePython(code: string): { line: number; col: number; message: string; severity: number }[] {
-  // Use Pyodide (real CPython compile) if loaded
-  if (isPyodideReady()) {
-    return checkPythonSyntax(code).map(e => ({
-      line: e.line,
-      col: e.col || 1,
-      message: e.msg,
-      severity: 8,
-    }));
-  }
-  // Fallback: basic bracket balance check
-  const markers: { line: number; col: number; message: string; severity: number }[] = [];
-  const lines = code.split("\n");
-  let parens = 0, brackets = 0, braces = 0;
-  for (const line of lines) {
-    for (const ch of line) {
-      if (ch === "(") parens++; else if (ch === ")") parens--;
-      else if (ch === "[") brackets++; else if (ch === "]") brackets--;
-      else if (ch === "{") braces++; else if (ch === "}") braces--;
-    }
-  }
-  if (parens !== 0) markers.push({ line: lines.length, col: 1, message: "Unbalanced parentheses", severity: 8 });
-  if (brackets !== 0) markers.push({ line: lines.length, col: 1, message: "Unbalanced brackets", severity: 8 });
-  if (braces !== 0) markers.push({ line: lines.length, col: 1, message: "Unbalanced braces", severity: 8 });
-  return markers;
-}
-
-/** Shell script validation: quotes, brackets, common issues */
-function validateShell(code: string): { line: number; col: number; message: string; severity: number }[] {
-  const markers: { line: number; col: number; message: string; severity: number }[] = [];
-  const lines = code.split("\n");
-
-  // Quote balance (single and double)
-  let inSingle = false, inDouble = false;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    for (let j = 0; j < line.length; j++) {
-      const ch = line[j];
-      if (ch === "\\" && !inSingle) { j++; continue; } // skip escaped
-      if (ch === "'" && !inDouble) inSingle = !inSingle;
-      else if (ch === '"' && !inSingle) inDouble = !inDouble;
-    }
-  }
-  if (inSingle) markers.push({ line: lines.length, col: 1, message: "Unterminated single quote", severity: 8 });
-  if (inDouble) markers.push({ line: lines.length, col: 1, message: "Unterminated double quote", severity: 8 });
-
-  // if/then/fi, do/done, case/esac balance
-  let ifCount = 0, fiCount = 0, doCount = 0, doneCount = 0, caseCount = 0, esacCount = 0;
-  for (const line of lines) {
-    const words = line.trim().replace(/#.*$/, "").split(/\s+|;/);
-    for (const w of words) {
-      if (w === "if" || w === "elif") ifCount++;
-      else if (w === "fi") fiCount++;
-      else if (w === "do") doCount++;
-      else if (w === "done") doneCount++;
-      else if (w === "case") caseCount++;
-      else if (w === "esac") esacCount++;
-    }
-  }
-  if (ifCount !== fiCount) markers.push({ line: lines.length, col: 1, message: `Unbalanced if/fi (${ifCount} if vs ${fiCount} fi)`, severity: 8 });
-  if (doCount !== doneCount) markers.push({ line: lines.length, col: 1, message: `Unbalanced do/done (${doCount} do vs ${doneCount} done)`, severity: 8 });
-  if (caseCount !== esacCount) markers.push({ line: lines.length, col: 1, message: `Unbalanced case/esac`, severity: 8 });
-
-  return markers;
-}
+import { validatePython } from "../../lib/validators/python-validator";
+import { validateShell } from "../../lib/validators/shell-validator";
 
 // --- Skill validation ---
 
