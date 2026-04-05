@@ -269,10 +269,12 @@ TOOLS_PY_HEADER = "from strands import tool\n\n"
 
 # ── builtin_tools.py (injected into every sub-agent zip) ──────────────────
 BUILTIN_TOOLS_CODE = '''\
-"""Built-in tools for Agent Studio sub-agents — skill loading."""
+"""Built-in tools for Agent Studio sub-agents — skill loading with local cache."""
 
 import json as _json
 import os as _os
+from pathlib import Path as _Path
+from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 
 import boto3 as _boto3
 from strands import tool as _tool
@@ -285,21 +287,128 @@ _S3_BUCKET = _os.getenv(
 )
 _s3 = _boto3.client("s3", region_name=_REGION)
 
+# Local cache directory — uses managed session storage if available, else /tmp
+_CACHE_ROOT = _Path("/mnt/workspace/skills") if _os.path.isdir("/mnt/workspace") else _Path("/tmp/skills_cache")
+_CACHE_READY = False
 
-def get_skills_listing() -> str:
-    """Read skills/index.json from S3, return formatted listing for prompt injection.
 
-    Returns empty string if no skills or index not found.
-    """
+def _download_skill_file(args):
+    """Download a single S3 object to local cache. Used by ThreadPoolExecutor."""
+    key, local_path = args
+    try:
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        _s3.download_file(_S3_BUCKET, key, str(local_path))
+        return True
+    except Exception:
+        return False
+
+
+def ensure_skills_cached():
+    """Download all skills from S3 to local cache in parallel. Skips if already cached."""
+    global _CACHE_READY
+    if _CACHE_READY:
+        return
+
+    # Check if index already cached (session storage persists across invocations)
+    index_path = _CACHE_ROOT / "index.json"
+    if index_path.exists():
+        _CACHE_READY = True
+        return
+
+    _CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+
+    # Download index
     try:
         obj = _s3.get_object(Bucket=_S3_BUCKET, Key="skills/index.json")
-        skills = _json.loads(obj["Body"].read().decode("utf-8"))
+        index_data = obj["Body"].read().decode("utf-8")
+        index_path.write_text(index_data, encoding="utf-8")
+        skills = _json.loads(index_data)
+    except Exception:
+        _CACHE_READY = True
+        return
+
+    if not skills:
+        _CACHE_READY = True
+        return
+
+    # Collect all files to download
+    download_tasks = []
+    for skill in skills:
+        sid = skill.get("id", "")
+        if not sid:
+            continue
+        prefix = f"skills/{sid}/"
+        try:
+            paginator = _s3.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=_S3_BUCKET, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    key = obj["Key"]
+                    rel = key[len("skills/"):]  # e.g. "abc123/SKILL.md"
+                    local_path = _CACHE_ROOT / rel
+                    if not local_path.exists():
+                        download_tasks.append((key, local_path))
+        except Exception:
+            pass
+
+    # Parallel download (up to 20 concurrent)
+    if download_tasks:
+        with _ThreadPoolExecutor(max_workers=20) as pool:
+            list(pool.map(_download_skill_file, download_tasks))
+
+    _CACHE_READY = True
+
+
+def get_skills_listing() -> str:
+    """Read skills index, return formatted listing for prompt injection."""
+    ensure_skills_cached()
+    index_path = _CACHE_ROOT / "index.json"
+    try:
+        if index_path.exists():
+            skills = _json.loads(index_path.read_text(encoding="utf-8"))
+        else:
+            obj = _s3.get_object(Bucket=_S3_BUCKET, Key="skills/index.json")
+            skills = _json.loads(obj["Body"].read().decode("utf-8"))
         if not skills:
             return ""
-        lines = [f"- {s['name']}: {s['description']}" for s in skills]
+        lines = [f"- {s['name']}: {s['description']}" for s in skills if not s.get("deleted")]
         return "\\n".join(lines)
     except Exception:
         return ""
+
+
+def _read_local_or_s3(s3_key: str) -> str | None:
+    """Read from local cache first, fallback to S3."""
+    rel = s3_key[len("skills/"):] if s3_key.startswith("skills/") else s3_key
+    local_path = _CACHE_ROOT / rel
+    if local_path.exists():
+        return local_path.read_text(encoding="utf-8")
+    try:
+        obj = _s3.get_object(Bucket=_S3_BUCKET, Key=s3_key)
+        content = obj["Body"].read().decode("utf-8")
+        # Cache for next time
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_text(content, encoding="utf-8")
+        return content
+    except Exception:
+        return None
+
+
+def _list_local_or_s3(prefix: str) -> list[str]:
+    """List files from local cache first, fallback to S3."""
+    # prefix like "skills/abc123/"
+    rel_dir = prefix[len("skills/"):] if prefix.startswith("skills/") else prefix
+    local_dir = _CACHE_ROOT / rel_dir
+    if local_dir.exists() and local_dir.is_dir():
+        files = []
+        for p in local_dir.rglob("*"):
+            if p.is_file():
+                files.append(str(p.relative_to(local_dir)))
+        return files
+    try:
+        resp = _s3.list_objects_v2(Bucket=_S3_BUCKET, Prefix=prefix, MaxKeys=500)
+        return [o["Key"][len(prefix):] for o in resp.get("Contents", []) if o["Key"] != prefix]
+    except Exception:
+        return []
 
 
 @_tool
@@ -316,10 +425,16 @@ def load_skill(name: str, file: str = "") -> str:
     Returns:
         The skill content, or an error message.
     """
+    ensure_skills_cached()
+
     # Read index to find skill_id by name
+    index_path = _CACHE_ROOT / "index.json"
     try:
-        obj = _s3.get_object(Bucket=_S3_BUCKET, Key="skills/index.json")
-        skills = _json.loads(obj["Body"].read().decode("utf-8"))
+        if index_path.exists():
+            skills = _json.loads(index_path.read_text(encoding="utf-8"))
+        else:
+            obj = _s3.get_object(Bucket=_S3_BUCKET, Key="skills/index.json")
+            skills = _json.loads(obj["Body"].read().decode("utf-8"))
     except Exception as e:
         return _json.dumps({"error": f"Failed to read skill index: {e}"})
 
@@ -330,7 +445,7 @@ def load_skill(name: str, file: str = "") -> str:
             break
 
     if not skill_id:
-        available = [s.get("name", "") for s in skills]
+        available = [s.get("name", "") for s in skills if not s.get("deleted")]
         return _json.dumps({
             "error": f"Skill \\'{name}\\' not found.",
             "available_skills": available,
@@ -338,42 +453,31 @@ def load_skill(name: str, file: str = "") -> str:
 
     prefix = f"skills/{skill_id}/"
 
-    # If a specific file is requested, read it directly
+    # If a specific file is requested, read it
     if file:
-        key = prefix + file.lstrip("/")
-        try:
-            obj = _s3.get_object(Bucket=_S3_BUCKET, Key=key)
-            return obj["Body"].read().decode("utf-8")
-        except Exception as e:
-            return _json.dumps({"error": f"File \\'{file}\\' not found in skill \\'{name}\\': {e}"})
+        content = _read_local_or_s3(prefix + file.lstrip("/"))
+        if content is None:
+            return _json.dumps({"error": f"File \\'{file}\\' not found in skill \\'{name}\\'"})
+        return content
 
     # Default: read SKILL.md + list all files
-    try:
-        obj = _s3.get_object(Bucket=_S3_BUCKET, Key=f"{prefix}SKILL.md")
-        content = obj["Body"].read().decode("utf-8")
-    except Exception as e:
-        return _json.dumps({"error": f"Failed to read skill: {e}"})
+    content = _read_local_or_s3(f"{prefix}SKILL.md")
+    if content is None:
+        return _json.dumps({"error": f"Failed to read skill SKILL.md"})
 
-    # List other files in the skill directory (truncate if too many)
-    try:
-        resp = _s3.list_objects_v2(Bucket=_S3_BUCKET, Prefix=prefix, MaxKeys=500)
-        files = [
-            o["Key"][len(prefix):]
-            for o in resp.get("Contents", [])
-            if o["Key"] != f"{prefix}SKILL.md"
-        ]
-        if files:
-            content += "\\n\\n---\\n## Skill Files\\n"
-            content += "Use `load_skill(\\"" + name + "\\", file=\\"<path>\\")` to read:\\n"
-            shown = files[:30]
-            for f in shown:
-                content += f"- `{f}`\\n"
-            if len(files) > 30:
-                content += f"\\n... and {len(files) - 30} more files. Use load_skill with file= to read specific files.\\n"
-    except Exception:
-        pass
+    # List other files
+    all_files = _list_local_or_s3(prefix)
+    files = [f for f in all_files if f and f != "SKILL.md"]
+    if files:
+        content += "\\n\\n---\\n## Skill Files\\n"
+        content += "Use `load_skill(\\"" + name + "\\", file=\\"<path>\\")` to read:\\n"
+        shown = files[:30]
+        for f in shown:
+            content += f"- `{f}`\\n"
+        if len(files) > 30:
+            content += f"\\n... and {len(files) - 30} more files. Use load_skill with file= to read specific files.\\n"
 
-    # Truncate if content is too large (prevent context overflow)
+    # Truncate if content is too large
     if len(content) > 30000:
         content = content[:30000] + "\\n\\n... (truncated, use load_skill with file= to read specific files)"
 
