@@ -288,15 +288,14 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
 
   setPendingSkillFiles: (skillId, files) => {
     const { pendingSkillFiles, originalSkillFiles } = get();
-    // Store original snapshot if first time
-    if (!originalSkillFiles[skillId]) {
-      set({
-        pendingSkillFiles: { ...pendingSkillFiles, [skillId]: files },
-        originalSkillFiles: { ...originalSkillFiles, [skillId]: { ...files } },
-      });
-    } else {
-      set({ pendingSkillFiles: { ...pendingSkillFiles, [skillId]: files } });
-    }
+    set({
+      pendingSkillFiles: { ...pendingSkillFiles, [skillId]: files },
+      // Only set original if not already present (existing skills loaded from S3)
+      // For newly added skills, original stays empty so diff shows all files as new
+      originalSkillFiles: originalSkillFiles[skillId]
+        ? originalSkillFiles
+        : { ...originalSkillFiles, [skillId]: {} },
+    });
   },
 
   getPendingSkillFiles: (skillId) => {

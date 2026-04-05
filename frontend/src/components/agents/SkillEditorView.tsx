@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react"
+import { ArrowLeft, Loader2, FolderPlus, Trash2, Plus } from "lucide-react"
 import MonacoEditor, { type OnMount } from "@monaco-editor/react"
 import { Tree, type NodeRendererProps } from "react-arborist"
 import useIsDark from "../../hooks/useIsDark"
@@ -115,19 +115,6 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
     monaco.editor.setModelMarkers(model, "skill-editor", markers)
   }, [editor.currentFile, currentContent])
 
-  // --- New file ---
-  const handleNewFile = useCallback(() => {
-    const name = prompt(t("skillEditor.newFileName", "New file name (e.g. scripts/run.py):"))
-    if (!name || !name.trim()) return
-    const path = name.trim()
-    if (!editor.stageNewFile(path)) {
-      setError(t("skillEditor.fileExists", "File already exists"))
-      return
-    }
-    editor.setCurrentFile(path)
-    editor.setContent("")
-  }, [editor, t])
-
   // --- Delete file ---
   const handleDeleteFile = useCallback((path: string) => {
     if (path === "SKILL.md") return
@@ -215,13 +202,6 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
         </span>
         <div className="flex-1" />
         {error && <span className="text-xs text-red-500 truncate max-w-[200px]">{error}</span>}
-        <button
-          onClick={handleNewFile}
-          className={`flex items-center gap-1 px-2 py-1 text-xs rounded-lg transition-colors ${isDark ? "text-gray-400 hover:text-gray-200 hover:bg-gray-700" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"}`}
-        >
-          <Plus className="w-3.5 h-3.5" />
-          {t("skillEditor.newFile", "New File")}
-        </button>
       </div>
 
       {/* Body: tree + editor */}
@@ -231,8 +211,41 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
           style={{ width: sidebarWidth }}
           className={`flex-shrink-0 border-r overflow-hidden flex flex-col ${isDark ? "border-gray-700 bg-gray-800/50" : "border-gray-200 bg-gray-50"}`}
         >
-          <div className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+          <div className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider flex items-center ${isDark ? "text-gray-500" : "text-gray-400"}`}>
             {t("skillEditor.files", "Files")}
+            <span className="ml-auto flex items-center gap-0.5">
+              <button
+                onClick={() => {
+                  const name = prompt(t("skillEditor.newFileName", "New file name (e.g. scripts/run.py):"))
+                  if (!name || !name.trim()) return
+                  const path = name.trim()
+                  if (!editor.stageNewFile(path)) {
+                    setError(t("skillEditor.fileExists", "File already exists"))
+                    return
+                  }
+                  editor.setCurrentFile(path)
+                  editor.setContent("")
+                }}
+                className={`p-0.5 rounded transition-colors ${isDark ? "hover:bg-gray-700 hover:text-gray-300" : "hover:bg-gray-200 hover:text-gray-600"}`}
+                title={t("skillEditor.newFile", "New File")}
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => {
+                  const name = prompt(t("skillEditor.newFolderTitle", "New folder name:"))
+                  if (!name || !name.trim()) return
+                  const path = `${name.trim()}/untitled`
+                  if (!editor.stageNewFile(path, "")) return
+                  editor.setCurrentFile(path)
+                  editor.setContent("")
+                }}
+                className={`p-0.5 rounded transition-colors ${isDark ? "hover:bg-gray-700 hover:text-gray-300" : "hover:bg-gray-200 hover:text-gray-600"}`}
+                title={t("skillEditor.newFolder", "New Folder")}
+              >
+                <FolderPlus className="w-3.5 h-3.5" />
+              </button>
+            </span>
           </div>
           <div className="flex-1 overflow-hidden" ref={treeContainerRef}>
             <Tree<TreeNode>
