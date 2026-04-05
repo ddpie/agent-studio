@@ -210,11 +210,13 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     for (const key of keys) {
       if (skipKeys.has(key)) continue;
       if (key === "skills") {
-        // Serialize skills as readable list for diff
-        const oldSkills = ((originalData as Record<string, unknown>).skills as Array<{ name: string; description: string }>) || [];
-        const newSkills = ((formData as Record<string, unknown>).skills as Array<{ name: string; description: string }>) || [];
-        const serialize = (arr: Array<{ name: string; description: string }>) =>
-          arr.map(s => `${s.name}: ${s.description}`).join("\n") || "(none)";
+        // Serialize skills as readable YAML-like format for diff
+        const oldSkills = ((originalData as Record<string, unknown>).skills as Array<{ name: string; description: string; files: string[]; sourceSkillId: string }>) || [];
+        const newSkills = ((formData as Record<string, unknown>).skills as Array<{ name: string; description: string; files: string[]; sourceSkillId: string }>) || [];
+        const serialize = (arr: Array<{ name: string; description: string; files: string[]; sourceSkillId: string }>) =>
+          arr.length === 0 ? "(none)" : arr.map(s =>
+            `- ${s.name}\n  ${s.description}\n  source: ${s.sourceSkillId}\n  files: [${(s.files || []).join(", ")}]`
+          ).join("\n");
         const oldVal = serialize(oldSkills);
         const newVal = serialize(newSkills);
         if (oldVal !== newVal) {
