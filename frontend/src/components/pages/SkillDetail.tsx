@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
-import { useParams, useNavigate, useSearchParams, useBlocker } from "react-router";
+import { useParams, useNavigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import {
   ChevronLeft, Trash2, Loader2, Save, GitCompare,
@@ -19,6 +19,7 @@ import { preloadPyodide } from "../../lib/pyodide-checker";
 import { getMonacoLanguage } from "../../lib/monaco-helpers";
 import type { ValidationResult } from "../../lib/types/validation";
 import useIsDark from "../../hooks/useIsDark";
+import useUnsavedGuard from "../../hooks/useUnsavedGuard";
 import { validatePython } from "../../lib/validators/python-validator";
 import { validateShell } from "../../lib/validators/shell-validator";
 
@@ -737,35 +738,15 @@ export default function SkillDetail() {
     return () => window.removeEventListener("click", close);
   }, [contextMenu]);
 
-  // Warn on browser navigation with unsaved changes
-  useEffect(() => {
-    if (changedFiles.size === 0) return;
-    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [changedFiles.size]);
-
-  // Ctrl+S to save
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-        e.preventDefault();
-        if (hasPendingOps && !saving) handleSaveAll();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [hasPendingOps, saving]);
+  // Unified unsaved changes guard (beforeunload + Ctrl+S + route blocker)
+  const blocker = useUnsavedGuard({
+    hasChanges: hasPendingOps,
+    onSave: handleSaveAll,
+    saving,
+  });
 
   // Sidebar collapse
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
-  // Block route navigation when there are unsaved changes
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
-    if (!hasPendingOps) return false;
-    // Only block if leaving the skill detail page, not when switching files (searchParams)
-    return currentLocation.pathname !== nextLocation.pathname;
-  });
 
   // Custom tree node renderer
   const FileNode = useCallback(({ node, style }: NodeRendererProps<TreeNode>) => {
