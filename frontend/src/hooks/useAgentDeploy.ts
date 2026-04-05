@@ -162,10 +162,10 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
           setStatus(t("agentEditor.validationPassed"));
         }
       } else {
-        setStatus("Validation returned no result — Meta-Agent may not have called validate_agent");
+        setStatus(t("agentEditor.validationNoResult"));
       }
     } catch (err) {
-      setStatus(`Validation error: ${err instanceof Error ? err.message : "Unknown"}`);
+      setStatus(t("agentEditor.validationError", { error: err instanceof Error ? err.message : "Unknown" }));
     } finally {
       setValidating(false);
     }
@@ -202,7 +202,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
       }
 
       // Step 1: Validate
-      setProgressStep("Validating...");
+      setProgressStep(t("agentEditor.validating"));
       setProgressPct(10);
       const valPrompt = `Execute validate_agent with staging_key: ${stagingKey}\nDo NOT ask for confirmation.`;
       const { toolResults: valToolResults } = await streamMetaAgent(valPrompt);
@@ -216,7 +216,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
         setPendingStagingKey(stagingKey);
         if (!validation.valid) {
           setProgressStep(null);
-          setStatus("Validation failed — fix errors before deploying");
+          setStatus(t("agentEditor.validationFailed"));
           setSaving(false);
           return;
         }
@@ -244,7 +244,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
     setSaving(true);
     setStatus(null);
     setErrorDetail(null);
-    setProgressStep(isCreateMode ? "Preparing..." : "Updating...");
+    setProgressStep(isCreateMode ? t("agentEditor.preparing") : t("agentEditor.updating"));
 
     try {
       const prompt = isCreateMode
@@ -262,12 +262,12 @@ The full config (system_prompt, tool_definitions, etc.) is in the S3 staging fil
 Do NOT ask for confirmation. Execute update_agent immediately.`;
 
       const deployToolNameMap: Record<string, string> = {
-        create_agent: "Creating agent...",
-        update_agent: "Updating agent...",
-        upload_deployment: "Uploading code...",
-        deploy_agent: "Deploying...",
-        get_agent_status: "Checking status...",
-        save_metadata: "Saving metadata...",
+        create_agent: t("agentEditor.creatingAgent"),
+        update_agent: t("agentEditor.updatingAgent"),
+        upload_deployment: t("agentEditor.uploadingCode"),
+        deploy_agent: t("agentEditor.deploying"),
+        get_agent_status: t("agentEditor.checkingStatus"),
+        save_metadata: t("agentEditor.savingMetadata"),
       };
       const deployToolPctMap: Record<string, number> = {
         validate_agent: 40, create_agent: 50, update_agent: 50,

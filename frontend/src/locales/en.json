@@ -214,7 +214,19 @@
     "validationFailed": "Validation failed — fix errors before deploying",
     "autoFixApplied": "Auto-fix applied. Click Update to re-validate and deploy.",
     "viewCode": "View Code",
-    "deployAnyway": "Deploy anyway"
+    "deployAnyway": "Deploy anyway",
+    "validating": "Validating...",
+    "preparing": "Preparing...",
+    "updating": "Updating...",
+    "creatingAgent": "Creating agent...",
+    "updatingAgent": "Updating agent...",
+    "uploadingCode": "Uploading code...",
+    "deploying": "Deploying...",
+    "checkingStatus": "Checking status...",
+    "savingMetadata": "Saving metadata...",
+    "showDetails": "Show details",
+    "codePreview": "Assembled Code Preview (main.py)",
+    "createDesc": "Configure and deploy a new agent"
   },
   "agentSkills": {
     "title": "Skills",

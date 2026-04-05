@@ -188,7 +188,7 @@ export default function AgentEditForm() {
             </div>
             {deploy.errorDetail && deploy.errorDetail !== "__hidden__" && (
               <details className="px-4 pb-3">
-                <summary className="text-[11px] cursor-pointer opacity-70 hover:opacity-100">Show details</summary>
+                <summary className="text-[11px] cursor-pointer opacity-70 hover:opacity-100">{t("agentEditor.showDetails")}</summary>
                 <pre className="mt-2 text-[11px] font-mono whitespace-pre-wrap bg-red-100/50 rounded p-2 max-h-40 overflow-y-auto">{deploy.errorDetail}</pre>
               </details>
             )}
@@ -201,10 +201,10 @@ export default function AgentEditForm() {
             <div className="px-4 py-3">
               <p className={`font-medium ${deploy.validationResult.valid ? "text-amber-700" : "text-red-600"}`}>
                 {!deploy.validationResult.valid
-                  ? "Validation failed"
+                  ? t("agentEditor.validationFailed")
                   : deploy.validationResult.warnings.length > 0
-                    ? `Validation passed with ${deploy.validationResult.warnings.length} warning(s)`
-                    : "Validation passed"}
+                    ? t("validation.passedWithWarnings", { count: deploy.validationResult.warnings.length })
+                    : t("agentEditor.validationPassed")}
               </p>
               {deploy.validationResult.errors.length > 0 && (
                 <ul className="mt-2 space-y-1">
@@ -319,8 +319,8 @@ export default function AgentEditForm() {
       <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => deploy.setPreviewCode(null)}>
         <div className="bg-gray-900 rounded-xl w-[80vw] h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()} onWheel={e => e.stopPropagation()}>
           <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
-            <span className="text-sm font-medium text-gray-200">Assembled Code Preview (main.py)</span>
-            <button onClick={() => deploy.setPreviewCode(null)} className="px-3 py-1 text-xs text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg">Close</button>
+            <span className="text-sm font-medium text-gray-200">{t("agentEditor.codePreview")}</span>
+            <button onClick={() => deploy.setPreviewCode(null)} className="px-3 py-1 text-xs text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg">{t("common.close")}</button>
           </div>
           <div className="flex-1 overflow-hidden">
             <MonacoEditor

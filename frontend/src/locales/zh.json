@@ -214,7 +214,19 @@
     "validationFailed": "验证失败 — 请先修复错误再部署",
     "autoFixApplied": "自动修复已应用。点击「更新」重新验证并部署。",
     "viewCode": "查看代码",
-    "deployAnyway": "仍然部署"
+    "deployAnyway": "仍然部署",
+    "validating": "验证中...",
+    "preparing": "准备中...",
+    "updating": "更新中...",
+    "creatingAgent": "创建 Agent...",
+    "updatingAgent": "更新 Agent...",
+    "uploadingCode": "上传代码...",
+    "deploying": "部署中...",
+    "checkingStatus": "检查状态...",
+    "savingMetadata": "保存元数据...",
+    "showDetails": "显示详情",
+    "codePreview": "组装代码预览 (main.py)",
+    "createDesc": "配置并部署新 Agent"
   },
   "agentSkills": {
     "title": "技能",
