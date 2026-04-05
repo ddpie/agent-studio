@@ -4,7 +4,6 @@
  */
 import { useState, useEffect, useCallback } from "react"
 import { useTranslation } from "react-i18next"
-import { useNavigate } from "react-router"
 import { Package, Plus, Trash2, RefreshCw, Loader2 } from "lucide-react"
 import { useAgentEditStore } from "../../stores/agent-edit-store"
 import {
@@ -14,6 +13,7 @@ import {
 import { listSkills, type SkillIndexEntry } from "../../lib/skill-storage"
 import type { AgentSkillEntry } from "../../lib/agent-metadata"
 import SkillPicker from "./SkillPicker"
+import SkillEditorModal from "./SkillEditorModal"
 
 interface SkillsSectionProps {
   skills: AgentSkillEntry[]
@@ -23,9 +23,9 @@ interface SkillsSectionProps {
 
 export default function SkillsSection({ skills, agentId, deployedHashes }: SkillsSectionProps) {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const { addSkill, removeSkill } = useAgentEditStore()
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [editingSkill, setEditingSkill] = useState<AgentSkillEntry | null>(null)
   const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [globalSkills, setGlobalSkills] = useState<SkillIndexEntry[]>([])
@@ -39,7 +39,7 @@ export default function SkillsSection({ skills, agentId, deployedHashes }: Skill
   }, [])
 
   const handleOpenSkill = (skill: AgentSkillEntry) => {
-    navigate(`/skills/${skill.sourceSkillId}?agentId=${agentId}&agentSkillId=${skill.id}`)
+    setEditingSkill(skill)
   }
 
   const handleAddSkill = useCallback(async (globalSkill: SkillIndexEntry) => {
@@ -161,6 +161,18 @@ export default function SkillsSection({ skills, agentId, deployedHashes }: Skill
         onSelect={handleAddSkill}
         existingSkillSourceIds={existingSourceIds}
       />
+
+      {/* Skill Editor Modal */}
+      {editingSkill && (
+        <SkillEditorModal
+          open={!!editingSkill}
+          onClose={() => setEditingSkill(null)}
+          agentId={agentId}
+          skillId={editingSkill.id}
+          sourceSkillId={editingSkill.sourceSkillId}
+          skillName={editingSkill.name}
+        />
+      )}
     </div>
   )
 }
