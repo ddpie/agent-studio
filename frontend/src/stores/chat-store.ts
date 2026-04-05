@@ -274,19 +274,18 @@ export const useChatStore = create<ChatState>()(
                   try { out = m.output ? new TextDecoder().decode(Uint8Array.from(atob(m.output), c => c.charCodeAt(0))) : ""; } catch { out = m.output || ""; }
                   let detailContent = `\n\n<details class="tool-call"><summary>Called <strong>${m.name}</strong></summary>\n\n`;
                   if (inp) detailContent += `**Input:**\n\`\`\`json\n${inp}\n\`\`\`\n`;
-                  const isHtml = out && out.trimStart().startsWith("<") && m.name !== "load_skill";
-                  if (out && !isHtml) {
-                    // Truncate long output and escape backticks to prevent breaking code blocks
+                  // Only render inline SVG (charts/diagrams). All other outputs use code blocks.
+                  const isSvg = out && out.trimStart().startsWith("<svg");
+                  if (out && !isSvg) {
                     const maxDisplay = 2000;
                     const truncated = out.length > maxDisplay ? out.slice(0, maxDisplay) + "\n... (truncated)" : out;
                     const escaped = truncated.replace(/```/g, "\\`\\`\\`");
                     detailContent += `**Output:**\n\`\`\`\n${escaped}\n\`\`\`\n`;
-                  } else if (isHtml) {
-                    detailContent += `**Output:** Rich content rendered below.\n`;
+                  } else if (isSvg) {
+                    detailContent += `**Output:** Chart rendered below.\n`;
                   }
                   detailContent += `\n</details>\n\n`;
-                  // HTML/SVG output: render inline after the details block
-                  if (isHtml) {
+                  if (isSvg) {
                     detailContent += `\n\n<div class="tool-rich-output">${out}</div>\n\n`;
                   }
                   set((s) => ({
