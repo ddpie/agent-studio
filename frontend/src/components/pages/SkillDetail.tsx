@@ -14,6 +14,7 @@ import { Tree, type NodeRendererProps } from "react-arborist";
 import { useUISettings } from "../../stores/ui-settings-store";
 import { useSkillAssistantStore } from "../../stores/skill-assistant-store";
 import SkillAssistant from "../skills/SkillAssistant";
+import ValidationBanner from "../shared/ValidationBanner";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
 import { preloadPyodide } from "../../lib/pyodide-checker";
 import { getMonacoLanguage } from "../../lib/monaco-helpers";
@@ -973,77 +974,39 @@ Respond with ONLY a JSON block:
       </div>
 
       {/* Validation results */}
-      {validationResult && (
-        <div className={`mx-6 mt-2 rounded-lg text-sm border ${
-          !validationResult.valid
-            ? isDark ? "bg-red-900/20 border-red-800" : "bg-red-50 border-red-200"
-            : validationResult.errors.length === 0 && validationResult.warnings.length === 0
-              ? isDark ? "bg-green-900/20 border-green-800" : "bg-green-50 border-green-200"
-              : isDark ? "bg-amber-900/20 border-amber-800" : "bg-amber-50 border-amber-200"
-        }`}>
-          <div className="px-4 py-2">
-            <div className="flex items-center justify-between">
-              <p className={`text-xs font-medium ${
-                !validationResult.valid ? "text-red-500"
-                  : validationResult.errors.length === 0 && validationResult.warnings.length === 0
-                    ? isDark ? "text-green-400" : "text-green-600"
-                    : "text-amber-600"
-              }`}>
-                {!validationResult.valid
-                  ? t("validation.failed")
-                  : validationResult.errors.length === 0 && validationResult.warnings.length === 0
-                    ? t("validation.noIssues")
-                    : t("validation.warnings")}
-              </p>
-            </div>
-            {validationResult.errors.map((e, i) => (
-              <p key={`e${i}`} className="text-[11px] text-red-500 mt-1">&#x2716; {e}</p>
-            ))}
-            {validationResult.warnings.map((w, i) => (
-              <p key={`w${i}`} className="text-[11px] text-amber-600 mt-1">&#x26A0; {w}</p>
-            ))}
-            {(validationResult.errors.length > 0 || validationResult.warnings.length > 0) && (
-              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                <button onClick={async () => {
-                  if (!skillId) return;
-                  // Pre-load ALL file contents into memory so AI can fix across files
-                  const allFilesList = ["SKILL.md", ...virtualFiles];
-                  for (const filePath of allFilesList) {
-                    if (editedContents.has(filePath) || originalContents.has(filePath)) continue;
-                    const content = filePath === "SKILL.md"
-                      ? await storage.getContent()
-                      : await storage.getFile(filePath);
-                    if (content !== null) originalContents.set(filePath, content);
-                  }
-                  const store = useSkillAssistantStore.getState();
-                  if (!store.panelOpen) store.openPanel(skillId);
-                  const issues = [...validationResult.errors, ...validationResult.warnings].join("\n");
-                  const autoFixPrompt = `## Auto-Fix Task\nFix ONLY the following validation issues. Do NOT remove or rewrite any existing content.\n\nIssues:\n${issues}\n\nRules:\n- Use __file_edit (search/replace) ONLY. Do NOT use __file_update.\n- Fix ONLY the specific issues listed above.\n- NEVER delete existing content, sections, or descriptions.\n- NEVER shorten or summarize existing text.\n- Make minimal, surgical changes.\n- If an issue appears already fixed in the current file content, skip it and say so.\n- If SEARCH text cannot be found, the issue may have been fixed already — do NOT attempt alternative fixes.`;
-                  store.sendMessage(
-                    autoFixPrompt,
-                    { path: currentPath, content: skillContent ?? "", allFiles: allFilesList, getFileContent: (p: string) => editedContents.get(p) ?? originalContents.get(p) ?? null },
-                    (path: string, newContent: string) => {
-                      editedContents.set(path, newContent);
-                      const orig = originalContents.get(path);
-                      const next = new Set(changedFiles);
-                      if (orig !== undefined && newContent !== orig) next.add(path);
-                      else if (orig === undefined) { pendingCreates.set(path, ""); next.add(path); }
-                      setChangedFiles(next);
-                      if (path === currentPath) setSkillContent(newContent);
-                    },
-                  );
-                  setValidationResult(null);
-                }}
-                  className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-green-600 text-white rounded hover:bg-green-700 transition-colors">
-                  <Sparkles className="w-3 h-3" />
-                  {t("common.autoFix")}
-                </button>
-                <button onClick={() => setValidationResult(null)} className="text-[10px] text-gray-400 hover:text-gray-600">{t("common.dismiss")}</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <ValidationBanner
+        result={validationResult}
+        onDismiss={() => setValidationResult(null)}
+        onAutoFix={async () => {
+          if (!skillId) return;
+          const allFilesList = ["SKILL.md", ...virtualFiles];
+          for (const filePath of allFilesList) {
+            if (editedContents.has(filePath) || originalContents.has(filePath)) continue;
+            const content = filePath === "SKILL.md"
+              ? await storage.getContent()
+              : await storage.getFile(filePath);
+            if (content !== null) originalContents.set(filePath, content);
+          }
+          const store = useSkillAssistantStore.getState();
+          if (!store.panelOpen) store.openPanel(skillId);
+          const issues = [...(validationResult?.errors ?? []), ...(validationResult?.warnings ?? [])].join("\n");
+          const autoFixPrompt = `## Auto-Fix Task\nFix ONLY the following validation issues. Do NOT remove or rewrite any existing content.\n\nIssues:\n${issues}\n\nRules:\n- Use __file_edit (search/replace) ONLY. Do NOT use __file_update.\n- Fix ONLY the specific issues listed above.\n- NEVER delete existing content, sections, or descriptions.\n- NEVER shorten or summarize existing text.\n- Make minimal, surgical changes.\n- If an issue appears already fixed in the current file content, skip it and say so.\n- If SEARCH text cannot be found, the issue may have been fixed already — do NOT attempt alternative fixes.`;
+          store.sendMessage(
+            autoFixPrompt,
+            { path: currentPath, content: skillContent ?? "", allFiles: allFilesList, getFileContent: (p: string) => editedContents.get(p) ?? originalContents.get(p) ?? null },
+            (path: string, newContent: string) => {
+              editedContents.set(path, newContent);
+              const orig = originalContents.get(path);
+              const next = new Set(changedFiles);
+              if (orig !== undefined && newContent !== orig) next.add(path);
+              else if (orig === undefined) { pendingCreates.set(path, ""); next.add(path); }
+              setChangedFiles(next);
+              if (path === currentPath) setSkillContent(newContent);
+            },
+          );
+          setValidationResult(null);
+        }}
+      />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar: react-arborist file tree */}
