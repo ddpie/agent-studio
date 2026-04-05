@@ -4,6 +4,7 @@
  */
 import { unzipSync } from "fflate";
 import { importSkillFromFiles } from "./skill-storage";
+import { invokeMetaAgent } from "./agentcore-client";
 
 export interface UrlImportResult {
   id: string;
@@ -12,6 +13,8 @@ export interface UrlImportResult {
   filesCount: number;
   source: string;
 }
+
+type ProgressFn = (key: string, params?: Record<string, string | number>) => void;
 
 /** Detect URL source type */
 function detectSource(url: string): "clawhub" | "github-dir" | "github-file" | "gist" | "raw" {
@@ -23,71 +26,107 @@ function detectSource(url: string): "clawhub" | "github-dir" | "github-file" | "
 }
 
 /** Fetch ClawHub skill as zip → extract files */
-async function fetchClawHub(url: string): Promise<Record<string, string>> {
+async function fetchClawHub(url: string, onProgress?: ProgressFn): Promise<Record<string, string>> {
   const match = url.match(/(?:clawhub\.ai|claw-hub\.net)\/([^/?#]+\/[^/?#]+)/);
   if (!match) throw new Error("Cannot parse ClawHub slug from URL");
   const slug = match[1];
 
+  onProgress?.("skills.urlDownloadingZip");
   const resp = await fetch(`https://clawhub.ai/api/v1/download?slug=${slug}`);
   if (!resp.ok) throw new Error(`ClawHub API error: ${resp.status}`);
 
   const buffer = await resp.arrayBuffer();
+  onProgress?.("skills.urlExtracting");
   const unzipped = unzipSync(new Uint8Array(buffer));
 
   const files: Record<string, string> = {};
   for (const [path, data] of Object.entries(unzipped)) {
     if (!path || path.endsWith("/")) continue;
-    // Strip common prefix directory (e.g., "skill-name/SKILL.md" → "SKILL.md")
     const parts = path.split("/");
     const relPath = parts.length > 1 ? parts.slice(1).join("/") : path;
     if (!relPath || relPath.startsWith(".") || relPath.startsWith("__")) continue;
     try {
       files[relPath] = new TextDecoder().decode(data);
-    } catch {
-      // Skip binary files
-    }
+    } catch { /* skip binary */ }
   }
+  onProgress?.("skills.urlDownloaded", { current: Object.keys(files).length, total: Object.keys(files).length });
   return files;
 }
 
-/** Fetch all files from a GitHub directory recursively */
-async function fetchGitHubDir(url: string): Promise<Record<string, string>> {
+/** Fetch all files from a GitHub directory.
+ * Strategy: Trees API (1 call) + raw.githubusercontent.com (CORS ok, no rate limit).
+ * Fallback: Meta-Agent backend if API rate limited.
+ */
+async function fetchGitHubDir(url: string, onProgress?: ProgressFn): Promise<Record<string, string>> {
   const match = url.match(/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)(?:\/(.*))?/);
   if (!match) throw new Error("Cannot parse GitHub directory URL");
   const [, owner, repo, branch, path] = match;
-  const dirPath = (path || "").replace(/\/$/, "");
+  const basePath = (path || "").replace(/\/$/, "");
 
+  // Try Trees API first (1 API call)
+  onProgress?.("skills.urlScanning");
+  const treeResp = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
+    { headers: { Accept: "application/vnd.github.v3+json" } }
+  );
+
+  if (!treeResp.ok) {
+    // Rate limited — fallback to Meta-Agent backend
+    onProgress?.("skills.urlFetchingBackend");
+    return fetchGitHubDirViaBackend(url, onProgress);
+  }
+
+  const treeData: { tree: Array<{ path: string; type: string; size?: number }> } = await treeResp.json();
+
+  const fileEntries = treeData.tree.filter(item => {
+    if (item.type !== "blob") return false;
+    if (basePath && !item.path.startsWith(basePath + "/")) return false;
+    const name = item.path.split("/").pop() || "";
+    if (name.startsWith(".") || name.startsWith("__")) return false;
+    if (/\.(png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|zip|tar|gz|pdf|exe|dll|so|dylib)$/i.test(name)) return false;
+    if (item.size && item.size > 500_000) return false;
+    return true;
+  });
+
+  const total = fileEntries.length;
+  onProgress?.("skills.urlFoundFiles", { total });
+
+  // Parallel download from raw.githubusercontent.com (CORS ok, no rate limit)
+  let completed = 0;
   const files: Record<string, string> = {};
-  await fetchGitHubDirRecursive(owner, repo, branch, dirPath, dirPath, files);
+
+  await Promise.all(fileEntries.map(async (item) => {
+    const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${item.path}`;
+    try {
+      const resp = await fetch(rawUrl);
+      if (resp.ok) {
+        const relPath = basePath ? item.path.slice(basePath.length + 1) : item.path;
+        files[relPath] = await resp.text();
+      }
+    } catch { /* skip */ }
+    completed++;
+    onProgress?.("skills.urlDownloaded", { current: completed, total });
+  }));
+
   return files;
 }
 
-async function fetchGitHubDirRecursive(
-  owner: string, repo: string, branch: string,
-  currentPath: string, basePath: string,
-  files: Record<string, string>,
-): Promise<void> {
-  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${currentPath}?ref=${branch}`;
-  const resp = await fetch(apiUrl, { headers: { Accept: "application/vnd.github.v3+json" } });
-  if (!resp.ok) throw new Error(`GitHub API error: ${resp.status}`);
+/** Fallback: use Meta-Agent to import GitHub dir (server-side, no CORS) */
+async function fetchGitHubDirViaBackend(url: string, onProgress?: ProgressFn): Promise<Record<string, string>> {
+  onProgress?.("skills.urlFetchingBackend");
 
-  const items: Array<{ type: string; name: string; path: string; download_url: string | null }> = await resp.json();
-
-  for (const item of items) {
-    if (item.name.startsWith(".") || item.name.startsWith("__")) continue;
-
-    if (item.type === "file" && item.download_url) {
-      const relPath = basePath ? item.path.slice(basePath.length + 1) : item.path;
-      try {
-        const fileResp = await fetch(item.download_url);
-        if (fileResp.ok) {
-          files[relPath] = await fileResp.text();
-        }
-      } catch { /* skip failed files */ }
-    } else if (item.type === "dir") {
-      await fetchGitHubDirRecursive(owner, repo, branch, item.path, basePath, files);
-    }
+  let fullText = "";
+  for await (const chunk of invokeMetaAgent(
+    `Import the skill from this GitHub URL using the import_skill tool with url="${url}". Return only the JSON result.`,
+    [],
+  )) {
+    fullText += chunk;
   }
+
+  const idMatch = fullText.match(/"skill_id"\s*:\s*"([^"]+)"/);
+  if (!idMatch) throw new Error("Backend import failed — check Meta-Agent logs");
+
+  return { __meta_agent_imported: idMatch[1] };
 }
 
 /** Fetch a single file from GitHub (blob URL → raw) */
@@ -131,27 +170,50 @@ async function fetchRawUrl(url: string): Promise<string> {
  * Import a skill from a URL. Detects source type and fetches accordingly.
  * Returns the imported skill info, or throws on error.
  */
-export async function importSkillFromUrl(url: string): Promise<UrlImportResult> {
+export async function importSkillFromUrl(url: string, onProgress?: ProgressFn): Promise<UrlImportResult> {
   const source = detectSource(url);
   let files: Record<string, string> = {};
 
+  onProgress?.("skills.urlDetected", { source });
+
   if (source === "clawhub") {
-    files = await fetchClawHub(url);
+    onProgress?.("skills.urlFetching", { source: "ClawHub" });
+    files = await fetchClawHub(url, onProgress);
   } else if (source === "github-dir") {
-    files = await fetchGitHubDir(url);
+    onProgress?.("skills.urlFetching", { source: "GitHub" });
+    files = await fetchGitHubDir(url, onProgress);
   } else if (source === "gist") {
+    onProgress?.("skills.urlFetching", { source: "Gist" });
     files = await fetchGist(url);
   } else if (source === "github-file") {
+    onProgress?.("skills.urlFetching", { source: "GitHub" });
     const content = await fetchGitHubFile(url);
     const fileName = url.split("/").pop() || "SKILL.md";
     files = { [fileName === "SKILL.md" ? "SKILL.md" : fileName]: content };
   } else {
+    onProgress?.("skills.urlFetching", { source: "URL" });
     const content = await fetchRawUrl(url);
     files = { "SKILL.md": content };
   }
 
   if (Object.keys(files).length === 0) {
     throw new Error("No files found at the given URL");
+  }
+
+  // Meta-Agent handled the import (GitHub dir) — skill already in S3
+  if (files.__meta_agent_imported) {
+    const skillId = files.__meta_agent_imported;
+    // Refresh skill list to get name/description
+    const { listSkills } = await import("./skill-storage");
+    const skills = await listSkills();
+    const skill = skills.find(s => s.id === skillId);
+    return {
+      id: skillId,
+      name: skill?.name || "imported-skill",
+      description: skill?.description || "",
+      filesCount: 0,
+      source,
+    };
   }
 
   // If no SKILL.md but has a single .md file, rename it
@@ -161,13 +223,14 @@ export async function importSkillFromUrl(url: string): Promise<UrlImportResult> 
       files["SKILL.md"] = files[mdFiles[0]];
       delete files[mdFiles[0]];
     } else if (!mdFiles.length) {
-      // Wrap first file as SKILL.md
       const firstKey = Object.keys(files)[0];
       const nameFromUrl = url.split("/").pop()?.replace(/\.[^.]+$/, "") || "imported-skill";
       files["SKILL.md"] = `---\nname: "${nameFromUrl}"\ndescription: "Imported from URL"\ntype: "prompt"\nsource: "url"\nuser-invocable: true\n---\n\n${files[firstKey]}`;
       delete files[firstKey];
     }
   }
+
+  onProgress?.("skills.urlWriting", { count: Object.keys(files).length });
 
   const result = await importSkillFromFiles(files);
   if (!result) throw new Error("Failed to write skill to storage");

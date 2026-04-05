@@ -19,7 +19,7 @@ import {
 } from "../lib/agent-skill-storage"
 import { deleteFromS3 } from "../lib/s3-storage"
 
-interface SkillStorageOps {
+export interface SkillStorageOps {
   getContent: (path?: string) => Promise<string | null>
   getFile: (path: string) => Promise<string | null>
   listFiles: () => Promise<string[]>

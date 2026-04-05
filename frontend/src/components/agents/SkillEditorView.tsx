@@ -9,13 +9,13 @@ import MonacoEditor, { type OnMount } from "@monaco-editor/react"
 import { Tree, type NodeRendererProps } from "react-arborist"
 import useIsDark from "../../hooks/useIsDark"
 import { useSkillStorage } from "../../hooks/useSkillStorage"
+import { useFileEditor } from "../../hooks/useFileEditor"
 import { useAgentEditStore } from "../../stores/agent-edit-store"
 import { computeSkillHash } from "../../lib/agent-skill-storage"
-import { buildTreeData, getFileIcon, type TreeNode } from "../../lib/tree-helpers"
+import { getFileIcon, type TreeNode } from "../../lib/tree-helpers"
 import { getMonacoLanguage } from "../../lib/monaco-helpers"
 import { validatePython } from "../../lib/validators/python-validator"
 import { validateShell } from "../../lib/validators/shell-validator"
-import { validateSkill } from "../../lib/validators/skill-validator"
 import ValidationBanner from "../shared/ValidationBanner"
 import useUnsavedGuard from "../../hooks/useUnsavedGuard"
 import type { AgentSkillEntry } from "../../lib/agent-metadata"
@@ -33,22 +33,11 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
   const storage = useSkillStorage(skill.sourceSkillId, agentId, skill.id)
   const { updateSkillEntry } = useAgentEditStore()
 
-  // File state
-  const [files, setFiles] = useState<string[]>([])
-  const [currentFile, setCurrentFile] = useState("SKILL.md")
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  // Multi-file dirty tracking
-  const [originalContents, setOriginalContents] = useState<Map<string, string>>(new Map())
-  const [editedContents, setEditedContents] = useState<Map<string, string>>(new Map())
-  const [changedFiles, setChangedFiles] = useState<Set<string>>(new Set())
-  const [pendingCreates, setPendingCreates] = useState<Set<string>>(new Set())
-  const [pendingDeletes, setPendingDeletes] = useState<Set<string>>(new Set())
+  const editor = useFileEditor({ storage })
 
   // Validation
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   // Resizable sidebar
   const [sidebarWidth, setSidebarWidth] = useState(200)
@@ -58,80 +47,35 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
   const monacoRef = useRef<Parameters<OnMount>[1] | null>(null)
 
-  const hasPendingOps = changedFiles.size > 0 || pendingCreates.size > 0 || pendingDeletes.size > 0
-  const pendingCount = changedFiles.size + pendingCreates.size + pendingDeletes.size
-
   // Unsaved guard (Ctrl+S, beforeunload, route blocker)
-  useUnsavedGuard({ hasChanges: hasPendingOps, onSave: handleSave, saving })
+  useUnsavedGuard({ hasChanges: editor.hasPendingOps, onSave: handleSave, saving: editor.saving })
 
   // --- Load all files on mount ---
   useEffect(() => {
-    setLoading(true)
-    setError(null)
-    Promise.all([storage.listFiles(), storage.getContent()])
-      .then(async ([fileList, skillMd]) => {
-        const allFiles = ["SKILL.md", ...fileList.filter((f: string) => f !== "SKILL.md")]
-        const unique = [...new Set(allFiles)]
-        setFiles(unique)
-
-        const origMap = new Map<string, string>()
-        const editMap = new Map<string, string>()
-        origMap.set("SKILL.md", skillMd || "")
-        editMap.set("SKILL.md", skillMd || "")
-
-        // Load all other files
-        for (const f of unique) {
-          if (f === "SKILL.md") continue
-          const content = await storage.getFile(f)
-          origMap.set(f, content || "")
-          editMap.set(f, content || "")
-        }
-
-        setOriginalContents(origMap)
-        setEditedContents(editMap)
-        setCurrentFile("SKILL.md")
-        setChangedFiles(new Set())
-        setPendingCreates(new Set())
-        setPendingDeletes(new Set())
-        setLoading(false)
-      })
-      .catch(() => {
-        setError(t("agentSkills.failedToLoad"))
-        setLoading(false)
-      })
+    editor.loadInitial().catch(() => {
+      setError(t("agentSkills.failedToLoad"))
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentId, skill.id, skill.sourceSkillId])
 
   // --- Editor content for current file ---
-  const currentContent = editedContents.get(currentFile) ?? ""
+  const currentContent = editor.content ?? ""
 
   // --- Switch file ---
   const switchFile = useCallback((path: string) => {
-    if (pendingDeletes.has(path)) return
-    setCurrentFile(path)
+    if (editor.pendingDeletes.has(path)) return
     setValidationResult(null)
-  }, [pendingDeletes])
+    editor.selectFile(path)
+  }, [editor])
 
   // --- Editor onChange ---
   const handleEditorChange = useCallback((value: string | undefined) => {
-    const val = value ?? ""
-    setEditedContents(prev => {
-      const next = new Map(prev)
-      next.set(currentFile, val)
-      return next
-    })
-    const orig = originalContents.get(currentFile) ?? ""
-    setChangedFiles(prev => {
-      const next = new Set(prev)
-      if (val !== orig) next.add(currentFile)
-      else next.delete(currentFile)
-      return next
-    })
-  }, [currentFile, originalContents])
+    editor.handleEditorChange(value)
+  }, [editor])
 
   // --- Python/Shell markers ---
-  const handleEditorMount: OnMount = useCallback((editor, monaco) => {
-    editorRef.current = editor
+  const handleEditorMount: OnMount = useCallback((ed, monaco) => {
+    editorRef.current = ed
     monacoRef.current = monaco
   }, [])
 
@@ -143,13 +87,13 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
 
     let markers: { startLineNumber: number; startColumn: number; endLineNumber: number; endColumn: number; message: string; severity: number }[] = []
 
-    if (currentFile.endsWith(".py")) {
+    if (editor.currentFile.endsWith(".py")) {
       markers = validatePython(currentContent).map(m => ({
         startLineNumber: m.line, startColumn: m.col,
         endLineNumber: m.line, endColumn: m.col + 1,
         message: m.message, severity: monaco.MarkerSeverity.Error,
       }))
-    } else if (currentFile.endsWith(".sh") || currentFile.endsWith(".bash")) {
+    } else if (editor.currentFile.endsWith(".sh") || editor.currentFile.endsWith(".bash")) {
       markers = validateShell(currentContent).map(m => ({
         startLineNumber: m.line, startColumn: m.col,
         endLineNumber: m.line, endColumn: m.col + 1,
@@ -158,77 +102,29 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
     }
 
     monaco.editor.setModelMarkers(model, "skill-editor", markers)
-  }, [currentFile, currentContent])
-
-  // --- Validate before save ---
-  function runValidation(): ValidationResult {
-    const skillMd = editedContents.get("SKILL.md") ?? ""
-    const virtualFiles = files
-      .filter(f => !pendingDeletes.has(f))
-      .concat([...pendingCreates])
-    return validateSkill(skillMd, virtualFiles, pendingDeletes)
-  }
+  }, [editor.currentFile, currentContent])
 
   // --- Batch save ---
   // eslint-disable-next-line react-hooks/exhaustive-deps
   async function handleSave() {
-    const result = runValidation()
-    if (!result.valid) {
-      setValidationResult(result)
+    const result = await editor.handleSaveAll()
+    if (!result.success) {
+      if (result.validationResult) setValidationResult(result.validationResult)
+      else setError(result.errors.join(", "))
       return
     }
 
-    setSaving(true)
-    setError(null)
-    try {
-      // Delete files
-      for (const path of pendingDeletes) {
-        await storage.deleteFile(path)
+    // Recompute hash and update agent-edit-store
+    const allFiles: Record<string, string> = {}
+    for (const f of editor.files) {
+      if (!editor.pendingDeletes.has(f)) {
+        allFiles[f] = editor.getEditedContent(f) ?? editor.getOriginalContent(f) ?? ""
       }
-      // Write changed + created files
-      const toWrite = new Set([...changedFiles, ...pendingCreates])
-      for (const path of toWrite) {
-        if (pendingDeletes.has(path)) continue
-        const content = editedContents.get(path) ?? ""
-        const ok = await storage.writeFile(path, content)
-        if (!ok) throw new Error(`Failed to write ${path}`)
-      }
-
-      // Recompute hash
-      const allFiles: Record<string, string> = {}
-      for (const [path, content] of editedContents) {
-        if (!pendingDeletes.has(path)) allFiles[path] = content
-      }
-      const newHash = await computeSkillHash(allFiles)
-      updateSkillEntry(skill.id, { contentHash: newHash })
-
-      // Update local state
-      const newFileList = files.filter(f => !pendingDeletes.has(f))
-      for (const f of pendingCreates) {
-        if (!newFileList.includes(f)) newFileList.push(f)
-      }
-      setFiles(newFileList)
-
-      const newOrig = new Map<string, string>()
-      for (const f of newFileList) {
-        newOrig.set(f, editedContents.get(f) ?? "")
-      }
-      setOriginalContents(newOrig)
-      setChangedFiles(new Set())
-      setPendingCreates(new Set())
-      setPendingDeletes(new Set())
-
-      // If current file was deleted, switch
-      if (pendingDeletes.has(currentFile)) {
-        setCurrentFile(newFileList[0] || "SKILL.md")
-      }
-
-      setValidationResult({ valid: true, errors: [], warnings: result.warnings })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("agentSkills.failedToSave", "Failed to save"))
-    } finally {
-      setSaving(false)
     }
+    const newHash = await computeSkillHash(allFiles)
+    updateSkillEntry(skill.id, { contentHash: newHash })
+
+    setValidationResult(result.validationResult ?? { valid: true, errors: [], warnings: [] })
   }
 
   // --- New file ---
@@ -236,40 +132,28 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
     const name = prompt(t("skillEditor.newFileName", "New file name (e.g. scripts/run.py):"))
     if (!name || !name.trim()) return
     const path = name.trim()
-    if (files.includes(path) || pendingCreates.has(path)) {
+    if (!editor.stageNewFile(path)) {
       setError(t("skillEditor.fileExists", "File already exists"))
       return
     }
-    setPendingCreates(prev => new Set(prev).add(path))
-    setEditedContents(prev => { const m = new Map(prev); m.set(path, ""); return m })
-    setFiles(prev => [...prev, path])
-    setCurrentFile(path)
-  }, [files, pendingCreates, t])
+    editor.setCurrentFile(path)
+    editor.setContent("")
+  }, [editor, t])
 
   // --- Delete file ---
   const handleDeleteFile = useCallback((path: string) => {
-    if (path === "SKILL.md") return // never delete SKILL.md
+    if (path === "SKILL.md") return
     if (!confirm(t("skillEditor.deleteConfirm", `Delete ${path}?`))) return
-
-    if (pendingCreates.has(path)) {
-      // Just remove from pending creates
-      setPendingCreates(prev => { const s = new Set(prev); s.delete(path); return s })
-      setFiles(prev => prev.filter(f => f !== path))
-      setEditedContents(prev => { const m = new Map(prev); m.delete(path); return m })
-    } else {
-      setPendingDeletes(prev => new Set(prev).add(path))
-    }
-    setChangedFiles(prev => { const s = new Set(prev); s.delete(path); return s })
-    if (currentFile === path) setCurrentFile("SKILL.md")
-  }, [currentFile, pendingCreates, t])
+    editor.stageDelete(path)
+  }, [editor, t])
 
   // --- Back with unsaved guard ---
   const handleBack = useCallback(() => {
-    if (hasPendingOps) {
+    if (editor.hasPendingOps) {
       if (!confirm(t("skillEditor.unsavedChanges", "You have unsaved changes. Discard?"))) return
     }
     onBack()
-  }, [hasPendingOps, onBack, t])
+  }, [editor.hasPendingOps, onBack, t])
 
   // --- Resize sidebar ---
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -287,15 +171,17 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
     window.addEventListener("mouseup", onUp)
   }, [sidebarWidth])
 
-  // --- Tree data ---
-  const visibleFiles = files.filter(f => !pendingDeletes.has(f))
-  const treeData = buildTreeData(visibleFiles)
+  // --- Tree data from hook ---
+  const treeData = editor.treeData
 
   // --- Tree node renderer ---
   function TreeNodeRow({ node, style }: NodeRendererProps<TreeNode>) {
     const isDir = !!node.data.children
-    const isActive = !isDir && node.data.id === currentFile
-    const isDirty = changedFiles.has(node.data.id) || pendingCreates.has(node.data.id)
+    const isActive = !isDir && node.data.id === editor.currentFile
+    const isDirty = editor.changedFiles.has(node.data.id) || editor.pendingCreates.has(node.data.id)
+    const isDeleted = editor.pendingDeletes.has(node.data.id)
+
+    if (isDeleted) return null
 
     return (
       <div
@@ -325,7 +211,7 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
     )
   }
 
-  if (loading) {
+  if (editor.loadingContent && editor.files.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
@@ -362,11 +248,11 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
         </button>
         <button
           onClick={handleSave}
-          disabled={!hasPendingOps || saving}
+          disabled={!editor.hasPendingOps || editor.saving}
           className="flex items-center gap-1 px-3 py-1 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-30 transition-colors"
         >
-          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-          {hasPendingOps ? `${t("common.save", "Save")} (${pendingCount})` : t("common.save", "Save")}
+          {editor.saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+          {editor.hasPendingOps ? `${t("common.save", "Save")} (${editor.pendingCount})` : t("common.save", "Save")}
         </button>
       </div>
 
@@ -413,7 +299,7 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
             height="100%"
             value={currentContent}
             onChange={handleEditorChange}
-            language={getMonacoLanguage(currentFile)}
+            language={getMonacoLanguage(editor.currentFile)}
             theme={isDark ? "vs-dark" : "light"}
             onMount={handleEditorMount}
             options={{

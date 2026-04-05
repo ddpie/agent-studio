@@ -17,6 +17,7 @@ export default function SkillsPage() {
   const [importing, setImporting] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
   const [confirmPermanentDelete, setConfirmPermanentDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createDesc, setCreateDesc] = useState("");
@@ -61,9 +62,14 @@ export default function SkillsPage() {
   };
 
   const handlePermanentDelete = async (id: string) => {
-    await permanentlyDeleteSkill(id);
-    setConfirmPermanentDelete(null);
-    refresh();
+    setDeleting(true);
+    try {
+      await permanentlyDeleteSkill(id);
+      setConfirmPermanentDelete(null);
+      refresh();
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleUrlImport = async () => {
@@ -73,7 +79,7 @@ export default function SkillsPage() {
     setUrlImportError(null);
     setUrlImportStatus(t("skills.urlFetching"));
     try {
-      const result = await importSkillFromUrl(url, (status) => setUrlImportStatus(status));
+      const result = await importSkillFromUrl(url, (key, params) => setUrlImportStatus(t(key, params)));
       setShowUrlImport(false);
       setImportUrl("");
       setUrlImportStatus("");
@@ -151,7 +157,7 @@ ${desc || "TODO: Add skill instructions here."}
               <button onClick={() => fileInputRef.current?.click()} disabled={importing}
                 className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50">
                 {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                {t("common.import")}
+                {t("skills.importLocal")}
               </button>
               <button onClick={() => setShowUrlImport(true)}
                 className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700">
@@ -231,8 +237,11 @@ ${desc || "TODO: Add skill instructions here."}
               {t("skills.permanentDeleteConfirm")}
             </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmPermanentDelete(null)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">{t("common.cancel")}</button>
-              <button onClick={() => handlePermanentDelete(confirmPermanentDelete)} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">{t("skills.deletePermanently")}</button>
+              <button onClick={() => setConfirmPermanentDelete(null)} disabled={deleting} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-50">{t("common.cancel")}</button>
+              <button onClick={() => handlePermanentDelete(confirmPermanentDelete)} disabled={deleting} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50">
+                {deleting && <Loader2 className="w-3 h-3 animate-spin" />}
+                {t("skills.deletePermanently")}
+              </button>
             </div>
           </div>
         </div>
@@ -294,6 +303,12 @@ ${desc || "TODO: Add skill instructions here."}
             />
             {urlImportError && (
               <p className="text-[11px] text-red-500 mt-2">{urlImportError}</p>
+            )}
+            {urlImporting && urlImportStatus && (
+              <div className="flex items-center gap-1.5 mt-2 text-[11px] text-blue-500">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                {urlImportStatus}
+              </div>
             )}
             <div className="flex justify-end gap-2 mt-4">
               <button

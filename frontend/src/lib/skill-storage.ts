@@ -233,15 +233,12 @@ export async function restoreSkill(id: string): Promise<boolean> {
 
 /** Permanently delete a skill (remove files + index entry) */
 export async function permanentlyDeleteSkill(id: string): Promise<boolean> {
-  // Delete SKILL.md and all files
+  // Delete all files in parallel
   try {
     const { listS3Keys } = await import("./s3-storage");
     const keys = await listS3Keys(`skills/${id}/`);
-    for (const key of keys) {
-      await deleteFromS3(key);
-    }
+    await Promise.all(keys.map(key => deleteFromS3(key)));
   } catch {
-    // If listing fails, at least delete SKILL.md
     await deleteFromS3(`skills/${id}/SKILL.md`);
   }
 
@@ -362,11 +359,56 @@ export async function importSkillFromFiles(
 
   const id = crypto.randomUUID().slice(0, 8);
 
-  // Write all files to S3 in parallel
+  // Initialize signer once for all uploads
+  const { credentials } = await fetchAuthSession();
+  if (!credentials) return null;
+  const { SignatureV4 } = await import("@smithy/signature-v4");
+  const { Sha256 } = await import("@aws-crypto/sha256-js");
+
+  const signer = new SignatureV4({
+    service: "s3",
+    region: agentConfig.region,
+    credentials: {
+      accessKeyId: credentials.accessKeyId,
+      secretAccessKey: credentials.secretAccessKey,
+      sessionToken: credentials.sessionToken,
+    },
+    sha256: Sha256,
+  });
+
+  // Parallel PUT all files with shared signer
   const entries = Object.entries(files);
   const results = await Promise.all(
-    entries.map(([path, content]) => writeSkillFile(id, path, content))
+    entries.map(async ([path, content]) => {
+      const safePath = sanitizePath(path);
+      const url = new URL(
+        `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/skills/${id}/${safePath}`
+      );
+      const body = new TextEncoder().encode(content);
+      const contentType = safePath.endsWith(".py") ? "text/x-python"
+        : safePath.endsWith(".json") ? "application/json"
+        : safePath.endsWith(".md") ? "text/markdown"
+        : "text/plain";
+
+      const signed = await signer.sign({
+        method: "PUT",
+        protocol: url.protocol,
+        hostname: url.hostname,
+        path: url.pathname,
+        query: {},
+        headers: { Host: url.host, "Content-Type": contentType },
+        body,
+      });
+
+      const resp = await fetch(url.toString(), {
+        method: "PUT",
+        headers: signed.headers as Record<string, string>,
+        body,
+      });
+      return resp.ok;
+    })
   );
+
   // Check SKILL.md write succeeded
   const skillMdIdx = entries.findIndex(([p]) => p === "SKILL.md");
   if (skillMdIdx >= 0 && !results[skillMdIdx]) return null;

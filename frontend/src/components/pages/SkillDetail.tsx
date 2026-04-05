@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { deleteSkill, listSkills, type SkillIndexEntry } from "../../lib/skill-storage";
 import { useSkillStorage } from "../../hooks/useSkillStorage";
+import { useFileEditor } from "../../hooks/useFileEditor";
 import Editor from "@monaco-editor/react";
 import type * as MonacoNS from "monaco-editor";
 import { Tree, type NodeRendererProps } from "react-arborist";
@@ -25,7 +26,7 @@ import useUnsavedGuard from "../../hooks/useUnsavedGuard";
 import { validatePython } from "../../lib/validators/python-validator";
 import { validateShell } from "../../lib/validators/shell-validator";
 import { validateSkill } from "../../lib/validators/skill-validator";
-import { buildTreeData, getFileIcon, type TreeNode } from "../../lib/tree-helpers";
+import { getFileIcon, type TreeNode } from "../../lib/tree-helpers";
 
 // --- Main Component ---
 
@@ -35,15 +36,11 @@ export default function SkillDetail() {
   const isDark = useIsDark();
   const { t } = useTranslation();
   const [skill, setSkill] = useState<SkillIndexEntry | null>(null);
-  const [skillContent, setSkillContent] = useState<string | null>(null);
-  const [skillFiles, setSkillFiles] = useState<string[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
   const agentId = searchParams.get("agentId");
   const agentSkillId = searchParams.get("agentSkillId");
   const storage = useSkillStorage(skillId!, agentId, agentSkillId);
   const activeFile = searchParams.get("file");
-  const [loadingContent, setLoadingContent] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
@@ -52,6 +49,14 @@ export default function SkillDetail() {
   const dragging = useRef(false);
   const [runOutput, setRunOutput] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+
+  const editor = useFileEditor({
+    storage,
+    onFileSwitch: (path) => setSearchParams(path === "SKILL.md" ? {} : { file: path }),
+  });
+
+  const currentPath = activeFile || "SKILL.md";
+  const skillContent = editor.content;
 
   const onDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -71,116 +76,17 @@ export default function SkillDetail() {
     document.addEventListener("mouseup", onUp);
   }, [sidebarWidth]);
 
-  // Multi-file edit state
-  const [originalContents] = useState(() => new Map<string, string>());
-  const [editedContents] = useState(() => new Map<string, string>());
-  const [changedFiles, setChangedFiles] = useState<Set<string>>(new Set());
-
-  // Staging state — all file ops are local until Save
-  const [pendingCreates] = useState(() => new Map<string, string>());
-  const [pendingDeletes, setPendingDeletes] = useState<Set<string>>(new Set());
-  const [pendingDeleteDirs, setPendingDeleteDirs] = useState<Set<string>>(new Set());
-  const [pendingRenames] = useState(() => new Map<string, string>()); // oldPath → newPath
-
-  const currentPath = activeFile || "SKILL.md";
-
-  /** Shared helper: stage a file move/rename. Handles chained renames correctly. */
-  const stageMove = useCallback((oldPath: string, newPath: string) => {
-    if (newPath === oldPath) return;
-
-    if (pendingCreates.has(oldPath)) {
-      // Move a pending create — just relocate in memory
-      const content = editedContents.get(oldPath) ?? pendingCreates.get(oldPath) ?? "";
-      pendingCreates.delete(oldPath);
-      pendingCreates.set(newPath, content);
-      if (editedContents.has(oldPath)) {
-        editedContents.set(newPath, editedContents.get(oldPath)!);
-        editedContents.delete(oldPath);
-      }
-    } else {
-      // Check if oldPath is already the TARGET of an existing rename (chained move)
-      let originalKey: string | null = null;
-      for (const [k, v] of pendingRenames) {
-        if (v === oldPath) { originalKey = k; break; }
-      }
-
-      if (originalKey !== null) {
-        // Update the existing rename chain
-        if (newPath === originalKey) {
-          // Moved back to original location — cancel the rename
-          pendingRenames.delete(originalKey);
-        } else {
-          pendingRenames.set(originalKey, newPath);
-        }
-      } else {
-        // New rename
-        pendingRenames.set(oldPath, newPath);
-      }
-
-      // Migrate edit/original contents
-      if (editedContents.has(oldPath)) {
-        editedContents.set(newPath, editedContents.get(oldPath)!);
-        editedContents.delete(oldPath);
-      }
-      if (originalContents.has(oldPath)) {
-        originalContents.set(newPath, originalContents.get(oldPath)!);
-        originalContents.delete(oldPath);
-      }
-    }
-
-    const next = new Set(changedFiles);
-    next.delete(oldPath);
-    next.add(newPath);
-    setChangedFiles(next);
-
-    if (oldPath === currentPath) {
-      setSearchParams({ file: newPath });
-      const content = editedContents.get(newPath) ?? originalContents.get(newPath) ?? "";
-      setSkillContent(content);
-    }
-  }, [currentPath, changedFiles, editedContents, originalContents, pendingCreates, pendingRenames]);
-
-  // Compute virtual file list: real files + renames + creates (keep deletes for strikethrough)
-  const virtualFiles = useMemo(() => {
-    let files = [...skillFiles];
-    // Apply renames
-    files = files.map(f => pendingRenames.get(f) ?? f);
-    // Add created
-    for (const path of pendingCreates.keys()) {
-      if (!files.includes(path)) files.push(path);
-    }
-    return files;
-  }, [skillFiles, pendingDeletes, pendingRenames, pendingCreates, changedFiles]); // changedFiles triggers re-render
-
-  const treeData = useMemo(() => buildTreeData(virtualFiles), [virtualFiles]);
-
-  const hasPendingOps = changedFiles.size > 0 || pendingCreates.size > 0 || pendingDeletes.size > 0 || pendingDeleteDirs.size > 0 || pendingRenames.size > 0;
-  const pendingCount = changedFiles.size + pendingCreates.size + pendingDeletes.size + pendingDeleteDirs.size + pendingRenames.size;
+  const { virtualFiles, treeData, hasPendingOps, pendingCount, changedFiles, pendingDeletes, pendingDeleteDirs } = editor;
 
   useEffect(() => {
     if (!skillId) return;
-    originalContents.clear();
-    editedContents.clear();
-    pendingCreates.clear();
-    pendingDeletes.clear();
-    pendingRenames.clear();
-    setChangedFiles(new Set());
-    setPendingDeletes(new Set());
-    setLoadingContent(true);
     const fileParam = searchParams.get("file");
     Promise.all([
       listSkills(),
-      fileParam ? storage.getFile(fileParam) : storage.getContent(),
-      storage.listFiles(),
-    ]).then(([skills, content, files]) => {
+      editor.loadInitial(fileParam || undefined),
+    ]).then(([skills]) => {
       const found = skills.find(s => s.id === skillId) || null;
       setSkill(found);
-      setSkillContent(content);
-      setSkillFiles(files);
-      if (content !== null) {
-        originalContents.set(fileParam || "SKILL.md", content);
-      }
-      setLoadingContent(false);
     });
     // Auto-open AI assistant
     useSkillAssistantStore.getState().openPanel(skillId);
@@ -188,56 +94,21 @@ export default function SkillDetail() {
     preloadPyodide();
   }, [skillId, storage]);
 
-  const loadingPathRef = useRef<string | null>(null);
-
-  const loadFile = useCallback(async (path: string) => {
-    if (!skillId) return;
-    if (pendingCreates.has(path)) {
-      setSkillContent(editedContents.get(path) ?? pendingCreates.get(path)!);
-      return;
-    }
-    if (editedContents.has(path)) {
-      setSkillContent(editedContents.get(path)!);
-      return;
-    }
-    loadingPathRef.current = path;
-    setLoadingContent(true);
-    const content = path === "SKILL.md"
-      ? await storage.getContent()
-      : await storage.getFile(path);
-    // Only apply if this is still the file we're loading (prevents race condition)
-    if (loadingPathRef.current !== path) return;
-    setSkillContent(content);
-    if (content !== null) {
-      originalContents.set(path, content);
-    }
-    setLoadingContent(false);
-  }, [skillId, editedContents, originalContents, pendingCreates, storage]);
-
   const handleNodeClick = async (nodeId: string) => {
     if (nodeId.startsWith("__dir__")) return;
     if (nodeId === currentPath) return;
-    setValidationResult(null); // Clear old validation
+    setValidationResult(null);
     if (nodeId === "SKILL.md") {
       setSearchParams({});
     } else {
       setSearchParams({ file: nodeId });
     }
-    await loadFile(nodeId);
+    await editor.selectFile(nodeId);
   };
 
   const handleEditorChange = (val: string | undefined) => {
     if (val === undefined) return;
-    editedContents.set(currentPath, val);
-    setSkillContent(val);
-    const original = originalContents.get(currentPath);
-    const next = new Set(changedFiles);
-    if (original !== undefined && val !== original) {
-      next.add(currentPath);
-    } else {
-      next.delete(currentPath);
-    }
-    setChangedFiles(next);
+    editor.handleEditorChange(val);
 
     // Run Python/Shell validation on change (onValidate only fires for JSON/JS/TS)
     requestAnimationFrame(() => {
@@ -268,111 +139,22 @@ export default function SkillDetail() {
 
   const handleSaveAll = async () => {
     if (!skillId || !hasPendingOps) return;
-
-    // Validate SKILL.md before saving
-    const skillMd = editedContents.get("SKILL.md") ?? originalContents.get("SKILL.md") ?? "";
-    const result = validateSkill(skillMd, virtualFiles, pendingDeletes);
-    setValidationResult(result);
-    if (!result.valid) return; // Block save on errors
-
-    setSaving(true);
-    const errors: string[] = [];
-
-    try {
-      // 1. Execute deletes (individual files)
-      for (const path of pendingDeletes) {
-        try { await storage.deleteFile(path); }
-        catch { errors.push(`Failed to delete ${path}`); }
-      }
-
-      // 1b. Execute directory deletes (all files under dir)
-      for (const dir of pendingDeleteDirs) {
-        const dirFiles = skillFiles.filter(f => f.startsWith(dir + "/"));
-        for (const f of dirFiles) {
-          try { await storage.deleteFile(f); }
-          catch { errors.push(`Failed to delete ${f}`); }
-        }
-      }
-
-      // 2. Execute renames (copy + delete)
-      for (const [oldPath, newPath] of pendingRenames) {
-        if (!pendingDeletes.has(oldPath)) {
-          try { await storage.renameFile(oldPath, newPath); }
-          catch { errors.push(`Failed to rename ${oldPath} → ${newPath}`); }
-        }
-      }
-
-      // 3. Save created files
-      for (const [path, content] of pendingCreates) {
-        const edited = editedContents.get(path) ?? content;
-        try { await storage.writeFile(path, edited); }
-        catch { errors.push(`Failed to create ${path}`); }
-      }
-
-      // 4. Save edited existing files
-      for (const path of changedFiles) {
-        if (pendingCreates.has(path) || pendingDeletes.has(path)) continue;
-        const content = editedContents.get(path);
-        if (content === undefined) continue;
-        const actualPath = pendingRenames.get(path) ?? path;
-        try { await storage.writeFile(actualPath, content); }
-        catch { errors.push(`Failed to save ${actualPath}`); }
-      }
-
-      if (errors.length > 0) {
-        setValidationResult({ valid: false, errors, warnings: [] });
-        setSaving(false);
-        return; // Don't clear state — let user retry
-      }
-
-      // Success — clear staging state
-      pendingCreates.clear();
-      pendingDeletes.clear();
-      pendingDeleteDirs.clear();
-      pendingRenames.clear();
-      editedContents.clear();
-      originalContents.clear();
-      setChangedFiles(new Set());
-      setPendingDeletes(new Set());
-      setPendingDeleteDirs(new Set());
-
-      // Refresh from S3
-      const [files, content] = await Promise.all([
-        storage.listFiles(),
-        storage.getContent(),
-      ]);
-      setSkillFiles(files);
-      if (content !== null) {
-        originalContents.set("SKILL.md", content);
-        if (currentPath === "SKILL.md") setSkillContent(content);
-        const { parseFrontmatter } = await import("../../lib/skill-storage");
-        const meta = parseFrontmatter(content);
-        if (meta && skill) setSkill({ ...skill, name: meta.name, description: meta.description });
-      }
-      if (currentPath !== "SKILL.md") {
-        const fc = await storage.getFile(currentPath);
-        if (fc !== null) {
-          setSkillContent(fc);
-          originalContents.set(currentPath, fc);
-        }
-      }
-    } finally {
-      setSaving(false);
+    const result = await editor.handleSaveAll();
+    if (!result.success) {
+      setValidationResult(result.validationResult ?? { valid: false, errors: result.errors, warnings: [] });
+      return;
+    }
+    // Update skill metadata from saved SKILL.md
+    const newContent = editor.content;
+    if (newContent !== null && skill) {
+      const { parseFrontmatter } = await import("../../lib/skill-storage");
+      const meta = parseFrontmatter(newContent);
+      if (meta) setSkill({ ...skill, name: meta.name, description: meta.description });
     }
   };
 
   const handleDiscard = () => {
-    pendingCreates.clear();
-    pendingDeletes.clear();
-    pendingDeleteDirs.clear();
-    pendingRenames.clear();
-    editedContents.clear();
-    setChangedFiles(new Set());
-    setPendingDeletes(new Set());
-    setPendingDeleteDirs(new Set());
-    // Reload current file from original
-    const orig = originalContents.get(currentPath);
-    if (orig !== undefined) setSkillContent(orig);
+    editor.handleDiscard();
   };
 
   const handleDelete = async () => {
@@ -385,33 +167,7 @@ export default function SkillDetail() {
     }
   };
 
-  const getDiffChanges = (): Map<string, { original: string; edited: string }> => {
-    const result = new Map<string, { original: string; edited: string }>();
-    // Edited files
-    for (const path of changedFiles) {
-      if (pendingDeletes.has(path)) continue;
-      const original = originalContents.get(path) ?? "";
-      const edited = editedContents.get(path) ?? "";
-      result.set(path, { original, edited });
-    }
-    // Deleted files — show as full removal
-    for (const path of pendingDeletes) {
-      const original = originalContents.get(path) ?? "";
-      result.set(`${path} (deleted)`, { original, edited: "" });
-    }
-    // New files
-    for (const [path, content] of pendingCreates) {
-      const edited = editedContents.get(path) ?? content;
-      result.set(`${path} (new)`, { original: "", edited });
-    }
-    // Renames
-    for (const [oldPath, newPath] of pendingRenames) {
-      if (!result.has(newPath) && !pendingDeletes.has(oldPath)) {
-        result.set(`${oldPath} → ${newPath}`, { original: originalContents.get(newPath) ?? "", edited: editedContents.get(newPath) ?? originalContents.get(newPath) ?? "" });
-      }
-    }
-    return result;
-  };
+  const getDiffChanges = () => editor.getDiffChanges();
 
   // --- File management ---
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string; isFolder: boolean } | null>(null);
@@ -426,25 +182,21 @@ export default function SkillDetail() {
   const handleNewFile = async () => {
     if (!dialogInput.trim()) return;
     const name = dialogInput.trim();
-    // Validate filename
     if (/[<>:"|?*\\]/.test(name) || name.includes("..")) {
       setValidationResult({ valid: false, errors: [`Invalid filename: ${name}`], warnings: [] });
       return;
     }
     const dir = newFileDialog?.parentDir;
     const path = dir ? `${dir}/${name}` : name;
-    // Check for duplicates
-    if (virtualFiles.includes(path) || pendingCreates.has(path)) {
+    if (!editor.stageNewFile(path)) {
       setValidationResult({ valid: false, errors: [`File already exists: ${path}`], warnings: [] });
       return;
     }
-    pendingCreates.set(path, "");
-    editedContents.set(path, "");
     setNewFileDialog(null);
     setDialogInput("");
-    setChangedFiles(new Set([...changedFiles, path]));
     setSearchParams({ file: path });
-    setSkillContent("");
+    editor.setContent("");
+    editor.setCurrentFile(path);
   };
 
   const handleNewFolder = async () => {
@@ -460,45 +212,19 @@ export default function SkillDetail() {
     if (!deleteFileDialog) return;
     const target = deleteFileDialog;
     const isDir = target.startsWith("__dir__");
-    const next = new Set(changedFiles);
-    const nextDeletes = new Set(pendingDeletes);
 
     if (isDir) {
       const dirName = target.replace("__dir__", "");
-      const nextDirs = new Set(pendingDeleteDirs);
-      nextDirs.add(dirName);
-      setPendingDeleteDirs(nextDirs);
-      // Clean up edit state for files in this dir
-      for (const f of [...skillFiles, ...pendingCreates.keys()]) {
-        if (f.startsWith(dirName + "/")) {
-          editedContents.delete(f);
-          next.delete(f);
-        }
-      }
+      editor.stageDeleteDir(dirName);
       if (currentPath.startsWith(dirName + "/")) {
         setSearchParams({});
-        await loadFile("SKILL.md");
       }
     } else {
-      if (pendingCreates.has(target)) {
-        // Just remove from pending — never existed on S3
-        pendingCreates.delete(target);
-        editedContents.delete(target);
-        next.delete(target);
-      } else {
-        // Mark for deletion on save
-        nextDeletes.add(target);
-        editedContents.delete(target);
-        originalContents.delete(target);
-        next.delete(target);
-      }
+      editor.stageDelete(target);
       if (target === currentPath) {
         setSearchParams({});
-        await loadFile("SKILL.md");
       }
     }
-    setChangedFiles(next);
-    setPendingDeletes(nextDeletes);
     setDeleteFileDialog(null);
   };
 
@@ -513,11 +239,11 @@ export default function SkillDetail() {
     const parts = oldPath.split("/");
     parts[parts.length - 1] = name;
     const newPath = parts.join("/");
-    if (newPath !== oldPath && (virtualFiles.includes(newPath) || pendingCreates.has(newPath))) {
+    if (newPath !== oldPath && (virtualFiles.includes(newPath) || editor.pendingCreates.has(newPath))) {
       setValidationResult({ valid: false, errors: [`File already exists: ${newPath}`], warnings: [] });
       return;
     }
-    stageMove(oldPath, newPath);
+    editor.stageMove(oldPath, newPath);
     setRenameDialog(null);
     setDialogInput("");
   };
@@ -528,12 +254,11 @@ export default function SkillDetail() {
     const fileName = oldPath.split("/").pop()!;
     const targetDir = dialogInput.trim();
     const newPath = targetDir === "(root)" ? fileName : `${targetDir}/${fileName}`;
-    stageMove(oldPath, newPath);
+    editor.stageMove(oldPath, newPath);
     setMoveFileDialog(null);
     setDialogInput("");
   };
 
-  // Compute available directories for move dialog
   const availableDirs = useMemo(() => {
     const dirs = new Set<string>();
     dirs.add("(root)");
@@ -541,13 +266,12 @@ export default function SkillDetail() {
       const idx = f.indexOf("/");
       if (idx > 0) dirs.add(f.slice(0, idx));
     }
-    // Also include pending create dirs
-    for (const path of pendingCreates.keys()) {
+    for (const path of editor.pendingCreates.keys()) {
       const idx = path.indexOf("/");
       if (idx > 0) dirs.add(path.slice(0, idx));
     }
     return [...dirs].sort();
-  }, [virtualFiles, pendingCreates, changedFiles]);
+  }, [virtualFiles, editor.pendingCreates, changedFiles]);
 
   const handleContextMenu = (e: React.MouseEvent, nodeId: string, isFolder: boolean) => {
     e.preventDefault();
@@ -568,11 +292,21 @@ export default function SkillDetail() {
   const blocker = useUnsavedGuard({
     hasChanges: hasPendingOps,
     onSave: handleSaveAll,
-    saving,
+    saving: editor.saving,
   });
 
   // Sidebar collapse
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [treeHeight, setTreeHeight] = useState(400);
+  const treeContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = treeContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setTreeHeight(el.clientHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [sidebarCollapsed]);
 
   // Custom tree node renderer
   const FileNode = useCallback(({ node, style }: NodeRendererProps<TreeNode>) => {
@@ -580,7 +314,7 @@ export default function SkillDetail() {
     const isActive = !isFolder && node.id === currentPath;
     const isChanged = changedFiles.has(node.id);
     const isDeleted = pendingDeletes.has(node.id) || (isFolder && pendingDeleteDirs.has(node.id.replace("__dir__", "")));
-    const isNew = pendingCreates.has(node.id);
+    const isNew = editor.pendingCreates.has(node.id);
     const canContextMenu = node.id !== "SKILL.md";
 
     return (
@@ -615,9 +349,9 @@ export default function SkillDetail() {
         {isChanged && !isDeleted && !isNew && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" />}
       </div>
     );
-  }, [currentPath, changedFiles, isDark, pendingDeletes, pendingCreates]);
+  }, [currentPath, changedFiles, isDark, pendingDeletes, editor.pendingCreates]);
 
-  if (!skill && !loadingContent) {
+  if (!skill && !editor.loadingContent) {
     return (
       <div className="flex items-center justify-center h-full text-gray-400">
         Skill not found
@@ -651,7 +385,7 @@ export default function SkillDetail() {
           const allWarnings: string[] = [];
 
           // 1. Local validation: SKILL.md frontmatter + structure
-          const skillMd = editedContents.get("SKILL.md") ?? originalContents.get("SKILL.md") ?? skillContent ?? "";
+          const skillMd = editor.getEditedContent("SKILL.md") ?? editor.getOriginalContent("SKILL.md") ?? skillContent ?? "";
           const skillResult = validateSkill(skillMd, virtualFiles, pendingDeletes);
           allErrors.push(...skillResult.errors);
           allWarnings.push(...skillResult.warnings);
@@ -660,10 +394,9 @@ export default function SkillDetail() {
           const allFilesList = ["SKILL.md", ...virtualFiles];
           for (const filePath of allFilesList) {
             if (!filePath.endsWith(".py") && !filePath.endsWith(".sh") && !filePath.endsWith(".bash")) continue;
-            let content = editedContents.get(filePath) ?? originalContents.get(filePath) ?? null;
+            let content = editor.getEditedContent(filePath) ?? editor.getOriginalContent(filePath) ?? null;
             if (content === null && skillId) {
               content = await storage.getFile(filePath);
-              if (content !== null) originalContents.set(filePath, content);
             }
             if (!content) continue;
             if (filePath.endsWith(".py")) {
@@ -771,9 +504,9 @@ Respond with ONLY a JSON block:
         {hasPendingOps && (
           <>
           <div className={`w-px h-5 ${isDark ? "bg-gray-700" : "bg-gray-200"} mx-0.5`} />
-          <button onClick={handleSaveAll} disabled={saving}
+          <button onClick={handleSaveAll} disabled={editor.saving}
             className="flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 shadow-sm transition-all">
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            {editor.saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
             {t("skillEditor.save", { count: pendingCount })}
           </button>
           </>
@@ -806,11 +539,11 @@ Respond with ONLY a JSON block:
           if (!skillId) return;
           const allFilesList = ["SKILL.md", ...virtualFiles];
           for (const filePath of allFilesList) {
-            if (editedContents.has(filePath) || originalContents.has(filePath)) continue;
+            if (editor.getEditedContent(filePath) !== undefined || editor.getOriginalContent(filePath) !== undefined) continue;
             const content = filePath === "SKILL.md"
               ? await storage.getContent()
               : await storage.getFile(filePath);
-            if (content !== null) originalContents.set(filePath, content);
+            if (content !== null) editor.setEditedContent(filePath, content);
           }
           const store = useSkillAssistantStore.getState();
           if (!store.panelOpen) store.openPanel(skillId);
@@ -818,15 +551,9 @@ Respond with ONLY a JSON block:
           const autoFixPrompt = `## Auto-Fix Task\nFix ONLY the following validation issues. Do NOT remove or rewrite any existing content.\n\nIssues:\n${issues}\n\nRules:\n- Use __file_edit (search/replace) ONLY. Do NOT use __file_update.\n- Fix ONLY the specific issues listed above.\n- NEVER delete existing content, sections, or descriptions.\n- NEVER shorten or summarize existing text.\n- Make minimal, surgical changes.\n- If an issue appears already fixed in the current file content, skip it and say so.\n- If SEARCH text cannot be found, the issue may have been fixed already — do NOT attempt alternative fixes.`;
           store.sendMessage(
             autoFixPrompt,
-            { path: currentPath, content: skillContent ?? "", allFiles: allFilesList, getFileContent: (p: string) => editedContents.get(p) ?? originalContents.get(p) ?? null },
+            { path: currentPath, content: skillContent ?? "", allFiles: allFilesList, getFileContent: (p: string) => editor.getEditedContent(p) ?? editor.getOriginalContent(p) ?? null },
             (path: string, newContent: string) => {
-              editedContents.set(path, newContent);
-              const orig = originalContents.get(path);
-              const next = new Set(changedFiles);
-              if (orig !== undefined && newContent !== orig) next.add(path);
-              else if (orig === undefined) { pendingCreates.set(path, ""); next.add(path); }
-              setChangedFiles(next);
-              if (path === currentPath) setSkillContent(newContent);
+              editor.markNewFromExternal(path, newContent);
             },
           );
           setValidationResult(null);
@@ -857,11 +584,12 @@ Respond with ONLY a JSON block:
                 </button>
               </div>
             </div>
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-hidden" ref={treeContainerRef}>
             <Tree
               data={treeData}
               openByDefault
               width={sidebarWidth}
+              height={treeHeight}
               rowHeight={28}
               indent={16}
               disableEdit
@@ -877,7 +605,7 @@ Respond with ONLY a JSON block:
                   const fileName = id.split("/").pop()!;
                   const newDir = parentId?.replace("__dir__", "") ?? "";
                   const newPath = newDir ? `${newDir}/${fileName}` : fileName;
-                  stageMove(id, newPath);
+                  editor.stageMove(id, newPath);
                 }
               }}
             >
@@ -904,7 +632,7 @@ Respond with ONLY a JSON block:
 
         {/* Content: Monaco Editor */}
         <div className="flex-1 min-w-0 overflow-hidden flex flex-col">
-          {loadingContent ? (
+          {editor.loadingContent ? (
             <div className="flex justify-center py-12">
               <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
             </div>
@@ -1054,23 +782,9 @@ Respond with ONLY a JSON block:
             currentPath={currentPath}
             currentContent={skillContent ?? ""}
             allFiles={["SKILL.md", ...virtualFiles]}
-            getFileContent={(path) => editedContents.get(path) ?? originalContents.get(path) ?? null}
+            getFileContent={(path) => editor.getEditedContent(path) ?? editor.getOriginalContent(path) ?? null}
             onFileUpdate={(path, newContent) => {
-              editedContents.set(path, newContent);
-              const original = originalContents.get(path);
-              const next = new Set(changedFiles);
-              if (original !== undefined && newContent !== original) {
-                next.add(path);
-              } else if (original === undefined) {
-                // New file created by assistant
-                if (!pendingCreates.has(path)) pendingCreates.set(path, "");
-                next.add(path);
-              }
-              setChangedFiles(next);
-              // If updating the currently open file, refresh editor
-              if (path === currentPath) {
-                setSkillContent(newContent);
-              }
+              editor.markNewFromExternal(path, newContent);
             }}
           />
         )}
