@@ -13,19 +13,17 @@ import {
 import { listSkills, type SkillIndexEntry } from "../../lib/skill-storage"
 import type { AgentSkillEntry } from "../../lib/agent-metadata"
 import SkillPicker from "./SkillPicker"
-import SkillEditorModal from "./SkillEditorModal"
-
 interface SkillsSectionProps {
   skills: AgentSkillEntry[]
   agentId: string
   deployedHashes?: Record<string, string>
+  onEditSkill?: (skill: AgentSkillEntry) => void
 }
 
-export default function SkillsSection({ skills, agentId, deployedHashes }: SkillsSectionProps) {
+export default function SkillsSection({ skills, agentId, deployedHashes, onEditSkill }: SkillsSectionProps) {
   const { t } = useTranslation()
   const { addSkill, removeSkill } = useAgentEditStore()
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [editingSkill, setEditingSkill] = useState<AgentSkillEntry | null>(null)
   const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [globalSkills, setGlobalSkills] = useState<SkillIndexEntry[]>([])
@@ -39,7 +37,7 @@ export default function SkillsSection({ skills, agentId, deployedHashes }: Skill
   }, [])
 
   const handleOpenSkill = (skill: AgentSkillEntry) => {
-    setEditingSkill(skill)
+    onEditSkill?.(skill)
   }
 
   const handleAddSkill = useCallback(async (globalSkill: SkillIndexEntry) => {
@@ -162,17 +160,6 @@ export default function SkillsSection({ skills, agentId, deployedHashes }: Skill
         existingSkillSourceIds={existingSourceIds}
       />
 
-      {/* Skill Editor Modal */}
-      {editingSkill && (
-        <SkillEditorModal
-          open={!!editingSkill}
-          onClose={() => setEditingSkill(null)}
-          agentId={agentId}
-          skillId={editingSkill.id}
-          sourceSkillId={editingSkill.sourceSkillId}
-          skillName={editingSkill.name}
-        />
-      )}
     </div>
   )
 }

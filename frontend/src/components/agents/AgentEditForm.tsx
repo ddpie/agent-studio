@@ -13,6 +13,7 @@ import SkillDiffModal from "./SkillDiffModal";
 import type { AgentSkillEntry } from "../../lib/agent-metadata";
 import ReviewChangesModal from "./ReviewChangesModal";
 import AgentFormSections from "./AgentFormSections";
+import SkillEditorView from "./SkillEditorView";
 import { useAgentDeploy } from "../../hooks/useAgentDeploy";
 
 export default function AgentEditForm() {
@@ -26,6 +27,7 @@ export default function AgentEditForm() {
   const { agents, fetchAgents } = useAgentListStore();
   const { panelOpen, openPanel } = useEditAssistantStore();
   const [diffSkill, setDiffSkill] = useState<AgentSkillEntry | null>(null);
+  const [editingSkill, setEditingSkill] = useState<AgentSkillEntry | null>(null);
 
   const isCreateMode = agentId?.startsWith("draft-") || agentId === "__new__";
 
@@ -80,6 +82,14 @@ export default function AgentEditForm() {
   return (
     <div className="flex h-full">
     <div className="flex flex-col flex-1 min-w-0 bg-gray-50/50 dark:bg-gray-800/50">
+      {editingSkill ? (
+        <SkillEditorView
+          agentId={agentId!}
+          skill={editingSkill}
+          onBack={() => setEditingSkill(null)}
+        />
+      ) : (
+      <>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
         <div>
@@ -271,8 +281,11 @@ export default function AgentEditForm() {
           updateField={updateField}
           handleOptimizeField={deploy.handleOptimizeField}
           deployedSkillHashes={formData.deployedSkillHashes}
+          onEditSkill={setEditingSkill}
         />
       </div>
+      </>
+      )}
     </div>
     {/* AI Assistant sidebar */}
     <EditAssistant />

@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Code2, MessageSquare, Settings2, Sparkles } from "lucide-react";
 import { MODEL_GROUPS } from "../../lib/models";
 import { useEditAssistantStore } from "../../stores/edit-assistant-store";
-import type { AgentMetadata } from "../../lib/agent-metadata";
+import type { AgentMetadata, AgentSkillEntry } from "../../lib/agent-metadata";
 import Section from "./shared/Section";
 import Field from "./shared/Field";
 import SkillsSection from "./SkillsSection";
@@ -30,11 +30,12 @@ interface AgentFormSectionsProps {
   updateField: <K extends keyof AgentMetadata>(key: K, value: AgentMetadata[K]) => void;
   handleOptimizeField: (fieldName: string, fieldLabel: string) => void;
   deployedSkillHashes?: Record<string, string>;
+  onEditSkill?: (skill: AgentSkillEntry) => void;
 }
 
 export default function AgentFormSections({
   formData, agentId, agentName, isCreateMode, changedFields,
-  updateField, handleOptimizeField, deployedSkillHashes,
+  updateField, handleOptimizeField, deployedSkillHashes, onEditSkill,
 }: AgentFormSectionsProps) {
   const { t } = useTranslation();
 
@@ -151,6 +152,7 @@ export default function AgentFormSections({
         skills={formData.skills || []}
         agentId={agentId}
         deployedHashes={deployedSkillHashes}
+        onEditSkill={onEditSkill}
       />
 
       {/* Tools */}
