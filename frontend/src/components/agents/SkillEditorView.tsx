@@ -27,7 +27,7 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
   const { t } = useTranslation()
   const isDark = useIsDark()
   const storage = useSkillStorage(skill.sourceSkillId, agentId, skill.id)
-  const { getPendingSkillFiles } = useAgentEditStore()
+  const { updateSkillEntry, getPendingSkillFiles, updatePendingSkillFile } = useAgentEditStore()
 
   const editor = useFileEditor({ storage })
 
@@ -75,10 +75,14 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
     editor.selectFile(path)
   }, [editor])
 
-  // --- Editor onChange ---
+  // --- Editor onChange — sync to hook + store ---
   const handleEditorChange = useCallback((value: string | undefined) => {
     editor.handleEditorChange(value)
-  }, [editor])
+    // Sync to store so diff can see changes
+    if (value !== undefined) {
+      updatePendingSkillFile(skill.id, editor.currentFile, value)
+    }
+  }, [editor, skill.id, updatePendingSkillFile])
 
   // --- Python/Shell markers ---
   const handleEditorMount: OnMount = useCallback((ed, monaco) => {

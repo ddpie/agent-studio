@@ -13,6 +13,7 @@ interface AgentEditState {
   loading: boolean;
   saving: boolean;
   pendingSkillFiles: Record<string, Record<string, string>>;
+  originalSkillFiles: Record<string, Record<string, string>>;
 
   loadAgent: (agentId: string, agentName: string) => Promise<void>;
   openNewWithData: (data: Partial<AgentMetadata>) => void;
@@ -27,6 +28,7 @@ interface AgentEditState {
   setPendingSkillFiles: (skillId: string, files: Record<string, string>) => void;
   getPendingSkillFiles: (skillId: string) => Record<string, string> | undefined;
   clearPendingSkillFiles: (skillId: string) => void;
+  updatePendingSkillFile: (skillId: string, filePath: string, content: string) => void;
 }
 
 /**
@@ -123,6 +125,7 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   loading: false,
   saving: false,
   pendingSkillFiles: {},
+  originalSkillFiles: {},
 
   hasChanges: () => {
     const { formData, originalData } = get();
@@ -210,20 +213,30 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     for (const key of keys) {
       if (skipKeys.has(key)) continue;
       if (key === "skills") {
-        // Show skill add/remove summary for diff
-        const oldSkills = ((originalData as Record<string, unknown>).skills as Array<{ id: string; name: string; files: string[] }>) || [];
+        // Per-file diff for each skill's changed files
+        const { pendingSkillFiles: pending, originalSkillFiles: original } = get();
         const newSkills = ((formData as Record<string, unknown>).skills as Array<{ id: string; name: string; files: string[] }>) || [];
+        const oldSkills = ((originalData as Record<string, unknown>).skills as Array<{ id: string; name: string; files: string[] }>) || [];
         const oldIds = new Set(oldSkills.map(s => s.id));
-        const newIds = new Set(newSkills.map(s => s.id));
-        const added = newSkills.filter(s => !oldIds.has(s.id));
-        const removed = oldSkills.filter(s => !newIds.has(s.id));
-        if (added.length === 0 && removed.length === 0) continue;
-        const oldLines = oldSkills.map(s => `  ${s.name} (${(s.files || []).length} files)`).join("\n") || "(none)";
-        const newLines = newSkills.map(s => {
-          const isNew = !oldIds.has(s.id);
-          return `${isNew ? "+ " : "  "}${s.name} (${(s.files || []).length} files)`;
-        }).join("\n") || "(none)";
-        changes[key] = { old: oldLines, new: newLines };
+
+        for (const skill of newSkills) {
+          const orig = original[skill.id] || {};
+          const curr = pending[skill.id] || {};
+          const allPaths = new Set([...Object.keys(orig), ...Object.keys(curr)]);
+          for (const filePath of allPaths) {
+            const oldContent = orig[filePath] ?? "";
+            const newContent = curr[filePath] ?? "";
+            if (oldContent !== newContent) {
+              const prefix = !oldIds.has(skill.id) ? "+" : "";
+              changes[`${prefix}${skill.name}/${filePath}`] = { old: oldContent, new: newContent };
+            }
+          }
+          // If skill is newly added but no file edits yet, show SKILL.md as added
+          if (!oldIds.has(skill.id) && Object.keys(orig).length > 0 && Object.keys(changes).filter(k => k.startsWith(`+${skill.name}/`)).length === 0) {
+            const md = curr["SKILL.md"] || orig["SKILL.md"] || "";
+            if (md) changes[`+${skill.name}/SKILL.md`] = { old: "", new: md };
+          }
+        }
         continue;
       }
       if (key === "suggestions") {
@@ -254,12 +267,14 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   },
 
   removeSkill: (skillId: string) => {
-    const { formData, pendingSkillFiles } = get();
+    const { formData, pendingSkillFiles, originalSkillFiles } = get();
     if (!formData) return;
     const skills = (formData.skills || []).filter(s => s.id !== skillId);
-    const next = { ...pendingSkillFiles };
-    delete next[skillId];
-    set({ formData: { ...formData, skills }, pendingSkillFiles: next });
+    const nextPending = { ...pendingSkillFiles };
+    delete nextPending[skillId];
+    const nextOriginal = { ...originalSkillFiles };
+    delete nextOriginal[skillId];
+    set({ formData: { ...formData, skills }, pendingSkillFiles: nextPending, originalSkillFiles: nextOriginal });
   },
 
   updateSkillEntry: (skillId: string, updates: Partial<AgentSkillEntry>) => {
@@ -272,8 +287,16 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   },
 
   setPendingSkillFiles: (skillId, files) => {
-    const { pendingSkillFiles } = get();
-    set({ pendingSkillFiles: { ...pendingSkillFiles, [skillId]: files } });
+    const { pendingSkillFiles, originalSkillFiles } = get();
+    // Store original snapshot if first time
+    if (!originalSkillFiles[skillId]) {
+      set({
+        pendingSkillFiles: { ...pendingSkillFiles, [skillId]: files },
+        originalSkillFiles: { ...originalSkillFiles, [skillId]: { ...files } },
+      });
+    } else {
+      set({ pendingSkillFiles: { ...pendingSkillFiles, [skillId]: files } });
+    }
   },
 
   getPendingSkillFiles: (skillId) => {
@@ -281,9 +304,17 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   },
 
   clearPendingSkillFiles: (skillId) => {
+    const { pendingSkillFiles, originalSkillFiles } = get();
+    const nextPending = { ...pendingSkillFiles };
+    delete nextPending[skillId];
+    const nextOriginal = { ...originalSkillFiles };
+    delete nextOriginal[skillId];
+    set({ pendingSkillFiles: nextPending, originalSkillFiles: nextOriginal });
+  },
+
+  updatePendingSkillFile: (skillId, filePath, content) => {
     const { pendingSkillFiles } = get();
-    const next = { ...pendingSkillFiles };
-    delete next[skillId];
-    set({ pendingSkillFiles: next });
+    const current = pendingSkillFiles[skillId] || {};
+    set({ pendingSkillFiles: { ...pendingSkillFiles, [skillId]: { ...current, [filePath]: content } } });
   },
 }));

@@ -3,6 +3,7 @@ import { DiffEditor } from "@monaco-editor/react";
 import { GitCompare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import useIsDark from "../../hooks/useIsDark";
+import { getMonacoLanguage } from "../../lib/monaco-helpers";
 
 function ReviewChangesModal({ changes, onConfirm, onCancel, viewOnly }: {
   changes: Record<string, { old: string; new: string }>;
@@ -33,7 +34,10 @@ function ReviewChangesModal({ changes, onConfirm, onCancel, viewOnly }: {
 
   const [key, { old: oldVal, new: newVal }] = entries[activeIdx];
   const label = FIELD_LABELS[key] || key;
-  const lang = key === "tool_definitions" ? "python" : key === "system_prompt" ? "markdown" : "plaintext";
+  const lang = key === "tool_definitions" ? "python"
+    : key === "system_prompt" ? "markdown"
+    : key.includes("/") ? getMonacoLanguage(key.split("/").pop() || key)
+    : "plaintext";
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center animate-[fadeSlideIn_0.15s_ease-out]" onClick={onCancel}>
