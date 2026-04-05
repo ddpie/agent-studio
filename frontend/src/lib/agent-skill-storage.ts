@@ -77,9 +77,20 @@ export async function copySkillToAgent(
     if (content !== null) allFiles[f] = content
   }
 
-  // Write all files to agent's private space
-  for (const [filePath, content] of Object.entries(allFiles)) {
-    await writeAgentSkillFile(agentId, newId, filePath, content)
+  // Write all files with rollback on failure
+  const writtenFiles: string[] = []
+  try {
+    for (const [filePath, content] of Object.entries(allFiles)) {
+      const success = await writeAgentSkillFile(agentId, newId, filePath, content)
+      if (!success) throw new Error(`Failed to write ${filePath}`)
+      writtenFiles.push(filePath)
+    }
+  } catch (err) {
+    // Rollback: delete all written files
+    for (const f of writtenFiles) {
+      await deleteFromS3(`agents/${agentId}/skills/${newId}/${f}`)
+    }
+    throw err
   }
 
   // Compute hash

@@ -133,8 +133,9 @@ def update_agent(
                 md_key = f"{skill_prefix}SKILL.md"
                 md_obj = s3_client.get_object(Bucket=S3_BUCKET, Key=md_key)
                 skill_md_content = md_obj["Body"].read().decode("utf-8")
-            except Exception:
-                pass
+            except Exception as e:
+                import sys
+                print(f"WARNING: Failed to read SKILL.md for skill {skill_id}: {e}", file=sys.stderr)
 
             skills_data.append({
                 "name": skill_entry.get("name", skill_id),
@@ -156,8 +157,9 @@ def update_agent(
                         script_files[filename] = content
                 if script_files:
                     skill_scripts[skill_name] = script_files
-            except Exception:
-                pass
+            except Exception as e:
+                import sys
+                print(f"WARNING: Failed to read scripts for skill {skill_id}: {e}", file=sys.stderr)
 
     # Ownership check
     caller = getattr(__import__('tools.update_agent', fromlist=['_caller_id']), '_caller_id', 'unknown')

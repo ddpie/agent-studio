@@ -398,8 +398,8 @@ def validate_agent(
                                 content = s3_val.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read().decode("utf-8")
                                 tool_funcs = re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', content)
                                 funcs.extend(tool_funcs)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                warnings.append(f"Could not check skill {skill_name} for conflicts: {e}")
                     skill_tool_funcs[skill_name] = funcs
                     skill_file_names[skill_name] = fnames
                 except Exception:

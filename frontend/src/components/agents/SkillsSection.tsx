@@ -44,10 +44,13 @@ export default function SkillsSection({ skills, agentId, deployedHashes }: Skill
   const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [globalSkills, setGlobalSkills] = useState<SkillIndexEntry[]>([])
+  const [error, setError] = useState<string | null>(null)
 
   // Load global skill index for template update detection
   useEffect(() => {
-    listSkills().then(setGlobalSkills).catch(() => {})
+    listSkills().then(setGlobalSkills).catch(err => {
+      console.warn("Failed to load global skills for template detection:", err)
+    })
   }, [])
 
   // Load file content when expanding a skill or switching file tab
@@ -55,18 +58,26 @@ export default function SkillsSection({ skills, agentId, deployedHashes }: Skill
     if (!expandedId) return
     setFileContent("")
     setFileDirty(false)
+    setError(null)
     readAgentSkillFile(agentId, expandedId, activeFile).then(content => {
-      setFileContent(content || "")
+      if (content === null) {
+        setError("Failed to load file content")
+      } else {
+        setFileContent(content)
+      }
+    }).catch(() => {
+      setError("Failed to load file content")
     })
   }, [expandedId, activeFile, agentId])
 
   const handleAddSkill = useCallback(async (globalSkill: SkillIndexEntry) => {
     setAdding(true)
+    setError(null)
     try {
       const entry = await copySkillToAgent(agentId, globalSkill)
       addSkill(entry)
     } catch (err) {
-      console.error("Failed to add skill:", err)
+      setError(err instanceof Error ? err.message : "Failed to add skill")
     } finally {
       setAdding(false)
     }
@@ -75,12 +86,13 @@ export default function SkillsSection({ skills, agentId, deployedHashes }: Skill
   const handleDeleteSkill = useCallback(async (skillId: string) => {
     if (!confirm("Remove this skill from the agent?")) return
     setDeleting(skillId)
+    setError(null)
     try {
       await deleteAgentSkill(agentId, skillId)
       removeSkill(skillId)
       if (expandedId === skillId) setExpandedId(null)
     } catch (err) {
-      console.error("Failed to delete skill:", err)
+      setError(err instanceof Error ? err.message : "Failed to remove skill")
     } finally {
       setDeleting(null)
     }
@@ -89,16 +101,17 @@ export default function SkillsSection({ skills, agentId, deployedHashes }: Skill
   const handleSaveFile = useCallback(async () => {
     if (!expandedId || !fileDirty) return
     setSaving(true)
+    setError(null)
     try {
-      await writeAgentSkillFile(agentId, expandedId, activeFile, fileContent)
-      // Recompute contentHash
+      const success = await writeAgentSkillFile(agentId, expandedId, activeFile, fileContent)
+      if (!success) throw new Error("Failed to save file")
       const allFiles = await readAllAgentSkillFiles(agentId, expandedId)
       allFiles[activeFile] = fileContent
       const newHash = await computeSkillHash(allFiles)
       updateSkillEntry(expandedId, { contentHash: newHash })
       setFileDirty(false)
     } catch (err) {
-      console.error("Failed to save skill file:", err)
+      setError(err instanceof Error ? err.message : "Failed to save skill file")
     } finally {
       setSaving(false)
     }
@@ -133,6 +146,12 @@ export default function SkillsSection({ skills, agentId, deployedHashes }: Skill
       </div>
 
       <div className="px-3 py-3 space-y-2">
+        {error && (
+          <div className="flex items-center gap-2 px-3 py-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400 rounded-lg">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">✕</button>
+          </div>
+        )}
         {skills.length === 0 ? (
           <p className="text-xs text-gray-400 text-center py-4">
             No skills bound. Click "+ Add" to attach skills from the library.

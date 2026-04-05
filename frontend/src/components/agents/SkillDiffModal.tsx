@@ -39,6 +39,7 @@ export default function SkillDiffModal({ open, onClose, agentId, skill }: SkillD
   const [modifiedContent, setModifiedContent] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Load both global and local file contents
   useEffect(() => {
@@ -83,11 +84,13 @@ export default function SkillDiffModal({ open, onClose, agentId, skill }: SkillD
 
   const handleSave = useCallback(async () => {
     setSaving(true)
+    setError(null)
     try {
       // Write all modified files back to S3
       for (const [filePath, content] of Object.entries(modifiedContent)) {
         if (content !== localContent[filePath]) {
-          await writeAgentSkillFile(agentId, skill.id, filePath, content)
+          const success = await writeAgentSkillFile(agentId, skill.id, filePath, content)
+          if (!success) throw new Error(`Failed to save ${filePath}`)
         }
       }
 
@@ -108,7 +111,7 @@ export default function SkillDiffModal({ open, onClose, agentId, skill }: SkillD
 
       onClose()
     } catch (err) {
-      console.error("Failed to save diff changes:", err)
+      setError(err instanceof Error ? err.message : "Failed to save changes")
     } finally {
       setSaving(false)
     }
@@ -176,6 +179,12 @@ export default function SkillDiffModal({ open, onClose, agentId, skill }: SkillD
           <span className="flex-1">Global Template (latest)</span>
           <span className="flex-1 text-right">My Version (editable)</span>
         </div>
+
+        {error && (
+          <div className="px-4 py-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400 border-b border-red-200 dark:border-red-800">
+            {error}
+          </div>
+        )}
 
         {/* Diff editor */}
         <div className="flex-1 overflow-hidden">

@@ -425,7 +425,11 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
         }
 
         if (applied) {
-          await writeAgentSkillFile(currentAgentId, skillId, filePath, currentContent!);
+          const writeSuccess = await writeAgentSkillFile(currentAgentId, skillId, filePath, currentContent!)
+          if (!writeSuccess) {
+            console.error(`Failed to write skill file ${skillId}/${filePath}`)
+            continue  // Don't update hash
+          }
           const allFiles = await readAllAgentSkillFiles(currentAgentId, skillId);
           allFiles[filePath] = currentContent!;
           const newHash = await computeSkillHash(allFiles);
