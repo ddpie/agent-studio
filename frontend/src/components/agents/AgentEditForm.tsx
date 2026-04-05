@@ -2,7 +2,7 @@ import { useAgentEditStore } from "../../stores/agent-edit-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { useEditAssistantStore } from "../../stores/edit-assistant-store";
 import { Loader2, Save, Code2, Shield, Sparkles, FileDown, GitCompare, Wrench } from "lucide-react";
-import { useMemo, useEffect, useState } from "react";
+import { useMemo, useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import MonacoEditor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
@@ -28,6 +28,8 @@ export default function AgentEditForm() {
   const { panelOpen, openPanel } = useEditAssistantStore();
   const [diffSkill, setDiffSkill] = useState<AgentSkillEntry | null>(null);
   const [editingSkill, setEditingSkill] = useState<AgentSkillEntry | null>(null);
+  const formScrollRef = useRef<HTMLDivElement>(null);
+  const savedScrollTop = useRef(0);
 
   const isCreateMode = agentId?.startsWith("draft-") || agentId === "__new__";
 
@@ -86,7 +88,15 @@ export default function AgentEditForm() {
         <SkillEditorView
           agentId={agentId!}
           skill={editingSkill}
-          onBack={() => setEditingSkill(null)}
+          onBack={() => {
+            setEditingSkill(null)
+            // Restore scroll position after React re-renders
+            requestAnimationFrame(() => {
+              if (formScrollRef.current) {
+                formScrollRef.current.scrollTop = savedScrollTop.current
+              }
+            })
+          }}
         />
       ) : (
       <>
@@ -169,7 +179,7 @@ export default function AgentEditForm() {
       </div>
 
       {/* Form */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      <div ref={formScrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {/* Status banner */}
         {deploy.status && (
           <div className={`rounded-lg text-sm font-medium ${deploy.status.includes("Error") || deploy.status.includes("failed") ? "bg-red-50 text-red-600 border border-red-200" : "bg-green-50 text-green-600 border border-green-200"}`}>
@@ -281,7 +291,13 @@ export default function AgentEditForm() {
           updateField={updateField}
           handleOptimizeField={deploy.handleOptimizeField}
           deployedSkillHashes={formData.deployedSkillHashes}
-          onEditSkill={setEditingSkill}
+          onEditSkill={(skill) => {
+            // Save scroll position before switching to skill editor
+            if (formScrollRef.current) {
+              savedScrollTop.current = formScrollRef.current.scrollTop
+            }
+            setEditingSkill(skill)
+          }}
         />
       </div>
       </>

@@ -43,13 +43,13 @@ function ReviewChangesModal({ changes, onConfirm, onCancel, viewOnly }: {
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center animate-[fadeSlideIn_0.15s_ease-out]" onClick={onCancel}>
       <div className="bg-white dark:bg-gray-900 rounded-xl w-[85vw] h-[80vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center gap-3">
-            <GitCompare className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{viewOnly ? t("reviewChanges.viewTitle") : t("reviewChanges.title")}</span>
-            <div className="flex items-center gap-1">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <GitCompare className="w-4 h-4 text-blue-600 flex-shrink-0" />
+            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 flex-shrink-0">{viewOnly ? t("reviewChanges.viewTitle") : t("reviewChanges.title")}</span>
+            <div className="flex items-center gap-1 overflow-x-auto min-w-0 scrollbar-none">
               {entries.map(([k], i) => (
                 <button key={k} onClick={() => setActiveIdx(i)}
-                  className={`px-2 py-0.5 text-[11px] rounded ${i === activeIdx
+                  className={`px-2 py-0.5 text-[11px] rounded whitespace-nowrap flex-shrink-0 ${i === activeIdx
                     ? "bg-blue-600 text-white"
                     : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}>
