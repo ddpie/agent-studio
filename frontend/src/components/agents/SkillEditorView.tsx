@@ -36,10 +36,23 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
   // Resizable sidebar
   const [sidebarWidth, setSidebarWidth] = useState(200)
   const resizing = useRef(false)
+  const treeContainerRef = useRef<HTMLDivElement>(null)
+  const [treeHeight, setTreeHeight] = useState(400)
 
   // Monaco ref for markers
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
   const monacoRef = useRef<Parameters<OnMount>[1] | null>(null)
+
+  // Measure tree container height
+  useEffect(() => {
+    const el = treeContainerRef.current
+    if (!el) return
+    const obs = new ResizeObserver(([entry]) => {
+      setTreeHeight(entry.contentRect.height)
+    })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
 
   // --- Load all files on mount ---
   useEffect(() => {
@@ -217,11 +230,12 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
           <div className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider ${isDark ? "text-gray-500" : "text-gray-400"}`}>
             {t("skillEditor.files", "Files")}
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-hidden" ref={treeContainerRef}>
             <Tree<TreeNode>
               data={editor.treeData}
               openByDefault
               width={sidebarWidth}
+              height={treeHeight}
               rowHeight={26}
               indent={14}
               disableDrag
