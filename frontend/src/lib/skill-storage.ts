@@ -349,6 +349,7 @@ export async function importSkill(
  */
 export async function importSkillFromFiles(
   files: Record<string, string>,
+  onWriteProgress?: (current: number, total: number) => void,
 ): Promise<{ id: string; name: string; description: string } | null> {
   const skillMd = files["SKILL.md"];
   if (!skillMd) return null;
@@ -376,38 +377,49 @@ export async function importSkillFromFiles(
     sha256: Sha256,
   });
 
-  // Parallel PUT all files with shared signer
+  // Batch PUT files (20 concurrent) with progress
   const entries = Object.entries(files);
-  const results = await Promise.all(
-    entries.map(async ([path, content]) => {
-      const safePath = sanitizePath(path);
-      const url = new URL(
-        `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/skills/${id}/${safePath}`
-      );
-      const body = new TextEncoder().encode(content);
-      const contentType = safePath.endsWith(".py") ? "text/x-python"
-        : safePath.endsWith(".json") ? "application/json"
-        : safePath.endsWith(".md") ? "text/markdown"
-        : "text/plain";
+  const total = entries.length;
+  let completed = 0;
+  const results: boolean[] = new Array(entries.length).fill(false);
+  const BATCH_SIZE = 20;
 
-      const signed = await signer.sign({
-        method: "PUT",
-        protocol: url.protocol,
-        hostname: url.hostname,
-        path: url.pathname,
-        query: {},
-        headers: { Host: url.host, "Content-Type": contentType },
-        body,
-      });
+  for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+    const batch = entries.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.all(
+      batch.map(async ([path, content]) => {
+        const safePath = sanitizePath(path);
+        const url = new URL(
+          `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/skills/${id}/${safePath}`
+        );
+        const body = new TextEncoder().encode(content);
+        const contentType = safePath.endsWith(".py") ? "text/x-python"
+          : safePath.endsWith(".json") ? "application/json"
+          : safePath.endsWith(".md") ? "text/markdown"
+          : "text/plain";
 
-      const resp = await fetch(url.toString(), {
-        method: "PUT",
-        headers: signed.headers as Record<string, string>,
-        body,
-      });
-      return resp.ok;
-    })
-  );
+        const signed = await signer.sign({
+          method: "PUT",
+          protocol: url.protocol,
+          hostname: url.hostname,
+          path: url.pathname,
+          query: {},
+          headers: { Host: url.host, "Content-Type": contentType },
+          body,
+        });
+
+        const resp = await fetch(url.toString(), {
+          method: "PUT",
+          headers: signed.headers as Record<string, string>,
+          body,
+        });
+        completed++;
+        onWriteProgress?.(completed, total);
+        return resp.ok;
+      })
+    );
+    batchResults.forEach((ok, j) => { results[i + j] = ok; });
+  }
 
   // Check SKILL.md write succeeded
   const skillMdIdx = entries.findIndex(([p]) => p === "SKILL.md");

@@ -83,8 +83,6 @@ async function fetchGitHubDir(url: string, onProgress?: ProgressFn): Promise<Rec
     if (basePath && !item.path.startsWith(basePath + "/")) return false;
     const name = item.path.split("/").pop() || "";
     if (name.startsWith(".") || name.startsWith("__")) return false;
-    if (/\.(png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|zip|tar|gz|pdf|exe|dll|so|dylib)$/i.test(name)) return false;
-    if (item.size && item.size > 500_000) return false;
     return true;
   });
 
@@ -232,7 +230,9 @@ export async function importSkillFromUrl(url: string, onProgress?: ProgressFn): 
 
   onProgress?.("skills.urlWriting", { count: Object.keys(files).length });
 
-  const result = await importSkillFromFiles(files);
+  const result = await importSkillFromFiles(files, (current, total) => {
+    onProgress?.("skills.urlWritingProgress", { current, total });
+  });
   if (!result) throw new Error("Failed to write skill to storage");
 
   return {

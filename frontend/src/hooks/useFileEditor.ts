@@ -87,7 +87,8 @@ export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): U
     let vf = [...files]
     vf = vf.map(f => pendingRenames.get(f) ?? f)
     for (const path of pendingCreates.keys()) {
-      if (!vf.includes(path)) vf.push(path)
+      // SKILL.md is always added by buildTreeData, don't duplicate
+      if (path !== "SKILL.md" && !vf.includes(path)) vf.push(path)
     }
     return vf
     // eslint-disable-next-line react-hooks/exhaustive-deps
