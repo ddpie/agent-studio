@@ -354,9 +354,9 @@ def load_skill(name: str, file: str = "") -> str:
     except Exception as e:
         return _json.dumps({"error": f"Failed to read skill: {e}"})
 
-    # List other files in the skill directory
+    # List other files in the skill directory (truncate if too many)
     try:
-        resp = _s3.list_objects_v2(Bucket=_S3_BUCKET, Prefix=prefix)
+        resp = _s3.list_objects_v2(Bucket=_S3_BUCKET, Prefix=prefix, MaxKeys=500)
         files = [
             o["Key"][len(prefix):]
             for o in resp.get("Contents", [])
@@ -365,10 +365,17 @@ def load_skill(name: str, file: str = "") -> str:
         if files:
             content += "\\n\\n---\\n## Skill Files\\n"
             content += "Use `load_skill(\\"" + name + "\\", file=\\"<path>\\")` to read:\\n"
-            for f in files:
+            shown = files[:30]
+            for f in shown:
                 content += f"- `{f}`\\n"
+            if len(files) > 30:
+                content += f"\\n... and {len(files) - 30} more files. Use load_skill with file= to read specific files.\\n"
     except Exception:
         pass
+
+    # Truncate if content is too large (prevent context overflow)
+    if len(content) > 30000:
+        content = content[:30000] + "\\n\\n... (truncated, use load_skill with file= to read specific files)"
 
     return content
 
