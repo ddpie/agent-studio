@@ -276,7 +276,11 @@ export const useChatStore = create<ChatState>()(
                   if (inp) detailContent += `**Input:**\n\`\`\`json\n${inp}\n\`\`\`\n`;
                   const isHtml = out && out.trimStart().startsWith("<");
                   if (out && !isHtml) {
-                    detailContent += `**Output:**\n\`\`\`\n${out}\n\`\`\`\n`;
+                    // Truncate long output and escape backticks to prevent breaking code blocks
+                    const maxDisplay = 2000;
+                    const truncated = out.length > maxDisplay ? out.slice(0, maxDisplay) + "\n... (truncated)" : out;
+                    const escaped = truncated.replace(/```/g, "\\`\\`\\`");
+                    detailContent += `**Output:**\n\`\`\`\n${escaped}\n\`\`\`\n`;
                   } else if (isHtml) {
                     detailContent += `**Output:** Rich content rendered below.\n`;
                   }
