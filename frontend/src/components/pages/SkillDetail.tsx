@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import {
   ChevronLeft, Trash2, Loader2, Save, GitCompare,
-  FileText, FolderOpen, FolderClosed, File, ChevronRight as ChevronRightIcon,
+  FolderClosed, File, ChevronRight as ChevronRightIcon,
   Plus, Pencil, FolderPlus, ArrowRightLeft, Sparkles, ShieldCheck, Play,
 } from "lucide-react";
 import { deleteSkill, listSkills, type SkillIndexEntry } from "../../lib/skill-storage";
@@ -23,121 +23,8 @@ import useIsDark from "../../hooks/useIsDark";
 import useUnsavedGuard from "../../hooks/useUnsavedGuard";
 import { validatePython } from "../../lib/validators/python-validator";
 import { validateShell } from "../../lib/validators/shell-validator";
-
-// --- Skill validation ---
-
-function validateSkill(
-  skillMdContent: string,
-  virtualFiles: string[],
-  pendingDeletes: Set<string>,
-): ValidationResult {
-  const errors: string[] = [];
-  const warnings: string[] = [];
-
-  // 1. Check frontmatter exists
-  if (!skillMdContent.startsWith("---")) {
-    errors.push("SKILL.md must start with YAML frontmatter (---)");
-    return { valid: false, errors, warnings };
-  }
-  const parts = skillMdContent.split("---", 3);
-  if (parts.length < 3) {
-    errors.push("SKILL.md frontmatter is incomplete (missing closing ---)");
-    return { valid: false, errors, warnings };
-  }
-
-  // 2. Parse frontmatter fields
-  const fm = parts[1].trim();
-  const fields: Record<string, string> = {};
-  for (const line of fm.split("\n")) {
-    const match = line.match(/^(\w[\w-]*):\s*(.*)/);
-    if (match) fields[match[1]] = match[2].trim().replace(/^["']|["']$/g, "");
-  }
-
-  if (!fields.name) errors.push("Missing required field: name");
-  if (!fields.description) warnings.push("Missing field: description (recommended)");
-  if (fields.name && !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(fields.name)) {
-    warnings.push("Skill name should be alphanumeric with hyphens/underscores");
-  }
-
-  // 3. Check files referenced in frontmatter
-  if (fields.files || fm.includes("files:")) {
-    const fileLines = fm.split("\n").filter(l => l.trim().startsWith("- "));
-    for (const fl of fileLines) {
-      const ref = fl.trim().replace(/^-\s*/, "").trim();
-      if (ref && !virtualFiles.includes(ref) || pendingDeletes.has(ref)) {
-        errors.push(`Referenced file not found: ${ref}`);
-      }
-    }
-  }
-
-  // 4. Check body is not empty
-  const body = parts[2].trim();
-  if (!body) warnings.push("SKILL.md body is empty");
-
-  return { valid: errors.length === 0, errors, warnings };
-}
-
-// --- Tree data helpers ---
-
-type TreeNode = {
-  id: string;
-  name: string;
-  children?: TreeNode[];
-};
-
-function buildTreeData(files: string[]): TreeNode[] {
-  const root: TreeNode[] = [{ id: "SKILL.md", name: "SKILL.md" }];
-
-  // Build a nested map: each level maps name → { files, subdirs }
-  interface DirEntry { children: Map<string, DirEntry>; files: { id: string; name: string }[] }
-  const rootDir: DirEntry = { children: new Map(), files: [] };
-
-  for (const f of files) {
-    const parts = f.split("/");
-    if (parts.length === 1) {
-      rootDir.files.push({ id: f, name: f });
-    } else {
-      let current = rootDir;
-      for (let i = 0; i < parts.length - 1; i++) {
-        if (!current.children.has(parts[i])) {
-          current.children.set(parts[i], { children: new Map(), files: [] });
-        }
-        current = current.children.get(parts[i])!;
-      }
-      current.files.push({ id: f, name: parts[parts.length - 1] });
-    }
-  }
-
-  function buildLevel(dir: DirEntry, prefix: string): TreeNode[] {
-    const nodes: TreeNode[] = [];
-    // Subdirectories first
-    for (const [name, sub] of [...dir.children.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-      const dirPath = prefix ? `${prefix}/${name}` : name;
-      nodes.push({
-        id: `__dir__${dirPath}`,
-        name,
-        children: buildLevel(sub, dirPath),
-      });
-    }
-    // Then files
-    for (const f of dir.files.sort((a, b) => a.name.localeCompare(b.name))) {
-      nodes.push({ id: f.id, name: f.name });
-    }
-    return nodes;
-  }
-
-  root.push(...buildLevel(rootDir, ""));
-  return root;
-}
-
-function getFileIcon(name: string, isFolder: boolean, isOpen: boolean) {
-  if (isFolder) return isOpen ? <FolderOpen className="w-3.5 h-3.5 text-yellow-500" /> : <FolderClosed className="w-3.5 h-3.5 text-yellow-500" />;
-  if (name.endsWith(".md")) return <FileText className="w-3.5 h-3.5 text-blue-400" />;
-  if (name.endsWith(".py")) return <File className="w-3.5 h-3.5 text-green-400" />;
-  if (name.endsWith(".json")) return <File className="w-3.5 h-3.5 text-yellow-400" />;
-  if (name.endsWith(".js") || name.endsWith(".ts")) return <File className="w-3.5 h-3.5 text-amber-400" />;
-  return <File className="w-3.5 h-3.5 text-gray-400" />;
-}
+import { validateSkill } from "../../lib/validators/skill-validator";
+import { buildTreeData, getFileIcon, type TreeNode } from "../../lib/tree-helpers";
 
 // --- Diff Modal (Monaco DiffEditor) ---
 
