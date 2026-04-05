@@ -70,6 +70,9 @@
     "deletePermanently": "Delete Forever",
     "permanentDeleteConfirm": "This will remove the skill and all its files. This cannot be undone.",
     "importFailed": "Import failed. If the file has no YAML frontmatter, a name is required.",
+    "importUrl": "URL",
+    "urlPlaceholder": "https://clawhub.ai/author/skill or GitHub URL",
+    "urlImportError": "Failed to import: {{error}}",
     "deleted": "Deleted {{date}}"
   },
   "skillEditor": {

@@ -70,6 +70,9 @@
     "deletePermanently": "永久删除",
     "permanentDeleteConfirm": "这将删除该技能及其所有文件，此操作不可撤销。",
     "importFailed": "导入失败。如果文件没有 YAML 前置信息，则需要提供名称。",
+    "importUrl": "URL",
+    "urlPlaceholder": "https://clawhub.ai/author/skill 或 GitHub URL",
+    "urlImportError": "导入失败：{{error}}",
     "deleted": "删除于 {{date}}"
   },
   "skillEditor": {

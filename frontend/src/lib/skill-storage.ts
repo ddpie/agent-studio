@@ -362,11 +362,14 @@ export async function importSkillFromFiles(
 
   const id = crypto.randomUUID().slice(0, 8);
 
-  // Write all files to S3
-  for (const [path, content] of Object.entries(files)) {
-    const ok = await writeSkillFile(id, path, content);
-    if (!ok && path === "SKILL.md") return null;
-  }
+  // Write all files to S3 in parallel
+  const entries = Object.entries(files);
+  const results = await Promise.all(
+    entries.map(([path, content]) => writeSkillFile(id, path, content))
+  );
+  // Check SKILL.md write succeeded
+  const skillMdIdx = entries.findIndex(([p]) => p === "SKILL.md");
+  if (skillMdIdx >= 0 && !results[skillMdIdx]) return null;
 
   // Compute hash and update index
   const contentHash = await computeContentHash(files);

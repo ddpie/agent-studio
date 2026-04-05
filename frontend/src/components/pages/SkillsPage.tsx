@@ -25,6 +25,7 @@ export default function SkillsPage() {
   const [importUrl, setImportUrl] = useState("");
   const [urlImporting, setUrlImporting] = useState(false);
   const [urlImportError, setUrlImportError] = useState<string | null>(null);
+  const [urlImportStatus, setUrlImportStatus] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => {
@@ -70,14 +71,17 @@ export default function SkillsPage() {
     if (!url) return;
     setUrlImporting(true);
     setUrlImportError(null);
+    setUrlImportStatus(t("skills.urlFetching"));
     try {
-      const result = await importSkillFromUrl(url);
+      const result = await importSkillFromUrl(url, (status) => setUrlImportStatus(status));
       setShowUrlImport(false);
       setImportUrl("");
+      setUrlImportStatus("");
       refresh();
       navigate(`/skills/${result.id}`);
     } catch (err) {
       setUrlImportError(err instanceof Error ? err.message : t("skills.urlImportError", { error: "Unknown error" }));
+      setUrlImportStatus("");
     } finally {
       setUrlImporting(false);
     }
