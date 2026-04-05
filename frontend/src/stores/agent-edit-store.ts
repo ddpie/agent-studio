@@ -205,10 +205,34 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     if (!formData || !originalData) return {};
     const changes: Record<string, { old: string; new: string }> = {};
     // Skip complex object fields that can't be meaningfully diffed as strings
-    const skipKeys = new Set(["skills", "deployedSkillHashes", "tools", "suggestions"]);
+    const skipKeys = new Set(["deployedSkillHashes", "tools"]);
     const keys = new Set([...Object.keys(formData), ...Object.keys(originalData)]);
     for (const key of keys) {
       if (skipKeys.has(key)) continue;
+      if (key === "skills") {
+        // Serialize skills as readable list for diff
+        const oldSkills = ((originalData as Record<string, unknown>).skills as Array<{ name: string; description: string }>) || [];
+        const newSkills = ((formData as Record<string, unknown>).skills as Array<{ name: string; description: string }>) || [];
+        const serialize = (arr: Array<{ name: string; description: string }>) =>
+          arr.map(s => `${s.name}: ${s.description}`).join("\n") || "(none)";
+        const oldVal = serialize(oldSkills);
+        const newVal = serialize(newSkills);
+        if (oldVal !== newVal) {
+          changes[key] = { old: oldVal, new: newVal };
+        }
+        continue;
+      }
+      if (key === "suggestions") {
+        // Serialize suggestions as readable list
+        const oldSug = ((originalData as Record<string, unknown>).suggestions as string[]) || [];
+        const newSug = ((formData as Record<string, unknown>).suggestions as string[]) || [];
+        const oldVal = Array.isArray(oldSug) ? oldSug.join("\n") : String(oldSug);
+        const newVal = Array.isArray(newSug) ? newSug.join("\n") : String(newSug);
+        if (oldVal !== newVal) {
+          changes[key] = { old: oldVal, new: newVal };
+        }
+        continue;
+      }
       const oldVal = String((originalData as Record<string, unknown>)[key] ?? "");
       const newVal = String((formData as Record<string, unknown>)[key] ?? "");
       if (oldVal !== newVal) {
