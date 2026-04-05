@@ -473,11 +473,8 @@ def upload_to_s3(local_path: str, filename: str = "") -> str:
             ExtraArgs={"ContentType": content_type, "ContentDisposition": f'attachment; filename="{fname}"'},
         )
 
-        return _json.dumps({
-            "s3_key": s3_key,
-            "filename": fname,
-            "download_marker": f"__S3_DOWNLOAD__:{s3_key}:{fname}",
-        })
+        # Return plain text with download marker — LLM should include this verbatim in response
+        return f"File uploaded successfully. Include this download link in your response:\\n__S3_DOWNLOAD__:{s3_key}:{fname}"
     except Exception as e:
-        return _json.dumps({"error": f"Upload failed: {e}"})
+        return f"Upload failed: {e}"
 '''

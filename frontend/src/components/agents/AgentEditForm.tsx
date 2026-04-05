@@ -104,10 +104,10 @@ export default function AgentEditForm() {
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
         <div>
           <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-            {isCreateMode ? "Create Agent" : (formData.display_name || agentName)}
+            {isCreateMode ? t("agentEditor.create") : (formData.display_name || agentName)}
           </h2>
           <p className="text-[11px] text-gray-400">
-            {isCreateMode ? "Configure and deploy a new agent" : (
+            {isCreateMode ? t("agentEditor.createDesc", "Configure and deploy a new agent") : (
               <span className="flex items-center gap-1.5">
                 <span className="font-mono text-[10px] text-gray-400 select-all">{agentId}</span>
               </span>
@@ -173,7 +173,7 @@ export default function AgentEditForm() {
                 />
               </svg>
             ) : <Save className="w-3.5 h-3.5" />}
-            {saving && deploy.progressStep ? deploy.progressStep : (isCreateMode ? "Create" : "Update")}
+            {saving && deploy.progressStep ? deploy.progressStep : (isCreateMode ? t("agentEditor.create") : t("agentEditor.update"))}
           </button>
         </div>
       </div>
@@ -259,7 +259,7 @@ export default function AgentEditForm() {
                   className="flex items-center gap-1 px-3 py-1 text-[12px] font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
                 >
                   {deploy.autoFixing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wrench className="w-3 h-3" />}
-                  {deploy.autoFixing ? "Fixing..." : t("common.autoFix")}
+                  {deploy.autoFixing ? t("agentEditor.fixing", "Fixing...") : t("common.autoFix")}
                 </button>
                 <button
                   onClick={deploy.handlePreviewCode}

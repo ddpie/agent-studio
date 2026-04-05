@@ -394,11 +394,20 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
           <>
           {/* S3 download buttons */}
           {(() => {
-            const downloads = [...(message.content.matchAll(/__S3_DOWNLOAD__:([^:]+):([^\s"}\]]+)/g))];
+            // Scan both message content and tool-call blocks for download markers
+            const fullText = message.content || "";
+            const downloads = [...(fullText.matchAll(/__S3_DOWNLOAD__:([^:\s"}\]]+):([^\s"}\]]+)/g))];
             if (downloads.length === 0) return null;
+            // Deduplicate by s3_key
+            const seen = new Set<string>();
+            const unique = downloads.filter(([, key]) => {
+              if (seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            });
             return (
               <div className="flex flex-wrap gap-2 mb-2">
-                {downloads.map(([, key, filename], i) => (
+                {unique.map(([, key, filename], i) => (
                   <button
                     key={i}
                     onClick={async () => {
