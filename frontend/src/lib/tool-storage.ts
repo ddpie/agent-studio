@@ -154,17 +154,19 @@ export async function deleteToolItem(toolId: string): Promise<void> {
   });
 }
 
-/** Soft-delete a tool (mark as deleted via PutItem — no UpdateItem permission needed) */
+/** Soft-delete a tool (mark as deleted via PutItem) */
 export async function softDeleteToolItem(toolId: string): Promise<void> {
-  // Read current item first
+  const { username } = await getCurrentUser();
+
   const data = await ddbRequest("GetItem", {
     TableName: TABLE,
     Key: { toolId: { S: toolId } },
   }) as { Item?: Record<string, Record<string, unknown>> };
 
   if (!data.Item) throw new Error("Tool not found");
+  const owner = (data.Item.owner?.S as string) || "";
+  if (owner !== username && owner !== "__builtin__") throw new Error("Cannot delete other users' tools");
 
-  // Write back with deleted flag
   data.Item.deleted = { BOOL: true };
   data.Item.deleted_at = { S: new Date().toISOString() };
   await ddbRequest("PutItem", { TableName: TABLE, Item: data.Item });

@@ -486,7 +486,8 @@ Respond with ONLY a JSON block:
           </>
         )}
 
-        {/* Delete */}
+        {/* Delete — only for own tools or seed tools */}
+        {canEdit && (
         <button
           onClick={() => setConfirmDelete(true)}
           className={`p-1.5 rounded transition-colors ${isDark ? "text-red-400 hover:bg-red-900/20" : "text-red-400 hover:text-red-600 hover:bg-red-50"}`}
@@ -494,6 +495,7 @@ Respond with ONLY a JSON block:
         >
           <Trash2 className="w-4 h-4" />
         </button>
+        )}
 
         {/* AI Assistant toggle */}
         <button
