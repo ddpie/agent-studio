@@ -8,9 +8,21 @@ source "${SCRIPT_DIR}/../../.env"
 
 REGION="${AGENT_STUDIO_REGION}"
 
+wait_gsis_active() {
+  local table=$1
+  echo "Waiting for all GSIs on $table to become ACTIVE..."
+  while true; do
+    CREATING=$(aws dynamodb describe-table --table-name "$table" --region "$REGION" \
+      --query "Table.GlobalSecondaryIndexes[?IndexStatus!='ACTIVE'].IndexName" --output text)
+    [ -z "$CREATING" ] && break
+    echo "  Still creating: $CREATING"
+    sleep 15
+  done
+  echo "  All GSIs ACTIVE on $table"
+}
+
 echo "=== Adding GSIs to agent-studio-agents ==="
 
-# workspace-index GSI
 echo "Adding workspace-index GSI..."
 OUTPUT=$(aws dynamodb update-table \
   --table-name agent-studio-agents \
@@ -35,16 +47,8 @@ OUTPUT=$(aws dynamodb update-table \
   fi
 }
 
-# wait table-exists 对已存在的表会立即返回，必须轮询 TableStatus == ACTIVE
-echo "Waiting for agents table to become ACTIVE..."
-while true; do
-  STATUS=$(aws dynamodb describe-table --table-name agent-studio-agents --region "$REGION" --query "Table.TableStatus" --output text)
-  [ "$STATUS" = "ACTIVE" ] && break
-  echo "  Table status: $STATUS, waiting..."
-  sleep 10
-done
+wait_gsis_active agent-studio-agents
 
-# public-index GSI
 echo "Adding public-index GSI..."
 OUTPUT=$(aws dynamodb update-table \
   --table-name agent-studio-agents \
@@ -69,13 +73,7 @@ OUTPUT=$(aws dynamodb update-table \
   fi
 }
 
-echo "Waiting for agents table to become ACTIVE..."
-while true; do
-  STATUS=$(aws dynamodb describe-table --table-name agent-studio-agents --region "$REGION" --query "Table.TableStatus" --output text)
-  [ "$STATUS" = "ACTIVE" ] && break
-  echo "  Table status: $STATUS, waiting..."
-  sleep 10
-done
+wait_gsis_active agent-studio-agents
 
 echo "=== Adding GSI to agent-studio-tools ==="
 
@@ -102,13 +100,7 @@ OUTPUT=$(aws dynamodb update-table \
   fi
 }
 
-echo "Waiting for tools table to become ACTIVE..."
-while true; do
-  STATUS=$(aws dynamodb describe-table --table-name agent-studio-tools --region "$REGION" --query "Table.TableStatus" --output text)
-  [ "$STATUS" = "ACTIVE" ] && break
-  echo "  Table status: $STATUS, waiting..."
-  sleep 10
-done
+wait_gsis_active agent-studio-tools
 
 echo "=== Enabling PITR on existing tables ==="
 
