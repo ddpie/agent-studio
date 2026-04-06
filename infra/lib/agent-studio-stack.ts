@@ -6,13 +6,15 @@ import { Api } from "./constructs/api";
 import { Invoke } from "./constructs/invoke";
 import { Cdn } from "./constructs/cdn";
 
-export class AgentStudioStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, config: AgentStudioConfig, props?: cdk.StackProps) {
-    super(scope, id, props);
+export interface AgentStudioStackProps extends cdk.StackProps {
+  config: AgentStudioConfig;
+  webAclArn: string;
+}
 
-    if (config.region !== "us-east-1") {
-      throw new Error("Stack must deploy to us-east-1 (WAF CLOUDFRONT scope requirement)");
-    }
+export class AgentStudioStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props: AgentStudioStackProps) {
+    super(scope, id, props);
+    const config = props.config;
 
     const database = new Database(this, "Database", {
       existingAgentsTableName: "agent-studio-agents",
@@ -44,6 +46,7 @@ export class AgentStudioStack extends cdk.Stack {
       functionUrl: invoke.functionUrl,
       originVerifyHeaderName: "x-origin-verify",
       originVerifyHeaderValue: originVerifyValue,
+      webAclArn: props.webAclArn,
     });
   }
 }

@@ -2,7 +2,6 @@ import * as cdk from "aws-cdk-lib";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as s3 from "aws-cdk-lib/aws-s3";
-import * as wafv2 from "aws-cdk-lib/aws-wafv2";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
@@ -14,6 +13,7 @@ export interface CdnProps {
   functionUrl: lambda.FunctionUrl;
   originVerifyHeaderName: string;
   originVerifyHeaderValue: string;
+  webAclArn: string;
 }
 
 export class Cdn extends Construct {
@@ -28,48 +28,6 @@ export class Cdn extends Construct {
       bucketName: `agent-studio-frontend-${props.config.accountId}-${props.config.region}`,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
-    });
-
-    // WAF WebACL — 必须在 us-east-1（CloudFront scope 要求）
-    const webAcl = new wafv2.CfnWebACL(this, "WebAcl", {
-      defaultAction: { allow: {} },
-      scope: "CLOUDFRONT",
-      visibilityConfig: {
-        cloudWatchMetricsEnabled: true,
-        metricName: "agent-studio-waf",
-        sampledRequestsEnabled: true,
-      },
-      rules: [
-        {
-          name: "AWSManagedRulesCommonRuleSet",
-          priority: 0,
-          overrideAction: { none: {} },
-          visibilityConfig: {
-            cloudWatchMetricsEnabled: true,
-            metricName: "common-rules",
-            sampledRequestsEnabled: true,
-          },
-          statement: {
-            managedRuleGroupStatement: {
-              vendorName: "AWS",
-              name: "AWSManagedRulesCommonRuleSet",
-            },
-          },
-        },
-        {
-          name: "RateLimit",
-          priority: 1,
-          action: { block: {} },
-          visibilityConfig: {
-            cloudWatchMetricsEnabled: true,
-            metricName: "rate-limit",
-            sampledRequestsEnabled: true,
-          },
-          statement: {
-            rateBasedStatement: { limit: 2000, aggregateKeyType: "IP" },
-          },
-        },
-      ],
     });
 
     // API Gateway origin
@@ -115,7 +73,7 @@ export class Cdn extends Construct {
       errorResponses: [
         { httpStatus: 404, responseHttpStatus: 200, responsePagePath: "/index.html" },
       ],
-      webAclId: webAcl.attrArn,
+      webAclId: props.webAclArn,
     });
 
     new cdk.CfnOutput(this, "CloudFrontDomain", { value: this.distribution.distributionDomainName });
