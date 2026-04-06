@@ -44,6 +44,7 @@ export class AgentStudioStack extends cdk.Stack {
       config,
       restApi: api.restApi,
       functionUrl: invoke.functionUrl,
+      invokeLambda: invoke.invokeLambda,
       originVerifyHeaderName: "x-origin-verify",
       originVerifyHeaderValue: originVerifyValue,
       webAclArn: props.webAclArn,

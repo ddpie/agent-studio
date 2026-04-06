@@ -11,6 +11,7 @@ export interface CdnProps {
   config: AgentStudioConfig;
   restApi: apigateway.RestApi;
   functionUrl: lambda.FunctionUrl;
+  invokeLambda: lambda.Function;
   originVerifyHeaderName: string;
   originVerifyHeaderValue: string;
   webAclArn: string;
@@ -37,10 +38,8 @@ export class Cdn extends Construct {
       },
     });
 
-    // Lambda Function URL origin
-    const fnUrlDomain = cdk.Fn.select(2, cdk.Fn.split("/", props.functionUrl.url));
-    const invokeOrigin = new origins.HttpOrigin(fnUrlDomain, {
-      protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
+    // Lambda Function URL origin with OAC (IAM auth, CloudFront signs requests)
+    const invokeOrigin = new origins.FunctionUrlOrigin(props.functionUrl, {
       readTimeout: cdk.Duration.seconds(60), // default max; request quota increase for longer SSE
       keepaliveTimeout: cdk.Duration.seconds(60),
     });

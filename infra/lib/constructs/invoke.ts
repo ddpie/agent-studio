@@ -49,15 +49,10 @@ export class Invoke extends Construct {
       },
     });
 
-    // Function URL with RESPONSE_STREAM
+    // Function URL with IAM auth (CloudFront OAC signs requests)
     this.functionUrl = this.invokeLambda.addFunctionUrl({
-      authType: lambda.FunctionUrlAuthType.NONE,
-      invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
-      cors: {
-        allowedOrigins: ["*"],
-        allowedMethods: [lambda.HttpMethod.POST],
-        allowedHeaders: ["Authorization", "Content-Type"],
-      },
+      authType: lambda.FunctionUrlAuthType.AWS_IAM,
+      invokeMode: lambda.InvokeMode.BUFFERED, // Switch to RESPONSE_STREAM in Plan 3 with Lambda Web Adapter
     });
 
     // Grant DDB read for membership check
