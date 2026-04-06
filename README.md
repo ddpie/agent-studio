@@ -175,6 +175,7 @@ agent-studio/
 
 ```bash
 cp .env.example .env       # Configure AWS credentials (see env table below)
+cd infra && npm install && npx cdk deploy   # Deploy infrastructure (first time)
 bash scripts/deploy-agentcore.sh   # Deploy Meta-Agent
 cd frontend && npm install && npm run dev   # Start frontend
 ```
