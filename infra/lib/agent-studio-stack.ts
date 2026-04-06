@@ -4,6 +4,7 @@ import { AgentStudioConfig } from "./config";
 import { Database } from "./constructs/database";
 import { Api } from "./constructs/api";
 import { Invoke } from "./constructs/invoke";
+import { Cdn } from "./constructs/cdn";
 
 export class AgentStudioStack extends cdk.Stack {
   constructor(scope: Construct, id: string, config: AgentStudioConfig, props?: cdk.StackProps) {
@@ -26,6 +27,17 @@ export class AgentStudioStack extends cdk.Stack {
       config,
       workspacesTable: database.workspacesTable,
       agentsTable: database.agentsTable,
+    });
+
+    const originVerifyValue = process.env.ORIGIN_VERIFY_SECRET;
+    if (!originVerifyValue) throw new Error("Missing ORIGIN_VERIFY_SECRET env var — generate with: openssl rand -hex 32");
+
+    const cdn = new Cdn(this, "Cdn", {
+      config,
+      restApi: api.restApi,
+      functionUrl: invoke.functionUrl,
+      originVerifyHeaderName: "x-origin-verify",
+      originVerifyHeaderValue: originVerifyValue,
     });
   }
 }
