@@ -39,9 +39,14 @@ export class Cdn extends Construct {
     });
 
     // Lambda Function URL origin with OAC (IAM auth, CloudFront signs requests via SigV4)
-    const invokeOrigin = origins.FunctionUrlOrigin.withOriginAccessControl(props.functionUrl, {
-      readTimeout: cdk.Duration.seconds(60), // default max; request quota increase for longer SSE
-      keepaliveTimeout: cdk.Duration.seconds(60),
+    const invokeOrigin = origins.FunctionUrlOrigin.withOriginAccessControl(props.functionUrl);
+
+    // CloudFront OAC requires both InvokeFunctionUrl AND InvokeFunction permissions
+    // CDK auto-adds InvokeFunctionUrl but not InvokeFunction
+    props.invokeLambda.addPermission("CloudFrontInvokeFunction", {
+      principal: new cdk.aws_iam.ServicePrincipal("cloudfront.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: `arn:aws:cloudfront::${props.config.accountId}:distribution/*`,
     });
 
     // CloudFront distribution
