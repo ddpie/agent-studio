@@ -557,17 +557,8 @@ def upload_to_s3(local_path: str, filename: str = "") -> str:
         return _json.dumps({"error": f"File not found: {local_path}"})
 
     fname = filename or _os2.path.basename(local_path)
-    # Determine agent ID from available environment variables
-    agent_id = _os.getenv("AGENT_RUNTIME_ID", "") or _os.getenv("BEDROCK_AGENTCORE_RUNTIME_ID", "") or _os.getenv("AWS_LAMBDA_FUNCTION_NAME", "")
-    if not agent_id:
-        # Try to extract from runtime ARN if available
-        arn = _os.getenv("AGENT_RUNTIME_ARN", "") or _os.getenv("AWS_EXECUTION_ENV", "")
-        if "/" in arn:
-            agent_id = arn.rsplit("/", 1)[-1]
-    if not agent_id:
-        agent_id = "shared"
-    timestamp = int(_time.time())
-    s3_key = f"agents/{agent_id}/outputs/{timestamp}_{fname}"
+    import uuid as _uuid
+    s3_key = f"outputs/{_uuid.uuid4().hex[:12]}_{fname}"
 
     try:
         # Detect content type

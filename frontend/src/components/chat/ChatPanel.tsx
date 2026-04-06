@@ -392,13 +392,27 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
         )}
         {message.content ? (
           <>
-          {/* S3 download buttons */}
+          <div ref={contentDivRef} className={`prose prose-sm max-w-none ${isUser ? "prose-invert" : "dark:prose-invert"}`}>
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]} components={mdComponents}>{
+              // Strip [Attached file: ...] lines and __S3_DOWNLOAD__ markers from display
+              (() => {
+                let text = message.content;
+                if (message.attachments?.length) text = text.replace(/\n\n\[Attached file:[^\]]*\]/g, "").trim();
+                text = text.replace(/__S3_DOWNLOAD__:[^:]+:[^\s"}\]]+/g, "").trim();
+                return text;
+              })()
+            }</ReactMarkdown>
+            {showTypingIndicator && (
+              <span className="inline-flex items-center gap-1 text-gray-400 text-xs mt-2">
+                <Loader2 className="w-3 h-3 animate-spin" /> {t("chat.working")}
+              </span>
+            )}
+          </div>
+          {/* S3 download buttons — after message content */}
           {(() => {
-            // Scan both message content and tool-call blocks for download markers
             const fullText = message.content || "";
             const downloads = [...(fullText.matchAll(/__S3_DOWNLOAD__:([^:\s"}\]]+):([^\s"}\]]+)/g))];
             if (downloads.length === 0) return null;
-            // Deduplicate by s3_key
             const seen = new Set<string>();
             const unique = downloads.filter(([, key]) => {
               if (seen.has(key)) return false;
@@ -406,7 +420,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
               return true;
             });
             return (
-              <div className="flex flex-wrap gap-2 mb-2">
+              <div className="flex flex-wrap gap-2 mt-3">
                 {unique.map(([, key, filename], i) => (
                   <button
                     key={i}
@@ -430,22 +444,6 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
               </div>
             );
           })()}
-          <div ref={contentDivRef} className={`prose prose-sm max-w-none ${isUser ? "prose-invert" : "dark:prose-invert"}`}>
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]} components={mdComponents}>{
-              // Strip [Attached file: ...] lines and __S3_DOWNLOAD__ markers from display
-              (() => {
-                let text = message.content;
-                if (message.attachments?.length) text = text.replace(/\n\n\[Attached file:[^\]]*\]/g, "").trim();
-                text = text.replace(/__S3_DOWNLOAD__:[^:]+:[^\s"}\]]+/g, "").trim();
-                return text;
-              })()
-            }</ReactMarkdown>
-            {showTypingIndicator && (
-              <span className="inline-flex items-center gap-1 text-gray-400 text-xs mt-2">
-                <Loader2 className="w-3 h-3 animate-spin" /> {t("chat.working")}
-              </span>
-            )}
-          </div>
           </>
         ) : (
           <span className="inline-flex items-center gap-1 text-gray-400 text-sm">

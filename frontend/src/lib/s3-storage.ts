@@ -176,21 +176,22 @@ export async function listS3Keys(prefix: string): Promise<string[]> {
 /** Download a file from S3 and return a blob URL for browser download. */
 export async function generateDownloadUrl(key: string): Promise<string> {
   const signer = await getSigner();
-  // Encode each path segment individually to handle Chinese/special chars
-  const encodedKey = key.split("/").map(s => encodeURIComponent(s)).join("/");
-  const path = `/${BUCKET}/${encodedKey}`;
   const hostname = `s3.${agentConfig.region}.amazonaws.com`;
+  // Raw path for signing (SigV4 handles encoding internally)
+  const rawPath = `/${BUCKET}/${key}`;
+  // Encoded path for the actual HTTP request
+  const encodedPath = `/${BUCKET}/${key.split("/").map(s => encodeURIComponent(s)).join("/")}`;
 
   const signed = await signer.sign({
     method: "GET",
     protocol: "https:",
     hostname,
-    path,
+    path: rawPath,
     query: {},
     headers: { Host: hostname },
   });
 
-  const resp = await fetch(`https://${hostname}${path}`, {
+  const resp = await fetch(`https://${hostname}${encodedPath}`, {
     method: "GET",
     headers: signed.headers as Record<string, string>,
   });
