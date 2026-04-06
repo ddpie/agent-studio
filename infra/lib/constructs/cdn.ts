@@ -38,8 +38,8 @@ export class Cdn extends Construct {
       },
     });
 
-    // Lambda Function URL origin with OAC (IAM auth, CloudFront signs requests)
-    const invokeOrigin = new origins.FunctionUrlOrigin(props.functionUrl, {
+    // Lambda Function URL origin with OAC (IAM auth, CloudFront signs requests via SigV4)
+    const invokeOrigin = origins.FunctionUrlOrigin.withOriginAccessControl(props.functionUrl, {
       readTimeout: cdk.Duration.seconds(60), // default max; request quota increase for longer SSE
       keepaliveTimeout: cdk.Duration.seconds(60),
     });
