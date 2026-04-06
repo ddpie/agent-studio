@@ -3,6 +3,7 @@ import { Construct } from "constructs";
 import { AgentStudioConfig } from "./config";
 import { Database } from "./constructs/database";
 import { Api } from "./constructs/api";
+import { Invoke } from "./constructs/invoke";
 
 export class AgentStudioStack extends cdk.Stack {
   constructor(scope: Construct, id: string, config: AgentStudioConfig, props?: cdk.StackProps) {
@@ -19,6 +20,12 @@ export class AgentStudioStack extends cdk.Stack {
       agentsTable: database.agentsTable,
       skillsTable: database.skillsTable,
       toolsTable: database.toolsTable,
+    });
+
+    const invoke = new Invoke(this, "Invoke", {
+      config,
+      workspacesTable: database.workspacesTable,
+      agentsTable: database.agentsTable,
     });
   }
 }
