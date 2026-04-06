@@ -75,7 +75,10 @@ agent-studio/
 cp .env.example .env
 # 编辑 .env 填入 AWS 账号信息（见下方环境变量表）
 
-# 2. 部署 Meta-Agent
+# 2. 部署基础设施（首次）
+cd infra && npm install && npx cdk deploy
+
+# 3. 部署 Meta-Agent
 bash scripts/deploy-agentcore.sh
 
 # 3. 启动前端
