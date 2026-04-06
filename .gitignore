@@ -53,3 +53,10 @@ Thumbs.db
 # Logs
 *.log
 uv.lock
+
+# CDK
+infra/cdk.out/
+infra/.cdk.staging/
+infra/*.js
+infra/*.d.ts
+!infra/jest.config.js
