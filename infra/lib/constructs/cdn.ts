@@ -41,7 +41,7 @@ export class Cdn extends Construct {
     const fnUrlDomain = cdk.Fn.select(2, cdk.Fn.split("/", props.functionUrl.url));
     const invokeOrigin = new origins.HttpOrigin(fnUrlDomain, {
       protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
-      readTimeout: cdk.Duration.seconds(180),
+      readTimeout: cdk.Duration.seconds(60), // default max; request quota increase for longer SSE
       keepaliveTimeout: cdk.Duration.seconds(60),
     });
 
