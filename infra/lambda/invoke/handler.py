@@ -52,6 +52,10 @@ def handler(event, response_stream):
         response_stream.close()
         return
 
-    # Placeholder: send a test SSE event
-    response_stream.write(f"data: {{\"status\": \"ready\", \"user\": \"{user_id}\"}}\n\n".encode())
+    # Placeholder: send keepalive + test SSE event
+    # Real implementation (Plan 3) should send `: keepalive\n\n` every 30s
+    # to prevent CloudFront 60s origin read timeout from closing the connection
+    response_stream.write(b": keepalive\n\n")
+    data = json.dumps({"status": "ready", "user": user_id})
+    response_stream.write(f"data: {data}\n\n".encode())
     response_stream.close()
