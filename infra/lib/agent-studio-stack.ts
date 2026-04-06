@@ -10,6 +10,10 @@ export class AgentStudioStack extends cdk.Stack {
   constructor(scope: Construct, id: string, config: AgentStudioConfig, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    if (config.region !== "us-east-1") {
+      throw new Error("Stack must deploy to us-east-1 (WAF CLOUDFRONT scope requirement)");
+    }
+
     const database = new Database(this, "Database", {
       existingAgentsTableName: "agent-studio-agents",
       existingToolsTableName: "agent-studio-tools",
@@ -27,6 +31,8 @@ export class AgentStudioStack extends cdk.Stack {
       config,
       workspacesTable: database.workspacesTable,
       agentsTable: database.agentsTable,
+      skillsTable: database.skillsTable,
+      toolsTable: database.toolsTable,
     });
 
     const originVerifyValue = process.env.ORIGIN_VERIFY_SECRET;

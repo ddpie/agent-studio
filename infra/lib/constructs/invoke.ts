@@ -10,6 +10,8 @@ export interface InvokeProps {
   config: AgentStudioConfig;
   workspacesTable: dynamodb.Table;
   agentsTable: dynamodb.ITable;
+  skillsTable: dynamodb.ITable;
+  toolsTable: dynamodb.ITable;
 }
 
 export class Invoke extends Construct {
@@ -39,8 +41,8 @@ export class Invoke extends Construct {
         S3_BUCKET: props.config.s3Bucket,
         WORKSPACES_TABLE: props.workspacesTable.tableName,
         AGENTS_TABLE: props.agentsTable.tableName,
-        SKILLS_TABLE: "agent-studio-skills",
-        TOOLS_TABLE: "agent-studio-tools",
+        SKILLS_TABLE: props.skillsTable.tableName,
+        TOOLS_TABLE: props.toolsTable.tableName,
         COGNITO_USER_POOL_ID: props.config.cognitoUserPoolId,
         COGNITO_CLIENT_ID: props.config.cognitoClientId,
         META_AGENT_ARN: `arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:runtime/${props.config.metaAgentId}`,
