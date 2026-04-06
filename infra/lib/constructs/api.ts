@@ -42,9 +42,9 @@ export class Api extends Construct {
       environment: {
         S3_BUCKET: props.config.s3Bucket,
         WORKSPACES_TABLE: props.workspacesTable.tableName,
-        AGENTS_TABLE: "agent-studio-agents",
+        AGENTS_TABLE: props.agentsTable.tableName,
         SKILLS_TABLE: props.skillsTable.tableName,
-        TOOLS_TABLE: "agent-studio-tools",
+        TOOLS_TABLE: props.toolsTable.tableName,
         COGNITO_USER_POOL_ID: props.config.cognitoUserPoolId,
         COGNITO_CLIENT_ID: props.config.cognitoClientId,
         META_AGENT_ARN: `arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:runtime/${props.config.metaAgentId}`,
@@ -59,7 +59,7 @@ export class Api extends Construct {
     this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: [
         "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem",
-        "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan",
+        "dynamodb:DeleteItem", "dynamodb:Query",
       ],
       resources: [
         `arn:aws:dynamodb:${props.config.region}:${props.config.accountId}:table/agent-studio-agents`,

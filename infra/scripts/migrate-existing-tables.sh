@@ -12,7 +12,7 @@ echo "=== Adding GSIs to agent-studio-agents ==="
 
 # workspace-index GSI
 echo "Adding workspace-index GSI..."
-aws dynamodb update-table \
+OUTPUT=$(aws dynamodb update-table \
   --table-name agent-studio-agents \
   --region "$REGION" \
   --attribute-definitions \
@@ -27,7 +27,13 @@ aws dynamodb update-table \
       ],
       "Projection": {"ProjectionType": "ALL"}
     }
-  }]' 2>/dev/null || echo "  workspace-index may already exist, skipping."
+  }]' 2>&1) || {
+  if echo "$OUTPUT" | grep -q "ResourceInUseException"; then
+    echo "  workspace-index already exists, skipping."
+  else
+    echo "ERROR: $OUTPUT" >&2; exit 1
+  fi
+}
 
 # wait table-exists 对已存在的表会立即返回，必须轮询 TableStatus == ACTIVE
 echo "Waiting for agents table to become ACTIVE..."
@@ -40,7 +46,7 @@ done
 
 # public-index GSI
 echo "Adding public-index GSI..."
-aws dynamodb update-table \
+OUTPUT=$(aws dynamodb update-table \
   --table-name agent-studio-agents \
   --region "$REGION" \
   --attribute-definitions \
@@ -55,7 +61,13 @@ aws dynamodb update-table \
       ],
       "Projection": {"ProjectionType": "ALL"}
     }
-  }]' 2>/dev/null || echo "  public-index may already exist, skipping."
+  }]' 2>&1) || {
+  if echo "$OUTPUT" | grep -q "ResourceInUseException"; then
+    echo "  public-index already exists, skipping."
+  else
+    echo "ERROR: $OUTPUT" >&2; exit 1
+  fi
+}
 
 echo "Waiting for agents table to become ACTIVE..."
 while true; do
@@ -67,7 +79,7 @@ done
 
 echo "=== Adding GSI to agent-studio-tools ==="
 
-aws dynamodb update-table \
+OUTPUT=$(aws dynamodb update-table \
   --table-name agent-studio-tools \
   --region "$REGION" \
   --attribute-definitions \
@@ -82,7 +94,13 @@ aws dynamodb update-table \
       ],
       "Projection": {"ProjectionType": "ALL"}
     }
-  }]' 2>/dev/null || echo "  workspace-index may already exist, skipping."
+  }]' 2>&1) || {
+  if echo "$OUTPUT" | grep -q "ResourceInUseException"; then
+    echo "  workspace-index already exists, skipping."
+  else
+    echo "ERROR: $OUTPUT" >&2; exit 1
+  fi
+}
 
 echo "Waiting for tools table to become ACTIVE..."
 while true; do

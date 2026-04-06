@@ -31,7 +31,7 @@ def _get_signing_key(token: str) -> dict:
     for key in jwks.get("keys", []):
         if key["kid"] == kid:
             return key
-    raise JWTError(f"Key {kid} not found in JWKS")
+    raise JWTError("Signing key not found in JWKS")
 
 def verify_jwt(token: str) -> dict:
     """Verify Cognito JWT. Returns claims dict. Raises ValueError on failure."""
@@ -46,8 +46,8 @@ def verify_jwt(token: str) -> dict:
         if claims.get("token_use") != "id":
             raise ValueError("Not an id token")
         return claims
-    except JWTError as e:
-        raise ValueError(f"JWT verification failed: {e}")
+    except JWTError:
+        raise ValueError("Authentication failed")
 
 def get_membership(workspace_id: str, user_id: str) -> dict | None:
     resp = _ws_table.get_item(

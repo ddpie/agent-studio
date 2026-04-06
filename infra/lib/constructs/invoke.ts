@@ -38,7 +38,7 @@ export class Invoke extends Construct {
       environment: {
         S3_BUCKET: props.config.s3Bucket,
         WORKSPACES_TABLE: props.workspacesTable.tableName,
-        AGENTS_TABLE: "agent-studio-agents",
+        AGENTS_TABLE: props.agentsTable.tableName,
         SKILLS_TABLE: "agent-studio-skills",
         TOOLS_TABLE: "agent-studio-tools",
         COGNITO_USER_POOL_ID: props.config.cognitoUserPoolId,
@@ -82,6 +82,6 @@ export class Invoke extends Construct {
       resources: [`arn:aws:s3:::${props.config.s3Bucket}/uploads/*`],
     }));
 
-    new cdk.CfnOutput(scope, "InvokeFunctionUrl", { value: this.functionUrl.url });
+    new cdk.CfnOutput(this, "InvokeFunctionUrl", { value: this.functionUrl.url });
   }
 }
