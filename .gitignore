@@ -60,3 +60,5 @@ infra/.cdk.staging/
 infra/*.js
 infra/*.d.ts
 !infra/jest.config.js
+infra/node_modules/
+infra/.env
