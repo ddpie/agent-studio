@@ -159,7 +159,7 @@ export async function deleteAgent(agentId: string) {
 export async function fetchAgentFile(agentId: string, filePath: string): Promise<string> {
   try {
     const data = await apiGet<{ content?: string }>(
-      `/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filePath)}`
+      `/agents/${encodeURIComponent(agentId)}/files?path=${encodeURIComponent(filePath)}`
     );
     return data.content || "";
   } catch (err) {
@@ -170,7 +170,7 @@ export async function fetchAgentFile(agentId: string, filePath: string): Promise
 
 export async function putAgentFile(agentId: string, filePath: string, content: string) {
   return apiPut(
-    `/agents/${encodeURIComponent(agentId)}/files/${encodeURIComponent(filePath)}`,
+    `/agents/${encodeURIComponent(agentId)}/files?path=${encodeURIComponent(filePath)}`,
     { content }
   );
 }

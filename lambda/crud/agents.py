@@ -350,8 +350,8 @@ def unpublish_agent(wsId: str, agentId: str):
     return success({"agentId": agentId, "visibility": "private"})
 
 
-@router.get("/api/workspaces/<wsId>/agents/<agentId>/files/<path>")
-def get_agent_file(wsId: str, agentId: str, path: str):
+@router.get("/api/workspaces/<wsId>/agents/<agentId>/files")
+def get_agent_file(wsId: str, agentId: str):
     user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
     if err:
         return err
@@ -360,6 +360,7 @@ def get_agent_file(wsId: str, agentId: str, path: str):
     if id_err:
         return bad_request(id_err)
 
+    path = (router.current_event.query_string_parameters or {}).get("path", "")
     allowed_paths = {"system_prompt.txt", "tool_definitions.py"}
     if path not in allowed_paths:
         return bad_request("Invalid file path")
@@ -383,8 +384,8 @@ def get_agent_file(wsId: str, agentId: str, path: str):
     return success({"path": path, "content": content})
 
 
-@router.put("/api/workspaces/<wsId>/agents/<agentId>/files/<path>")
-def put_agent_file(wsId: str, agentId: str, path: str):
+@router.put("/api/workspaces/<wsId>/agents/<agentId>/files")
+def put_agent_file(wsId: str, agentId: str):
     user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
@@ -393,6 +394,7 @@ def put_agent_file(wsId: str, agentId: str, path: str):
     if id_err:
         return bad_request(id_err)
 
+    path = (router.current_event.query_string_parameters or {}).get("path", "")
     allowed_paths = {"system_prompt.txt", "tool_definitions.py"}
     if path not in allowed_paths:
         return bad_request("Invalid file path")
