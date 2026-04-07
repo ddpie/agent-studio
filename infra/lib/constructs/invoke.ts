@@ -26,6 +26,7 @@ export class Invoke extends Construct {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "invoke.handler.handler",
       code: lambda.Code.fromAsset(path.join(__dirname, "../../../lambda"), {
+        assetHashType: cdk.AssetHashType.SOURCE,
         bundling: {
           image: lambda.Runtime.PYTHON_3_12.bundlingImage,
           command: ["bash", "-c",
