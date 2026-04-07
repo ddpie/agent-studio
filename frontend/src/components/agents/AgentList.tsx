@@ -80,7 +80,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
               >
                 {agent.displayName.charAt(0).toUpperCase()}
               </button>
-              <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white dark:border-gray-900 ${agent.status === "READY" ? "bg-green-500" : "bg-yellow-500"}`} />
+              <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white dark:border-gray-900 ${agent.status === "active" ? "bg-green-500" : "bg-yellow-500"}`} />
             </div>
             <span className="text-[9px] text-gray-400 leading-tight text-center w-12 mt-0.5 line-clamp-2 break-all">
               {agent.displayName}
@@ -198,7 +198,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
                 </button>
                 <span
                   className={`w-2 h-2 rounded-full ${
-                    agent.status === "READY" ? "bg-green-500" : "bg-yellow-500"
+                    agent.status === "active" ? "bg-green-500" : "bg-yellow-500"
                   }`}
                   title={agent.status}
                 />

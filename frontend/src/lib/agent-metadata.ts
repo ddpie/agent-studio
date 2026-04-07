@@ -54,10 +54,12 @@ export async function fetchAgentMetadata(agentId: string): Promise<AgentMetadata
       default_model_id: item.default_model_id || item.model_id || "",
       system_prompt: systemPrompt,
       tool_definitions: toolDefinitions,
-      tool_names: item.tool_names || "",
+      tool_names: typeof item.tool_names === "string" ? item.tool_names : Array.isArray(item.tool_names) ? item.tool_names.join(",") : "",
       welcome_message: item.welcome_message || "",
       suggestions: item.suggestions || [],
-      tools: item.tool_names ? item.tool_names.split(",").map((t: string) => t.trim()).filter(Boolean) : [],
+      tools: typeof item.tool_names === "string"
+        ? item.tool_names.split(",").map((t: string) => t.trim()).filter(Boolean)
+        : Array.isArray(item.tool_names) ? item.tool_names : [],
       template_id: item.template_id || "",
       supports_images: item.supports_images || false,
       created_at: item.created_at || "",
