@@ -1,6 +1,8 @@
 import { fetchAuthSession } from "aws-amplify/auth";
+import { agentConfig } from "../config";
 
 const WS_KEY = "agent-studio-workspace-id";
+const API_BASE = agentConfig.apiUrl; // 空字符串 = 相对路径（生产），有值 = 直连 CloudFront（开发）
 
 export function getWorkspaceId(): string {
   return localStorage.getItem(WS_KEY) || "default";
@@ -32,7 +34,7 @@ export class ApiError extends Error {
 async function request<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
   const token = await getIdToken();
   const wsId = getWorkspaceId();
-  const url = `/api/workspaces/${wsId}${path}`;
+  const url = `${API_BASE}/api/workspaces/${wsId}${path}`;
 
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
   const init: RequestInit = { method, headers };
@@ -82,7 +84,7 @@ async function requestRaw<T = unknown>(method: string, fullPath: string, body?: 
 
   let resp: Response;
   try {
-    resp = await fetch(fullPath, init);
+    resp = await fetch(`${API_BASE}${fullPath}`, init);
   } catch (err) {
     throw new ApiError(0, { error: "Network error" });
   }

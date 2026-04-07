@@ -1,6 +1,7 @@
 """CRUD Lambda handler — main entry point."""
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler import APIGatewayRestResolver
+from aws_lambda_powertools.event_handler.api_gateway import CORSConfig
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 from crud.workspaces import router as workspaces_router
@@ -11,7 +12,13 @@ from crud.uploads import router as uploads_router
 from crud.secrets import router as secrets_router
 
 logger = Logger(service="agent-studio-crud")
-app = APIGatewayRestResolver()
+
+cors_config = CORSConfig(
+    allow_origin="*",
+    allow_headers=["Authorization", "Content-Type"],
+    max_age=3600,
+)
+app = APIGatewayRestResolver(cors=cors_config)
 
 app.include_router(workspaces_router)
 app.include_router(agents_router)

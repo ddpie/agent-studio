@@ -16,6 +16,10 @@ vi.mock("aws-amplify/auth", () => ({
   fetchAuthSession: vi.fn(),
 }));
 
+vi.mock("../../config", () => ({
+  agentConfig: { apiUrl: "" },
+}));
+
 import { fetchAuthSession } from "aws-amplify/auth";
 import { apiGet, apiPost, apiPut, apiDelete, getWorkspaceId, setWorkspaceId } from "../api-client";
 
