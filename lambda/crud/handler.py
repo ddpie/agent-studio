@@ -8,6 +8,7 @@ from crud.agents import router as agents_router
 from crud.skills import router as skills_router
 from crud.tools import router as tools_router
 from crud.uploads import router as uploads_router
+from crud.secrets import router as secrets_router
 
 logger = Logger(service="agent-studio-crud")
 app = APIGatewayRestResolver()
@@ -17,6 +18,7 @@ app.include_router(agents_router)
 app.include_router(skills_router)
 app.include_router(tools_router)
 app.include_router(uploads_router)
+app.include_router(secrets_router)
 
 
 @app.get("/api/health")
