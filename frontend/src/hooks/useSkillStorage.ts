@@ -17,7 +17,9 @@ import {
   writeAgentSkillFile,
   listAgentSkillFiles,
 } from "../lib/agent-skill-storage"
-import { deleteFromS3 } from "../lib/s3-storage"
+import {
+  deleteAgentSkillFiles,
+} from "../lib/api-client"
 
 export interface SkillStorageOps {
   getContent: (path?: string) => Promise<string | null>
@@ -69,21 +71,19 @@ export function useSkillStorage(
 
   const deleteFile = useCallback(async (path: string) => {
     if (isAgentMode) {
-      const key = `agents/${agentId}/skills/${agentSkillId}/${path}`
-      return deleteFromS3(key)
+      return deleteAgentSkillFiles(agentId!, agentSkillId!, path)
     }
     return deleteSkillFile(skillId, path)
   }, [skillId, agentId, agentSkillId, isAgentMode])
 
   const renameFile = useCallback(async (oldPath: string, newPath: string) => {
     if (isAgentMode) {
-      // Read old, write new, delete old
+      // Read old, write new, delete old — all via Lambda API
       const content = await readAgentSkillFile(agentId!, agentSkillId!, oldPath)
       if (content === null) return false
       const written = await writeAgentSkillFile(agentId!, agentSkillId!, newPath, content)
       if (!written) return false
-      const key = `agents/${agentId}/skills/${agentSkillId}/${oldPath}`
-      return deleteFromS3(key)
+      return deleteAgentSkillFiles(agentId!, agentSkillId!, oldPath)
     }
     return renameSkillFile(skillId, oldPath, newPath)
   }, [skillId, agentId, agentSkillId, isAgentMode])

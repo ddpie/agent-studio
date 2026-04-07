@@ -1,47 +1,16 @@
 /**
  * Agent-private skill storage — CRUD for skills copied into agent's S3 space.
  * Path pattern: agents/{agentId}/skills/{skillId}/{filePath}
- * Uses SigV4 signing pattern from skill-storage.ts.
+ * Migrated from SigV4 direct S3 access to Lambda API.
  */
-import { fetchAuthSession } from "aws-amplify/auth"
-import { agentConfig } from "../config"
-import { listS3Keys, deleteFromS3 } from "./s3-storage"
+import {
+  fetchAgentSkillFiles,
+  fetchAgentSkillFile,
+  putAgentSkillFile,
+  deleteAgentSkillFiles,
+} from "./api-client"
 import { getSkillFile, listSkillFiles as listGlobalSkillFiles, type SkillIndexEntry } from "./skill-storage"
 import type { AgentSkillEntry } from "./agent-metadata"
-
-const BUCKET = agentConfig.s3Bucket
-const S3_ENDPOINT = `https://s3.${agentConfig.region}.amazonaws.com`
-
-/** Validate file path to prevent traversal attacks */
-function sanitizePath(path: string): string {
-  const decoded = decodeURIComponent(path)
-  const normalized = decoded
-    .replace(/\\/g, "/")
-    .replace(/\.\./g, "")
-    .replace(/\/\//g, "/")
-    .replace(/^\//, "")
-  if (!normalized || normalized.startsWith("/")) return "invalid"
-  return normalized
-}
-
-async function getSigner() {
-  const { credentials } = await fetchAuthSession()
-  if (!credentials) throw new Error("Not authenticated")
-
-  const { SignatureV4 } = await import("@smithy/signature-v4")
-  const { Sha256 } = await import("@aws-crypto/sha256-js")
-
-  return new SignatureV4({
-    service: "s3",
-    region: agentConfig.region,
-    credentials: {
-      accessKeyId: credentials.accessKeyId,
-      secretAccessKey: credentials.secretAccessKey,
-      sessionToken: credentials.sessionToken,
-    },
-    sha256: Sha256,
-  })
-}
 
 /**
  * Compute a deterministic content hash from file contents.
@@ -105,7 +74,7 @@ export async function copySkillToAgent(
     const batchResults = await Promise.all(
       batch.map(async ([filePath, content]) => ({
         filePath,
-        success: await writeAgentSkillFile(agentId, newId, filePath, content),
+        success: await putAgentSkillFile(agentId, newId, filePath, content),
       }))
     )
     writeResults.push(...batchResults)
@@ -115,8 +84,9 @@ export async function copySkillToAgent(
 
   const failed = writeResults.filter(r => !r.success)
   if (failed.length > 0) {
+    // Clean up written files on failure
     const written = writeResults.filter(r => r.success).map(r => r.filePath)
-    await Promise.all(written.map(f => deleteFromS3(`agents/${agentId}/skills/${newId}/${f}`)))
+    await Promise.all(written.map(f => deleteAgentSkillFiles(agentId, newId, f)))
     throw new Error(`Failed to write: ${failed.map(r => r.filePath).join(", ")}`)
   }
 
@@ -141,29 +111,7 @@ export async function readAgentSkillFile(
   skillId: string,
   filePath: string,
 ): Promise<string | null> {
-  try {
-    const safePath = sanitizePath(filePath)
-    const signer = await getSigner()
-    const key = `agents/${agentId}/skills/${skillId}/${safePath}`
-    const url = new URL(`${S3_ENDPOINT}/${BUCKET}/${key}`)
-
-    const signed = await signer.sign({
-      method: "GET",
-      protocol: url.protocol,
-      hostname: url.hostname,
-      path: url.pathname,
-      query: {},
-      headers: { Host: url.host },
-    })
-
-    const resp = await fetch(url.toString(), {
-      headers: signed.headers as Record<string, string>,
-    })
-    if (!resp.ok) return null
-    return resp.text()
-  } catch {
-    return null
-  }
+  return fetchAgentSkillFile(agentId, skillId, filePath)
 }
 
 /** Write a file to agent's private skill directory */
@@ -173,38 +121,7 @@ export async function writeAgentSkillFile(
   filePath: string,
   content: string,
 ): Promise<boolean> {
-  try {
-    const safePath = sanitizePath(filePath)
-    const signer = await getSigner()
-    const key = `agents/${agentId}/skills/${skillId}/${safePath}`
-    const url = new URL(`${S3_ENDPOINT}/${BUCKET}/${key}`)
-    const body = new TextEncoder().encode(content)
-
-    const contentType = safePath.endsWith(".py") ? "text/x-python"
-      : safePath.endsWith(".json") ? "application/json"
-      : safePath.endsWith(".md") ? "text/markdown"
-      : safePath.endsWith(".sh") ? "text/x-shellscript"
-      : "text/plain"
-
-    const signed = await signer.sign({
-      method: "PUT",
-      protocol: url.protocol,
-      hostname: url.hostname,
-      path: url.pathname,
-      query: {},
-      headers: { Host: url.host, "Content-Type": contentType },
-      body,
-    })
-
-    const resp = await fetch(url.toString(), {
-      method: "PUT",
-      headers: signed.headers as Record<string, string>,
-      body,
-    })
-    return resp.ok
-  } catch {
-    return false
-  }
+  return putAgentSkillFile(agentId, skillId, filePath, content)
 }
 
 /** Delete all files for an agent's private skill */
@@ -212,16 +129,7 @@ export async function deleteAgentSkill(
   agentId: string,
   skillId: string,
 ): Promise<boolean> {
-  try {
-    const prefix = `agents/${agentId}/skills/${skillId}/`
-    const keys = await listS3Keys(prefix)
-    for (const key of keys) {
-      await deleteFromS3(key)
-    }
-    return true
-  } catch {
-    return false
-  }
+  return deleteAgentSkillFiles(agentId, skillId)
 }
 
 /** List all files in an agent's private skill directory */
@@ -229,15 +137,7 @@ export async function listAgentSkillFiles(
   agentId: string,
   skillId: string,
 ): Promise<string[]> {
-  try {
-    const prefix = `agents/${agentId}/skills/${skillId}/`
-    const keys = await listS3Keys(prefix)
-    return keys
-      .map(k => k.slice(prefix.length))
-      .filter(f => f && !f.startsWith("."))
-  } catch {
-    return []
-  }
+  return fetchAgentSkillFiles(agentId, skillId)
 }
 
 /**

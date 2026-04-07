@@ -358,3 +358,54 @@ export async function deleteSkillApi(skillId: string): Promise<boolean> {
     return false;
   }
 }
+
+// ── Agent 技能文件 ──
+
+export async function fetchAgentSkillFiles(agentId: string, skillId: string): Promise<string[]> {
+  try {
+    const resp = await apiGet<{ files: string[] }>(
+      `/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(skillId)}/files`
+    );
+    return resp.files;
+  } catch (err) {
+    console.error("fetchAgentSkillFiles failed:", err);
+    return [];
+  }
+}
+
+export async function fetchAgentSkillFile(agentId: string, skillId: string, path: string): Promise<string | null> {
+  try {
+    const resp = await apiGet<{ content: string }>(
+      `/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(skillId)}/files?path=${encodeURIComponent(path)}`
+    );
+    return resp.content;
+  } catch (err) {
+    console.error("fetchAgentSkillFile failed:", err);
+    return null;
+  }
+}
+
+export async function putAgentSkillFile(agentId: string, skillId: string, path: string, content: string): Promise<boolean> {
+  try {
+    await apiPut(
+      `/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(skillId)}/files?path=${encodeURIComponent(path)}`,
+      { content }
+    );
+    return true;
+  } catch (err) {
+    console.error("putAgentSkillFile failed:", err);
+    return false;
+  }
+}
+
+export async function deleteAgentSkillFiles(agentId: string, skillId: string, path?: string): Promise<boolean> {
+  try {
+    const url = `/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(skillId)}/files`
+      + (path ? `?path=${encodeURIComponent(path)}` : "");
+    await apiDelete(url);
+    return true;
+  } catch (err) {
+    console.error("deleteAgentSkillFiles failed:", err);
+    return false;
+  }
+}

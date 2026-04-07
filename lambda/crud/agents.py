@@ -12,7 +12,7 @@ from shared.auth import verify_jwt, get_membership, check_permission
 from shared.config import AGENTS_TABLE, REGION, ASSETS_BUCKET
 from shared.middleware import auth_check
 from shared.response import success, paginated, forbidden, not_found, bad_request, version_conflict, internal_error
-from shared.validators import validate_id, parse_pagination
+from shared.validators import validate_id, validate_path, parse_pagination
 
 router = Router()
 logger = Logger(child=True)
@@ -433,3 +433,126 @@ def put_agent_file(wsId: str, agentId: str):
     )
 
     return success({"path": path, "updated_at": now})
+
+
+# ── Agent Skill Files ──
+
+
+def _check_agent_ownership(agent_id: str, ws_id: str):
+    """Return agent item if valid, or (None, error_response)."""
+    table = _get_table()
+    agent = table.get_item(Key={"agentId": agent_id}, ConsistentRead=True).get("Item")
+    if not agent or agent.get("workspace_id") != ws_id:
+        return None, forbidden()
+    if agent.get("status") == "archived":
+        return None, forbidden()
+    return agent, None
+
+
+@router.get("/api/workspaces/<wsId>/agents/<agentId>/skills/<skillId>/files")
+def get_agent_skill_file(wsId: str, agentId: str, skillId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
+    if err:
+        return err
+
+    agent, agent_err = _check_agent_ownership(agentId, ws_id)
+    if agent_err:
+        return agent_err
+
+    path = (router.current_event.query_string_parameters or {}).get("path", "")
+    prefix = f"agents/{agentId}/skills/{skillId}/"
+
+    if not path:
+        # List files
+        s3 = _get_s3()
+        keys = []
+        try:
+            resp = s3.list_objects_v2(Bucket=ASSETS_BUCKET, Prefix=prefix, MaxKeys=200)
+            for obj in resp.get("Contents", []):
+                rel = obj["Key"][len(prefix):]
+                if rel and not rel.startswith("."):
+                    keys.append(rel)
+        except Exception:
+            logger.exception("Failed to list agent skill files")
+        return success({"files": keys})
+
+    path_err = validate_path(path)
+    if path_err:
+        return bad_request(path_err)
+
+    s3 = _get_s3()
+    try:
+        obj = s3.get_object(Bucket=ASSETS_BUCKET, Key=f"{prefix}{path}")
+        content = obj["Body"].read().decode("utf-8")
+    except Exception:
+        logger.exception("Failed to read agent skill file")
+        return not_found()
+    return success({"path": path, "content": content})
+
+
+@router.put("/api/workspaces/<wsId>/agents/<agentId>/skills/<skillId>/files")
+def put_agent_skill_file(wsId: str, agentId: str, skillId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
+    if err:
+        return err
+
+    agent, agent_err = _check_agent_ownership(agentId, ws_id)
+    if agent_err:
+        return agent_err
+
+    path = (router.current_event.query_string_parameters or {}).get("path", "")
+    path_err = validate_path(path)
+    if path_err:
+        return bad_request(path_err)
+
+    body = router.current_event.json_body or {}
+    content = body.get("content", "")
+
+    ct = "text/markdown" if path.endswith(".md") else "text/x-python" if path.endswith(".py") else "text/plain"
+    s3 = _get_s3()
+    try:
+        s3.put_object(
+            Bucket=ASSETS_BUCKET,
+            Key=f"agents/{agentId}/skills/{skillId}/{path}",
+            Body=content.encode("utf-8"),
+            ContentType=ct,
+        )
+    except Exception:
+        logger.exception("Failed to write agent skill file")
+        return internal_error("Failed to write file")
+    return success({"path": path})
+
+
+@router.delete("/api/workspaces/<wsId>/agents/<agentId>/skills/<skillId>/files")
+def delete_agent_skill_files(wsId: str, agentId: str, skillId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
+    if err:
+        return err
+
+    agent, agent_err = _check_agent_ownership(agentId, ws_id)
+    if agent_err:
+        return agent_err
+
+    path = (router.current_event.query_string_parameters or {}).get("path", "")
+    s3 = _get_s3()
+    prefix = f"agents/{agentId}/skills/{skillId}/"
+
+    if path:
+        path_err = validate_path(path)
+        if path_err:
+            return bad_request(path_err)
+        try:
+            s3.delete_object(Bucket=ASSETS_BUCKET, Key=f"{prefix}{path}")
+        except Exception:
+            logger.exception("Failed to delete agent skill file")
+            return internal_error("Failed to delete file")
+    else:
+        # Delete all files for this skill
+        try:
+            resp = s3.list_objects_v2(Bucket=ASSETS_BUCKET, Prefix=prefix, MaxKeys=200)
+            for obj in resp.get("Contents", []):
+                s3.delete_object(Bucket=ASSETS_BUCKET, Key=obj["Key"])
+        except Exception:
+            logger.exception("Failed to delete agent skill files")
+            return internal_error("Failed to delete files")
+    return success({"deleted": True})
