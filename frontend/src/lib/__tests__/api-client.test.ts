@@ -27,7 +27,7 @@ beforeEach(() => {
   mockFetchAuthSession.mockResolvedValue({
     tokens: { idToken: { toString: () => "mock-id-token" } },
   } as any);
-  global.fetch = vi.fn();
+  globalThis.fetch = vi.fn() as any;
 });
 
 describe("api-client", () => {
@@ -46,12 +46,12 @@ describe("api-client", () => {
   describe("apiGet", () => {
     it("发送带 Authorization header 的 GET 请求", async () => {
       const mockResponse = { ok: true, json: () => Promise.resolve({ items: [] }) };
-      (global.fetch as any).mockResolvedValue(mockResponse);
+      (globalThis.fetch as any).mockResolvedValue(mockResponse);
 
       setWorkspaceId("ws-abc");
       const result = await apiGet("/agents");
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         "/api/workspaces/ws-abc/agents",
         expect.objectContaining({
           method: "GET",
@@ -69,7 +69,7 @@ describe("api-client", () => {
     });
 
     it("HTTP 错误时抛出带 status 的错误", async () => {
-      (global.fetch as any).mockResolvedValue({
+      (globalThis.fetch as any).mockResolvedValue({
         ok: false, status: 403,
         json: () => Promise.resolve({ error: "Forbidden" }),
       });
@@ -80,13 +80,13 @@ describe("api-client", () => {
 
   describe("apiPost", () => {
     it("发送 JSON body 的 POST 请求", async () => {
-      (global.fetch as any).mockResolvedValue({
+      (globalThis.fetch as any).mockResolvedValue({
         ok: true, json: () => Promise.resolve({ agentId: "a-1" }),
       });
       setWorkspaceId("ws-abc");
       const result = await apiPost("/agents", { name: "test" });
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         "/api/workspaces/ws-abc/agents",
         expect.objectContaining({
           method: "POST",
@@ -102,13 +102,13 @@ describe("api-client", () => {
 
   describe("apiPut", () => {
     it("发送 PUT 请求", async () => {
-      (global.fetch as any).mockResolvedValue({
+      (globalThis.fetch as any).mockResolvedValue({
         ok: true, json: () => Promise.resolve({ updated: true }),
       });
       setWorkspaceId("ws-abc");
       await apiPut("/agents/a-1", { name: "updated" });
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         "/api/workspaces/ws-abc/agents/a-1",
         expect.objectContaining({ method: "PUT" })
       );
@@ -117,13 +117,13 @@ describe("api-client", () => {
 
   describe("apiDelete", () => {
     it("发送 DELETE 请求", async () => {
-      (global.fetch as any).mockResolvedValue({
+      (globalThis.fetch as any).mockResolvedValue({
         ok: true, json: () => Promise.resolve({ deleted: true }),
       });
       setWorkspaceId("ws-abc");
       await apiDelete("/agents/a-1");
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         "/api/workspaces/ws-abc/agents/a-1",
         expect.objectContaining({ method: "DELETE" })
       );

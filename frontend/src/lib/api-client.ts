@@ -18,9 +18,14 @@ async function getIdToken(forceRefresh = false): Promise<string> {
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, public body: { error?: string; code?: string }) {
+  status: number;
+  body: { error?: string; code?: string };
+
+  constructor(status: number, body: { error?: string; code?: string }) {
     super(`${status}: ${body?.error || "API error"}`);
     this.name = "ApiError";
+    this.status = status;
+    this.body = body;
   }
 }
 
