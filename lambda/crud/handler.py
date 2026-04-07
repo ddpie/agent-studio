@@ -5,12 +5,14 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 
 from crud.workspaces import router as workspaces_router
 from crud.agents import router as agents_router
+from crud.skills import router as skills_router
 
 logger = Logger(service="agent-studio-crud")
 app = APIGatewayRestResolver()
 
 app.include_router(workspaces_router)
 app.include_router(agents_router)
+app.include_router(skills_router)
 
 
 @app.get("/api/health")
