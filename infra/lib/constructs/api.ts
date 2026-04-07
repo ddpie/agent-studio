@@ -27,7 +27,7 @@ export class Api extends Construct {
       functionName: "agent-studio-crud",
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "crud.handler.lambda_handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "../../lambda"), {
+      code: lambda.Code.fromAsset(path.join(__dirname, "../../../lambda"), {
         bundling: {
           image: lambda.Runtime.PYTHON_3_12.bundlingImage,
           command: ["bash", "-c",

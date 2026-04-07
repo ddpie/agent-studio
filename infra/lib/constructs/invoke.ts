@@ -25,7 +25,7 @@ export class Invoke extends Construct {
       functionName: "agent-studio-invoke",
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "invoke.handler.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "../../lambda"), {
+      code: lambda.Code.fromAsset(path.join(__dirname, "../../../lambda"), {
         bundling: {
           image: lambda.Runtime.PYTHON_3_12.bundlingImage,
           command: ["bash", "-c",
