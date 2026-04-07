@@ -12,6 +12,27 @@ export function setWorkspaceId(wsId: string): void {
   localStorage.setItem(WS_KEY, wsId);
 }
 
+/**
+ * 确保 localStorage 中有有效的 workspace ID。
+ * 如果没有，从 API 获取用户的 workspace 列表并设置第一个。
+ */
+export async function ensureWorkspaceId(): Promise<string> {
+  const existing = localStorage.getItem(WS_KEY);
+  if (existing && existing !== "default") return existing;
+
+  try {
+    const resp = await apiGetRaw<{ items: Array<{ workspaceId: string }> }>("/api/workspaces");
+    if (resp.items?.length) {
+      const wsId = resp.items[0].workspaceId;
+      setWorkspaceId(wsId);
+      return wsId;
+    }
+  } catch (err) {
+    console.error("Failed to fetch workspaces for auto-setup:", err);
+  }
+  return existing || "default";
+}
+
 async function getIdToken(forceRefresh = false): Promise<string> {
   const session = await fetchAuthSession({ forceRefresh });
   const token = session.tokens?.idToken?.toString();

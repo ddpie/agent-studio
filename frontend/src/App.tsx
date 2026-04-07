@@ -1,9 +1,9 @@
-// src/App.tsx
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Authenticator } from "@aws-amplify/ui-react";
 import "@aws-amplify/ui-react/styles.css";
 import { RouterProvider } from "react-router";
 import { createRouter } from "./router";
+import { ensureWorkspaceId } from "./lib/api-client";
 
 export default function App() {
   return (
@@ -58,6 +58,21 @@ export default function App() {
 }
 
 function AuthenticatedApp({ signOut, user }: { signOut?: () => void; user?: { signInDetails?: { loginId?: string } } }) {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    ensureWorkspaceId().then(() => setReady(true));
+  }, []);
+
   const router = useMemo(() => createRouter(signOut, user), [signOut, user]);
+
+  if (!ready) {
+    return (
+      <div className="flex items-center justify-center h-screen text-gray-400">
+        Loading workspace...
+      </div>
+    );
+  }
+
   return <RouterProvider router={router} />;
 }
