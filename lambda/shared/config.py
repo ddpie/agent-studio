@@ -3,6 +3,7 @@ import os
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 S3_BUCKET = os.environ.get("S3_BUCKET", "")
+ASSETS_BUCKET = os.environ.get("S3_BUCKET", "")
 WORKSPACES_TABLE = os.environ.get("WORKSPACES_TABLE", "")
 AGENTS_TABLE = os.environ.get("AGENTS_TABLE", "")
 SKILLS_TABLE = os.environ.get("SKILLS_TABLE", "")
