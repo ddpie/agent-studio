@@ -455,6 +455,11 @@ def get_agent_skill_file(wsId: str, agentId: str, skillId: str):
     if err:
         return err
 
+    for name, val in [("agentId", agentId), ("skillId", skillId)]:
+        id_err = validate_id(val, name)
+        if id_err:
+            return bad_request(id_err)
+
     agent, agent_err = _check_agent_ownership(agentId, ws_id)
     if agent_err:
         return agent_err
@@ -496,6 +501,11 @@ def put_agent_skill_file(wsId: str, agentId: str, skillId: str):
     if err:
         return err
 
+    for name, val in [("agentId", agentId), ("skillId", skillId)]:
+        id_err = validate_id(val, name)
+        if id_err:
+            return bad_request(id_err)
+
     agent, agent_err = _check_agent_ownership(agentId, ws_id)
     if agent_err:
         return agent_err
@@ -528,6 +538,11 @@ def delete_agent_skill_files(wsId: str, agentId: str, skillId: str):
     user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
+
+    for name, val in [("agentId", agentId), ("skillId", skillId)]:
+        id_err = validate_id(val, name)
+        if id_err:
+            return bad_request(id_err)
 
     agent, agent_err = _check_agent_ownership(agentId, ws_id)
     if agent_err:
