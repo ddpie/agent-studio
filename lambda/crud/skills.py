@@ -266,6 +266,11 @@ def delete_skill(wsId: str, skillId: str):
     table = _get_table()
 
     if purge:
+        # Verify ownership BEFORE deleting anything
+        existing = table.get_item(Key={"skillId": skillId}, ConsistentRead=True).get("Item")
+        if not existing or existing.get("workspace_id") != ws_id:
+            return forbidden()
+
         # Permanent delete: remove S3 files (with pagination) + DDB record
         try:
             s3 = _get_s3()
@@ -513,7 +518,7 @@ def get_skill_file(wsId: str, skillId: str):
         return not_found()
     except Exception:
         logger.exception("Failed to read skill file %s/%s", skillId, path)
-        return not_found()
+        return internal_error()
 
 
 @router.put("/api/workspaces/<wsId>/skills/<skillId>/files")
