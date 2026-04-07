@@ -1,0 +1,424 @@
+"""Agent CRUD endpoints."""
+import json
+import uuid
+from datetime import datetime
+
+import boto3
+from aws_lambda_powertools import Logger
+from aws_lambda_powertools.event_handler.api_gateway import Router
+from boto3.dynamodb.conditions import Key
+
+from shared.auth import verify_jwt, get_membership, check_permission
+from shared.config import AGENTS_TABLE, REGION, ASSETS_BUCKET
+from shared.middleware import auth_check
+from shared.response import success, paginated, forbidden, not_found, bad_request, version_conflict, internal_error
+from shared.validators import validate_id, parse_pagination
+
+router = Router()
+logger = Logger(child=True)
+
+_table = None
+_s3 = None
+
+
+def _get_table():
+    global _table
+    if _table is None:
+        _table = boto3.resource("dynamodb", region_name=REGION).Table(AGENTS_TABLE)
+    return _table
+
+
+def _get_s3():
+    global _s3
+    if _s3 is None:
+        _s3 = boto3.client("s3", region_name=REGION)
+    return _s3
+
+
+ALLOWED_AGENT_FIELDS = {
+    "name", "description", "model_id", "template_id",
+    "supports_images", "welcome_message", "suggestions",
+    "tool_names", "skill_ids",
+}
+
+
+def _build_agent_item(body: dict, ws_id: str, agent_id: str, user_id: str, now: str) -> dict:
+    item = {
+        "agentId": agent_id,
+        "workspace_id": ws_id,
+        "name": body.get("name", ""),
+        "description": body.get("description", ""),
+        "model_id": body.get("model_id", ""),
+        "template_id": body.get("template_id", ""),
+        "supports_images": body.get("supports_images", False),
+        "welcome_message": body.get("welcome_message", ""),
+        "suggestions": body.get("suggestions", []),
+        "tool_names": body.get("tool_names", []),
+        "skill_ids": body.get("skill_ids", []),
+        "status": "active",
+        "visibility": "private",
+        "created_by": user_id,
+        "created_at": now,
+        "updated_at": now,
+    }
+    return item
+
+
+def _agent_response(item: dict) -> dict:
+    return {
+        "agentId": item.get("agentId", ""),
+        "workspace_id": item.get("workspace_id", ""),
+        "name": item.get("name", ""),
+        "description": item.get("description", ""),
+        "model_id": item.get("model_id", ""),
+        "template_id": item.get("template_id", ""),
+        "supports_images": item.get("supports_images", False),
+        "welcome_message": item.get("welcome_message", ""),
+        "suggestions": item.get("suggestions", []),
+        "tool_names": item.get("tool_names", []),
+        "skill_ids": item.get("skill_ids", []),
+        "status": item.get("status", "active"),
+        "visibility": item.get("visibility", "private"),
+        "created_by": item.get("created_by", ""),
+        "created_at": item.get("created_at", ""),
+        "updated_at": item.get("updated_at", ""),
+    }
+
+
+@router.get("/api/workspaces/<wsId>/agents")
+def list_agents(wsId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event)
+    if err:
+        return err
+
+    limit, cursor = parse_pagination(router.current_event.query_string_parameters or {})
+    table = _get_table()
+
+    query_kwargs = {
+        "IndexName": "workspace-index",
+        "KeyConditionExpression": Key("workspace_id").eq(ws_id),
+        "ScanIndexForward": False,
+        "Limit": limit,
+        "FilterExpression": "attribute_not_exists(#st) OR #st <> :archived",
+        "ExpressionAttributeNames": {"#st": "status"},
+        "ExpressionAttributeValues": {":archived": "archived"},
+    }
+    if cursor:
+        try:
+            query_kwargs["ExclusiveStartKey"] = json.loads(
+                __import__("base64").b64decode(cursor).decode()
+            )
+        except Exception:
+            return bad_request("Invalid cursor")
+
+    resp = table.query(**query_kwargs)
+    items = [_agent_response(i) for i in resp.get("Items", [])]
+
+    last_key = resp.get("LastEvaluatedKey")
+    while len(items) < limit and last_key:
+        query_kwargs["ExclusiveStartKey"] = last_key
+        query_kwargs["Limit"] = limit - len(items)
+        resp = table.query(**query_kwargs)
+        items.extend([_agent_response(i) for i in resp.get("Items", [])])
+        last_key = resp.get("LastEvaluatedKey")
+
+    next_cursor = None
+    if last_key:
+        import base64
+        next_cursor = base64.b64encode(json.dumps(last_key).encode()).decode()
+
+    return paginated(items, next_cursor)
+
+
+@router.get("/api/workspaces/<wsId>/agents/<agentId>")
+def get_agent(wsId: str, agentId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event)
+    if err:
+        return err
+
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+
+    table = _get_table()
+    resp = table.get_item(Key={"agentId": agentId}, ConsistentRead=True)
+    item = resp.get("Item")
+    if not item or item.get("workspace_id") != ws_id:
+        return forbidden()
+    if item.get("status") == "archived":
+        return forbidden()
+
+    return success(_agent_response(item))
+
+
+@router.post("/api/workspaces/<wsId>/agents")
+def create_agent(wsId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    if err:
+        return err
+
+    body = router.current_event.json_body or {}
+    name = body.get("name", "").strip()
+    if not name:
+        return bad_request("name is required")
+    if len(name) > 200:
+        return bad_request("name must be 200 characters or less")
+
+    agent_id = str(uuid.uuid4())
+    now = datetime.utcnow().isoformat() + "Z"
+    item = _build_agent_item(body, ws_id, agent_id, user_id, now)
+
+    table = _get_table()
+    table.put_item(Item=item)
+
+    return success(_agent_response(item), status_code=201)
+
+
+@router.put("/api/workspaces/<wsId>/agents/<agentId>")
+def update_agent(wsId: str, agentId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    if err:
+        return err
+
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+
+    table = _get_table()
+    existing = table.get_item(Key={"agentId": agentId}, ConsistentRead=True).get("Item")
+    if not existing or existing.get("workspace_id") != ws_id:
+        return forbidden()
+    if existing.get("status") == "archived":
+        return forbidden()
+
+    body = router.current_event.json_body or {}
+    now = datetime.utcnow().isoformat() + "Z"
+    expected_updated_at = body.get("expected_updated_at")
+    if not expected_updated_at:
+        return bad_request("expected_updated_at is required for optimistic concurrency control")
+
+    update_parts = []
+    expr_names = {}
+    expr_values = {":now": now, ":ws": ws_id, ":expected": expected_updated_at}
+
+    for field in ALLOWED_AGENT_FIELDS:
+        if field in body:
+            safe_name = f"#f_{field}"
+            safe_val = f":v_{field}"
+            update_parts.append(f"{safe_name} = {safe_val}")
+            expr_names[safe_name] = field
+            expr_values[safe_val] = body[field]
+
+    update_parts.append("updated_at = :now")
+    update_expr = "SET " + ", ".join(update_parts)
+
+    condition = "attribute_exists(agentId) AND workspace_id = :ws AND updated_at = :expected"
+
+    try:
+        resp = table.update_item(
+            Key={"agentId": agentId},
+            UpdateExpression=update_expr,
+            **({'ExpressionAttributeNames': expr_names} if expr_names else {}),
+            ExpressionAttributeValues=expr_values,
+            ConditionExpression=condition,
+            ReturnValues="ALL_NEW",
+        )
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        return version_conflict("Agent was modified by another request")
+
+    return success(_agent_response(resp.get("Attributes", {})))
+
+
+@router.delete("/api/workspaces/<wsId>/agents/<agentId>")
+def delete_agent(wsId: str, agentId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    if err:
+        return err
+
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+
+    table = _get_table()
+    try:
+        table.update_item(
+            Key={"agentId": agentId},
+            UpdateExpression="SET #st = :archived, updated_at = :now",
+            ExpressionAttributeNames={"#st": "status"},
+            ExpressionAttributeValues={
+                ":archived": "archived",
+                ":now": datetime.utcnow().isoformat() + "Z",
+                ":ws": ws_id,
+            },
+            ConditionExpression="attribute_exists(agentId) AND workspace_id = :ws",
+        )
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        return forbidden()
+
+    return success({"deleted": True})
+
+
+@router.post("/api/workspaces/<wsId>/agents/<agentId>/deploy")
+def deploy_agent(wsId: str, agentId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    if err:
+        return err
+
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+
+    table = _get_table()
+    existing = table.get_item(Key={"agentId": agentId}, ConsistentRead=True).get("Item")
+    if not existing or existing.get("workspace_id") != ws_id:
+        return forbidden()
+
+    skill_ids = existing.get("skill_ids", [])
+    if skill_ids:
+        from shared.config import SKILLS_TABLE
+        skills_table = boto3.resource("dynamodb", region_name=REGION).Table(SKILLS_TABLE)
+        unapproved = []
+        for sid in skill_ids:
+            skill_item = skills_table.get_item(Key={"skillId": sid}, ConsistentRead=True).get("Item")
+            if skill_item and not skill_item.get("approved", False):
+                unapproved.append(sid)
+        if unapproved:
+            return bad_request("Cannot deploy: some referenced skills are not approved")
+
+    now = datetime.utcnow().isoformat() + "Z"
+    table.update_item(
+        Key={"agentId": agentId},
+        UpdateExpression="SET updated_at = :now",
+        ExpressionAttributeValues={":now": now, ":ws": ws_id},
+        ConditionExpression="attribute_exists(agentId) AND workspace_id = :ws",
+    )
+
+    logger.info("Deploy triggered", extra={"agentId": agentId, "workspace_id": ws_id})
+
+    return success({"agentId": agentId, "status": "deploying"}, status_code=202)
+
+
+@router.post("/api/workspaces/<wsId>/agents/<agentId>/publish")
+def publish_agent(wsId: str, agentId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    if err:
+        return err
+
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+
+    table = _get_table()
+    now = datetime.utcnow().isoformat() + "Z"
+    try:
+        table.update_item(
+            Key={"agentId": agentId},
+            UpdateExpression="SET visibility = :pub, updated_at = :now",
+            ExpressionAttributeValues={":pub": "public", ":now": now, ":ws": ws_id},
+            ConditionExpression="attribute_exists(agentId) AND workspace_id = :ws",
+        )
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        return forbidden()
+
+    return success({"agentId": agentId, "visibility": "public"})
+
+
+@router.post("/api/workspaces/<wsId>/agents/<agentId>/unpublish")
+def unpublish_agent(wsId: str, agentId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    if err:
+        return err
+
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+
+    table = _get_table()
+    now = datetime.utcnow().isoformat() + "Z"
+    try:
+        table.update_item(
+            Key={"agentId": agentId},
+            UpdateExpression="SET visibility = :priv, updated_at = :now",
+            ExpressionAttributeValues={":priv": "private", ":now": now, ":ws": ws_id},
+            ConditionExpression="attribute_exists(agentId) AND workspace_id = :ws",
+        )
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        return forbidden()
+
+    return success({"agentId": agentId, "visibility": "private"})
+
+
+@router.get("/api/workspaces/<wsId>/agents/<agentId>/files/<path>")
+def get_agent_file(wsId: str, agentId: str, path: str):
+    user_id, ws_id, member, err = auth_check(router.current_event)
+    if err:
+        return err
+
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+
+    allowed_paths = {"system_prompt.txt", "tool_definitions.py"}
+    if path not in allowed_paths:
+        return bad_request("Invalid file path")
+
+    table = _get_table()
+    existing = table.get_item(Key={"agentId": agentId}, ConsistentRead=True).get("Item")
+    if not existing or existing.get("workspace_id") != ws_id:
+        return forbidden()
+
+    s3_key = f"agents/{agentId}/{path}"
+    s3 = _get_s3()
+    try:
+        obj = s3.get_object(Bucket=ASSETS_BUCKET, Key=s3_key)
+        content = obj["Body"].read().decode("utf-8")
+    except s3.exceptions.NoSuchKey:
+        return not_found()
+    except Exception:
+        logger.exception("Failed to read S3 file")
+        return not_found()
+
+    return success({"path": path, "content": content})
+
+
+@router.put("/api/workspaces/<wsId>/agents/<agentId>/files/<path>")
+def put_agent_file(wsId: str, agentId: str, path: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    if err:
+        return err
+
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+
+    allowed_paths = {"system_prompt.txt", "tool_definitions.py"}
+    if path not in allowed_paths:
+        return bad_request("Invalid file path")
+
+    table = _get_table()
+    existing = table.get_item(Key={"agentId": agentId}, ConsistentRead=True).get("Item")
+    if not existing or existing.get("workspace_id") != ws_id:
+        return forbidden()
+
+    body = router.current_event.json_body or {}
+    content = body.get("content", "")
+    if not content:
+        return bad_request("content is required")
+
+    s3_key = f"agents/{agentId}/{path}"
+    s3 = _get_s3()
+    s3.put_object(
+        Bucket=ASSETS_BUCKET,
+        Key=s3_key,
+        Body=content.encode("utf-8"),
+        ContentType="text/plain" if path.endswith(".txt") else "text/x-python",
+    )
+
+    now = datetime.utcnow().isoformat() + "Z"
+    table.update_item(
+        Key={"agentId": agentId},
+        UpdateExpression="SET updated_at = :now",
+        ExpressionAttributeValues={":now": now},
+    )
+
+    return success({"path": path, "updated_at": now})
