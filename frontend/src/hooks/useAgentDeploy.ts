@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { writeJsonToS3 } from "../lib/s3-storage";
+import { updateAgent } from "../lib/api-client";
 import { invokeMetaAgent } from "../lib/agentcore-client";
 import { useEditAssistantStore } from "../stores/edit-assistant-store";
 import { useTranslation } from "react-i18next";
@@ -303,8 +304,7 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
       if (!failed) {
         markSaved();
         if (agentId && formData?.tool_definitions) {
-          const metaKey = `agents/${agentId}/metadata.json`;
-          writeJsonToS3(metaKey, { ...formData, agent_id: agentId });
+          updateAgent(agentId, { ...formData, agent_id: agentId }).catch(() => {});
         }
         if (isCreateMode) onNavigateBack();
       }
