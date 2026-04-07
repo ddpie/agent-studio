@@ -18,5 +18,14 @@ export default defineConfig(({ mode }) => {
       __AGENT_STUDIO_COGNITO_IDENTITY_POOL_ID__: JSON.stringify(env.AGENT_STUDIO_COGNITO_IDENTITY_POOL_ID || ''),
       __AGENT_STUDIO_S3_BUCKET__: JSON.stringify(env.AGENT_STUDIO_S3_BUCKET || ''),
     },
+    server: {
+      proxy: {
+        '/api': {
+          target: env.AGENT_STUDIO_API_URL || '',
+          changeOrigin: true,
+          secure: true,
+        },
+      },
+    },
   }
 })
