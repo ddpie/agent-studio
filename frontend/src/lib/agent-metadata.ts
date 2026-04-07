@@ -60,7 +60,7 @@ export async function fetchAgentMetadataLight(agentId: string): Promise<AgentMet
       updated_at: item.updated_at || "",
       created_by: item.created_by || "",
       visibility: item.visibility || "private",
-      skills: item.skill_ids || [],
+      skills: item.skills || item.skill_ids || [],
       deployedSkillHashes: item.deployedSkillHashes,
     } as AgentMetadata;
   } catch (err) {
@@ -103,7 +103,7 @@ export async function fetchAgentMetadata(agentId: string): Promise<AgentMetadata
       updated_at: item.updated_at || "",
       created_by: item.created_by || "",
       visibility: item.visibility || "private",
-      skills: item.skill_ids || [],
+      skills: item.skills || item.skill_ids || [],
       deployedSkillHashes: item.deployedSkillHashes,
     } as AgentMetadata;
   } catch (err) {

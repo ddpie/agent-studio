@@ -36,9 +36,9 @@ def _get_s3():
 
 
 ALLOWED_AGENT_FIELDS = {
-    "name", "description", "model_id", "template_id",
-    "supports_images", "welcome_message", "suggestions",
-    "tool_names", "skill_ids",
+    "name", "display_name", "description", "model_id", "default_model_id",
+    "template_id", "supports_images", "welcome_message", "suggestions",
+    "tool_names", "skill_ids", "skills",
 }
 
 
@@ -47,14 +47,17 @@ def _build_agent_item(body: dict, ws_id: str, agent_id: str, user_id: str, now: 
         "agentId": agent_id,
         "workspace_id": ws_id,
         "name": body.get("name", ""),
+        "display_name": body.get("display_name", ""),
         "description": body.get("description", ""),
         "model_id": body.get("model_id", ""),
+        "default_model_id": body.get("default_model_id", ""),
         "template_id": body.get("template_id", ""),
         "supports_images": body.get("supports_images", False),
         "welcome_message": body.get("welcome_message", ""),
         "suggestions": body.get("suggestions", []),
         "tool_names": body.get("tool_names", []),
         "skill_ids": body.get("skill_ids", []),
+        "skills": body.get("skills", []),
         "status": "active",
         "visibility": "private",
         "created_by": user_id,
@@ -69,14 +72,17 @@ def _agent_response(item: dict) -> dict:
         "agentId": item.get("agentId", ""),
         "workspace_id": item.get("workspace_id", ""),
         "name": item.get("name", ""),
+        "display_name": item.get("display_name", ""),
         "description": item.get("description", ""),
         "model_id": item.get("model_id", ""),
+        "default_model_id": item.get("default_model_id", ""),
         "template_id": item.get("template_id", ""),
         "supports_images": item.get("supports_images", False),
         "welcome_message": item.get("welcome_message", ""),
         "suggestions": item.get("suggestions", []),
         "tool_names": item.get("tool_names", []),
         "skill_ids": item.get("skill_ids", []),
+        "skills": item.get("skills", []),
         "status": item.get("status", "active"),
         "visibility": item.get("visibility", "private"),
         "created_by": item.get("created_by", ""),
