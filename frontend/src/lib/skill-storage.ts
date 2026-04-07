@@ -1,12 +1,19 @@
 /**
- * Skill CRUD via S3 direct access (no Meta-Agent LLM).
- * Uses s3-storage.ts for signed S3 operations.
+ * Skill CRUD via Lambda API (migrated from S3 direct access).
+ * Pure functions (parseFrontmatter, wrapWithFrontmatter, computeContentHash) are preserved.
  */
-import { readJsonFromS3, writeJsonToS3, deleteFromS3 } from "./s3-storage";
-import { fetchAuthSession } from "aws-amplify/auth";
-import { agentConfig } from "../config";
-
-const INDEX_KEY = "skills/index.json";
+import {
+  fetchSkills,
+  fetchDeletedSkills,
+  fetchSkillFile,
+  fetchSkillFiles,
+  putSkillFile,
+  deleteSkillFileApi,
+  deleteSkillApi,
+  restoreSkillApi,
+  permanentlyDeleteSkillApi,
+  importSkillApi,
+} from "./api-client";
 
 /**
  * Compute a deterministic content hash from file contents.
@@ -25,227 +32,96 @@ export interface SkillIndexEntry {
   id: string;
   name: string;
   description: string;
-  contentHash?: string;    // 每次保存时更新
-  files?: string[];        // 文件列表
+  contentHash?: string;    // not stored in DDB — recompute after reading files
+  files?: string[];        // not stored in DDB — recompute after reading files
   deleted?: boolean;
   deletedAt?: number;
 }
 
-/** List all skills from index.json (excludes deleted) */
+function mapSkillItem(item: Record<string, any>): SkillIndexEntry {
+  return {
+    id: item.skillId || "",
+    name: item.name || "",
+    description: item.description || "",
+    contentHash: "",
+    files: [],
+    deleted: item.deleted || false,
+    deletedAt: item.deleted_at ? new Date(item.deleted_at).getTime() : undefined,
+  };
+}
+
+/** List all skills (excludes deleted) */
 export async function listSkills(): Promise<SkillIndexEntry[]> {
-  const index = await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY);
-  return (index ?? []).filter(s => !s.deleted);
-}
-
-/** List deleted (trashed) skills */
-export async function listDeletedSkills(): Promise<SkillIndexEntry[]> {
-  const index = await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY);
-  return (index ?? []).filter(s => s.deleted);
-}
-
-/** Read full SKILL.md content */
-export async function getSkillContent(id: string): Promise<string | null> {
-  return getSkillFile(id, "SKILL.md");
-}
-
-/** Validate file path to prevent traversal attacks */
-function sanitizePath(path: string): string {
-  const decoded = decodeURIComponent(path);
-  const normalized = decoded
-    .replace(/\\/g, "/")       // backslash → forward slash
-    .replace(/\.\./g, "")      // remove ..
-    .replace(/\/\//g, "/")     // collapse //
-    .replace(/^\//, "");       // no leading /
-  if (!normalized || normalized.startsWith("/")) return "invalid";
-  return normalized;
-}
-
-/** Read any file from a skill directory */
-export async function getSkillFile(id: string, path: string): Promise<string | null> {
   try {
-    const safePath = sanitizePath(path);
-    const { credentials } = await fetchAuthSession();
-    if (!credentials) return null;
-
-    const { SignatureV4 } = await import("@smithy/signature-v4");
-    const { Sha256 } = await import("@aws-crypto/sha256-js");
-
-    const signer = new SignatureV4({
-      service: "s3",
-      region: agentConfig.region,
-      credentials: {
-        accessKeyId: credentials.accessKeyId,
-        secretAccessKey: credentials.secretAccessKey,
-        sessionToken: credentials.sessionToken,
-      },
-      sha256: Sha256,
-    });
-
-    const url = new URL(
-      `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/skills/${id}/${safePath}`
-    );
-    const signed = await signer.sign({
-      method: "GET",
-      protocol: url.protocol,
-      hostname: url.hostname,
-      path: url.pathname,
-      query: {},
-      headers: { Host: url.host },
-    });
-
-    const resp = await fetch(url.toString(), {
-      headers: signed.headers as Record<string, string>,
-    });
-    if (!resp.ok) return null;
-    return resp.text();
-  } catch {
-    return null;
-  }
-}
-
-/** List all files in a skill directory (excluding SKILL.md) */
-export async function listSkillFiles(id: string): Promise<string[]> {
-  try {
-    const { listS3Keys } = await import("./s3-storage");
-    const prefix = `skills/${id}/`;
-    const keys = await listS3Keys(prefix);
-    return keys
-      .map((k) => k.slice(prefix.length))
-      .filter((f) => f && f !== "SKILL.md" && f !== "assistant-history.json" && !f.startsWith("."));
+    const resp = await fetchSkills(undefined, 100);
+    return (resp.items || []).map(mapSkillItem);
   } catch {
     return [];
   }
 }
 
-/** Write any file to a skill directory. If writing SKILL.md, syncs index.json from frontmatter. */
-export async function writeSkillFile(id: string, path: string, content: string): Promise<boolean> {
+/** List deleted (trashed) skills */
+export async function listDeletedSkills(): Promise<SkillIndexEntry[]> {
   try {
-    const safePath = sanitizePath(path);
-    const { credentials } = await fetchAuthSession();
-    if (!credentials) return false;
-
-    const { SignatureV4 } = await import("@smithy/signature-v4");
-    const { Sha256 } = await import("@aws-crypto/sha256-js");
-
-    const signer = new SignatureV4({
-      service: "s3",
-      region: agentConfig.region,
-      credentials: {
-        accessKeyId: credentials.accessKeyId,
-        secretAccessKey: credentials.secretAccessKey,
-        sessionToken: credentials.sessionToken,
-      },
-      sha256: Sha256,
-    });
-
-    const url = new URL(
-      `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/skills/${id}/${safePath}`
-    );
-    const body = new TextEncoder().encode(content);
-    const contentType = safePath.endsWith(".py") ? "text/x-python"
-      : safePath.endsWith(".json") ? "application/json"
-      : safePath.endsWith(".md") ? "text/markdown"
-      : "text/plain";
-
-    const signed = await signer.sign({
-      method: "PUT",
-      protocol: url.protocol,
-      hostname: url.hostname,
-      path: url.pathname,
-      query: {},
-      headers: { Host: url.host, "Content-Type": contentType },
-      body,
-    });
-
-    const resp = await fetch(url.toString(), {
-      method: "PUT",
-      headers: signed.headers as Record<string, string>,
-      body,
-    });
-    if (!resp.ok) return false;
-
-    // Sync index.json when SKILL.md is updated
-    if (path === "SKILL.md") {
-      const meta = parseFrontmatter(content);
-      if (meta) {
-        const index = (await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY)) ?? [];
-        const entry = index.find((s) => s.id === id);
-        if (entry) {
-          entry.name = meta.name;
-          entry.description = meta.description;
-          // Recompute contentHash: read all files for this skill
-          const allFiles = await listSkillFiles(id);
-          const fileContents: Record<string, string> = { "SKILL.md": content };
-          for (const f of allFiles) {
-            if (f !== "SKILL.md") {
-              const fc = await getSkillFile(id, f);
-              if (fc !== null) fileContents[f] = fc;
-            }
-          }
-          entry.contentHash = await computeContentHash(fileContents);
-          entry.files = Object.keys(fileContents).sort();
-          await writeJsonToS3(INDEX_KEY, index);
-        }
-      }
-    }
-
-    return true;
+    const resp = await fetchDeletedSkills(undefined, 100);
+    return (resp.items || []).map(mapSkillItem);
   } catch {
-    return false;
+    return [];
   }
+}
+
+/** Read full SKILL.md content */
+export async function getSkillContent(id: string): Promise<string | null> {
+  return fetchSkillFile(id, "SKILL.md");
+}
+
+/** Read any file from a skill directory */
+export async function getSkillFile(id: string, path: string): Promise<string | null> {
+  return fetchSkillFile(id, path);
+}
+
+/** List all files in a skill directory (excluding SKILL.md) */
+export async function listSkillFiles(id: string): Promise<string[]> {
+  try {
+    const files = await fetchSkillFiles(id);
+    return files.filter((f) => f && f !== "SKILL.md" && f !== "assistant-history.json" && !f.startsWith("."));
+  } catch {
+    return [];
+  }
+}
+
+/** Write any file to a skill directory. If writing SKILL.md, the Lambda syncs frontmatter to DDB. */
+export async function writeSkillFile(id: string, path: string, content: string): Promise<boolean> {
+  return putSkillFile(id, path, content);
 }
 
 /** Delete a single file from a skill directory */
 export async function deleteSkillFile(id: string, path: string): Promise<boolean> {
-  return deleteFromS3(`skills/${id}/${sanitizePath(path)}`);
+  return deleteSkillFileApi(id, path);
 }
 
-/** Rename/move a file within a skill directory (copy + delete, S3 has no rename) */
+/** Rename/move a file within a skill directory (read + write + delete, S3 has no rename) */
 export async function renameSkillFile(id: string, oldPath: string, newPath: string): Promise<boolean> {
-  const content = await getSkillFile(id, oldPath);
+  const content = await fetchSkillFile(id, oldPath);
   if (content === null) return false;
-  const written = await writeSkillFile(id, newPath, content);
+  const written = await putSkillFile(id, newPath, content);
   if (!written) return false;
-  return deleteFromS3(`skills/${id}/${sanitizePath(oldPath)}`);
+  return deleteSkillFileApi(id, oldPath);
 }
 
 /** Soft-delete a skill (move to trash) */
 export async function deleteSkill(id: string): Promise<boolean> {
-  const index = (await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY)) ?? [];
-  const entry = index.find((s) => s.id === id);
-  if (!entry) return false;
-  entry.deleted = true;
-  entry.deletedAt = Date.now();
-  await writeJsonToS3(INDEX_KEY, index);
-  return true;
+  return deleteSkillApi(id);
 }
 
 /** Restore a soft-deleted skill */
 export async function restoreSkill(id: string): Promise<boolean> {
-  const index = (await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY)) ?? [];
-  const entry = index.find((s) => s.id === id);
-  if (!entry) return false;
-  delete entry.deleted;
-  delete entry.deletedAt;
-  await writeJsonToS3(INDEX_KEY, index);
-  return true;
+  return restoreSkillApi(id);
 }
 
-/** Permanently delete a skill (remove files + index entry) */
+/** Permanently delete a skill (remove files + DDB record) */
 export async function permanentlyDeleteSkill(id: string): Promise<boolean> {
-  // Delete all files in parallel
-  try {
-    const { listS3Keys } = await import("./s3-storage");
-    const keys = await listS3Keys(`skills/${id}/`);
-    await Promise.all(keys.map(key => deleteFromS3(key)));
-  } catch {
-    await deleteFromS3(`skills/${id}/SKILL.md`);
-  }
-
-  const index = (await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY)) ?? [];
-  const updated = index.filter((s) => s.id !== id);
-  await writeJsonToS3(INDEX_KEY, updated);
-  return true;
+  return permanentlyDeleteSkillApi(id);
 }
 
 /** Parse YAML frontmatter from SKILL.md content */
@@ -289,62 +165,19 @@ export async function importSkill(
   if (!skillName) return null; // need a name
 
   const skillMd = meta ? content : wrapWithFrontmatter(content, skillName, skillDesc);
-  const id = crypto.randomUUID().slice(0, 8);
 
-  // Write SKILL.md
-  const { fetchAuthSession } = await import("aws-amplify/auth");
-  const { SignatureV4 } = await import("@smithy/signature-v4");
-  const { Sha256 } = await import("@aws-crypto/sha256-js");
-  const { agentConfig } = await import("../config");
+  const resp = await importSkillApi({ content: skillMd, name: skillName, description: skillDesc });
+  if (!resp) return null;
 
-  const { credentials } = await fetchAuthSession();
-  if (!credentials) return null;
-
-  const signer = new SignatureV4({
-    service: "s3",
-    region: agentConfig.region,
-    credentials: {
-      accessKeyId: credentials.accessKeyId,
-      secretAccessKey: credentials.secretAccessKey,
-      sessionToken: credentials.sessionToken,
-    },
-    sha256: Sha256,
-  });
-
-  const url = new URL(
-    `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/skills/${id}/SKILL.md`
-  );
-  const body = new TextEncoder().encode(skillMd);
-  const signed = await signer.sign({
-    method: "PUT",
-    protocol: url.protocol,
-    hostname: url.hostname,
-    path: url.pathname,
-    query: {},
-    headers: { Host: url.host, "Content-Type": "text/markdown" },
-    body,
-  });
-
-  const resp = await fetch(url.toString(), {
-    method: "PUT",
-    headers: signed.headers as Record<string, string>,
-    body,
-  });
-  if (!resp.ok) return null;
-
-  // Compute initial contentHash
-  const initialHash = await computeContentHash({ "SKILL.md": skillMd });
-
-  // Update index
-  const index = (await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY)) ?? [];
-  index.push({ id, name: skillName, description: skillDesc, contentHash: initialHash, files: ["SKILL.md"] });
-  await writeJsonToS3(INDEX_KEY, index);
-
-  return { id, name: skillName, description: skillDesc };
+  return {
+    id: resp.skillId || "",
+    name: resp.name || skillName,
+    description: resp.description || skillDesc,
+  };
 }
 
 /**
- * Import a multi-file skill. Writes all files to S3 and updates index.
+ * Import a multi-file skill. Writes all files via Lambda import endpoint.
  * files: Record<path, content> — must include "SKILL.md".
  */
 export async function importSkillFromFiles(
@@ -358,79 +191,35 @@ export async function importSkillFromFiles(
   const skillName = meta?.name ?? "imported-skill";
   const skillDesc = meta?.description ?? "";
 
-  const id = crypto.randomUUID().slice(0, 8);
+  onWriteProgress?.(0, 1);
 
-  // Initialize signer once for all uploads
-  const { credentials } = await fetchAuthSession();
-  if (!credentials) return null;
-  const { SignatureV4 } = await import("@smithy/signature-v4");
-  const { Sha256 } = await import("@aws-crypto/sha256-js");
-
-  const signer = new SignatureV4({
-    service: "s3",
-    region: agentConfig.region,
-    credentials: {
-      accessKeyId: credentials.accessKeyId,
-      secretAccessKey: credentials.secretAccessKey,
-      sessionToken: credentials.sessionToken,
-    },
-    sha256: Sha256,
-  });
-
-  // Batch PUT files (20 concurrent) with progress
-  const entries = Object.entries(files);
-  const total = entries.length;
-  let completed = 0;
-  const results: boolean[] = new Array(entries.length).fill(false);
-  const BATCH_SIZE = 20;
-
-  for (let i = 0; i < entries.length; i += BATCH_SIZE) {
-    const batch = entries.slice(i, i + BATCH_SIZE);
-    const batchResults = await Promise.all(
-      batch.map(async ([path, content]) => {
-        const safePath = sanitizePath(path);
-        const url = new URL(
-          `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/skills/${id}/${safePath}`
-        );
-        const body = new TextEncoder().encode(content);
-        const contentType = safePath.endsWith(".py") ? "text/x-python"
-          : safePath.endsWith(".json") ? "application/json"
-          : safePath.endsWith(".md") ? "text/markdown"
-          : "text/plain";
-
-        const signed = await signer.sign({
-          method: "PUT",
-          protocol: url.protocol,
-          hostname: url.hostname,
-          path: url.pathname,
-          query: {},
-          headers: { Host: url.host, "Content-Type": contentType },
-          body,
-        });
-
-        const resp = await fetch(url.toString(), {
-          method: "PUT",
-          headers: signed.headers as Record<string, string>,
-          body,
-        });
-        completed++;
-        onWriteProgress?.(completed, total);
-        return resp.ok;
-      })
-    );
-    batchResults.forEach((ok, j) => { results[i + j] = ok; });
+  // Separate scripts (scripts/*) from other extra files
+  const scripts: Record<string, string> = {};
+  const extraFiles: Record<string, string> = {};
+  for (const [path, content] of Object.entries(files)) {
+    if (path === "SKILL.md") continue;
+    if (path.startsWith("scripts/")) {
+      scripts[path.slice("scripts/".length)] = content;
+    } else {
+      extraFiles[path] = content;
+    }
   }
 
-  // Check SKILL.md write succeeded
-  const skillMdIdx = entries.findIndex(([p]) => p === "SKILL.md");
-  if (skillMdIdx >= 0 && !results[skillMdIdx]) return null;
+  const resp = await importSkillApi({
+    content: skillMd,
+    name: skillName,
+    description: skillDesc,
+    scripts,
+    files: extraFiles,
+  });
 
-  // Compute hash and update index
-  const contentHash = await computeContentHash(files);
-  const extraFiles = Object.keys(files).filter(f => f !== "SKILL.md").sort();
-  const index = (await readJsonFromS3<SkillIndexEntry[]>(INDEX_KEY)) ?? [];
-  index.push({ id, name: skillName, description: skillDesc, contentHash, files: extraFiles });
-  await writeJsonToS3(INDEX_KEY, index);
+  onWriteProgress?.(1, 1);
 
-  return { id, name: skillName, description: skillDesc };
+  if (!resp) return null;
+
+  return {
+    id: resp.skillId || "",
+    name: resp.name || skillName,
+    description: resp.description || skillDesc,
+  };
 }

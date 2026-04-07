@@ -260,3 +260,101 @@ export async function fetchPublicAgents(cursor?: string, limit = 20) {
   if (cursor) params.set("cursor", cursor);
   return apiGetRaw<PaginatedResponse<AgentListItem>>(`/api/public/agents?${params}`);
 }
+
+// ── 技能文件 ──
+
+export async function fetchSkills(cursor?: string, limit = 50) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  return apiGet<PaginatedResponse<Record<string, any>>>(`/skills?${params}`);
+}
+
+export async function fetchDeletedSkills(cursor?: string, limit = 50) {
+  const params = new URLSearchParams({ limit: String(limit), deleted: "true" });
+  if (cursor) params.set("cursor", cursor);
+  return apiGet<PaginatedResponse<Record<string, any>>>(`/skills?${params}`);
+}
+
+export async function fetchSkillFiles(skillId: string): Promise<string[]> {
+  try {
+    const resp = await apiGet<{ files: string[] }>(`/skills/${encodeURIComponent(skillId)}/files`);
+    return resp.files;
+  } catch (err) {
+    console.error("fetchSkillFiles failed:", err);
+    return [];
+  }
+}
+
+export async function fetchSkillFile(skillId: string, path: string): Promise<string | null> {
+  try {
+    const resp = await apiGet<{ content: string }>(
+      `/skills/${encodeURIComponent(skillId)}/files?path=${encodeURIComponent(path)}`
+    );
+    return resp.content;
+  } catch (err) {
+    console.error("fetchSkillFile failed:", err);
+    return null;
+  }
+}
+
+export async function putSkillFile(skillId: string, path: string, content: string): Promise<boolean> {
+  try {
+    await apiPut(
+      `/skills/${encodeURIComponent(skillId)}/files?path=${encodeURIComponent(path)}`,
+      { content }
+    );
+    return true;
+  } catch (err) {
+    console.error("putSkillFile failed:", err);
+    return false;
+  }
+}
+
+export async function deleteSkillFileApi(skillId: string, path: string): Promise<boolean> {
+  try {
+    await apiDelete(`/skills/${encodeURIComponent(skillId)}/files?path=${encodeURIComponent(path)}`);
+    return true;
+  } catch (err) {
+    console.error("deleteSkillFileApi failed:", err);
+    return false;
+  }
+}
+
+export async function importSkillApi(body: Record<string, any>): Promise<Record<string, any> | null> {
+  try {
+    return await apiPost<Record<string, any>>("/skills/import", body);
+  } catch (err) {
+    console.error("importSkillApi failed:", err);
+    return null;
+  }
+}
+
+export async function restoreSkillApi(skillId: string): Promise<boolean> {
+  try {
+    await apiPost(`/skills/${encodeURIComponent(skillId)}/restore`);
+    return true;
+  } catch (err) {
+    console.error("restoreSkillApi failed:", err);
+    return false;
+  }
+}
+
+export async function permanentlyDeleteSkillApi(skillId: string): Promise<boolean> {
+  try {
+    await apiDelete(`/skills/${encodeURIComponent(skillId)}?purge=true`);
+    return true;
+  } catch (err) {
+    console.error("permanentlyDeleteSkillApi failed:", err);
+    return false;
+  }
+}
+
+export async function deleteSkillApi(skillId: string): Promise<boolean> {
+  try {
+    await apiDelete(`/skills/${encodeURIComponent(skillId)}`);
+    return true;
+  } catch (err) {
+    console.error("deleteSkillApi failed:", err);
+    return false;
+  }
+}
