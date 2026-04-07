@@ -106,6 +106,25 @@ export async function fetchSignedS3(s3Url: string): Promise<string> {
   // If it's already a data URL, return as-is
   if (s3Url.startsWith("data:")) return s3Url;
 
+  try {
+    const url = new URL(s3Url);
+    const pathParts = url.pathname.split("/");
+    const bucketIdx = pathParts.indexOf(agentConfig.s3Bucket);
+    if (bucketIdx >= 0) {
+      const key = pathParts.slice(bucketIdx + 1).join("/");
+      const { getDownloadUrl } = await import("./api-client");
+      const presignedUrl = await getDownloadUrl(key);
+      if (presignedUrl) {
+        const response = await fetch(presignedUrl);
+        if (response.ok) {
+          const blob = await response.blob();
+          return URL.createObjectURL(blob);
+        }
+      }
+    }
+  } catch { /* fallback to original SigV4 path */ }
+
+  // Fallback: use SigV4 signing
   const { credentials } = await fetchAuthSession();
   if (!credentials) return s3Url;
 

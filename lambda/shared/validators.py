@@ -26,6 +26,20 @@ def parse_pagination(query_params: dict) -> tuple[int, str | None]:
     return limit, cursor
 
 
+SAFE_PATH_RE = re.compile(r'^[a-zA-Z0-9/_.\-]+$')
+
+
+def validate_path(path: str) -> str | None:
+    """Returns error message if invalid, None if valid."""
+    if not path or not SAFE_PATH_RE.match(path) or '//' in path:
+        return "Invalid path"
+    if '..' in path.split('/'):
+        return "Invalid path"
+    if len(path) > 512:
+        return "Path too long"
+    return None
+
+
 SECRET_KEY_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 

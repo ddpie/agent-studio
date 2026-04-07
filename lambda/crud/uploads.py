@@ -12,7 +12,7 @@ from shared.auth import verify_jwt, get_membership, check_permission
 from shared.config import REGION, ASSETS_BUCKET, AGENTS_TABLE, SKILLS_TABLE
 from shared.middleware import auth_check
 from shared.response import success, paginated, forbidden, bad_request
-from shared.validators import validate_id, parse_pagination
+from shared.validators import validate_id, validate_path, parse_pagination
 
 router = Router()
 logger = Logger(child=True)
@@ -144,6 +144,63 @@ def upload_attachment(wsId: str):
         "s3Key": s3_key,
         "expiresIn": PRESIGNED_URL_EXPIRY,
     })
+
+
+@router.get("/api/workspaces/<wsId>/downloads")
+def get_download_url(wsId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
+    if err:
+        return err
+
+    key = (router.current_event.query_string_parameters or {}).get("key", "")
+    key_err = validate_path(key)
+    if key_err:
+        return bad_request(key_err)
+
+    allowed_prefixes = ("outputs/", "agents/", "uploads/", "skills/")
+    if not any(key.startswith(p) for p in allowed_prefixes):
+        return bad_request("Invalid key prefix")
+
+    # Resource ownership check
+    try:
+        if key.startswith("agents/"):
+            parts = key.split("/")
+            if len(parts) >= 2:
+                agent = _get_agents_table().get_item(Key={"agentId": parts[1]}).get("Item")
+                if not agent or agent.get("workspace_id") != ws_id:
+                    logger.warning("Download denied: agent not in workspace", extra={"key": key, "ws_id": ws_id})
+                    return forbidden()
+                if agent.get("status") == "archived":
+                    return forbidden()
+        elif key.startswith("skills/"):
+            parts = key.split("/")
+            if len(parts) >= 2:
+                skill = _get_skills_table().get_item(Key={"skillId": parts[1]}).get("Item")
+                if not skill or skill.get("workspace_id") != ws_id:
+                    logger.warning("Download denied: skill not in workspace", extra={"key": key, "ws_id": ws_id})
+                    return forbidden()
+                if skill.get("deleted"):
+                    return forbidden()
+        # outputs/ and uploads/ rely on UUID unguessability
+    except Exception:
+        logger.exception("Error checking resource ownership for download")
+        return forbidden()
+
+    try:
+        s3 = _get_s3()
+        url = s3.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": ASSETS_BUCKET,
+                "Key": key,
+                "ResponseContentDisposition": "attachment",
+            },
+            ExpiresIn=300,
+        )
+        return success({"url": url, "expiresIn": 300})
+    except Exception:
+        logger.exception("Failed to generate presigned download URL")
+        return bad_request("Failed to generate download URL")
 
 
 @router.get("/api/public/agents")

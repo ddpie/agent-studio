@@ -223,6 +223,15 @@ export async function uploadWithPresignedPost(
   if (!resp.ok) throw new Error(`Upload failed: ${resp.status}`);
 }
 
+// ── 下载 ──
+
+export async function getDownloadUrl(s3Key: string): Promise<string | null> {
+  try {
+    const resp = await apiGet<{ url: string }>(`/downloads?key=${encodeURIComponent(s3Key)}`);
+    return resp.url;
+  } catch { return null; }
+}
+
 // ── 工具（带缓存） ──
 
 let _toolsCache: { items: ToolItem[]; ts: number } | null = null;
