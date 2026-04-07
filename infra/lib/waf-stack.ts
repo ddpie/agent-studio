@@ -31,9 +31,11 @@ export class WafStack extends cdk.Stack {
               vendorName: "AWS",
               name: "AWSManagedRulesCommonRuleSet",
               excludedRules: [
-                // /api/* paths carry JWT auth; URI extension checks
-                // block legitimate .txt/.py file endpoints
+                // /api/* paths carry JWT auth; extension checks
+                // block legitimate .txt/.py file endpoints in both
+                // URI path and query params (?path=system_prompt.txt)
                 { name: "RestrictedExtensions_URIPATH" },
+                { name: "RestrictedExtensions_QUERYARGUMENTS" },
               ],
             },
           },
