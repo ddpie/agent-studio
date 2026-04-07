@@ -18,12 +18,13 @@ from shared.validators import validate_id
 logger = Logger(child=True)
 
 
-def auth_check(event, min_role: str = "viewer", require_ws: bool = True):
+def auth_check(event, min_role: str = "viewer", require_ws: bool = True, ws_id: str = ""):
     """Verify JWT + workspace membership + role.
 
     Returns (user_id, workspace_id, member, error_response).
     If error_response is not None, return it immediately from the route handler.
     When require_ws=False, workspace_id and member will be None.
+    ws_id must be passed explicitly from the route handler's path parameter.
     """
     auth_header = event.get_header_value("Authorization") or ""
     if not auth_header.startswith("Bearer "):
@@ -37,7 +38,6 @@ def auth_check(event, min_role: str = "viewer", require_ws: bool = True):
     if not require_ws:
         return user_id, None, None, None
 
-    ws_id = (event.resolved_path_parameters or {}).get("wsId", "")
     id_err = validate_id(ws_id, "workspaceId")
     if id_err:
         return None, None, None, forbidden()

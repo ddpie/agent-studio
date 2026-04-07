@@ -49,6 +49,19 @@ export class Cdn extends Construct {
       sourceArn: `arn:aws:cloudfront::${props.config.accountId}:distribution/*`,
     });
 
+    // CORS response headers policy for API (开发时浏览器直连 CloudFront)
+    const corsPolicy = new cloudfront.ResponseHeadersPolicy(this, "ApiCorsPolicy", {
+      responseHeadersPolicyName: "agent-studio-api-cors",
+      corsBehavior: {
+        accessControlAllowOrigins: ["*"],
+        accessControlAllowHeaders: ["Authorization", "Content-Type"],
+        accessControlAllowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        accessControlAllowCredentials: false,
+        accessControlMaxAge: cdk.Duration.seconds(3600),
+        originOverride: true,
+      },
+    });
+
     // CloudFront distribution
     this.distribution = new cloudfront.Distribution(this, "Distribution", {
       defaultBehavior: {
@@ -63,6 +76,7 @@ export class Cdn extends Construct {
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
           cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
           originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          responseHeadersPolicy: corsPolicy,
         },
         "/invoke/*": {
           origin: invokeOrigin,
