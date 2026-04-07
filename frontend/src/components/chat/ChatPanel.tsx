@@ -14,7 +14,7 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { fetchAgentMetadata, type AgentMetadata } from "../../lib/agent-metadata";
+import { fetchAgentMetadataLight, type AgentMetadata } from "../../lib/agent-metadata";
 import { useUISettings } from "../../stores/ui-settings-store";
 import { uploadImageToS3, uploadFileToS3, fetchSignedS3 } from "../../lib/s3-utils";
 import { agentConfig } from "../../config";
@@ -565,7 +565,7 @@ export default function ChatPanel() {
   // Load agent metadata when target changes
   useEffect(() => {
     if (agentName && agentId) {
-      fetchAgentMetadata(agentId).then((m) => {
+      fetchAgentMetadataLight(agentId).then((m) => {
         setMetadata(m);
         // Auto-select agent's default model if set
         if (m?.default_model_id) {
