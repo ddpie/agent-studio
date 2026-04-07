@@ -229,7 +229,10 @@ export async function getDownloadUrl(s3Key: string): Promise<string | null> {
   try {
     const resp = await apiGet<{ url: string }>(`/downloads?key=${encodeURIComponent(s3Key)}`);
     return resp.url;
-  } catch { return null; }
+  } catch (err) {
+    console.error("getDownloadUrl failed:", err);
+    return null;
+  }
 }
 
 // ── 工具（带缓存） ──

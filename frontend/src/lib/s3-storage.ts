@@ -175,10 +175,39 @@ export async function listS3Keys(prefix: string): Promise<string[]> {
 
 /** Download a file from S3 via presigned URL and return a blob URL for browser download. */
 export async function generateDownloadUrl(key: string): Promise<string> {
-  const { getDownloadUrl } = await import("./api-client");
-  const presignedUrl = await getDownloadUrl(key);
-  if (!presignedUrl) throw new Error("Failed to get download URL");
-  const resp = await fetch(presignedUrl);
+  // Try presigned URL via Lambda API first
+  try {
+    const { getDownloadUrl } = await import("./api-client");
+    const presignedUrl = await getDownloadUrl(key);
+    if (presignedUrl) {
+      const resp = await fetch(presignedUrl);
+      if (resp.ok) {
+        const blob = await resp.blob();
+        return URL.createObjectURL(blob);
+      }
+    }
+  } catch { /* fallback to SigV4 */ }
+
+  // Fallback: SigV4 direct (legacy path, works when Lambda unavailable)
+  const signer = await getSigner();
+  const hostname = `s3.${agentConfig.region}.amazonaws.com`;
+  const rawPath = `/${BUCKET}/${key}`;
+  const encodedPath = `/${BUCKET}/${key.split("/").map(s => encodeURIComponent(s)).join("/")}`;
+
+  const signed = await signer.sign({
+    method: "GET",
+    protocol: "https:",
+    hostname,
+    path: rawPath,
+    query: {},
+    headers: { Host: hostname },
+  });
+
+  const resp = await fetch(`https://${hostname}${encodedPath}`, {
+    method: "GET",
+    headers: signed.headers as Record<string, string>,
+  });
+
   if (!resp.ok) throw new Error(`Download failed: ${resp.status}`);
   const blob = await resp.blob();
   return URL.createObjectURL(blob);
