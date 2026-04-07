@@ -26,5 +26,12 @@ def health():
     return {"status": "ok"}
 
 
+@app.exception_handler(Exception)
+def handle_unhandled(ex: Exception):
+    logger.exception("Unhandled exception")
+    from shared.response import internal_error
+    return internal_error()
+
+
 def lambda_handler(event: dict, context: LambdaContext) -> dict:
     return app.resolve(event, context)

@@ -87,6 +87,20 @@ export class Api extends Construct {
       },
     }));
 
+    // Secrets Manager access for agent secrets
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:ListSecrets",
+      ],
+      resources: [
+        `arn:aws:secretsmanager:${props.config.region}:${props.config.accountId}:secret:agent-studio/*`,
+      ],
+    }));
+
     // REST API
     this.restApi = new apigateway.RestApi(this, "RestApi", {
       restApiName: "agent-studio-api",
