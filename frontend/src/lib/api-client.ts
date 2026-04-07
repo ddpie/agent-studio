@@ -162,9 +162,8 @@ export async function fetchAgentFile(agentId: string, filePath: string): Promise
       `/agents/${encodeURIComponent(agentId)}/files?path=${encodeURIComponent(filePath)}`
     );
     return data.content || "";
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) return "";
-    throw err;
+  } catch {
+    return "";
   }
 }
 
