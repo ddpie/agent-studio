@@ -1,9 +1,7 @@
 import { create } from "zustand";
 import { fetchAgentMetadata, type AgentMetadata, type AgentSkillEntry } from "../lib/agent-metadata";
 import { extractToolsFromDeployment } from "../lib/tool-extractor";
-import { fetchAuthSession } from "aws-amplify/auth";
-import { agentConfig } from "../config";
-import { fetchToolCatalog } from "../lib/s3-utils";
+import { fetchTools } from "../lib/api-client";
 
 interface AgentEditState {
   agentId: string | null;
@@ -32,60 +30,6 @@ interface AgentEditState {
 }
 
 /**
- * Fallback: fetch basic info from AgentCore control plane if S3 metadata is missing.
- */
-async function fetchAgentFromControlPlane(agentId: string): Promise<Partial<AgentMetadata> | null> {
-  try {
-    const { credentials } = await fetchAuthSession();
-    if (!credentials) return null;
-
-    const { SignatureV4 } = await import("@smithy/signature-v4");
-    const { Sha256 } = await import("@aws-crypto/sha256-js");
-
-    const signer = new SignatureV4({
-      service: "bedrock-agentcore",
-      region: agentConfig.region,
-      credentials: {
-        accessKeyId: credentials.accessKeyId,
-        secretAccessKey: credentials.secretAccessKey,
-        sessionToken: credentials.sessionToken,
-      },
-      sha256: Sha256,
-    });
-
-    const url = new URL(`https://bedrock-agentcore-control.${agentConfig.region}.amazonaws.com/runtimes/${agentId}`);
-    const signed = await signer.sign({
-      method: "GET",
-      protocol: url.protocol,
-      hostname: url.hostname,
-      path: url.pathname,
-      query: {},
-      headers: { Host: url.host },
-    });
-
-    const response = await fetch(url.toString(), {
-      method: "GET",
-      headers: signed.headers as Record<string, string>,
-    });
-
-    if (!response.ok) return null;
-    const data = await response.json();
-    return {
-      name: data.agentRuntimeName || agentId,
-      description: data.description || "",
-      welcome_message: "",
-      suggestions: [],
-      tools: [],
-      template_id: "",
-      supports_images: false,
-      system_prompt: "",
-    } as Partial<AgentMetadata>;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Inject missing built-in tool code from catalog.
  * For each tool in tool_names that has no @tool function in tool_definitions,
  * look it up in the catalog and append its code.
@@ -101,11 +45,12 @@ async function injectBuiltinToolCode(data: Partial<AgentMetadata>): Promise<void
   if (!missing.length) return;
 
   try {
-    const catalog = await fetchToolCatalog();
+    const resp = await fetchTools(undefined, 100);
     const codeParts: string[] = [];
     for (const name of missing) {
-      if (catalog[name]) {
-        codeParts.push(catalog[name].code);
+      const tool = resp.items.find((t: any) => t.name === name);
+      if (tool?.code) {
+        codeParts.push(tool.code);
       }
     }
     if (codeParts.length) {
@@ -113,7 +58,7 @@ async function injectBuiltinToolCode(data: Partial<AgentMetadata>): Promise<void
       data.tool_definitions = defs ? defs.trimEnd() + "\n\n" + injected : injected;
     }
   } catch (e) {
-    console.warn("Failed to fetch tool catalog:", e);
+    console.warn("Failed to fetch tools:", e);
   }
 }
 
@@ -136,14 +81,10 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   loadAgent: async (agentId, agentName) => {
     set({ agentId: agentId, agentName: agentName, loading: true, formData: null });
 
-    // Try S3 metadata first, fallback to control plane
+    // API 已经整合了 DDB + S3 数据，不需要 fallback
     let metadata = await fetchAgentMetadata(agentId);
     if (!metadata) {
-      console.warn(`No S3 metadata for ${agentId}, falling back to control plane`);
-      metadata = (await fetchAgentFromControlPlane(agentId)) as AgentMetadata | null;
-    }
-    if (!metadata) {
-      console.warn(`Control plane fallback also failed for ${agentId}`);
+      console.warn(`No metadata for ${agentId}`);
     }
 
     const data: Partial<AgentMetadata> = metadata || { name: agentName };
