@@ -87,18 +87,22 @@ export class Api extends Construct {
       },
     }));
 
-    // Secrets Manager access for agent secrets
+    // Secrets Manager — scoped actions
     this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: [
         "secretsmanager:CreateSecret",
         "secretsmanager:GetSecretValue",
         "secretsmanager:PutSecretValue",
         "secretsmanager:DeleteSecret",
-        "secretsmanager:ListSecrets",
       ],
       resources: [
         `arn:aws:secretsmanager:${props.config.region}:${props.config.accountId}:secret:agent-studio/*`,
       ],
+    }));
+    // ListSecrets does not support resource-level permissions
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["secretsmanager:ListSecrets"],
+      resources: ["*"],
     }));
 
     // REST API

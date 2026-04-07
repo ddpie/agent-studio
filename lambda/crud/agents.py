@@ -280,7 +280,9 @@ def deploy_agent(wsId: str, agentId: str):
         unapproved = []
         for sid in skill_ids:
             skill_item = skills_table.get_item(Key={"skillId": sid}, ConsistentRead=True).get("Item")
-            if skill_item and not skill_item.get("approved", False):
+            if not skill_item or skill_item.get("workspace_id") != ws_id:
+                continue  # skip skills not in this workspace
+            if not skill_item.get("approved", False):
                 unapproved.append(sid)
         if unapproved:
             return bad_request("Cannot deploy: some referenced skills are not approved")
@@ -418,7 +420,8 @@ def put_agent_file(wsId: str, agentId: str, path: str):
     table.update_item(
         Key={"agentId": agentId},
         UpdateExpression="SET updated_at = :now",
-        ExpressionAttributeValues={":now": now},
+        ExpressionAttributeValues={":now": now, ":ws": ws_id},
+        ConditionExpression="attribute_exists(agentId) AND workspace_id = :ws",
     )
 
     return success({"path": path, "updated_at": now})

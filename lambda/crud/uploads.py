@@ -70,6 +70,10 @@ def upload_image(wsId: str):
     if not filename:
         return bad_request("filename is required")
 
+    import re
+    if not re.match(r"^[a-zA-Z0-9._-]+$", filename):
+        return bad_request("Invalid filename: must match [a-zA-Z0-9._-]+")
+
     ext = filename.rsplit(".", 1)[-1] if "." in filename else "png"
     upload_id = str(uuid.uuid4())
     s3_key = f"uploads/images/{upload_id}.{ext}"

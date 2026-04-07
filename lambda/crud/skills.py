@@ -301,6 +301,9 @@ def import_skill(wsId: str):
         return bad_request("name is required (in body or SKILL.md frontmatter)")
 
     skill_type = body.get("type", "prompt")
+    if skill_type not in ("prompt", "script"):
+        return bad_request("type must be 'prompt' or 'script'")
+
     skill_id = str(uuid.uuid4())
     now = datetime.utcnow().isoformat() + "Z"
 
@@ -319,6 +322,14 @@ def import_skill(wsId: str):
         "updated_at": now,
     }
 
+    # Validate all script names BEFORE any writes
+    scripts = body.get("scripts", {})
+    import re as _re
+    for script_name in scripts:
+        if not _re.match(r"^[a-zA-Z0-9._-]+$", script_name):
+            return bad_request(f"Invalid script name: must match [a-zA-Z0-9._-]+")
+
+    # Now safe to write
     table = _get_table()
     table.put_item(Item=item)
 
@@ -330,11 +341,7 @@ def import_skill(wsId: str):
         ContentType="text/markdown",
     )
 
-    scripts = body.get("scripts", {})
-    import re as _re
     for script_name, script_content in scripts.items():
-        if not _re.match(r"^[a-zA-Z0-9._-]+$", script_name):
-            return bad_request(f"Invalid script name: must match [a-zA-Z0-9._-]+")
         s3.put_object(
             Bucket=ASSETS_BUCKET,
             Key=f"skills/{skill_id}/scripts/{script_name}",
@@ -360,7 +367,7 @@ def approve_skill(wsId: str, skillId: str):
     if not existing or existing.get("workspace_id") != ws_id:
         return forbidden()
     if existing.get("deleted"):
-        return not_found()
+        return forbidden()
     if existing.get("type") != "script":
         return bad_request("Only script skills require approval")
     if existing.get("approved"):
