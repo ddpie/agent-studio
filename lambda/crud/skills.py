@@ -53,7 +53,7 @@ def _skill_response(item: dict) -> dict:
 
 @router.get("/api/workspaces/<wsId>/skills")
 def list_skills(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event)
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
     if err:
         return err
 
@@ -96,7 +96,7 @@ def list_skills(wsId: str):
 
 @router.get("/api/workspaces/<wsId>/skills/<skillId>")
 def get_skill(wsId: str, skillId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event)
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
     if err:
         return err
 
@@ -124,7 +124,7 @@ def get_skill(wsId: str, skillId: str):
 
 @router.post("/api/workspaces/<wsId>/skills")
 def create_skill(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
 
@@ -175,7 +175,7 @@ def create_skill(wsId: str):
 
 @router.put("/api/workspaces/<wsId>/skills/<skillId>")
 def update_skill(wsId: str, skillId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
 
@@ -243,7 +243,7 @@ def update_skill(wsId: str, skillId: str):
 
 @router.delete("/api/workspaces/<wsId>/skills/<skillId>")
 def delete_skill(wsId: str, skillId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
 
@@ -271,7 +271,7 @@ def delete_skill(wsId: str, skillId: str):
 
 @router.post("/api/workspaces/<wsId>/skills/import")
 def import_skill(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
 
@@ -354,7 +354,7 @@ def import_skill(wsId: str):
 
 @router.post("/api/workspaces/<wsId>/skills/<skillId>/approve")
 def approve_skill(wsId: str, skillId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
 

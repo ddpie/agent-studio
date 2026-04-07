@@ -36,8 +36,12 @@ def health():
 @app.exception_handler(Exception)
 def handle_unhandled(ex: Exception):
     logger.exception("Unhandled exception")
-    from shared.response import internal_error
-    return internal_error()
+    from aws_lambda_powertools.event_handler import Response
+    return Response(
+        status_code=500,
+        content_type="application/json",
+        body='{"error":"Internal server error","code":"INTERNAL_ERROR"}',
+    )
 
 
 def lambda_handler(event: dict, context: LambdaContext) -> dict:

@@ -55,7 +55,7 @@ PRESIGNED_URL_EXPIRY = 900
 
 @router.post("/api/workspaces/<wsId>/uploads/images")
 def upload_image(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event)
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
     if err:
         return err
 
@@ -100,7 +100,7 @@ def upload_image(wsId: str):
 
 @router.post("/api/workspaces/<wsId>/uploads/attachments")
 def upload_attachment(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event)
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
     if err:
         return err
 

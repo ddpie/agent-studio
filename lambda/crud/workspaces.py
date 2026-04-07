@@ -194,7 +194,7 @@ def onboarding():
 # ─── GET /api/workspaces/{wsId} ───
 @router.get("/api/workspaces/<wsId>")
 def get_workspace(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="viewer")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="viewer", ws_id=wsId)
     if err:
         return err
 
@@ -230,7 +230,7 @@ def get_workspace(wsId: str):
 # ─── PUT /api/workspaces/{wsId} ───
 @router.put("/api/workspaces/<wsId>")
 def update_workspace(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
 
@@ -278,7 +278,7 @@ def update_workspace(wsId: str):
 # ─── DELETE /api/workspaces/{wsId} ───
 @router.delete("/api/workspaces/<wsId>")
 def delete_workspace(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="owner")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="owner", ws_id=wsId)
     if err:
         return err
 
@@ -305,7 +305,7 @@ def delete_workspace(wsId: str):
 # ─── POST /api/workspaces/{wsId}/members — 邀请成员 ───
 @router.post("/api/workspaces/<wsId>/members")
 def invite_member(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
 
@@ -352,7 +352,7 @@ def invite_member(wsId: str):
 # ─── PUT /api/workspaces/{wsId}/members/{userId} — 修改角色 ───
 @router.put("/api/workspaces/<wsId>/members/<memberId>")
 def update_member_role(wsId: str, memberId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
 
@@ -392,7 +392,7 @@ def update_member_role(wsId: str, memberId: str):
 # ─── DELETE /api/workspaces/{wsId}/members/{userId} — 移除成员 ───
 @router.delete("/api/workspaces/<wsId>/members/<memberId>")
 def remove_member(wsId: str, memberId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
 
@@ -417,7 +417,7 @@ def remove_member(wsId: str, memberId: str):
 # ─── POST /api/workspaces/{wsId}/leave — 自行退出 ───
 @router.post("/api/workspaces/<wsId>/leave")
 def leave_workspace(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="viewer")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="viewer", ws_id=wsId)
     if err:
         return err
 
@@ -432,7 +432,7 @@ def leave_workspace(wsId: str):
 # ─── POST /api/workspaces/{wsId}/transfer-ownership — 转让 Owner ───
 @router.post("/api/workspaces/<wsId>/transfer-ownership")
 def transfer_ownership(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="owner")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="owner", ws_id=wsId)
     if err:
         return err
 
@@ -503,7 +503,7 @@ def transfer_ownership(wsId: str):
 # ─── GET /api/workspaces/{wsId}/invitations — 待处理邀请列表 ───
 @router.get("/api/workspaces/<wsId>/invitations")
 def list_invitations(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
 
@@ -527,7 +527,7 @@ def list_invitations(wsId: str):
 # ─── DELETE /api/workspaces/{wsId}/invitations/{token} — 撤销邀请 ───
 @router.delete("/api/workspaces/<wsId>/invitations/<token>")
 def revoke_invitation(wsId: str, token: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
 

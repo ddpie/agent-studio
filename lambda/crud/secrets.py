@@ -46,7 +46,7 @@ def _verify_agent_ownership(agent_id: str, workspace_id: str) -> bool:
 
 @router.get("/api/workspaces/<wsId>/agents/<agentId>/secrets")
 def list_secrets(wsId: str, agentId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
 
@@ -83,7 +83,7 @@ def list_secrets(wsId: str, agentId: str):
 
 @router.post("/api/workspaces/<wsId>/agents/<agentId>/secrets")
 def set_secret(wsId: str, agentId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
 
@@ -122,7 +122,7 @@ def set_secret(wsId: str, agentId: str):
 
 @router.delete("/api/workspaces/<wsId>/agents/<agentId>/secrets/<secretKey>")
 def delete_secret(wsId: str, agentId: str, secretKey: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
 

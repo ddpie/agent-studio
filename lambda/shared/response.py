@@ -1,45 +1,47 @@
 """Unified API response helpers."""
 import json
 
-
-def success(data: dict | list, status_code: int = 200) -> dict:
-    return {
-        "statusCode": status_code,
-        "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(data),
-    }
+from aws_lambda_powertools.event_handler import Response
 
 
-def paginated(items: list, next_cursor: str | None = None) -> dict:
+def success(data: dict | list, status_code: int = 200) -> Response:
+    return Response(
+        status_code=status_code,
+        content_type="application/json",
+        body=json.dumps(data),
+    )
+
+
+def paginated(items: list, next_cursor: str | None = None) -> Response:
     body = {"items": items}
     if next_cursor:
         body["nextCursor"] = next_cursor
     return success(body)
 
 
-def error(message: str, code: str, status_code: int) -> dict:
-    return {
-        "statusCode": status_code,
-        "headers": {"Content-Type": "application/json"},
-        "body": json.dumps({"error": message, "code": code}),
-    }
+def error(message: str, code: str, status_code: int) -> Response:
+    return Response(
+        status_code=status_code,
+        content_type="application/json",
+        body=json.dumps({"error": message, "code": code}),
+    )
 
 
-def forbidden() -> dict:
+def forbidden() -> Response:
     return error("Forbidden", "PERMISSION_DENIED", 403)
 
 
-def not_found() -> dict:
+def not_found() -> Response:
     return error("Not found", "NOT_FOUND", 404)
 
 
-def bad_request(message: str) -> dict:
+def bad_request(message: str) -> Response:
     return error(message, "VALIDATION_ERROR", 400)
 
 
-def version_conflict(message: str) -> dict:
+def version_conflict(message: str) -> Response:
     return error(message, "VALIDATION_ERROR", 409)
 
 
-def internal_error() -> dict:
+def internal_error() -> Response:
     return error("Internal server error", "INTERNAL_ERROR", 500)

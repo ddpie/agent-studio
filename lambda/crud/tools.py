@@ -45,7 +45,7 @@ def _tool_response(item: dict) -> dict:
 
 @router.get("/api/workspaces/<wsId>/tools")
 def list_tools(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event)
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
     if err:
         return err
 
@@ -107,7 +107,7 @@ def list_tools(wsId: str):
 
 @router.get("/api/workspaces/<wsId>/tools/<toolId>")
 def get_tool(wsId: str, toolId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event)
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
     if err:
         return err
 
@@ -129,7 +129,7 @@ def get_tool(wsId: str, toolId: str):
 
 @router.post("/api/workspaces/<wsId>/tools")
 def create_tool(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
 
@@ -170,7 +170,7 @@ def create_tool(wsId: str):
 
 @router.put("/api/workspaces/<wsId>/tools/<toolId>")
 def update_tool(wsId: str, toolId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
 
@@ -226,7 +226,7 @@ def update_tool(wsId: str, toolId: str):
 
 @router.delete("/api/workspaces/<wsId>/tools/<toolId>")
 def delete_tool(wsId: str, toolId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
 
@@ -254,7 +254,7 @@ def delete_tool(wsId: str, toolId: str):
 
 @router.post("/api/workspaces/<wsId>/tools/<toolId>/publish")
 def publish_tool(wsId: str, toolId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
 
@@ -279,7 +279,7 @@ def publish_tool(wsId: str, toolId: str):
 
 @router.post("/api/workspaces/<wsId>/tools/<toolId>/unpublish")
 def unpublish_tool(wsId: str, toolId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
 

@@ -87,7 +87,7 @@ def _agent_response(item: dict) -> dict:
 
 @router.get("/api/workspaces/<wsId>/agents")
 def list_agents(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event)
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
     if err:
         return err
 
@@ -132,7 +132,7 @@ def list_agents(wsId: str):
 
 @router.get("/api/workspaces/<wsId>/agents/<agentId>")
 def get_agent(wsId: str, agentId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event)
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
     if err:
         return err
 
@@ -153,7 +153,7 @@ def get_agent(wsId: str, agentId: str):
 
 @router.post("/api/workspaces/<wsId>/agents")
 def create_agent(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
 
@@ -176,7 +176,7 @@ def create_agent(wsId: str):
 
 @router.put("/api/workspaces/<wsId>/agents/<agentId>")
 def update_agent(wsId: str, agentId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
 
@@ -231,7 +231,7 @@ def update_agent(wsId: str, agentId: str):
 
 @router.delete("/api/workspaces/<wsId>/agents/<agentId>")
 def delete_agent(wsId: str, agentId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
 
@@ -260,7 +260,7 @@ def delete_agent(wsId: str, agentId: str):
 
 @router.post("/api/workspaces/<wsId>/agents/<agentId>/deploy")
 def deploy_agent(wsId: str, agentId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
 
@@ -302,7 +302,7 @@ def deploy_agent(wsId: str, agentId: str):
 
 @router.post("/api/workspaces/<wsId>/agents/<agentId>/publish")
 def publish_agent(wsId: str, agentId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
 
@@ -327,7 +327,7 @@ def publish_agent(wsId: str, agentId: str):
 
 @router.post("/api/workspaces/<wsId>/agents/<agentId>/unpublish")
 def unpublish_agent(wsId: str, agentId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
 
@@ -352,7 +352,7 @@ def unpublish_agent(wsId: str, agentId: str):
 
 @router.get("/api/workspaces/<wsId>/agents/<agentId>/files/<path>")
 def get_agent_file(wsId: str, agentId: str, path: str):
-    user_id, ws_id, member, err = auth_check(router.current_event)
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
     if err:
         return err
 
@@ -385,7 +385,7 @@ def get_agent_file(wsId: str, agentId: str, path: str):
 
 @router.put("/api/workspaces/<wsId>/agents/<agentId>/files/<path>")
 def put_agent_file(wsId: str, agentId: str, path: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor")
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
 
