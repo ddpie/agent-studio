@@ -234,6 +234,7 @@ def get_storage(wsId: str):
         try:
             data = _json.loads(content)
         except Exception:
+            logger.warning("Storage value is not valid JSON", extra={"key": key})
             data = None
     except s3.exceptions.NoSuchKey:
         data = None
@@ -272,7 +273,11 @@ def put_storage(wsId: str):
 
     s3_key = f"workspaces/{ws_id}/storage/{key}"
     s3 = _get_s3()
-    s3.put_object(Bucket=ASSETS_BUCKET, Key=s3_key, Body=content.encode("utf-8"), ContentType="application/json")
+    try:
+        s3.put_object(Bucket=ASSETS_BUCKET, Key=s3_key, Body=content.encode("utf-8"), ContentType="application/json")
+    except Exception:
+        logger.exception("Failed to write storage", extra={"key": key, "ws_id": ws_id})
+        return internal_error()
     return success({"key": key})
 
 
@@ -296,7 +301,11 @@ def delete_storage(wsId: str):
 
     s3_key = f"workspaces/{ws_id}/storage/{key}"
     s3 = _get_s3()
-    s3.delete_object(Bucket=ASSETS_BUCKET, Key=s3_key)
+    try:
+        s3.delete_object(Bucket=ASSETS_BUCKET, Key=s3_key)
+    except Exception:
+        logger.exception("Failed to delete storage", extra={"key": key, "ws_id": ws_id})
+        return internal_error()
     return success({"deleted": True})
 
 
