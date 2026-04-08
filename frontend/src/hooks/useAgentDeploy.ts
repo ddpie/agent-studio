@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { writeJsonToS3 } from "../lib/s3-storage";
-import { updateAgent } from "../lib/api-client";
+import { updateAgent, apiPut, putStorage, getDownloadUrl } from "../lib/api-client";
 import { invokeMetaAgent } from "../lib/agentcore-client";
 import { useEditAssistantStore } from "../stores/edit-assistant-store";
 import { useTranslation } from "react-i18next";
@@ -135,7 +134,6 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
     setValidationResult(null);
 
     try {
-      const stagingKey = `agents/_staging/${agentId || "new"}-val-${Date.now()}.json`;
       const stagingData = {
         name: formData?.name || agentName,
         display_name: formData?.display_name || agentName,
@@ -148,8 +146,21 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
         skills: formData?.skills || [],
         agent_id: agentId,
       };
-      const uploaded = await writeJsonToS3(stagingKey, stagingData);
-      if (!uploaded) { setStatus("Failed to upload config"); return; }
+
+      let stagingKey: string;
+      try {
+        if (agentId && !isCreateMode) {
+          await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
+          stagingKey = `agents/${agentId}/staging.json`;
+        } else {
+          const draftKey = `staging/${agentId || "new"}.json`;
+          await putStorage(draftKey, stagingData);
+          stagingKey = draftKey;
+        }
+      } catch {
+        setStatus("Failed to upload config");
+        return;
+      }
 
       const { toolResults } = await streamMetaAgent(
         `Execute validate_agent with staging_key: ${stagingKey}\nDo NOT ask for confirmation.`,
@@ -180,7 +191,6 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
     setValidationResult(null);
 
     try {
-      const stagingKey = `agents/_staging/${agentId || "new"}-${Date.now()}.json`;
       const stagingData = {
         name: formData?.name || agentName,
         display_name: formData?.display_name || agentName,
@@ -195,8 +205,18 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
         skills: formData?.skills || [],
         agent_id: agentId,
       };
-      const uploaded = await writeJsonToS3(stagingKey, stagingData);
-      if (!uploaded) {
+
+      let stagingKey: string;
+      try {
+        if (agentId && !isCreateMode) {
+          await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
+          stagingKey = `agents/${agentId}/staging.json`;
+        } else {
+          const draftKey = `staging/${agentId || "new"}.json`;
+          await putStorage(draftKey, stagingData);
+          stagingKey = draftKey;
+        }
+      } catch {
         setStatus("Failed to upload config to S3");
         setSaving(false);
         return;
@@ -419,17 +439,21 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
     setSavingDraft(true);
     setStatus(null);
     try {
-      const draftKey = isCreateMode
-        ? `agents/_drafts/${formData?.name || "untitled"}/metadata.json`
-        : `agents/${agentId}/draft.json`;
       const draftData = {
         ...formData,
         _draftSavedAt: new Date().toISOString(),
         _agentId: agentId,
         _agentName: agentName,
       };
-      const ok = await writeJsonToS3(draftKey, draftData);
-      setStatus(ok ? t("agentEditor.draftSaved") : t("agentEditor.draftFailed"));
+      if (isCreateMode) {
+        await putStorage(`drafts/${formData?.name || "untitled"}.json`, draftData);
+      } else {
+        await apiPut(
+          `/agents/${agentId}/files?path=draft.json`,
+          { content: JSON.stringify(draftData) }
+        );
+      }
+      setStatus(t("agentEditor.draftSaved"));
     } catch (err) {
       setStatus(`Error: ${err instanceof Error ? err.message : "Unknown"}`);
     } finally {
@@ -449,9 +473,14 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
       const clean = result.replace(/\{"__tool"[^}]*\}/g, "");
       const keyMatch = clean.match(/"preview_key"\s*:\s*"([^"]+)"/);
       if (keyMatch) {
-        const { readBinaryFromS3 } = await import("../lib/s3-storage");
-        const buf = await readBinaryFromS3(keyMatch[1]);
-        if (buf) setPreviewCode(new TextDecoder().decode(buf));
+        const presignedUrl = await getDownloadUrl(keyMatch[1]);
+        if (presignedUrl) {
+          const resp = await fetch(presignedUrl);
+          if (resp.ok) {
+            const buf = await resp.arrayBuffer();
+            setPreviewCode(new TextDecoder().decode(buf));
+          }
+        }
       }
     } finally {
       setPreviewLoading(false);
