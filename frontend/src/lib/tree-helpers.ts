@@ -17,6 +17,7 @@ export function buildTreeData(files: string[]): TreeNode[] {
   const rootDir: DirEntry = { children: new Map(), files: [] };
 
   for (const f of files) {
+    if (f === "SKILL.md") continue; // already in root
     const parts = f.split("/");
     if (parts.length === 1) {
       rootDir.files.push({ id: f, name: f });
