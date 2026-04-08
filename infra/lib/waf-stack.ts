@@ -30,19 +30,18 @@ export class WafStack extends cdk.Stack {
             managedRuleGroupStatement: {
               vendorName: "AWS",
               name: "AWSManagedRulesCommonRuleSet",
-              excludedRules: [
-                // /api/* paths carry JWT auth; extension checks
-                // block legitimate .txt/.py file endpoints in both
-                // URI path and query params (?path=system_prompt.txt)
-                { name: "RestrictedExtensions_URIPATH" },
-                { name: "RestrictedExtensions_QUERYARGUMENTS" },
-                // Skill import can have large body (multi-file skills from GitHub)
-                // API Gateway has its own 10MB limit; JWT auth protects the endpoint
-                { name: "SizeRestrictions_Body" },
-                // Skill content (SKILL.md) contains HTML/SVG tags as documentation
-                // WAF XSS check false-positives on <script>, <text>, <rect> etc.
-                { name: "CrossSiteScripting_BODY" },
-              ],
+              scopeDownStatement: {
+                notStatement: {
+                  statement: {
+                    byteMatchStatement: {
+                      fieldToMatch: { uriPath: {} },
+                      positionalConstraint: "STARTS_WITH",
+                      searchString: "/api/",
+                      textTransformations: [{ priority: 0, type: "LOWERCASE" }],
+                    },
+                  },
+                },
+              },
             },
           },
         },
