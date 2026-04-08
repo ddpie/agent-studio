@@ -182,8 +182,8 @@ export default function AgentEditForm() {
 
       {/* Form */}
       <div ref={formScrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        {/* Status banner */}
-        {deploy.status && (
+        {/* Status banner — hide when validation results are showing */}
+        {deploy.status && !(deploy.validationResult && (deploy.validationResult.errors.length > 0 || deploy.validationResult.warnings.length > 0)) && (
           <div className={`rounded-lg text-sm font-medium ${deploy.status.includes("Error") || deploy.status.includes("failed") ? "bg-red-50 text-red-600 border border-red-200" : "bg-green-50 text-green-600 border border-green-200"}`}>
             <div className="px-4 py-3 flex items-center justify-between">
               <span>{deploy.status}</span>
