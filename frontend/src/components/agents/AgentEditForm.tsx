@@ -1,7 +1,7 @@
 import { useAgentEditStore } from "../../stores/agent-edit-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { useEditAssistantStore } from "../../stores/edit-assistant-store";
-import { Loader2, Save, Code2, Shield, Sparkles, FileDown, GitCompare, Wrench } from "lucide-react";
+import { Loader2, Save, Code2, Shield, Sparkles, GitCompare, Wrench } from "lucide-react";
 import { useMemo, useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import MonacoEditor from "@monaco-editor/react";
@@ -140,15 +140,6 @@ export default function AgentEditForm() {
           >
             {deploy.validating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
             {t("common.validate")}
-          </button>
-          <button
-            onClick={deploy.handleSaveDraft}
-            disabled={deploy.savingDraft}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
-            title={t("agentEditor.draft")}
-          >
-            {deploy.savingDraft ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
-            {t("agentEditor.draft")}
           </button>
           <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-0.5" />
           <button
