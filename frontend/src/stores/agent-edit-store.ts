@@ -96,9 +96,8 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     const toolCount = (data.tool_definitions || "").split("@tool").length - 1;
     const expectedCount = (data.tools || []).length;
     if (!data.tool_definitions || (expectedCount > 0 && toolCount < expectedCount)) {
-      const name = data.name || agentName || "";
-      if (name) {
-        const extracted = await extractToolsFromDeployment(name);
+      if (agentId) {
+        const extracted = await extractToolsFromDeployment(agentId);
         if (extracted) {
           data.tool_definitions = extracted.tool_definitions;
           if (!data.tool_names) data.tool_names = extracted.tool_names;

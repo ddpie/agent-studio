@@ -1,9 +1,7 @@
 /**
- * Extract @tool function definitions from a deployment.zip's main.py.
- * Uses fflate for fast in-browser zip decompression.
+ * Extract @tool function definitions from tool_definitions.py via Lambda API.
  */
-import { unzipSync } from "fflate";
-import { readBinaryFromS3 } from "./s3-storage";
+import { fetchAgentFile } from "./api-client";
 
 /**
  * Parse @tool blocks from main.py source code.
@@ -83,52 +81,21 @@ export function extractToolNames(toolDefs: string): string {
 }
 
 /**
- * Fetch deployment.zip from S3, extract tools from tools.py (new format) or main.py (legacy).
- * Tries agentId path first, then falls back to base name path.
- * Returns { tool_definitions, tool_names } or null if extraction fails.
+ * Fetch tool_definitions.py from Lambda API and extract tool info.
+ * Returns { tool_definitions, tool_names } or null if not available.
  */
 export async function extractToolsFromDeployment(
-  agentName: string
+  agentId: string
 ): Promise<{ tool_definitions: string; tool_names: string } | null> {
   try {
-    // Try the given name first, then strip the suffix (e.g. "Agent-ey4RTBE1Wa" → "Agent")
-    const baseName = agentName.replace(/[-_][A-Za-z0-9]{10}$/, "");
-    const paths = [
-      `agents/${agentName}/deployment.zip`,
-      ...(baseName !== agentName ? [`agents/${baseName}/deployment.zip`] : []),
-    ];
+    const source = await fetchAgentFile(agentId, "tool_definitions.py");
+    if (!source || !source.includes("@tool")) return null;
 
-    let zipData: ArrayBuffer | null = null;
-    for (const path of paths) {
-      zipData = await readBinaryFromS3(path);
-      if (zipData) break;
-    }
-    if (!zipData) return null;
+    // Strip the "from strands import tool" header, keep only @tool blocks
+    const stripped = source.replace(/^from strands import tool\s*\n*/m, "").trim();
+    if (!stripped || !stripped.includes("@tool")) return null;
 
-    const files = unzipSync(new Uint8Array(zipData), {
-      filter: (file) => file.name === "tools.py" || file.name === "main.py",
-    });
-
-    // New multi-file format: tools.py has only @tool functions
-    const toolsPy = files["tools.py"];
-    if (toolsPy) {
-      const source = new TextDecoder().decode(toolsPy);
-      // Strip the "from strands import tool" header, keep only @tool blocks
-      const stripped = source.replace(/^from strands import tool\s*\n*/m, "").trim();
-      if (stripped && stripped.includes("@tool")) {
-        const tool_names = extractToolNames(stripped);
-        return { tool_definitions: stripped, tool_names };
-      }
-    }
-
-    // Legacy single-file format: parse @tool blocks from main.py
-    const mainPy = files["main.py"];
-    if (!mainPy) return null;
-
-    const source = new TextDecoder().decode(mainPy);
-    const tool_definitions = parseToolDefinitions(source);
-    if (!tool_definitions) return null;
-
+    const tool_definitions = parseToolDefinitions(stripped) || stripped;
     const tool_names = extractToolNames(tool_definitions);
     return { tool_definitions, tool_names };
   } catch (err) {

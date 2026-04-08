@@ -1,4 +1,3 @@
-import { fetchAuthSession } from "aws-amplify/auth";
 import { agentConfig } from "../config";
 import { getImageUploadUrl, getAttachmentUploadUrl, uploadWithPresignedPost } from "./api-client";
 
@@ -46,46 +45,7 @@ export async function fetchSignedS3(s3Url: string): Promise<string> {
         }
       }
     }
-  } catch { /* fallback to original SigV4 path */ }
+  } catch { /* fallback to original URL */ }
 
-  // Fallback: use SigV4 signing
-  const { credentials } = await fetchAuthSession();
-  if (!credentials) return s3Url;
-
-  const { SignatureV4 } = await import("@smithy/signature-v4");
-  const { Sha256 } = await import("@aws-crypto/sha256-js");
-
-  const signer = new SignatureV4({
-    service: "s3",
-    region: agentConfig.region,
-    credentials: {
-      accessKeyId: credentials.accessKeyId,
-      secretAccessKey: credentials.secretAccessKey,
-      sessionToken: credentials.sessionToken,
-    },
-    sha256: Sha256,
-  });
-
-  const parsedUrl = new URL(s3Url);
-  const signed = await signer.sign({
-    method: "GET",
-    protocol: parsedUrl.protocol,
-    hostname: parsedUrl.hostname,
-    path: parsedUrl.pathname,
-    query: {},
-    headers: {
-      Host: parsedUrl.host,
-    },
-  });
-
-  // Fetch as blob with signed headers, then create object URL
-  const response = await fetch(s3Url, {
-    method: "GET",
-    headers: signed.headers as Record<string, string>,
-  });
-
-  if (!response.ok) return s3Url;
-
-  const blob = await response.blob();
-  return URL.createObjectURL(blob);
+  return s3Url;
 }
