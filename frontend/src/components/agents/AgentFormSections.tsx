@@ -195,20 +195,6 @@ export default function AgentFormSections({
             );
           }}
         />
-        <Field label={t("agentFormSections.registeredTools")} changed={!!changedFields.tool_names} hint={t("agentFormSections.registeredToolsHint")}>
-          <div className={`w-full px-2 py-1.5 border border-gray-100 dark:border-gray-700 rounded-lg text-[12px] bg-gray-50 dark:bg-gray-800 min-h-[28px] flex flex-wrap gap-1 ${!formData.tool_names ? "italic text-gray-400" : ""}`}>
-            {formData.tool_names
-              ? (() => {
-                  const allNames = formData.tool_names!.split(",").map(t => t.trim()).filter(Boolean);
-                  return allNames.map(name => (
-                    <span key={name} className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                      {name}
-                    </span>
-                  ));
-                })()
-              : t("agentEditor.noTools")}
-          </div>
-        </Field>
       </Section>
 
       {/* Secrets */}
