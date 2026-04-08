@@ -4,6 +4,7 @@ import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as cr from "aws-cdk-lib/custom-resources";
 import { Construct } from "constructs";
 import { AgentStudioConfig } from "../config";
 
@@ -97,5 +98,53 @@ export class Cdn extends Construct {
     new cdk.CfnOutput(this, "CloudFrontDomain", { value: this.distribution.distributionDomainName });
     new cdk.CfnOutput(this, "CloudFrontId", { value: this.distribution.distributionId });
     new cdk.CfnOutput(this, "FrontendBucketName", { value: this.frontendBucket.bucketName });
+
+    // S3 CORS for assets bucket (external, not CDK-managed)
+    // Needed for presigned URL downloads from browser
+    new cr.AwsCustomResource(this, "AssetsBucketCors", {
+      onCreate: {
+        service: "S3",
+        action: "putBucketCors",
+        parameters: {
+          Bucket: props.config.s3Bucket,
+          CORSConfiguration: {
+            CORSRules: [{
+              AllowedOrigins: [
+                `https://${this.distribution.distributionDomainName}`,
+                "http://localhost:5173",
+                "http://localhost:5174",
+              ],
+              AllowedMethods: ["GET"],
+              AllowedHeaders: ["*"],
+              MaxAgeSeconds: 3600,
+            }],
+          },
+        },
+        physicalResourceId: cr.PhysicalResourceId.of("assets-bucket-cors"),
+      },
+      onUpdate: {
+        service: "S3",
+        action: "putBucketCors",
+        parameters: {
+          Bucket: props.config.s3Bucket,
+          CORSConfiguration: {
+            CORSRules: [{
+              AllowedOrigins: [
+                `https://${this.distribution.distributionDomainName}`,
+                "http://localhost:5173",
+                "http://localhost:5174",
+              ],
+              AllowedMethods: ["GET"],
+              AllowedHeaders: ["*"],
+              MaxAgeSeconds: 3600,
+            }],
+          },
+        },
+        physicalResourceId: cr.PhysicalResourceId.of("assets-bucket-cors"),
+      },
+      policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
+        resources: [`arn:aws:s3:::${props.config.s3Bucket}`],
+      }),
+    });
   }
 }
