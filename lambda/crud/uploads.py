@@ -11,7 +11,7 @@ from boto3.dynamodb.conditions import Key
 from shared.auth import verify_jwt, get_membership, check_permission
 from shared.config import REGION, ASSETS_BUCKET, AGENTS_TABLE, SKILLS_TABLE
 from shared.middleware import auth_check
-from shared.response import success, paginated, forbidden, bad_request
+from shared.response import success, paginated, forbidden, bad_request, not_found, internal_error
 from shared.validators import validate_id, validate_path, parse_pagination
 
 router = Router()
