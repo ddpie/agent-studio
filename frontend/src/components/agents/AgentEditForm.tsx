@@ -67,6 +67,8 @@ export default function AgentEditForm() {
   // Load agent data when route param changes
   useEffect(() => {
     if (routeAgentId) {
+      // Skip loadAgent for draft IDs if store already has data (from openNewWithData)
+      if (routeAgentId.startsWith("draft-") && agentId === routeAgentId && formData) return;
       const agent = agents.find(a => a.id === routeAgentId);
       loadAgent(routeAgentId, agent?.displayName || routeAgentId);
     }
