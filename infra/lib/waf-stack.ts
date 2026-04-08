@@ -36,6 +36,9 @@ export class WafStack extends cdk.Stack {
                 // URI path and query params (?path=system_prompt.txt)
                 { name: "RestrictedExtensions_URIPATH" },
                 { name: "RestrictedExtensions_QUERYARGUMENTS" },
+                // Skill import can have large body (multi-file skills from GitHub)
+                // API Gateway has its own 10MB limit; JWT auth protects the endpoint
+                { name: "SizeRestrictions_Body" },
               ],
             },
           },
