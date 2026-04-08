@@ -247,7 +247,7 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
               </button>
             </span>
           </div>
-          <div className="flex-1 overflow-hidden" ref={treeContainerRef}>
+          <div className="flex-1 overflow-hidden min-h-0" ref={treeContainerRef}>
             <Tree<TreeNode>
               data={editor.treeData}
               openByDefault

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router";
+import { useParams, useNavigate } from "react-router";
 import { useChatStore, type Message } from "../../stores/chat-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { generateDownloadUrl } from "../../lib/s3-storage";
@@ -24,6 +24,7 @@ import { useAgentEditStore } from "../../stores/agent-edit-store";
 
 function AgentProposalCard({ json }: { json: string }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { openNewWithData } = useAgentEditStore();
   let proposal: Record<string, unknown> | null = null;
   let parseError = "";
@@ -90,6 +91,9 @@ function AgentProposalCard({ json }: { json: string }) {
       suggestions,
       supports_images: supportsImages,
     } as Partial<AgentMetadata>);
+    // openNewWithData sets agentId synchronously — read it and navigate
+    const draftId = useAgentEditStore.getState().agentId;
+    if (draftId) navigate(`/agents/edit/${draftId}`);
   };
 
   return (
