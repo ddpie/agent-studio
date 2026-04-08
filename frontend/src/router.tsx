@@ -27,6 +27,7 @@ export function createRouter(
             { index: true, element: <ChatPanel /> },
             { path: "chat/:agentId", element: <ChatPanel /> },
             { path: "edit/:agentId", element: <AgentEditForm /> },
+            { path: "edit/:agentId/skills/:skillId", element: <AgentEditForm /> },
           ],
         },
         { path: "skills", element: <SkillsPage /> },

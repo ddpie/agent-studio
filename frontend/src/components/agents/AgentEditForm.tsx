@@ -18,7 +18,7 @@ import { useAgentDeploy } from "../../hooks/useAgentDeploy";
 
 export default function AgentEditForm() {
   const { t } = useTranslation();
-  const { agentId: routeAgentId } = useParams<{ agentId: string }>();
+  const { agentId: routeAgentId, skillId: routeSkillId } = useParams<{ agentId: string; skillId: string }>();
   const navigate = useNavigate();
   const {
     agentId, agentName, formData, loading, saving,
@@ -74,6 +74,20 @@ export default function AgentEditForm() {
     }
   }, [routeAgentId]);
 
+  // Open skill editor when URL has skillId
+  useEffect(() => {
+    if (routeSkillId && formData?.skills) {
+      const skill = (formData.skills as AgentSkillEntry[]).find(s => s.id === routeSkillId);
+      if (skill && (!editingSkill || editingSkill.id !== routeSkillId)) {
+        setEditingSkill(skill);
+        setEditingSkillId(skill.id);
+      }
+    } else if (!routeSkillId && editingSkill) {
+      setEditingSkill(null);
+      setEditingSkillId(null);
+    }
+  }, [routeSkillId, formData]);
+
   if (!agentId || loading) {
     return (
       <div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-400">
@@ -92,14 +106,7 @@ export default function AgentEditForm() {
           agentId={agentId!}
           skill={editingSkill}
           onBack={() => {
-            setEditingSkill(null)
-            setEditingSkillId(null)
-            // Restore scroll position after React re-renders
-            requestAnimationFrame(() => {
-              if (formScrollRef.current) {
-                formScrollRef.current.scrollTop = savedScrollTop.current
-              }
-            })
+            navigate(`/agents/edit/${agentId}`)
           }}
         />
       ) : (
@@ -287,12 +294,7 @@ export default function AgentEditForm() {
           handleOptimizeField={deploy.handleOptimizeField}
           deployedSkillHashes={formData.deployedSkillHashes}
           onEditSkill={(skill) => {
-            // Save scroll position before switching to skill editor
-            if (formScrollRef.current) {
-              savedScrollTop.current = formScrollRef.current.scrollTop
-            }
-            setEditingSkill(skill)
-            setEditingSkillId(skill.id)
+            navigate(`/agents/edit/${agentId}/skills/${skill.id}`)
           }}
         />
       </div>
