@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { updateAgent, apiPut, putStorage, getDownloadUrl } from "../lib/api-client";
 import { invokeMetaAgent } from "../lib/agentcore-client";
 import { useEditAssistantStore } from "../stores/edit-assistant-store";
@@ -126,6 +126,18 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
   const [autoFixing, setAutoFixing] = useState(false);
   const [previewCode, setPreviewCode] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Reset deploy state when switching agents
+  useEffect(() => {
+    setStatus(null);
+    setErrorDetail(null);
+    setProgressStep(null);
+    setProgressPct(0);
+    setValidationResult(null);
+    setValidating(false);
+    setPendingStagingKey(null);
+    setPreviewCode(null);
+  }, [agentId]);
 
   // ---- Validate only ----
   const handleValidateOnly = async () => {
