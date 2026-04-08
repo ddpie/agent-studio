@@ -28,11 +28,13 @@ def auth_check(event, min_role: str = "viewer", require_ws: bool = True, ws_id: 
     """
     auth_header = event.get_header_value("Authorization") or ""
     if not auth_header.startswith("Bearer "):
+        logger.warning("auth_check: missing Bearer token")
         return None, None, None, forbidden()
     try:
         claims = verify_jwt(auth_header[7:])
         user_id = claims["sub"]
-    except Exception:
+    except Exception as e:
+        logger.warning("auth_check: JWT verification failed: %s", str(e))
         return None, None, None, forbidden()
 
     if not require_ws:
@@ -40,8 +42,10 @@ def auth_check(event, min_role: str = "viewer", require_ws: bool = True, ws_id: 
 
     id_err = validate_id(ws_id, "workspaceId")
     if id_err:
+        logger.warning("auth_check: invalid ws_id=%s", ws_id)
         return None, None, None, forbidden()
     member = get_membership(ws_id, user_id)
     if not check_permission(member, min_role):
+        logger.warning("auth_check: permission denied user=%s ws=%s role=%s min=%s", user_id, ws_id, member.get("role") if member else None, min_role)
         return None, None, None, forbidden()
     return user_id, ws_id, member, None
