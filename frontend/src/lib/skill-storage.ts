@@ -191,31 +191,32 @@ export async function importSkillFromFiles(
   const skillName = meta?.name ?? "imported-skill";
   const skillDesc = meta?.description ?? "";
 
-  onWriteProgress?.(0, 1);
-
-  // Separate scripts (scripts/*) from other extra files
-  const scripts: Record<string, string> = {};
-  const extraFiles: Record<string, string> = {};
-  for (const [path, content] of Object.entries(files)) {
-    if (path === "SKILL.md") continue;
-    if (path.startsWith("scripts/")) {
-      scripts[path.slice("scripts/".length)] = content;
-    } else {
-      extraFiles[path] = content;
-    }
-  }
+  // Step 1: Create skill with SKILL.md only
+  const extraPaths = Object.keys(files).filter(p => p !== "SKILL.md");
+  const total = extraPaths.length + 1;
+  onWriteProgress?.(0, total);
 
   const resp = await importSkillApi({
     content: skillMd,
     name: skillName,
     description: skillDesc,
-    scripts,
-    files: extraFiles,
   });
 
-  onWriteProgress?.(1, 1);
-
   if (!resp) return null;
+  const skillId = resp.skillId;
+  onWriteProgress?.(1, total);
+
+  // Step 2: Upload extra files in batches of 5
+  const BATCH = 5;
+  let done = 1;
+  for (let i = 0; i < extraPaths.length; i += BATCH) {
+    const batch = extraPaths.slice(i, i + BATCH);
+    await Promise.all(
+      batch.map(path => putSkillFile(skillId, path, files[path]))
+    );
+    done += batch.length;
+    onWriteProgress?.(done, total);
+  }
 
   return {
     id: resp.skillId || "",
