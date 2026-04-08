@@ -39,6 +39,7 @@ function toTemplate(item: ToolItem): ToolTemplate {
     created_at: item.created_at || "",
     updated_at: item.updated_at || "",
     deleted: item.deleted || false,
+    deleted_at: item.deleted_at || "",
   };
 }
 

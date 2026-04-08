@@ -42,6 +42,7 @@ def _tool_response(item: dict) -> dict:
         "created_at": item.get("created_at", ""),
         "updated_at": item.get("updated_at", ""),
         "deleted": item.get("deleted", False),
+        "deleted_at": item.get("deleted_at", ""),
     }
 
 

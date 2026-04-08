@@ -151,6 +151,7 @@ export interface ToolItem {
   created_at?: string;
   updated_at?: string;
   deleted?: boolean;
+  deleted_at?: string;
 }
 
 export interface PaginatedResponse<T> {
