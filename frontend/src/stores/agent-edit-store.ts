@@ -25,6 +25,7 @@ interface AgentEditState {
   removeSkill: (skillId: string) => void;
   updateSkillEntry: (skillId: string, updates: Partial<AgentSkillEntry>) => void;
   setPendingSkillFiles: (skillId: string, files: Record<string, string>) => void;
+  initSkillFiles: (skillId: string, files: Record<string, string>) => void;
   getPendingSkillFiles: (skillId: string) => Record<string, string> | undefined;
   clearPendingSkillFiles: (skillId: string) => void;
   updatePendingSkillFile: (skillId: string, filePath: string, content: string) => void;
@@ -82,7 +83,7 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   },
 
   loadAgent: async (agentId, agentName) => {
-    set({ agentId: agentId, agentName: agentName, loading: true, formData: null });
+    set({ agentId: agentId, agentName: agentName, loading: true, formData: null, pendingSkillFiles: {}, originalSkillFiles: {}, editingSkillId: null });
 
     // API 已经整合了 DDB + S3 数据，不需要 fallback
     let metadata = await fetchAgentMetadata(agentId);
@@ -233,11 +234,19 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     const { pendingSkillFiles, originalSkillFiles } = get();
     set({
       pendingSkillFiles: { ...pendingSkillFiles, [skillId]: files },
-      // Only set original if not already present (existing skills loaded from S3)
-      // For newly added skills, original stays empty so diff shows all files as new
+      // Set original to same files if not already present — this is the baseline for diff
       originalSkillFiles: originalSkillFiles[skillId]
         ? originalSkillFiles
-        : { ...originalSkillFiles, [skillId]: {} },
+        : { ...originalSkillFiles, [skillId]: { ...files } },
+    });
+  },
+
+  initSkillFiles: (skillId, files) => {
+    const { originalSkillFiles } = get();
+    // Don't overwrite if already initialized (e.g. by setPendingSkillFiles when skill was added)
+    if (originalSkillFiles[skillId] && Object.keys(originalSkillFiles[skillId]).length > 0) return;
+    set({
+      originalSkillFiles: { ...originalSkillFiles, [skillId]: { ...files } },
     });
   },
 

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { getCurrentUser } from "aws-amplify/auth";
 import {
-  Wrench, Search, RefreshCw, Loader2, Plus, Code2, User, Trash2, RotateCcw, X,
+  Wrench, Search, RefreshCw, Loader2, Plus, Code2, User, Trash2, RotateCcw, X, ChevronLeft,
 } from "lucide-react";
 import { useToolLibraryStore, type ToolTemplate } from "../../stores/tool-library-store";
 
@@ -80,9 +80,18 @@ export default function ToolLibraryPage() {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-        <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">{t("tools.title")}</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400">{t("tools.subtitle")}</p>
+        <div className="flex items-center gap-2">
+          {showTrash && (
+            <button onClick={() => setShowTrash(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("common.back")}>
+              <ChevronLeft className="w-4 h-4 text-gray-500" />
+            </button>
+          )}
+          <div>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+              {showTrash ? t("skills.trash") : t("tools.title")}
+            </h2>
+            {!showTrash && <p className="text-xs text-gray-500 dark:text-gray-400">{t("tools.subtitle")}</p>}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -95,16 +104,15 @@ export default function ToolLibraryPage() {
               className="pl-7 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg w-48 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
             />
           </div>
+          {!showTrash && (
           <button
-            onClick={() => setShowTrash(!showTrash)}
-            className={`p-1.5 rounded-lg transition-colors ${showTrash
-              ? "text-red-500 bg-red-50 dark:bg-red-900/20"
-              : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-            }`}
-            title={showTrash ? t("common.back") : t("skills.trash")}
+            onClick={() => setShowTrash(true)}
+            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+            title={t("skills.trash")}
           >
             <Trash2 className="w-4 h-4" />
           </button>
+          )}
           <button
             onClick={refresh}
             className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"

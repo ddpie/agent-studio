@@ -200,6 +200,8 @@ export default function SkillDiffModal({ open, onClose, agentId, skill }: SkillD
               modified={currentModified}
               language={lang}
               theme={isDark ? "vs-dark" : "light"}
+              keepCurrentOriginalModel={true}
+              keepCurrentModifiedModel={true}
               onMount={(editor) => {
                 const modifiedEditor = editor.getModifiedEditor()
                 modifiedEditor.onDidChangeModelContent(() => {

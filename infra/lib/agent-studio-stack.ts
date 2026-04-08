@@ -33,8 +33,6 @@ export class AgentStudioStack extends cdk.Stack {
       config,
       workspacesTable: database.workspacesTable,
       agentsTable: database.agentsTable,
-      skillsTable: database.skillsTable,
-      toolsTable: database.toolsTable,
     });
 
     const originVerifyValue = process.env.ORIGIN_VERIFY_SECRET;

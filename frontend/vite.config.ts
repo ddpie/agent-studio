@@ -32,6 +32,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: true,
         },
+        '/invoke': {
+          target: cfDomain,
+          changeOrigin: true,
+          secure: true,
+        },
       } : undefined,
     },
   }

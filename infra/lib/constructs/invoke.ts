@@ -10,8 +10,6 @@ export interface InvokeProps {
   config: AgentStudioConfig;
   workspacesTable: dynamodb.Table;
   agentsTable: dynamodb.ITable;
-  skillsTable: dynamodb.ITable;
-  toolsTable: dynamodb.ITable;
 }
 
 export class Invoke extends Construct {
@@ -23,27 +21,25 @@ export class Invoke extends Construct {
 
     this.invokeLambda = new lambda.Function(this, "InvokeHandler", {
       functionName: "agent-studio-invoke",
-      runtime: lambda.Runtime.PYTHON_3_12,
-      handler: "invoke.handler.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "../../../lambda"), {
+      runtime: lambda.Runtime.NODEJS_22_X,
+      handler: "handler.handler",
+      code: lambda.Code.fromAsset(path.join(__dirname, "../../../lambda/invoke-node"), {
         assetHashType: cdk.AssetHashType.SOURCE,
         bundling: {
-          image: lambda.Runtime.PYTHON_3_12.bundlingImage,
+          image: lambda.Runtime.NODEJS_22_X.bundlingImage,
           command: ["bash", "-c",
-            "pip install -r invoke/requirements.txt -t /asset-output && " +
-            "cp -r invoke /asset-output/invoke && " +
-            "cp -r shared /asset-output/shared"
+            "cp package.json /asset-output/ && " +
+            "cp handler.mjs /asset-output/ && " +
+            "cd /asset-output && HOME=/tmp npm install --omit=dev"
           ],
         },
       }),
       timeout: cdk.Duration.seconds(300),
-      memorySize: 512,
+      memorySize: 1024,
       environment: {
-        S3_BUCKET: props.config.s3Bucket,
+        ACCOUNT_ID: props.config.accountId,
         WORKSPACES_TABLE: props.workspacesTable.tableName,
         AGENTS_TABLE: props.agentsTable.tableName,
-        SKILLS_TABLE: props.skillsTable.tableName,
-        TOOLS_TABLE: props.toolsTable.tableName,
         COGNITO_USER_POOL_ID: props.config.cognitoUserPoolId,
         COGNITO_CLIENT_ID: props.config.cognitoClientId,
         META_AGENT_ARN: `arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:runtime/${props.config.metaAgentId}`,
@@ -53,7 +49,7 @@ export class Invoke extends Construct {
     // Function URL with IAM auth (CloudFront OAC signs requests)
     this.functionUrl = this.invokeLambda.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.AWS_IAM,
-      invokeMode: lambda.InvokeMode.BUFFERED, // Switch to RESPONSE_STREAM in Plan 3 with Lambda Web Adapter
+      invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
     });
 
     // Grant DDB read for membership check

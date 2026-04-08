@@ -1,0 +1,11 @@
+{
+  "name": "agent-studio-invoke",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-bedrock-agentcore": "latest",
+    "@aws-sdk/client-dynamodb": "latest",
+    "@aws-sdk/lib-dynamodb": "latest",
+    "jose": "^5.0.0"
+  }
+}

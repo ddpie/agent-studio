@@ -294,6 +294,26 @@ export async function restoreToolApi(toolId: string): Promise<boolean> {
   }
 }
 
+export async function permanentDeleteToolApi(toolId: string): Promise<boolean> {
+  try {
+    invalidateToolsCache();
+    await apiDelete(`/tools/${encodeURIComponent(toolId)}/permanent`);
+    return true;
+  } catch (err) {
+    console.error("permanentDeleteToolApi failed:", err);
+    return false;
+  }
+}
+
+export async function fetchDeletedTools(): Promise<ToolItem[]> {
+  try {
+    return await apiGet<ToolItem[]>("/tools/deleted");
+  } catch (err) {
+    console.error("fetchDeletedTools failed:", err);
+    return [];
+  }
+}
+
 // ── 公开资源 ──
 
 export async function fetchPublicAgents(cursor?: string, limit = 20) {

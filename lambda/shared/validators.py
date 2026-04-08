@@ -1,7 +1,7 @@
 """Request validation helpers."""
 import re
 
-ID_PATTERN = re.compile(r"^[a-zA-Z0-9-]+$")
+ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 MAX_LIMIT = 100
 DEFAULT_LIMIT = 20
 
@@ -9,7 +9,7 @@ DEFAULT_LIMIT = 20
 def validate_id(value: str, name: str = "id") -> str | None:
     """Returns error message if invalid, None if valid."""
     if not value or not ID_PATTERN.match(value):
-        return f"Invalid {name}: must match [a-zA-Z0-9-]+"
+        return f"Invalid {name}: must match [a-zA-Z0-9_-]+"
     if len(value) > 128:
         return f"Invalid {name}: must be 128 characters or less"
     return None

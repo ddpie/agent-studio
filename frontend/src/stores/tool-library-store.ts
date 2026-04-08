@@ -3,7 +3,8 @@
  * Tools are either builtin (from tools_library) or user-created.
  */
 import { create } from "zustand";
-import { scanAllTools, putToolItem, deleteToolItem, softDeleteToolItem, restoreToolItem, type ToolTemplate } from "../lib/tool-storage";
+import { scanAllTools, scanDeletedTools, putToolItem, deleteToolItem, softDeleteToolItem, restoreToolItem, type ToolTemplate } from "../lib/tool-storage";
+import i18n from "../i18n";
 
 export type { ToolTemplate } from "../lib/tool-storage";
 
@@ -36,15 +37,15 @@ export const useToolLibraryStore = create<ToolLibraryState>((set) => ({
   fetchTools: async () => {
     set({ loading: true, error: null });
     try {
-      const all = sortTools(await scanAllTools());
+      const [all, trashed] = await Promise.all([scanAllTools(), scanDeletedTools()]);
       set({
-        tools: all.filter(t => !t.deleted),
-        trashedTools: all.filter(t => t.deleted),
+        tools: sortTools(all),
+        trashedTools: sortTools(trashed),
         loading: false,
       });
     } catch (err) {
       console.error("Failed to fetch tools:", err);
-      set({ tools: [], trashedTools: [], loading: false, error: err instanceof Error ? err.message : "Failed to load tools" });
+      set({ tools: [], trashedTools: [], loading: false, error: i18n.t("tools.loadFailed") });
     }
   },
 
@@ -52,11 +53,11 @@ export const useToolLibraryStore = create<ToolLibraryState>((set) => ({
     set({ saving: true, error: null });
     try {
       await putToolItem(tool);
-      const all = sortTools(await scanAllTools());
-      set({ tools: all.filter(t => !t.deleted), trashedTools: all.filter(t => t.deleted), saving: false });
+      const [all, trashed] = await Promise.all([scanAllTools(), scanDeletedTools()]);
+      set({ tools: sortTools(all), trashedTools: sortTools(trashed), saving: false });
     } catch (err) {
       console.error("Failed to save tool:", err);
-      set({ saving: false, error: err instanceof Error ? err.message : "Failed to save tool" });
+      set({ saving: false, error: i18n.t("tools.saveFailed") });
       throw err;
     }
   },
@@ -65,11 +66,11 @@ export const useToolLibraryStore = create<ToolLibraryState>((set) => ({
     set({ saving: true, error: null });
     try {
       await deleteToolItem(id);
-      const all = sortTools(await scanAllTools());
-      set({ tools: all.filter(t => !t.deleted), trashedTools: all.filter(t => t.deleted), saving: false });
+      const [all, trashed] = await Promise.all([scanAllTools(), scanDeletedTools()]);
+      set({ tools: sortTools(all), trashedTools: sortTools(trashed), saving: false });
     } catch (err) {
       console.error("Failed to delete tool:", err);
-      set({ saving: false, error: err instanceof Error ? err.message : "Failed to delete tool" });
+      set({ saving: false, error: i18n.t("tools.deleteFailed") });
       throw err;
     }
   },
@@ -78,11 +79,11 @@ export const useToolLibraryStore = create<ToolLibraryState>((set) => ({
     set({ saving: true, error: null });
     try {
       await softDeleteToolItem(id);
-      const all = sortTools(await scanAllTools());
-      set({ tools: all.filter(t => !t.deleted), trashedTools: all.filter(t => t.deleted), saving: false });
+      const [all, trashed] = await Promise.all([scanAllTools(), scanDeletedTools()]);
+      set({ tools: sortTools(all), trashedTools: sortTools(trashed), saving: false });
     } catch (err) {
       console.error("Failed to soft-delete tool:", err);
-      set({ saving: false, error: err instanceof Error ? err.message : "Failed to delete tool" });
+      set({ saving: false, error: i18n.t("tools.deleteFailed") });
       throw err;
     }
   },
@@ -91,11 +92,11 @@ export const useToolLibraryStore = create<ToolLibraryState>((set) => ({
     set({ saving: true, error: null });
     try {
       await restoreToolItem(id);
-      const all = sortTools(await scanAllTools());
-      set({ tools: all.filter(t => !t.deleted), trashedTools: all.filter(t => t.deleted), saving: false });
+      const [all, trashed] = await Promise.all([scanAllTools(), scanDeletedTools()]);
+      set({ tools: sortTools(all), trashedTools: sortTools(trashed), saving: false });
     } catch (err) {
       console.error("Failed to restore tool:", err);
-      set({ saving: false, error: err instanceof Error ? err.message : "Failed to restore tool" });
+      set({ saving: false, error: i18n.t("tools.restoreFailed") });
       throw err;
     }
   },

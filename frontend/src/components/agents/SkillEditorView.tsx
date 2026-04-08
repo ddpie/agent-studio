@@ -27,7 +27,7 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
   const { t } = useTranslation()
   const isDark = useIsDark()
   const storage = useSkillStorage(skill.sourceSkillId, agentId, skill.id)
-  const { updateSkillEntry, getPendingSkillFiles, updatePendingSkillFile } = useAgentEditStore()
+  const { getPendingSkillFiles, updatePendingSkillFile, initSkillFiles } = useAgentEditStore()
 
   const editor = useFileEditor({ storage })
 
@@ -56,24 +56,53 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
 
   // --- Load all files on mount ---
   useEffect(() => {
-    const pendingFiles = getPendingSkillFiles(skill.id)
-    if (pendingFiles && Object.keys(pendingFiles).length > 0) {
-      editor.loadFromMemory(pendingFiles)
-      return
+    const loadEverything = async () => {
+      try {
+        const { content } = await editor.loadInitial()
+        // Set original baseline for diff (only SKILL.md to start)
+        const baseFiles: Record<string, string> = {}
+        if (content !== null) baseFiles["SKILL.md"] = content
+        initSkillFiles(skill.id, baseFiles)
+        // Restore any pending edits from store on top of loaded content
+        const pendingFiles = getPendingSkillFiles(skill.id)
+        if (pendingFiles) {
+          editor.restoreEdits(pendingFiles)
+        }
+      } catch (err) {
+        console.error("[SkillEditor] load failed:", err)
+        setError(t("agentSkills.failedToLoad"))
+      }
     }
-    editor.loadInitial().catch(() => {
-      setError(t("agentSkills.failedToLoad"))
-    })
+    loadEverything()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentId, skill.id, skill.sourceSkillId])
 
   const currentContent = editor.content ?? ""
 
-  // --- Switch file ---
+  // --- Switch file — also capture original for diff ---
   const switchFile = useCallback((path: string) => {
     if (editor.pendingDeletes.has(path)) return
-    editor.selectFile(path)
-  }, [editor])
+    editor.selectFile(path).then(() => {
+      // Capture original content for diff if not already tracked
+      const { originalSkillFiles } = useAgentEditStore.getState()
+      const orig = originalSkillFiles[skill.id] || {}
+      if (!(path in orig)) {
+        const originalContent = editor.getOriginalContent(path)
+        if (originalContent !== undefined) {
+          useAgentEditStore.setState({
+            originalSkillFiles: {
+              ...useAgentEditStore.getState().originalSkillFiles,
+              [skill.id]: { ...useAgentEditStore.getState().originalSkillFiles[skill.id], [path]: originalContent },
+            },
+            pendingSkillFiles: {
+              ...useAgentEditStore.getState().pendingSkillFiles,
+              [skill.id]: { ...useAgentEditStore.getState().pendingSkillFiles[skill.id], [path]: originalContent },
+            },
+          })
+        }
+      }
+    })
+  }, [editor, skill.id])
 
   // --- Editor onChange — sync to hook + store ---
   const handleEditorChange = useCallback((value: string | undefined) => {

@@ -1,10 +1,11 @@
 import { fetchAuthSession } from "aws-amplify/auth";
 import { getCurrentUser } from "aws-amplify/auth";
 import { agentConfig } from "../config";
+import { getWorkspaceId } from "./api-client";
 
-const ACCOUNT_ID = agentConfig.accountId;
 const MAX_INIT_RETRIES = 3;
 const INIT_RETRY_DELAY_MS = 5000;
+const API_BASE = agentConfig.apiUrl;
 
 async function getCallerId(): Promise<string> {
   try {
@@ -15,8 +16,11 @@ async function getCallerId(): Promise<string> {
   }
 }
 
-function getEndpoint(agentArn: string) {
-  return `https://bedrock-agentcore.${agentConfig.region}.amazonaws.com/runtimes/${encodeURIComponent(agentArn)}/invocations?qualifier=DEFAULT`;
+async function getIdToken(forceRefresh = false): Promise<string> {
+  const session = await fetchAuthSession({ forceRefresh });
+  const token = session.tokens?.idToken?.toString();
+  if (!token) throw new Error("Not authenticated");
+  return token;
 }
 
 export interface ChatMessage {
@@ -39,11 +43,14 @@ export async function* invokeMetaAgent(
   modelId?: string
 ): AsyncGenerator<string> {
   const callerId = await getCallerId();
-  yield* invokeAgent(agentConfig.metaAgentArn, JSON.stringify({ prompt, history, images, model_id: modelId, caller_id: callerId }), sessionId, onStatus);
+  const wsId = getWorkspaceId();
+  const url = `${API_BASE}/invoke/workspaces/${wsId}/meta-agent`;
+  const body = { prompt, history, images, model_id: modelId, caller_id: callerId, session_id: sessionId };
+  yield* invokeAgent(url, body, onStatus);
 }
 
 /**
- * Invoke any Agent on AgentCore Runtime by ARN or ID.
+ * Invoke any Agent on AgentCore Runtime by ID.
  */
 export async function* invokeAgentById(
   agentId: string,
@@ -54,70 +61,39 @@ export async function* invokeAgentById(
   images?: string[],
   modelId?: string
 ): AsyncGenerator<string> {
-  const arn = `arn:aws:bedrock-agentcore:${agentConfig.region}:${ACCOUNT_ID}:runtime/${agentId}`;
-  yield* invokeAgent(arn, JSON.stringify({ prompt, history, images, model_id: modelId }), sessionId, onStatus);
-}
-
-async function signAndFetch(agentArn: string, body: string, sessionId?: string): Promise<Response> {
-  const { credentials } = await fetchAuthSession();
-  if (!credentials) throw new Error("Not authenticated");
-
-  const { SignatureV4 } = await import("@smithy/signature-v4");
-  const { Sha256 } = await import("@aws-crypto/sha256-js");
-
-  const signer = new SignatureV4({
-    service: "bedrock-agentcore",
-    region: agentConfig.region,
-    credentials: {
-      accessKeyId: credentials.accessKeyId,
-      secretAccessKey: credentials.secretAccessKey,
-      sessionToken: credentials.sessionToken,
-    },
-    sha256: Sha256,
-  });
-
-  const url = new URL(getEndpoint(agentArn));
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "text/event-stream",
-    Host: url.host,
-  };
-
-  if (sessionId) {
-    headers["x-amz-bedrock-agentcore-runtime-session-id"] = sessionId;
-  }
-
-  const signed = await signer.sign({
-    method: "POST",
-    protocol: url.protocol,
-    hostname: url.hostname,
-    path: url.pathname,
-    query: Object.fromEntries(url.searchParams),
-    headers,
-    body,
-  });
-
-  return fetch(url.toString(), {
-    method: "POST",
-    headers: signed.headers as Record<string, string>,
-    body,
-  });
+  const wsId = getWorkspaceId();
+  const url = `${API_BASE}/invoke/workspaces/${wsId}/agents/${encodeURIComponent(agentId)}`;
+  const body = { prompt, history, images, model_id: modelId, session_id: sessionId };
+  yield* invokeAgent(url, body, onStatus);
 }
 
 /**
- * Core: invoke an AgentCore Runtime agent with SigV4 signing.
+ * Core: invoke via Lambda proxy with JWT auth.
  * Auto-retries on 424 (cold start initialization timeout).
  */
 async function* invokeAgent(
-  agentArn: string,
-  body: string,
-  sessionId?: string,
+  url: string,
+  body: Record<string, unknown>,
   onStatus?: StatusCallback
 ): AsyncGenerator<string> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= MAX_INIT_RETRIES; attempt++) {
-    const response = await signAndFetch(agentArn, body, sessionId);
+    const token = await getIdToken(attempt > 0);
+    const bodyStr = JSON.stringify(body);
+    // CloudFront OAC requires x-amz-content-sha256 for POST to Lambda Function URL
+    const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(bodyStr));
+    const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Auth-Token": token,
+        "x-amz-content-sha256": hashHex,
+        Accept: "text/event-stream",
+      },
+      body: bodyStr,
+    });
 
     if (response.ok) {
       onStatus?.(null);
@@ -129,6 +105,11 @@ async function* invokeAgent(
     if (response.status === 424 && attempt < MAX_INIT_RETRIES) {
       onStatus?.(`Agent is initializing... (attempt ${attempt + 1}/${MAX_INIT_RETRIES})`);
       await new Promise((r) => setTimeout(r, INIT_RETRY_DELAY_MS));
+      continue;
+    }
+
+    // 403 on first attempt = possible token expiry, force refresh and retry once
+    if (response.status === 403 && attempt === 0) {
       continue;
     }
 

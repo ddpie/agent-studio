@@ -108,6 +108,15 @@ export class Api extends Construct {
       resources: ["*"],
     }));
 
+    // MCP Gateway discovery (bedrock-agentcore-control plane)
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        "bedrock-agentcore:ListGateways",
+        "bedrock-agentcore:ListGatewayTargets",
+      ],
+      resources: ["*"],
+    }));
+
     // REST API
     this.restApi = new apigateway.RestApi(this, "RestApi", {
       restApiName: "agent-studio-api",

@@ -444,8 +444,7 @@ Respond with ONLY a JSON block:
           </>
         )}
 
-        {/* Delete — only for own tools or seed tools */}
-        {canEdit && (
+        {/* Delete */}
         <button
           onClick={() => setConfirmDelete(true)}
           className={`p-1.5 rounded transition-colors ${isDark ? "text-red-400 hover:bg-red-900/20" : "text-red-400 hover:text-red-600 hover:bg-red-50"}`}
@@ -453,7 +452,6 @@ Respond with ONLY a JSON block:
         >
           <Trash2 className="w-4 h-4" />
         </button>
-        )}
 
         {/* AI Assistant toggle */}
         <button
@@ -618,6 +616,8 @@ Respond with ONLY a JSON block:
                 modified={code}
                 language="python"
                 theme={isDark ? "vs-dark" : "light"}
+                keepCurrentOriginalModel={true}
+                keepCurrentModifiedModel={true}
                 options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, lineNumbers: "on", scrollBeyondLastLine: false, renderSideBySide: true }}
               />
             </div>
@@ -629,14 +629,14 @@ Respond with ONLY a JSON block:
       {confirmDelete && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setConfirmDelete(false)} onKeyDown={(e) => { if (e.key === "Escape") setConfirmDelete(false); }}>
           <div className={`rounded-xl shadow-2xl p-5 max-w-sm mx-4 ${isDark ? "bg-gray-800" : "bg-white"}`} onClick={(e) => e.stopPropagation()}>
-            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("common.delete")}?</p>
-            <p className="text-xs text-gray-500 mb-4">{t("tools.deleteConfirm")}</p>
+            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.moveToTrash")}</p>
+            <p className="text-xs text-gray-500 mb-4">{t("tools.deleteConfirm", { name: name || toolId })}</p>
             <div className="flex justify-end gap-2">
               <button onClick={() => setConfirmDelete(false)} className={`px-3 py-1.5 text-xs rounded-lg ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"}`}>
                 {t("common.cancel")}
               </button>
               <button onClick={handleDelete} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">
-                {t("common.delete")}
+                {t("skillEditor.moveToTrashBtn")}
               </button>
             </div>
           </div>

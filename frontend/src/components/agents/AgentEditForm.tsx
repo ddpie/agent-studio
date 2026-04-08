@@ -23,14 +23,13 @@ export default function AgentEditForm() {
   const {
     agentId, agentName, formData, loading, saving,
     loadAgent, updateField, setSaving, markSaved, getChangedFields,
-    setEditingSkillId,
+    setEditingSkillId, pendingSkillFiles, originalSkillFiles,
   } = useAgentEditStore();
   const { agents, fetchAgents } = useAgentListStore();
   const { panelOpen, openPanel } = useEditAssistantStore();
   const [diffSkill, setDiffSkill] = useState<AgentSkillEntry | null>(null);
   const [editingSkill, setEditingSkill] = useState<AgentSkillEntry | null>(null);
   const formScrollRef = useRef<HTMLDivElement>(null);
-  const savedScrollTop = useRef(0);
 
   const isCreateMode = agentId?.startsWith("draft-") || agentId === "__new__";
 
@@ -43,10 +42,10 @@ export default function AgentEditForm() {
     setSaving,
     markSaved,
     fetchAgents,
-    onNavigateBack: () => navigate(-1),
+    onNavigateBack: () => navigate(agentId ? `/agents/chat/${agentId}` : "/agents"),
   });
 
-  const changedFields = useMemo(() => getChangedFields(), [formData, getChangedFields]);
+  const changedFields = useMemo(() => getChangedFields(), [formData, pendingSkillFiles, originalSkillFiles, getChangedFields]);
 
   // Auto-open AI assistant panel when editing
   useEffect(() => {
@@ -154,7 +153,7 @@ export default function AgentEditForm() {
           </button>
           <div className="w-px h-5 bg-gray-200 dark:bg-gray-700 mx-0.5" />
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate(agentId ? `/agents/chat/${agentId}` : "/agents")}
             className="px-2.5 py-1.5 text-[12px] text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
           >
             {t("common.cancel")}

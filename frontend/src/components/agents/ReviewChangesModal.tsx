@@ -74,6 +74,8 @@ function ReviewChangesModal({ changes, onConfirm, onCancel, viewOnly }: {
             modified={newVal}
             language={lang}
             theme={isDark ? "vs-dark" : "light"}
+            keepCurrentOriginalModel={true}
+            keepCurrentModifiedModel={true}
             options={{
               readOnly: true,
               renderSideBySide: true,

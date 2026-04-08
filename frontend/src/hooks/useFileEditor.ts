@@ -53,6 +53,7 @@ interface UseFileEditorReturn {
   setEditedContent: (path: string, content: string) => void
   markChanged: (path: string) => void
   markNewFromExternal: (path: string, content: string) => void
+  restoreEdits: (edits: Record<string, string>) => void
 }
 
 export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): UseFileEditorReturn {
@@ -459,6 +460,23 @@ export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): U
     if (path === currentFileRef.current) setContent(c)
   }, [changedFiles, editedContents, originalContents, pendingCreates])
 
+  const restoreEdits = useCallback((edits: Record<string, string>) => {
+    const next = new Set(changedFiles)
+    for (const [path, c] of Object.entries(edits)) {
+      editedContents.set(path, c)
+      const orig = originalContents.get(path)
+      if (orig !== undefined && c !== orig) {
+        next.add(path)
+      } else if (orig === undefined) {
+        next.add(path)
+      }
+    }
+    setChangedFiles(next)
+    // Update current file content if it was edited
+    const currentEdited = edits[currentFileRef.current]
+    if (currentEdited !== undefined) setContent(currentEdited)
+  }, [changedFiles, editedContents, originalContents])
+
   return {
     files,
     virtualFiles,
@@ -494,5 +512,6 @@ export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): U
     setEditedContent,
     markChanged,
     markNewFromExternal,
+    restoreEdits,
   }
 }

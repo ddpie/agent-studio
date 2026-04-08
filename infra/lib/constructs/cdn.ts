@@ -40,7 +40,9 @@ export class Cdn extends Construct {
     });
 
     // Lambda Function URL origin with OAC (IAM auth, CloudFront signs requests via SigV4)
-    const invokeOrigin = origins.FunctionUrlOrigin.withOriginAccessControl(props.functionUrl);
+    const invokeOrigin = origins.FunctionUrlOrigin.withOriginAccessControl(props.functionUrl, {
+      readTimeout: cdk.Duration.seconds(60), // CloudFront default max; request quota increase for higher
+    });
 
     // CloudFront OAC requires both InvokeFunctionUrl AND InvokeFunction permissions
     // CDK auto-adds InvokeFunctionUrl but not InvokeFunction
@@ -61,6 +63,18 @@ export class Cdn extends Construct {
         accessControlMaxAge: cdk.Duration.seconds(3600),
         originOverride: true,
       },
+    });
+
+    // Origin request policy for /invoke/* — must NOT forward Authorization header
+    // because it conflicts with CloudFront OAC SigV4 signing.
+    // Frontend sends JWT via X-Auth-Token instead.
+    const invokeOriginRequestPolicy = new cloudfront.OriginRequestPolicy(this, "InvokeOriginRequestPolicy", {
+      originRequestPolicyName: "agent-studio-invoke-orp",
+      headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
+        "Content-Type", "Accept", "X-Auth-Token"
+      ),
+      queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.all(),
+      cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
     });
 
     // CloudFront distribution
@@ -84,7 +98,7 @@ export class Cdn extends Construct {
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
           cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
-          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          originRequestPolicy: invokeOriginRequestPolicy,
           compress: false, // 禁用压缩，否则 gzip 会缓冲 SSE
         },
       },

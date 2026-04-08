@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Plug, RefreshCw, Loader2, Globe } from "lucide-react";
-import { fetchAuthSession } from "aws-amplify/auth";
-import { agentConfig } from "../../config";
+import { apiGet } from "../../lib/api-client";
 
 interface McpGateway {
   id: string;
@@ -18,47 +17,8 @@ interface McpTarget {
 
 async function fetchGateways(): Promise<McpGateway[]> {
   try {
-    const { credentials } = await fetchAuthSession();
-    if (!credentials) return [];
-
-    const { SignatureV4 } = await import("@smithy/signature-v4");
-    const { Sha256 } = await import("@aws-crypto/sha256-js");
-
-    const signer = new SignatureV4({
-      service: "bedrock-agentcore",
-      region: agentConfig.region,
-      credentials: {
-        accessKeyId: credentials.accessKeyId,
-        secretAccessKey: credentials.secretAccessKey,
-        sessionToken: credentials.sessionToken,
-      },
-      sha256: Sha256,
-    });
-
-    const url = new URL(`https://bedrock-agentcore-control.${agentConfig.region}.amazonaws.com/gateways/`);
-    const signed = await signer.sign({
-      method: "POST",
-      protocol: url.protocol,
-      hostname: url.hostname,
-      path: url.pathname,
-      query: {},
-      headers: { "Content-Type": "application/json", Host: url.host },
-      body: "",
-    });
-
-    const resp = await fetch(url.toString(), {
-      method: "POST",
-      headers: signed.headers as Record<string, string>,
-      body: "",
-    });
-
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    return (data.gateways || []).map((g: Record<string, string>) => ({
-      id: g.gatewayId,
-      name: g.name || g.gatewayId,
-      status: g.status || "UNKNOWN",
-    }));
+    const data = await apiGet<{ items: McpGateway[] }>("/mcp/gateways");
+    return data.items || [];
   } catch {
     return [];
   }
@@ -66,48 +26,8 @@ async function fetchGateways(): Promise<McpGateway[]> {
 
 async function fetchTargets(gatewayId: string): Promise<McpTarget[]> {
   try {
-    const { credentials } = await fetchAuthSession();
-    if (!credentials) return [];
-
-    const { SignatureV4 } = await import("@smithy/signature-v4");
-    const { Sha256 } = await import("@aws-crypto/sha256-js");
-
-    const signer = new SignatureV4({
-      service: "bedrock-agentcore",
-      region: agentConfig.region,
-      credentials: {
-        accessKeyId: credentials.accessKeyId,
-        secretAccessKey: credentials.secretAccessKey,
-        sessionToken: credentials.sessionToken,
-      },
-      sha256: Sha256,
-    });
-
-    const url = new URL(`https://bedrock-agentcore-control.${agentConfig.region}.amazonaws.com/gateways/${gatewayId}/targets/`);
-    const signed = await signer.sign({
-      method: "POST",
-      protocol: url.protocol,
-      hostname: url.hostname,
-      path: url.pathname,
-      query: {},
-      headers: { "Content-Type": "application/json", Host: url.host },
-      body: "",
-    });
-
-    const resp = await fetch(url.toString(), {
-      method: "POST",
-      headers: signed.headers as Record<string, string>,
-      body: "",
-    });
-
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    return (data.targets || []).map((t: Record<string, string>) => ({
-      name: t.name || t.targetId,
-      description: t.description || "",
-      endpointUrl: t.endpointUrl || "",
-      status: t.status || "UNKNOWN",
-    }));
+    const data = await apiGet<{ items: McpTarget[] }>(`/mcp/gateways/${encodeURIComponent(gatewayId)}/targets`);
+    return data.items || [];
   } catch {
     return [];
   }

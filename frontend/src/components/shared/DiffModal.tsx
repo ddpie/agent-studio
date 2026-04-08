@@ -56,6 +56,8 @@ export default function DiffModal({ changes, onClose }: DiffModalProps) {
             modified={edited}
             language={getMonacoLanguage(path)}
             theme={isDark ? "vs-dark" : "light"}
+            keepCurrentOriginalModel={true}
+            keepCurrentModifiedModel={true}
             options={{
               readOnly: true,
               renderSideBySide: true,

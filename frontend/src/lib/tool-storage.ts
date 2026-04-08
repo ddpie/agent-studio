@@ -3,9 +3,11 @@
  */
 import {
   fetchTools,
+  fetchDeletedTools,
   invalidateToolsCache,
   createOrUpdateTool,
   deleteToolApi,
+  permanentDeleteToolApi,
   restoreToolApi,
   type ToolItem,
 } from "./api-client";
@@ -55,6 +57,17 @@ export async function scanAllTools(): Promise<ToolTemplate[]> {
   }
 }
 
+/** Fetch soft-deleted tools */
+export async function scanDeletedTools(): Promise<ToolTemplate[]> {
+  try {
+    const items = await fetchDeletedTools();
+    return items.map(toTemplate);
+  } catch (err) {
+    console.error("scanDeletedTools failed:", err);
+    return [];
+  }
+}
+
 /** Save (create or update) a tool template */
 export async function putToolItem(tool: ToolTemplate): Promise<void> {
   try {
@@ -86,10 +99,10 @@ export async function softDeleteToolItem(toolId: string): Promise<void> {
   }
 }
 
-/** Hard-delete a tool (same as soft-delete via API — backend only does soft-delete) */
+/** Hard-delete a tool permanently */
 export async function deleteToolItem(toolId: string): Promise<void> {
   try {
-    const ok = await deleteToolApi(toolId);
+    const ok = await permanentDeleteToolApi(toolId);
     if (!ok) throw new Error("Failed to delete tool");
   } catch (err) {
     console.error("deleteToolItem failed:", err);

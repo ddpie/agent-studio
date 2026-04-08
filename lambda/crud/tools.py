@@ -108,6 +108,29 @@ def list_tools(wsId: str):
     return paginated(items, next_cursor)
 
 
+@router.get("/api/workspaces/<wsId>/tools/deleted")
+def list_deleted_tools(wsId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
+    if err:
+        return err
+
+    table = _get_table()
+    query_kwargs = {
+        "IndexName": "workspace-index",
+        "KeyConditionExpression": Key("workspace_id").eq(ws_id),
+        "FilterExpression": "deleted = :t",
+        "ExpressionAttributeValues": {":t": True},
+    }
+    resp = table.query(**query_kwargs)
+    items = [_tool_response(i) for i in resp.get("Items", [])]
+    while resp.get("LastEvaluatedKey"):
+        query_kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+        resp = table.query(**query_kwargs)
+        items.extend([_tool_response(i) for i in resp.get("Items", [])])
+
+    return success(items)
+
+
 @router.get("/api/workspaces/<wsId>/tools/<toolId>")
 def get_tool(wsId: str, toolId: str):
     user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
@@ -328,3 +351,26 @@ def restore_tool(wsId: str, toolId: str):
         return forbidden()
 
     return success({"restored": True})
+
+
+@router.delete("/api/workspaces/<wsId>/tools/<toolId>/permanent")
+def permanent_delete_tool(wsId: str, toolId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
+    if err:
+        return err
+
+    id_err = validate_id(toolId, "toolId")
+    if id_err:
+        return bad_request(id_err)
+
+    table = _get_table()
+    try:
+        table.delete_item(
+            Key={"toolId": toolId},
+            ConditionExpression="attribute_exists(toolId) AND workspace_id = :ws AND deleted = :t",
+            ExpressionAttributeValues={":ws": ws_id, ":t": True},
+        )
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        return forbidden()
+
+    return success({"deleted": True, "permanent": True})
