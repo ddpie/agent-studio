@@ -11,9 +11,9 @@ export async function uploadImageToS3(dataUrl: string): Promise<string> {
   const filename = `${crypto.randomUUID()}.${ext}`;
 
   const presigned = await getImageUploadUrl(filename, `image/${ext}`);
-  await uploadWithPresignedPost(presigned, blob);
+  await uploadWithPresignedPost({ url: presigned.uploadUrl, fields: presigned.fields }, blob);
 
-  return presigned.key;
+  return presigned.s3Key;
 }
 
 export async function uploadFileToS3(
@@ -21,9 +21,9 @@ export async function uploadFileToS3(
   sessionId: string
 ): Promise<{ key: string; url: string }> {
   const presigned = await getAttachmentUploadUrl(file.name, file.type || "application/octet-stream", sessionId);
-  await uploadWithPresignedPost(presigned, file);
+  await uploadWithPresignedPost({ url: presigned.uploadUrl, fields: presigned.fields }, file);
 
-  return { key: presigned.key, url: "" };
+  return { key: presigned.s3Key, url: "" };
 }
 export async function fetchSignedS3(s3Url: string): Promise<string> {
   // If it's already a data URL, return as-is

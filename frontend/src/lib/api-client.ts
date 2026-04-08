@@ -204,13 +204,13 @@ export async function putAgentFile(agentId: string, filePath: string, content: s
 // ── 上传 ──
 
 export async function getImageUploadUrl(filename: string, contentType: string) {
-  return apiPost<{ url: string; fields: Record<string, string>; key: string }>(
+  return apiPost<{ uploadUrl: string; fields: Record<string, string>; s3Key: string }>(
     "/uploads/images", { filename, content_type: contentType }
   );
 }
 
 export async function getAttachmentUploadUrl(filename: string, contentType: string, sessionId: string) {
-  return apiPost<{ url: string; fields: Record<string, string>; key: string }>(
+  return apiPost<{ uploadUrl: string; fields: Record<string, string>; s3Key: string }>(
     "/uploads/attachments", { filename, content_type: contentType, sessionId }
   );
 }
