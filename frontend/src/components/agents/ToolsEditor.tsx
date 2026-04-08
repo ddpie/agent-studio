@@ -294,13 +294,13 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
       {confirmDeleteIdx !== null && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setConfirmDeleteIdx(null)}>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-5 max-w-sm mx-4" onClick={e => e.stopPropagation()}>
-            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">Delete tool?</p>
+            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">{t("agentEditor.removeTool")}</p>
             <p className="text-xs text-gray-500 mb-4">
               {t("agentEditor.deleteToolConfirm")}
             </p>
             <div className="flex justify-end gap-2">
               <button onClick={() => setConfirmDeleteIdx(null)} className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">{t("common.cancel")}</button>
-              <button onClick={confirmRemove} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">Delete</button>
+              <button onClick={confirmRemove} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">{t("common.delete")}</button>
             </div>
           </div>
         </div>

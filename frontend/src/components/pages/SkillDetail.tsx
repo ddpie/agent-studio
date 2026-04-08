@@ -813,7 +813,7 @@ Respond with ONLY a JSON block:
           <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-xl shadow-2xl p-5 max-w-sm mx-4`} onClick={e => e.stopPropagation()}>
             <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.moveToTrash")}</p>
             <p className="text-xs text-gray-500 mb-4">
-              <span className={`font-mono font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>{skill?.name}</span> will be moved to trash. You can restore it later from the Skills page.
+              {t("skillEditor.moveToTrashDesc", { name: skill?.name })}
             </p>
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowDeleteConfirm(false)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>{t("common.cancel")}</button>
@@ -833,7 +833,7 @@ Respond with ONLY a JSON block:
             <>
               <button onClick={() => { setNewFileDialog({ parentDir: contextMenu.nodeId.replace("__dir__", "") }); setDialogInput(""); setContextMenu(null); }}
                 className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${isDark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`}>
-                <Plus className="w-3 h-3" /> New file here
+                <Plus className="w-3 h-3" /> {t("skillEditor.newFileRoot")}
               </button>
               <button onClick={() => {
                 const parent = contextMenu.nodeId.replace("__dir__", "");
@@ -843,25 +843,25 @@ Respond with ONLY a JSON block:
                 setContextMenu(null);
               }}
                 className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${isDark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`}>
-                <FolderPlus className="w-3 h-3" /> New folder here
+                <FolderPlus className="w-3 h-3" /> {t("skillEditor.newFolderTitle")}
               </button>
             </>
           )}
           {!contextMenu.isFolder && (
             <button onClick={() => { setRenameDialog({ path: contextMenu.nodeId, currentName: contextMenu.nodeId.split("/").pop()! }); setDialogInput(contextMenu.nodeId.split("/").pop()!); setContextMenu(null); }}
               className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${isDark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`}>
-              <Pencil className="w-3 h-3" /> Rename
+              <Pencil className="w-3 h-3" /> {t("skillEditor.renameFile")}
             </button>
           )}
           {!contextMenu.isFolder && (
             <button onClick={() => { setMoveFileDialog(contextMenu.nodeId); setDialogInput(""); setContextMenu(null); }}
               className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${isDark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"}`}>
-              <ArrowRightLeft className="w-3 h-3" /> Move to...
+              <ArrowRightLeft className="w-3 h-3" /> {t("skillEditor.moveTo")}
             </button>
           )}
           <button onClick={() => { setDeleteFileDialog(contextMenu.nodeId); setContextMenu(null); }}
             className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 text-red-400 ${isDark ? "hover:bg-gray-700" : "hover:bg-red-50"}`}>
-            <Trash2 className="w-3 h-3" /> Delete
+            <Trash2 className="w-3 h-3" /> {t("common.delete")}
           </button>
         </div>
       )}
@@ -871,7 +871,7 @@ Respond with ONLY a JSON block:
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setNewFileDialog(null)}>
           <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-xl shadow-2xl p-5 max-w-sm mx-4 w-80`} onClick={e => e.stopPropagation()}>
             <p className={`text-sm font-medium mb-3 ${isDark ? "text-gray-200" : "text-gray-800"}`}>
-              New file{newFileDialog.parentDir ? ` in ${newFileDialog.parentDir}/` : ""}
+              {newFileDialog.parentDir ? t("skillEditor.newFileIn", { dir: newFileDialog.parentDir }) : t("skillEditor.newFileRoot")}
             </p>
             <input
               autoFocus
@@ -882,8 +882,8 @@ Respond with ONLY a JSON block:
               className={`w-full px-2.5 py-1.5 text-xs border rounded-lg outline-none ${isDark ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-800"} focus:ring-1 focus:ring-blue-500`}
             />
             <div className="flex justify-end gap-2 mt-3">
-              <button onClick={() => setNewFileDialog(null)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>Cancel</button>
-              <button onClick={handleNewFile} disabled={!dialogInput.trim()} className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">Create</button>
+              <button onClick={() => setNewFileDialog(null)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>{t("common.cancel")}</button>
+              <button onClick={handleNewFile} disabled={!dialogInput.trim()} className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">{t("common.create")}</button>
             </div>
           </div>
         </div>
@@ -893,7 +893,7 @@ Respond with ONLY a JSON block:
       {newFolderDialog && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setNewFolderDialog(false)}>
           <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-xl shadow-2xl p-5 max-w-sm mx-4 w-80`} onClick={e => e.stopPropagation()}>
-            <p className={`text-sm font-medium mb-3 ${isDark ? "text-gray-200" : "text-gray-800"}`}>New folder</p>
+            <p className={`text-sm font-medium mb-3 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.newFolderTitle")}</p>
             <input
               autoFocus
               value={dialogInput}
@@ -903,8 +903,8 @@ Respond with ONLY a JSON block:
               className={`w-full px-2.5 py-1.5 text-xs border rounded-lg outline-none ${isDark ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-800"} focus:ring-1 focus:ring-blue-500`}
             />
             <div className="flex justify-end gap-2 mt-3">
-              <button onClick={() => setNewFolderDialog(false)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>Cancel</button>
-              <button onClick={handleNewFolder} disabled={!dialogInput.trim()} className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">Create</button>
+              <button onClick={() => setNewFolderDialog(false)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>{t("common.cancel")}</button>
+              <button onClick={handleNewFolder} disabled={!dialogInput.trim()} className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">{t("common.create")}</button>
             </div>
           </div>
         </div>
@@ -914,7 +914,7 @@ Respond with ONLY a JSON block:
       {renameDialog && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setRenameDialog(null)}>
           <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-xl shadow-2xl p-5 max-w-sm mx-4 w-80`} onClick={e => e.stopPropagation()}>
-            <p className={`text-sm font-medium mb-3 ${isDark ? "text-gray-200" : "text-gray-800"}`}>Rename file</p>
+            <p className={`text-sm font-medium mb-3 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.renameFile")}</p>
             <input
               autoFocus
               value={dialogInput}
@@ -923,8 +923,8 @@ Respond with ONLY a JSON block:
               className={`w-full px-2.5 py-1.5 text-xs border rounded-lg outline-none ${isDark ? "bg-gray-900 border-gray-700 text-gray-200" : "bg-white border-gray-200 text-gray-800"} focus:ring-1 focus:ring-blue-500`}
             />
             <div className="flex justify-end gap-2 mt-3">
-              <button onClick={() => setRenameDialog(null)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>Cancel</button>
-              <button onClick={handleRename} disabled={!dialogInput.trim()} className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">Rename</button>
+              <button onClick={() => setRenameDialog(null)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>{t("common.cancel")}</button>
+              <button onClick={handleRename} disabled={!dialogInput.trim()} className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">{t("common.rename")}</button>
             </div>
           </div>
         </div>
@@ -934,13 +934,13 @@ Respond with ONLY a JSON block:
       {deleteFileDialog && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setDeleteFileDialog(null)}>
           <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-xl shadow-2xl p-5 max-w-sm mx-4`} onClick={e => e.stopPropagation()}>
-            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>Delete file?</p>
+            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.deleteFile")}</p>
             <p className="text-xs text-gray-500 mb-4">
-              Remove <span className={`font-mono font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>{deleteFileDialog}</span>. You can undo this with Discard before saving.
+              {t("skillEditor.deleteFileDesc", { name: deleteFileDialog })}
             </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setDeleteFileDialog(null)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>Cancel</button>
-              <button onClick={handleDeleteFile} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">Delete</button>
+              <button onClick={() => setDeleteFileDialog(null)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>{t("common.cancel")}</button>
+              <button onClick={handleDeleteFile} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">{t("common.delete")}</button>
             </div>
           </div>
         </div>
@@ -950,9 +950,9 @@ Respond with ONLY a JSON block:
       {moveFileDialog && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setMoveFileDialog(null)}>
           <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-xl shadow-2xl p-5 max-w-sm mx-4 w-80`} onClick={e => e.stopPropagation()}>
-            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>Move file</p>
+            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.moveFile")}</p>
             <p className="text-xs text-gray-500 mb-3">
-              Move <span className={`font-mono font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>{moveFileDialog.split("/").pop()}</span> to:
+              {t("skillEditor.moveTo")} <span className={`font-mono font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>{moveFileDialog.split("/").pop()}</span>
             </p>
             <div className="space-y-1 max-h-40 overflow-y-auto mb-3">
               {availableDirs.map(dir => {
@@ -968,15 +968,15 @@ Respond with ONLY a JSON block:
                           : isDark ? "text-gray-300 hover:bg-gray-700" : "text-gray-700 hover:bg-gray-100"
                     }`}>
                     {dir === "(root)" ? <File className="w-3 h-3" /> : <FolderClosed className="w-3 h-3 text-yellow-500" />}
-                    {dir === "(root)" ? "Root" : dir}
-                    {isCurrent && <span className="text-[9px] ml-auto opacity-60">current</span>}
+                    {dir === "(root)" ? t("skillEditor.moveToRoot") : dir}
+                    {isCurrent && <span className="text-[9px] ml-auto opacity-60">{t("skillEditor.moveCurrent")}</span>}
                   </button>
                 );
               })}
             </div>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setMoveFileDialog(null)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>Cancel</button>
-              <button onClick={handleMoveFile} disabled={!dialogInput} className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">Move</button>
+              <button onClick={() => setMoveFileDialog(null)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>{t("common.cancel")}</button>
+              <button onClick={handleMoveFile} disabled={!dialogInput} className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">{t("skillEditor.moveFile")}</button>
             </div>
           </div>
         </div>
