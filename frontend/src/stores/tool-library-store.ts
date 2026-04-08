@@ -1,10 +1,9 @@
 /**
- * Tool Library Store — manages tool templates (DynamoDB-backed).
+ * Tool Library Store — manages tool templates (Lambda API-backed).
  * Tools are either builtin (from tools_library) or user-created.
  */
 import { create } from "zustand";
 import { scanAllTools, putToolItem, deleteToolItem, softDeleteToolItem, restoreToolItem, type ToolTemplate } from "../lib/tool-storage";
-import { invalidateToolCatalogCache, writeToolCatalog, type ToolCatalog } from "../lib/s3-utils";
 
 export type { ToolTemplate } from "../lib/tool-storage";
 
@@ -25,24 +24,6 @@ interface ToolLibraryState {
   softDeleteTool: (id: string) => Promise<void>;
   restoreTool: (id: string) => Promise<void>;
   clearError: () => void;
-}
-
-/** Build S3 catalog JSON from tool list */
-function buildCatalog(tools: ToolTemplate[]): ToolCatalog {
-  const catalog: ToolCatalog = {};
-  for (const t of tools) {
-    catalog[t.id] = {
-      id: t.id,
-      name: t.name,
-      description: t.description,
-      category: t.category,
-      code: t.code,
-      builtin: t.builtin,
-      owner: t.owner,
-      visibility: t.visibility,
-    };
-  }
-  return catalog;
 }
 
 export const useToolLibraryStore = create<ToolLibraryState>((set) => ({
@@ -71,12 +52,8 @@ export const useToolLibraryStore = create<ToolLibraryState>((set) => ({
     set({ saving: true, error: null });
     try {
       await putToolItem(tool);
-      const tools = sortTools(await scanAllTools());
-      set({ tools, saving: false });
-      // Sync S3 catalog after write succeeds
-      writeToolCatalog(buildCatalog(tools))
-        .then(() => invalidateToolCatalogCache())
-        .catch((e) => console.warn("Failed to sync S3 catalog:", e));
+      const all = sortTools(await scanAllTools());
+      set({ tools: all.filter(t => !t.deleted), trashedTools: all.filter(t => t.deleted), saving: false });
     } catch (err) {
       console.error("Failed to save tool:", err);
       set({ saving: false, error: err instanceof Error ? err.message : "Failed to save tool" });
@@ -90,9 +67,6 @@ export const useToolLibraryStore = create<ToolLibraryState>((set) => ({
       await deleteToolItem(id);
       const all = sortTools(await scanAllTools());
       set({ tools: all.filter(t => !t.deleted), trashedTools: all.filter(t => t.deleted), saving: false });
-      writeToolCatalog(buildCatalog(all.filter(t => !t.deleted)))
-        .then(() => invalidateToolCatalogCache())
-        .catch((e) => console.warn("Failed to sync S3 catalog:", e));
     } catch (err) {
       console.error("Failed to delete tool:", err);
       set({ saving: false, error: err instanceof Error ? err.message : "Failed to delete tool" });
@@ -105,11 +79,7 @@ export const useToolLibraryStore = create<ToolLibraryState>((set) => ({
     try {
       await softDeleteToolItem(id);
       const all = sortTools(await scanAllTools());
-      const active = all.filter(t => !t.deleted);
-      set({ tools: active, trashedTools: all.filter(t => t.deleted), saving: false });
-      writeToolCatalog(buildCatalog(active))
-        .then(() => invalidateToolCatalogCache())
-        .catch((e) => console.warn("Failed to sync S3 catalog:", e));
+      set({ tools: all.filter(t => !t.deleted), trashedTools: all.filter(t => t.deleted), saving: false });
     } catch (err) {
       console.error("Failed to soft-delete tool:", err);
       set({ saving: false, error: err instanceof Error ? err.message : "Failed to delete tool" });
@@ -122,11 +92,7 @@ export const useToolLibraryStore = create<ToolLibraryState>((set) => ({
     try {
       await restoreToolItem(id);
       const all = sortTools(await scanAllTools());
-      const active = all.filter(t => !t.deleted);
-      set({ tools: active, trashedTools: all.filter(t => t.deleted), saving: false });
-      writeToolCatalog(buildCatalog(active))
-        .then(() => invalidateToolCatalogCache())
-        .catch((e) => console.warn("Failed to sync S3 catalog:", e));
+      set({ tools: all.filter(t => !t.deleted), trashedTools: all.filter(t => t.deleted), saving: false });
     } catch (err) {
       console.error("Failed to restore tool:", err);
       set({ saving: false, error: err instanceof Error ? err.message : "Failed to restore tool" });

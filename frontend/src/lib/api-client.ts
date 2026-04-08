@@ -146,6 +146,11 @@ export interface ToolItem {
   category?: string;
   code?: string;
   builtin?: boolean;
+  owner?: string;
+  visibility?: string;
+  created_at?: string;
+  updated_at?: string;
+  deleted?: boolean;
 }
 
 export interface PaginatedResponse<T> {
@@ -252,6 +257,41 @@ export async function fetchTools(cursor?: string, limit = 100) {
 }
 
 export function invalidateToolsCache() { _toolsCache = null; }
+
+export async function createOrUpdateTool(data: Record<string, any>): Promise<Record<string, any>> {
+  try {
+    invalidateToolsCache();
+    if (data.toolId) {
+      return await apiPut(`/tools/${encodeURIComponent(data.toolId)}`, data);
+    }
+    return await apiPost<{ toolId: string }>("/tools", data);
+  } catch (err) {
+    console.error("createOrUpdateTool failed:", err);
+    throw err;
+  }
+}
+
+export async function deleteToolApi(toolId: string): Promise<boolean> {
+  try {
+    invalidateToolsCache();
+    await apiDelete(`/tools/${encodeURIComponent(toolId)}`);
+    return true;
+  } catch (err) {
+    console.error("deleteToolApi failed:", err);
+    return false;
+  }
+}
+
+export async function restoreToolApi(toolId: string): Promise<boolean> {
+  try {
+    invalidateToolsCache();
+    await apiPost(`/tools/${encodeURIComponent(toolId)}/restore`);
+    return true;
+  } catch (err) {
+    console.error("restoreToolApi failed:", err);
+    return false;
+  }
+}
 
 // ── 公开资源 ──
 

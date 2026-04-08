@@ -60,7 +60,7 @@ export class Api extends Construct {
     this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: [
         "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem",
-        "dynamodb:DeleteItem", "dynamodb:Query",
+        "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:Scan",
       ],
       resources: [
         `arn:aws:dynamodb:${props.config.region}:${props.config.accountId}:table/agent-studio-agents`,

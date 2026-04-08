@@ -36,10 +36,12 @@ def _tool_response(item: dict) -> dict:
         "category": item.get("category", ""),
         "code": item.get("code", ""),
         "builtin": item.get("builtin", False),
+        "owner": item.get("created_by", ""),
         "visibility": item.get("visibility", "private"),
         "created_by": item.get("created_by", ""),
         "created_at": item.get("created_at", ""),
         "updated_at": item.get("updated_at", ""),
+        "deleted": item.get("deleted", False),
     }
 
 
@@ -300,3 +302,28 @@ def unpublish_tool(wsId: str, toolId: str):
         return forbidden()
 
     return success({"toolId": toolId, "visibility": "private"})
+
+
+@router.post("/api/workspaces/<wsId>/tools/<toolId>/restore")
+def restore_tool(wsId: str, toolId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
+    if err:
+        return err
+
+    id_err = validate_id(toolId, "toolId")
+    if id_err:
+        return bad_request(id_err)
+
+    table = _get_table()
+    now = datetime.utcnow().isoformat() + "Z"
+    try:
+        table.update_item(
+            Key={"toolId": toolId},
+            UpdateExpression="SET deleted = :f, updated_at = :now REMOVE deleted_at",
+            ExpressionAttributeValues={":f": False, ":now": now, ":ws": ws_id},
+            ConditionExpression="attribute_exists(toolId) AND workspace_id = :ws",
+        )
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        return forbidden()
+
+    return success({"restored": True})
