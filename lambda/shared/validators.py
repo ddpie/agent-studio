@@ -26,11 +26,12 @@ def parse_pagination(query_params: dict) -> tuple[int, str | None]:
     return limit, cursor
 
 
-SAFE_PATH_RE = re.compile(r'^[a-zA-Z0-9/_.\-]+$')
+SAFE_PATH_RE = re.compile(r'^[^\x00-\x1f\x7f\\]+$')
 
 
 def validate_path(path: str) -> str | None:
-    """Returns error message if invalid, None if valid."""
+    """Returns error message if invalid, None if valid.
+    Allows Unicode (e.g. Chinese filenames). Blocks control chars, backslashes, .., //."""
     if not path or not SAFE_PATH_RE.match(path) or '//' in path:
         return "Invalid path"
     if '..' in path.split('/'):

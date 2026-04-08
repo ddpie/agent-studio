@@ -18,9 +18,9 @@ export async function uploadImageToS3(dataUrl: string): Promise<string> {
 
 export async function uploadFileToS3(
   file: File,
-  _sessionId: string
+  sessionId: string
 ): Promise<{ key: string; url: string }> {
-  const presigned = await getAttachmentUploadUrl(file.name, file.type || "application/octet-stream");
+  const presigned = await getAttachmentUploadUrl(file.name, file.type || "application/octet-stream", sessionId);
   await uploadWithPresignedPost(presigned, file);
 
   return { key: presigned.key, url: "" };

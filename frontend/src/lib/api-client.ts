@@ -209,9 +209,9 @@ export async function getImageUploadUrl(filename: string, contentType: string) {
   );
 }
 
-export async function getAttachmentUploadUrl(filename: string, contentType: string) {
+export async function getAttachmentUploadUrl(filename: string, contentType: string, sessionId: string) {
   return apiPost<{ url: string; fields: Record<string, string>; key: string }>(
-    "/uploads/attachments", { filename, content_type: contentType }
+    "/uploads/attachments", { filename, content_type: contentType, sessionId }
   );
 }
 
