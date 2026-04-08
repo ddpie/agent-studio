@@ -39,6 +39,9 @@ export class WafStack extends cdk.Stack {
                 // Skill import can have large body (multi-file skills from GitHub)
                 // API Gateway has its own 10MB limit; JWT auth protects the endpoint
                 { name: "SizeRestrictions_Body" },
+                // Skill content (SKILL.md) contains HTML/SVG tags as documentation
+                // WAF XSS check false-positives on <script>, <text>, <rect> etc.
+                { name: "CrossSiteScripting_BODY" },
               ],
             },
           },
