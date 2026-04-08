@@ -421,7 +421,7 @@ def put_agent_file(wsId: str, agentId: str):
         Bucket=ASSETS_BUCKET,
         Key=s3_key,
         Body=content.encode("utf-8"),
-        ContentType="text/plain" if path.endswith(".txt") else "text/x-python",
+        ContentType="text/plain" if path.endswith(".txt") else "application/json" if path.endswith(".json") else "text/x-python",
     )
 
     now = datetime.utcnow().isoformat() + "Z"
