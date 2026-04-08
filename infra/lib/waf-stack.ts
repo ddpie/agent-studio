@@ -33,11 +33,25 @@ export class WafStack extends cdk.Stack {
               scopeDownStatement: {
                 notStatement: {
                   statement: {
-                    byteMatchStatement: {
-                      fieldToMatch: { uriPath: {} },
-                      positionalConstraint: "STARTS_WITH",
-                      searchString: "/api/",
-                      textTransformations: [{ priority: 0, type: "LOWERCASE" }],
+                    orStatement: {
+                      statements: [
+                        {
+                          byteMatchStatement: {
+                            fieldToMatch: { uriPath: {} },
+                            positionalConstraint: "STARTS_WITH",
+                            searchString: "/api/",
+                            textTransformations: [{ priority: 0, type: "LOWERCASE" }],
+                          },
+                        },
+                        {
+                          byteMatchStatement: {
+                            fieldToMatch: { uriPath: {} },
+                            positionalConstraint: "STARTS_WITH",
+                            searchString: "/invoke/",
+                            textTransformations: [{ priority: 0, type: "LOWERCASE" }],
+                          },
+                        },
+                      ],
                     },
                   },
                 },
