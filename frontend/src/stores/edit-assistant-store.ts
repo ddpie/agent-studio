@@ -7,6 +7,7 @@ import { fetchAgentHistory, putAgentHistory, getStorage, putStorage } from "../l
 import { invokeMetaAgent } from "../lib/agentcore-client";
 import { useUISettings } from "./ui-settings-store";
 import { writeAgentSkillFile, readAllAgentSkillFiles, computeSkillHash } from "../lib/agent-skill-storage";
+import { useAgentEditStore } from "./agent-edit-store";
 
 export interface AssistantMessage {
   id: string;
@@ -162,9 +163,11 @@ ${(formContext.system_prompt as string || "(empty)")}
 ${toolDefs ? `## Current Tool Code (source of truth)\n\`\`\`python\n${toolDefs}\n\`\`\`` : "## Tools\nNo tools defined yet."}
 
 ${(() => {
-  const skills = (formContext.skills as Array<{ id: string; name: string; description: string; files: string[] }>) || [];
+  const allSkills = (formContext.skills as Array<{ id: string; name: string; description: string; files: string[] }>) || [];
+  const editingSkillId = useAgentEditStore.getState().editingSkillId;
+  const skills = editingSkillId ? allSkills.filter(s => s.id === editingSkillId) : allSkills;
   if (skills.length === 0) return "";
-  return `## Bound Skills
+  return `## Bound Skills${editingSkillId ? " (currently editing)" : ""}
 ${skills.map(s => `- ${s.name}: ${s.description} (files: ${s.files.join(", ")})`).join("\n")}
 
 When the user asks to modify a skill file, use __skill_edit format:

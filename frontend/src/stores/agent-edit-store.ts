@@ -12,6 +12,7 @@ interface AgentEditState {
   saving: boolean;
   pendingSkillFiles: Record<string, Record<string, string>>;
   originalSkillFiles: Record<string, Record<string, string>>;
+  editingSkillId: string | null;
 
   loadAgent: (agentId: string, agentName: string) => Promise<void>;
   openNewWithData: (data: Partial<AgentMetadata>) => void;
@@ -27,6 +28,7 @@ interface AgentEditState {
   getPendingSkillFiles: (skillId: string) => Record<string, string> | undefined;
   clearPendingSkillFiles: (skillId: string) => void;
   updatePendingSkillFile: (skillId: string, filePath: string, content: string) => void;
+  setEditingSkillId: (skillId: string | null) => void;
 }
 
 /**
@@ -71,6 +73,7 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   saving: false,
   pendingSkillFiles: {},
   originalSkillFiles: {},
+  editingSkillId: null,
 
   hasChanges: () => {
     const { formData, originalData } = get();
@@ -256,4 +259,6 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     const current = pendingSkillFiles[skillId] || {};
     set({ pendingSkillFiles: { ...pendingSkillFiles, [skillId]: { ...current, [filePath]: content } } });
   },
+
+  setEditingSkillId: (skillId) => set({ editingSkillId: skillId }),
 }));

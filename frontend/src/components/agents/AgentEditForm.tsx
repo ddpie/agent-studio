@@ -23,6 +23,7 @@ export default function AgentEditForm() {
   const {
     agentId, agentName, formData, loading, saving,
     loadAgent, updateField, setSaving, markSaved, getChangedFields,
+    setEditingSkillId,
   } = useAgentEditStore();
   const { agents, fetchAgents } = useAgentListStore();
   const { panelOpen, openPanel } = useEditAssistantStore();
@@ -90,6 +91,7 @@ export default function AgentEditForm() {
           skill={editingSkill}
           onBack={() => {
             setEditingSkill(null)
+            setEditingSkillId(null)
             // Restore scroll position after React re-renders
             requestAnimationFrame(() => {
               if (formScrollRef.current) {
@@ -288,6 +290,7 @@ export default function AgentEditForm() {
               savedScrollTop.current = formScrollRef.current.scrollTop
             }
             setEditingSkill(skill)
+            setEditingSkillId(skill.id)
           }}
         />
       </div>
