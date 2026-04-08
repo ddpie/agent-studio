@@ -206,16 +206,31 @@ export async function importSkillFromFiles(
   const skillId = resp.skillId;
   onWriteProgress?.(1, total);
 
-  // Step 2: Upload extra files in batches of 5
-  const BATCH = 5;
+  // Step 2: Upload extra files in batches of 3 with retry
+  const BATCH = 3;
+  const MAX_RETRIES = 2;
   let done = 1;
+  const failed: string[] = [];
+
   for (let i = 0; i < extraPaths.length; i += BATCH) {
     const batch = extraPaths.slice(i, i + BATCH);
-    await Promise.all(
-      batch.map(path => putSkillFile(skillId, path, files[path]))
+    const results = await Promise.all(
+      batch.map(async (path) => {
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          const ok = await putSkillFile(skillId, path, files[path]);
+          if (ok) return true;
+          if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        }
+        return false;
+      })
     );
+    results.forEach((ok, idx) => { if (!ok) failed.push(batch[idx]); });
     done += batch.length;
     onWriteProgress?.(done, total);
+  }
+
+  if (failed.length > 0) {
+    console.warn(`Skill import: ${failed.length} files failed after retries`, failed);
   }
 
   return {
