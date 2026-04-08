@@ -3,7 +3,7 @@
  * Simpler than edit-assistant-store: operates on file content, not form fields.
  */
 import { create } from "zustand";
-import { readJsonFromS3, writeJsonToS3 } from "../lib/s3-storage";
+import { fetchSkillHistory, putSkillHistory } from "../lib/api-client";
 import { invokeMetaAgent } from "../lib/agentcore-client";
 import { useUISettings } from "./ui-settings-store";
 
@@ -35,8 +35,6 @@ interface SkillAssistantState {
   cancelStreaming: () => void;
   clearHistory: () => void;
 }
-
-const S3_KEY = (skillId: string) => `skills/${skillId}/.assistant-history.json`;
 
 let _abortController: AbortController | null = null;
 
@@ -71,7 +69,7 @@ export const useSkillAssistantStore = create<SkillAssistantState>((set, get) => 
 
   loadHistory: async (skillId: string) => {
     set({ loading: true });
-    const data = await readJsonFromS3<SkillAssistantMessage[]>(S3_KEY(skillId));
+    const data = await fetchSkillHistory(skillId) as SkillAssistantMessage[] | null;
     if (get().skillId === skillId) {
       set({ messages: data || [], loading: false });
     }
@@ -363,7 +361,7 @@ You may be tempted to take shortcuts. Recognize these:
       set({ isStreaming: false });
       const { skillId, messages } = get();
       if (skillId) {
-        try { await writeJsonToS3(S3_KEY(skillId), messages); } catch { /* best effort */ }
+        try { await putSkillHistory(skillId, messages); } catch { /* best effort */ }
       }
     }
   },
@@ -372,7 +370,7 @@ You may be tempted to take shortcuts. Recognize these:
     const { skillId } = get();
     set({ messages: [] });
     if (skillId) {
-      writeJsonToS3(S3_KEY(skillId), []);
+      putSkillHistory(skillId, []);
     }
   },
 }));

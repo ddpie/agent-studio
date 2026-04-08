@@ -3,7 +3,7 @@
  * Persists to S3 for cross-browser access.
  */
 import { create } from "zustand";
-import { readJsonFromS3, writeJsonToS3 } from "../lib/s3-storage";
+import { fetchAgentHistory, putAgentHistory, getStorage, putStorage } from "../lib/api-client";
 import { invokeMetaAgent } from "../lib/agentcore-client";
 import { useUISettings } from "./ui-settings-store";
 import { writeAgentSkillFile, readAllAgentSkillFiles, computeSkillHash } from "../lib/agent-skill-storage";
@@ -48,11 +48,21 @@ interface EditAssistantState {
   clearHistory: () => void;
 }
 
-const S3_KEY = (agentId: string) => `agents/${agentId}/assistant-history.json`;
-const DRAFT_KEY = (draftId: string) => `drafts/${draftId}/assistant-history.json`;
+const DRAFT_STORAGE_KEY = (draftId: string) => `drafts/${draftId}/history.json`;
 
-function storageKey(agentId: string): string {
-  return agentId.startsWith("draft-") ? DRAFT_KEY(agentId) : S3_KEY(agentId);
+async function loadHistoryData(agentId: string): Promise<AssistantMessage[] | null> {
+  if (agentId.startsWith("draft-")) {
+    return getStorage<AssistantMessage[]>(DRAFT_STORAGE_KEY(agentId));
+  }
+  return fetchAgentHistory(agentId) as Promise<AssistantMessage[] | null>;
+}
+
+async function saveHistoryData(agentId: string, messages: AssistantMessage[]): Promise<void> {
+  if (agentId.startsWith("draft-")) {
+    await putStorage(DRAFT_STORAGE_KEY(agentId), messages);
+  } else {
+    await putAgentHistory(agentId, messages);
+  }
 }
 
 let _abortController: AbortController | null = null;
@@ -91,7 +101,7 @@ export const useEditAssistantStore = create<EditAssistantState>((set, get) => ({
 
   loadHistory: async (agentId: string) => {
     set({ loading: true });
-    const data = await readJsonFromS3<AssistantMessage[]>(storageKey(agentId));
+    const data = await loadHistoryData(agentId);
     // Only update if still viewing the same agent
     if (get().agentId === agentId) {
       set({ messages: data || [], loading: false });
@@ -510,10 +520,10 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
       _abortController = null;
       set({ isStreaming: false, previewContent: null });
 
-      // Persist to S3 (async, non-blocking)
+      // Persist history (async, non-blocking)
       const { agentId, messages } = get();
       if (agentId) {
-        writeJsonToS3(storageKey(agentId), messages);
+        saveHistoryData(agentId, messages);
       }
     }
   },
@@ -522,7 +532,7 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
     const { agentId } = get();
     set({ messages: [] });
     if (agentId) {
-      writeJsonToS3(storageKey(agentId), []);
+      saveHistoryData(agentId, []);
     }
   },
 

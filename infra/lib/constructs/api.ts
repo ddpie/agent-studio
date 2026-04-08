@@ -79,13 +79,14 @@ export class Api extends Construct {
         `arn:aws:s3:::${props.config.s3Bucket}/uploads/*`,
         `arn:aws:s3:::${props.config.s3Bucket}/tools/*`,
         `arn:aws:s3:::${props.config.s3Bucket}/outputs/*`,
+        `arn:aws:s3:::${props.config.s3Bucket}/workspaces/*`,
       ],
     }));
     this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: ["s3:ListBucket"],
       resources: [`arn:aws:s3:::${props.config.s3Bucket}`],
       conditions: {
-        StringLike: { "s3:prefix": ["agents/*", "skills/*", "uploads/*", "tools/*", "outputs/*"] },
+        StringLike: { "s3:prefix": ["agents/*", "skills/*", "uploads/*", "tools/*", "outputs/*", "workspaces/*"] },
       },
     }));
 

@@ -203,6 +203,103 @@ def get_download_url(wsId: str):
         return bad_request("Failed to generate download URL")
 
 
+_STORAGE_PREFIXES = ("tool-history/", "staging/", "drafts/")
+MAX_STORAGE_SIZE = 1_048_576  # 1MB
+
+
+@router.get("/api/workspaces/<wsId>/storage")
+def get_storage(wsId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
+    if err:
+        return err
+
+    key = (router.current_event.query_string_parameters or {}).get("key", "")
+    key_err = validate_path(key)
+    if key_err:
+        return bad_request(key_err)
+    if not any(key.startswith(p) for p in _STORAGE_PREFIXES):
+        return bad_request("Invalid key prefix")
+
+    # staging/drafts auto-inject userId for user isolation
+    if key.startswith("staging/") or key.startswith("drafts/"):
+        parts = key.split("/", 1)
+        key = f"{parts[0]}/{user_id}/{parts[1]}"
+
+    s3_key = f"workspaces/{ws_id}/storage/{key}"
+    s3 = _get_s3()
+    try:
+        obj = s3.get_object(Bucket=ASSETS_BUCKET, Key=s3_key)
+        content = obj["Body"].read().decode("utf-8")
+        import json as _json
+        try:
+            data = _json.loads(content)
+        except Exception:
+            data = None
+    except s3.exceptions.NoSuchKey:
+        data = None
+    except Exception:
+        logger.exception("Failed to read storage", extra={"key": key, "ws_id": ws_id})
+        data = None
+
+    return success({"key": key, "data": data})
+
+
+@router.put("/api/workspaces/<wsId>/storage")
+def put_storage(wsId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
+    if err:
+        return err
+
+    body = router.current_event.json_body or {}
+    key = body.get("key", "")
+    data = body.get("data")
+
+    key_err = validate_path(key)
+    if key_err:
+        return bad_request(key_err)
+    if not any(key.startswith(p) for p in _STORAGE_PREFIXES):
+        return bad_request("Invalid key prefix")
+
+    # staging/drafts auto-inject userId for user isolation
+    if key.startswith("staging/") or key.startswith("drafts/"):
+        parts = key.split("/", 1)
+        key = f"{parts[0]}/{user_id}/{parts[1]}"
+
+    import json as _json
+    content = _json.dumps(data)
+    if len(content) > MAX_STORAGE_SIZE:
+        return bad_request("Content too large (max 1MB)")
+
+    s3_key = f"workspaces/{ws_id}/storage/{key}"
+    s3 = _get_s3()
+    s3.put_object(Bucket=ASSETS_BUCKET, Key=s3_key, Body=content.encode("utf-8"), ContentType="application/json")
+    return success({"key": key})
+
+
+@router.delete("/api/workspaces/<wsId>/storage")
+def delete_storage(wsId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
+    if err:
+        return err
+
+    key = (router.current_event.query_string_parameters or {}).get("key", "")
+    key_err = validate_path(key)
+    if key_err:
+        return bad_request(key_err)
+    if not any(key.startswith(p) for p in _STORAGE_PREFIXES):
+        return bad_request("Invalid key prefix")
+
+    # staging/drafts auto-inject userId for user isolation
+    if key.startswith("staging/") or key.startswith("drafts/"):
+        parts = key.split("/", 1)
+        key = f"{parts[0]}/{user_id}/{parts[1]}"
+
+    s3_key = f"workspaces/{ws_id}/storage/{key}"
+    s3 = _get_s3()
+    s3.delete_object(Bucket=ASSETS_BUCKET, Key=s3_key)
+    return success({"deleted": True})
+
+
 @router.get("/api/public/agents")
 def list_public_agents():
     auth_header = router.current_event.get_header_value("Authorization") or ""

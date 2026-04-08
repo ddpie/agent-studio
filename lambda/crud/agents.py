@@ -367,7 +367,7 @@ def get_agent_file(wsId: str, agentId: str):
         return bad_request(id_err)
 
     path = (router.current_event.query_string_parameters or {}).get("path", "")
-    allowed_paths = {"system_prompt.txt", "tool_definitions.py"}
+    allowed_paths = {"system_prompt.txt", "tool_definitions.py", "assistant-history.json", "draft.json", "staging.json"}
     if path not in allowed_paths:
         return bad_request("Invalid file path")
 
@@ -401,7 +401,7 @@ def put_agent_file(wsId: str, agentId: str):
         return bad_request(id_err)
 
     path = (router.current_event.query_string_parameters or {}).get("path", "")
-    allowed_paths = {"system_prompt.txt", "tool_definitions.py"}
+    allowed_paths = {"system_prompt.txt", "tool_definitions.py", "assistant-history.json", "draft.json", "staging.json"}
     if path not in allowed_paths:
         return bad_request("Invalid file path")
 

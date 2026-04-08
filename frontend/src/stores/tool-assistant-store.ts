@@ -3,7 +3,7 @@
  * Modeled after skill-assistant-store.ts but for @tool function editing.
  */
 import { create } from "zustand";
-import { readJsonFromS3, writeJsonToS3 } from "../lib/s3-storage";
+import { getStorage, putStorage } from "../lib/api-client";
 import { invokeMetaAgent } from "../lib/agentcore-client";
 import { useUISettings } from "./ui-settings-store";
 
@@ -36,7 +36,7 @@ interface ToolAssistantState {
   clearHistory: () => void;
 }
 
-const S3_KEY = (toolId: string) => `agents/tool-assistant/${toolId}/history.json`;
+const STORAGE_KEY = (toolId: string) => `tool-history/${toolId}.json`;
 
 let _abortController: AbortController | null = null;
 
@@ -71,7 +71,7 @@ export const useToolAssistantStore = create<ToolAssistantState>((set, get) => ({
 
   loadHistory: async (toolId: string) => {
     set({ loading: true });
-    const data = await readJsonFromS3<ToolAssistantMessage[]>(S3_KEY(toolId));
+    const data = await getStorage<ToolAssistantMessage[]>(STORAGE_KEY(toolId));
     if (get().toolId === toolId) {
       set({ messages: data || [], loading: false });
     }
@@ -324,7 +324,7 @@ def my_tool(query: str, max_results: int = 5) -> str:
       set({ isStreaming: false });
       const { toolId, messages } = get();
       if (toolId) {
-        writeJsonToS3(S3_KEY(toolId), messages).catch(() => {});
+        putStorage(STORAGE_KEY(toolId), messages).catch(() => {});
       }
     }
   },
@@ -333,7 +333,7 @@ def my_tool(query: str, max_results: int = 5) -> str:
     const { toolId } = get();
     set({ messages: [] });
     if (toolId) {
-      writeJsonToS3(S3_KEY(toolId), []);
+      putStorage(STORAGE_KEY(toolId), []);
     }
   },
 }));

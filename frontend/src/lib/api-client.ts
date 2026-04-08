@@ -400,6 +400,92 @@ export async function deleteSkillApi(skillId: string): Promise<boolean> {
   }
 }
 
+// ── Agent history（领域端点）──
+
+export async function fetchAgentHistory(agentId: string): Promise<unknown[] | null> {
+  try {
+    const resp = await apiGet<{ content: string }>(
+      `/agents/${encodeURIComponent(agentId)}/files?path=assistant-history.json`
+    );
+    return JSON.parse(resp.content);
+  } catch {
+    console.error("fetchAgentHistory failed");
+    return null;
+  }
+}
+
+export async function putAgentHistory(agentId: string, data: unknown[]): Promise<boolean> {
+  try {
+    await apiPut(
+      `/agents/${encodeURIComponent(agentId)}/files?path=assistant-history.json`,
+      { content: JSON.stringify(data) }
+    );
+    return true;
+  } catch {
+    console.error("putAgentHistory failed");
+    return false;
+  }
+}
+
+// ── Skill history（領域端点）──
+
+export async function fetchSkillHistory(skillId: string): Promise<unknown[] | null> {
+  try {
+    const resp = await apiGet<{ content: string }>(
+      `/skills/${encodeURIComponent(skillId)}/files?path=assistant-history.json`
+    );
+    return JSON.parse(resp.content);
+  } catch {
+    console.error("fetchSkillHistory failed");
+    return null;
+  }
+}
+
+export async function putSkillHistory(skillId: string, data: unknown[]): Promise<boolean> {
+  try {
+    await apiPut(
+      `/skills/${encodeURIComponent(skillId)}/files?path=assistant-history.json`,
+      { content: JSON.stringify(data) }
+    );
+    return true;
+  } catch {
+    console.error("putSkillHistory failed");
+    return false;
+  }
+}
+
+// ── Workspace-scoped storage ──
+
+export async function getStorage<T = unknown>(key: string): Promise<T | null> {
+  try {
+    const resp = await apiGet<{ data: T | null }>(`/storage?key=${encodeURIComponent(key)}`);
+    return resp.data;
+  } catch {
+    console.error("getStorage failed");
+    return null;
+  }
+}
+
+export async function putStorage(key: string, data: unknown): Promise<boolean> {
+  try {
+    await apiPut("/storage", { key, data });
+    return true;
+  } catch {
+    console.error("putStorage failed");
+    return false;
+  }
+}
+
+export async function deleteStorage(key: string): Promise<boolean> {
+  try {
+    await apiDelete(`/storage?key=${encodeURIComponent(key)}`);
+    return true;
+  } catch {
+    console.error("deleteStorage failed");
+    return false;
+  }
+}
+
 // ── Agent 技能文件 ──
 
 export async function fetchAgentSkillFiles(agentId: string, skillId: string): Promise<string[]> {
