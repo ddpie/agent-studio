@@ -13,7 +13,8 @@ export async function uploadImageToS3(dataUrl: string): Promise<string> {
   const presigned = await getImageUploadUrl(filename, `image/${ext}`);
   await uploadWithPresignedPost({ url: presigned.uploadUrl, fields: presigned.fields }, blob);
 
-  return presigned.s3Key;
+  // Return full S3 URL so ImageLightbox can fetch via presigned URL
+  return `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/${presigned.s3Key}`;
 }
 
 export async function uploadFileToS3(
