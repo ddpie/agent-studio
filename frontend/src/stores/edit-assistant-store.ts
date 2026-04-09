@@ -562,6 +562,7 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
       // as JSON string values may contain ``` (e.g. code examples in system_prompt)
       const updateMatch = processedText.match(/\{\s*"__update"/);
       const updateIdx = updateMatch ? updateMatch.index! : -1;
+      console.log(`[__update] search in processedText (len=${processedText.length}), found at idx=${updateIdx}`);
       if (updateIdx !== -1) {
         // JSON-aware brace matching
         let depth = 0, inStr = false, esc = false, endIdx = -1;
@@ -574,10 +575,13 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
           if (ch === "{") depth++;
           else if (ch === "}") { depth--; if (depth === 0) { endIdx = i + 1; break; } }
         }
+        console.log(`[__update] brace match: endIdx=${endIdx}`);
         if (endIdx !== -1) {
           const jsonStr = processedText.slice(updateIdx, endIdx);
+          console.log(`[__update] jsonStr length=${jsonStr.length}, first 200:`, jsonStr.slice(0, 200));
           try {
             const parsed = JSON.parse(jsonStr);
+            console.log(`[__update] parsed OK, fields:`, Object.keys(parsed.__update || {}));
             if (parsed.__update && typeof parsed.__update === "object") {
               // Strip auto-computed fields
               delete parsed.__update.tool_names;
