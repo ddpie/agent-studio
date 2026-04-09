@@ -183,6 +183,10 @@ export async function deleteAgent(agentId: string) {
   return apiDelete(`/agents/${encodeURIComponent(agentId)}`);
 }
 
+export async function duplicateAgent(agentId: string) {
+  return apiPost<{ agentId: string }>(`/agents/${encodeURIComponent(agentId)}/duplicate`);
+}
+
 export async function fetchAgentFile(agentId: string, filePath: string): Promise<string> {
   try {
     const data = await apiGet<{ content?: string }>(

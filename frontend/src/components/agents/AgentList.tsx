@@ -3,9 +3,10 @@ import { useNavigate, useParams, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { useAgentEditStore } from "../../stores/agent-edit-store";
-import { Bot, RefreshCw, Loader2, MessageSquare, Settings2, Archive, ChevronDown, RotateCcw, Trash2 } from "lucide-react";
+import { Bot, RefreshCw, Loader2, MessageSquare, Settings2, Archive, ChevronDown, RotateCcw, Trash2, Copy } from "lucide-react";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
+import { duplicateAgent } from "../../lib/api-client";
 
 export default function AgentList({ collapsed = false }: { collapsed?: boolean }) {
   const { t } = useTranslation();
@@ -35,6 +36,19 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
       setActionLoading(null);
     }
   }, [fetchAgents]);
+
+  const handleDuplicate = useCallback(async (agentId: string) => {
+    setActionLoading(agentId);
+    try {
+      const result = await duplicateAgent(agentId);
+      await fetchAgents();
+      if (result?.agentId) navigate(`/agents/edit/${result.agentId}`);
+    } catch (err) {
+      console.error("duplicate failed:", err);
+    } finally {
+      setActionLoading(null);
+    }
+  }, [fetchAgents, navigate]);
 
   useEffect(() => {
     fetchAgents();
@@ -187,6 +201,14 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
                   title={t("common.edit")}
                 >
                   <Settings2 className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDuplicate(agent.id); }}
+                  className="p-1 text-gray-300 hover:text-blue-600 rounded transition-colors"
+                  title={t("agents.duplicate")}
+                  disabled={actionLoading === agent.id}
+                >
+                  <Copy className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); setConfirmAction({ agentId: agent.id, agentName: agent.displayName, type: "archive" }); }}
