@@ -6,7 +6,7 @@ import { useAgentEditStore } from "../../stores/agent-edit-store";
 import { Bot, RefreshCw, Loader2, MessageSquare, Settings2, Archive, ChevronDown, RotateCcw, Trash2, Copy } from "lucide-react";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
-import { duplicateAgent } from "../../lib/api-client";
+import { fetchAgent, fetchAgentSkillFiles, fetchAgentSkillFile } from "../../lib/api-client";
 
 export default function AgentList({ collapsed = false }: { collapsed?: boolean }) {
   const { t } = useTranslation();
@@ -40,15 +40,47 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
   const handleDuplicate = useCallback(async (agentId: string) => {
     setActionLoading(agentId);
     try {
-      const result = await duplicateAgent(agentId);
-      await fetchAgents();
-      if (result?.agentId) navigate(`/agents/edit/${result.agentId}`);
+      const agent = await fetchAgent(agentId);
+      const data: Record<string, any> = {
+        name: (agent.name || "") + "-copy",
+        display_name: (agent.display_name || "") + " (Copy)",
+        description: agent.description || "",
+        system_prompt: agent.system_prompt || "",
+        tool_definitions: agent.tool_definitions || "",
+        tool_names: agent.tool_names || "",
+        template_id: agent.template_id || "",
+        default_model_id: agent.default_model_id || "",
+        supports_images: agent.supports_images || false,
+        welcome_message: agent.welcome_message || "",
+        suggestions: agent.suggestions || [],
+        skills: (agent.skills || []).map((s: any) => ({ ...s, id: crypto.randomUUID().slice(0, 8) })),
+      };
+      const { openNewWithData, initSkillFiles } = useAgentEditStore.getState();
+      openNewWithData(data);
+      const draftId = useAgentEditStore.getState().agentId;
+
+      // Copy skill files into pending store
+      for (const skill of (agent.skills || [])) {
+        const newSkill = data.skills.find((s: any) => s.sourceSkillId === skill.sourceSkillId);
+        if (!newSkill) continue;
+        const files = await fetchAgentSkillFiles(agentId, skill.id);
+        const fileContents: Record<string, string> = {};
+        for (const f of files) {
+          const content = await fetchAgentSkillFile(agentId, skill.id, f);
+          if (content !== null) fileContents[f] = content;
+        }
+        if (Object.keys(fileContents).length > 0) {
+          initSkillFiles(newSkill.id, fileContents);
+        }
+      }
+
+      if (draftId) navigate(`/agents/edit/${draftId}`);
     } catch (err) {
       console.error("duplicate failed:", err);
     } finally {
       setActionLoading(null);
     }
-  }, [fetchAgents, navigate]);
+  }, [navigate]);
 
   useEffect(() => {
     fetchAgents();

@@ -180,54 +180,6 @@ def create_agent(wsId: str):
     return success(_agent_response(item), status_code=201)
 
 
-@router.post("/api/workspaces/<wsId>/agents/<agentId>/duplicate")
-def duplicate_agent(wsId: str, agentId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
-    if err:
-        return err
-
-    id_err = validate_id(agentId, "agentId")
-    if id_err:
-        return bad_request(id_err)
-
-    # Fetch source agent
-    table = _get_table()
-    source = table.get_item(Key={"agentId": agentId}, ConsistentRead=True).get("Item")
-    if not source or source.get("workspace_id") != ws_id:
-        return forbidden()
-    if source.get("status") == "archived":
-        return bad_request("Cannot duplicate an archived agent")
-
-    # Create new agent with copied fields
-    new_id = str(uuid.uuid4())
-    now = datetime.utcnow().isoformat() + "Z"
-    new_item = {k: v for k, v in source.items() if k in ALLOWED_AGENT_FIELDS}
-    new_item["name"] = (source.get("name", "") + "-copy")[:200]
-    new_item["display_name"] = (source.get("display_name", "") + " (Copy)")[:200]
-    new_item = _build_agent_item(new_item, ws_id, new_id, user_id, now)
-    table.put_item(Item=new_item)
-
-    # Copy S3 files (skills, metadata, etc.)
-    s3 = _get_s3()
-    src_prefix = f"agents/{agentId}/"
-    try:
-        paginator = s3.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=ASSETS_BUCKET, Prefix=src_prefix):
-            for obj in page.get("Contents", []):
-                src_key = obj["Key"]
-                dst_key = src_key.replace(src_prefix, f"agents/{new_id}/", 1)
-                s3.copy_object(
-                    Bucket=ASSETS_BUCKET,
-                    CopySource={"Bucket": ASSETS_BUCKET, "Key": src_key},
-                    Key=dst_key,
-                )
-    except Exception:
-        logger.exception("S3 copy failed during agent duplicate")
-        # Agent DDB record is created; S3 copy failure is non-fatal
-
-    return success(_agent_response(new_item), status_code=201)
-
-
 @router.put("/api/workspaces/<wsId>/agents/<agentId>")
 def update_agent(wsId: str, agentId: str):
     user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
