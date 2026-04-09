@@ -532,6 +532,19 @@ export async function fetchAgentSkillFilesBulk(agentId: string, skillId: string)
   }
 }
 
+export async function copySkillFilesFrom(agentId: string, skillId: string, sourceAgentId: string, sourceSkillId: string): Promise<number> {
+  try {
+    const resp = await apiPost<{ copied: number }>(
+      `/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(skillId)}/copy-from`,
+      { sourceAgentId, sourceSkillId }
+    );
+    return resp.copied;
+  } catch (err) {
+    console.error("copySkillFilesFrom failed:", err);
+    return 0;
+  }
+}
+
 export async function fetchAgentSkillFile(agentId: string, skillId: string, path: string): Promise<string | null> {
   try {
     const resp = await apiGet<{ content: string }>(

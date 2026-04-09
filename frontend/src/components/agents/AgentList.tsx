@@ -3,11 +3,9 @@ import { useNavigate, useParams, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { useAgentEditStore } from "../../stores/agent-edit-store";
-import { Bot, RefreshCw, Loader2, MessageSquare, Settings2, Archive, ChevronDown, RotateCcw, Trash2, Copy } from "lucide-react";
+import { Bot, RefreshCw, Loader2, MessageSquare, Settings2, Archive, ChevronDown, RotateCcw, Trash2 } from "lucide-react";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
-import { fetchAgentSkillFilesBulk } from "../../lib/api-client";
-import { fetchAgentMetadata } from "../../lib/agent-metadata";
 
 export default function AgentList({ collapsed = false }: { collapsed?: boolean }) {
   const { t } = useTranslation();
@@ -37,62 +35,6 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
       setActionLoading(null);
     }
   }, [fetchAgents]);
-
-  const handleDuplicate = useCallback(async (agentId: string) => {
-    setActionLoading({ id: agentId, action: "duplicate" });    try {
-      const agent = await fetchAgentMetadata(agentId);
-      if (!agent) throw new Error("Agent not found");
-
-      // Build old-to-new skill ID map
-      const skillIdMap = new Map<string, string>();
-      const newSkills = (agent.skills || []).map((s: any) => {
-        const newId = crypto.randomUUID().slice(0, 8);
-        skillIdMap.set(s.id, newId);
-        return { ...s, id: newId };
-      });
-
-      const data: Record<string, any> = {
-        name: (agent.name || "") + "-copy",
-        display_name: (agent.display_name || "") + " (Copy)",
-        description: agent.description || "",
-        system_prompt: agent.system_prompt || "",
-        tool_definitions: agent.tool_definitions || "",
-        tool_names: agent.tool_names || "",
-        model_id: agent.model_id || "",
-        default_model_id: agent.default_model_id || "",
-        template_id: agent.template_id || "",
-        supports_images: agent.supports_images || false,
-        welcome_message: agent.welcome_message || "",
-        suggestions: agent.suggestions || [],
-        skills: newSkills,
-      };
-      const { openNewWithData, setPendingSkillFiles, initSkillFiles } = useAgentEditStore.getState();
-
-      // Bulk read all skill files (one request per skill)
-      const skillFileMap: Record<string, Record<string, string>> = {};
-      await Promise.all((agent.skills || []).map(async (skill: any) => {
-        const newId = skillIdMap.get(skill.id);
-        if (!newId) return;
-        const files = await fetchAgentSkillFilesBulk(agentId, skill.id);
-        if (Object.keys(files).length > 0) {
-          skillFileMap[newId] = files;
-        }
-      }));
-
-      openNewWithData(data);
-      for (const [skillId, files] of Object.entries(skillFileMap)) {
-        initSkillFiles(skillId, files);
-        setPendingSkillFiles(skillId, files);
-      }
-
-      const draftId = useAgentEditStore.getState().agentId;
-      if (draftId) navigate(`/agents/edit/${draftId}`);
-    } catch (err) {
-      console.error("duplicate failed:", err);
-    } finally {
-      setActionLoading(null);
-    }
-  }, [navigate]);
 
   useEffect(() => {
     fetchAgents();
@@ -245,14 +187,6 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
                   title={t("common.edit")}
                 >
                   <Settings2 className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleDuplicate(agent.id); }}
-                  className="p-1 text-gray-300 hover:text-blue-600 rounded transition-colors"
-                  title={t("agents.duplicate")}
-                  disabled={actionLoading?.id === agent.id}
-                >
-                  {actionLoading?.id === agent.id && actionLoading.action === "duplicate" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); setConfirmAction({ agentId: agent.id, agentName: agent.displayName, type: "archive" }); }}

@@ -509,6 +509,53 @@ def get_agent_skill_file(wsId: str, agentId: str, skillId: str):
     return success({"path": path, "content": content})
 
 
+@router.post("/api/workspaces/<wsId>/agents/<agentId>/skills/<skillId>/copy-from")
+def copy_skill_files_from(wsId: str, agentId: str, skillId: str):
+    """Copy all skill files from a source agent's skill to this agent's skill via S3 CopyObject."""
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
+    if err:
+        return err
+
+    for name, val in [("agentId", agentId), ("skillId", skillId)]:
+        id_err = validate_id(val, name)
+        if id_err:
+            return bad_request(id_err)
+
+    body = router.current_event.json_body or {}
+    source_agent_id = body.get("sourceAgentId", "")
+    source_skill_id = body.get("sourceSkillId", "")
+    if not source_agent_id or not source_skill_id:
+        return bad_request("sourceAgentId and sourceSkillId are required")
+    for name, val in [("sourceAgentId", source_agent_id), ("sourceSkillId", source_skill_id)]:
+        id_err = validate_id(val, name)
+        if id_err:
+            return bad_request(id_err)
+
+    s3 = _get_s3()
+    src_prefix = f"agents/{source_agent_id}/skills/{source_skill_id}/"
+    dst_prefix = f"agents/{agentId}/skills/{skillId}/"
+    copied = 0
+    try:
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=ASSETS_BUCKET, Prefix=src_prefix):
+            for obj in page.get("Contents", []):
+                src_key = obj["Key"]
+                rel = src_key[len(src_prefix):]
+                if not rel:
+                    continue
+                s3.copy_object(
+                    Bucket=ASSETS_BUCKET,
+                    CopySource={"Bucket": ASSETS_BUCKET, "Key": src_key},
+                    Key=f"{dst_prefix}{rel}",
+                )
+                copied += 1
+    except Exception:
+        logger.exception("S3 copy failed for skill files")
+        return internal_error()
+
+    return success({"copied": copied})
+
+
 @router.put("/api/workspaces/<wsId>/agents/<agentId>/skills/<skillId>/files")
 def put_agent_skill_file(wsId: str, agentId: str, skillId: str):
     user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
