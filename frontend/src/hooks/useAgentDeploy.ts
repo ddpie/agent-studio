@@ -430,9 +430,7 @@ Issues:
 ${allIssues.map((issue, i) => `${i + 1}. ${issue}`).join("\n")}
 
 Rules:
-- If the change affects less than 60% of the field's lines → use __field_edit (search/replace) with precise SEARCH blocks.
-- If the change affects 60% or more of the field's lines → MUST use __update with the COMPLETE new field value.
-- Use __update JSON for short fields (description, etc.).
+- ALWAYS use __field_edit (search/replace) for ALL changes. Do NOT use __update.
 - Do NOT set tool_names — it is auto-computed.
 - Fix ONLY the specific issues listed above.
 - NEVER delete existing content, sections, or descriptions.

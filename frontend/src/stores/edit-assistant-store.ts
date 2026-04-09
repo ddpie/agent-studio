@@ -189,9 +189,8 @@ ${content}
 ## Output Format
 When the user asks for a plan, approach, or opinion (e.g., "怎么做", "你打算", "你觉得", "how would you", "what's your plan"), respond with ONLY text explanation. Do NOT output any __update or __field_edit block. Wait for the user to confirm before making changes.
 
-When the user gives a clear instruction to change something, choose the appropriate format:
+When the user gives a clear instruction to change something, use __field_edit:
 
-### For small changes to long fields (system_prompt, tool_definitions): use __field_edit
 \`\`\`__field_edit:FIELD_NAME
 <<<<<<< SEARCH
 exact text to find (copy verbatim from the field)
@@ -211,21 +210,11 @@ new section
 >>>>>>> REPLACE
 \`\`\`
 
-### For short fields or new values: use __update JSON
-\`\`\`json
-{"__update": {"field_name": "new_value", ...}}
-\`\`\`
-
-### Rules for choosing format
-- If the change affects less than 60% of the field's lines → use __field_edit with precise SEARCH blocks
-- If the change affects 60% or more of the field's lines → MUST use __update with the COMPLETE new field value
-- Setting short fields (name, description, welcome_message, suggestions) → use __update
-- Creating entirely new system_prompt or tool_definitions → use __update
+### Rules
+- ALWAYS use __field_edit for ALL fields including system_prompt, tool_definitions, description, welcome_message, suggestions, etc.
+- For short fields (name, description, welcome_message, suggestions): use a single SEARCH/REPLACE that matches the entire current value
 - SEARCH text must match the field content EXACTLY (whitespace matters)
-- NEVER explain your format choice to the user. Do NOT mention __update, __field_edit, percentages, or line counts in your response. Just output the format block directly after your explanation of what you changed.
-
-WRONG: {"system_prompt": "..."} (missing __update wrapper)
-CORRECT: {"__update": {"description": "..."}}
+- NEVER explain your format choice to the user. Do NOT mention __field_edit, percentages, or line counts in your response. Just output the format block directly after your explanation of what you changed.
 
 ## Tool Update Rules
 
@@ -287,8 +276,7 @@ Apply best practices:
 
 ### Mode C: Auto-fix (message starts with "## Auto-Fix Task")
 Fix ALL listed validation issues immediately. Do NOT ask for confirmation. Rules:
-- If the change affects less than 60% of the field's lines → use __field_edit with precise SEARCH blocks.
-- If the change affects 60% or more of the field's lines → MUST use __update with the COMPLETE new field value.
+- ALWAYS use __field_edit for ALL changes. Do NOT use __update.
 - For tool_definitions: only output changed tools.
 - Fix prompt review warnings by adding missing sections/content, not by rewriting.
 - Be precise and minimal — fix only what's flagged.
