@@ -72,6 +72,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
 
       // Navigate immediately so URL updates
       if (draftId) navigate(`/agents/edit/${draftId}`);
+      setActionLoading(null);
 
       // Copy skill files in parallel (runs after navigation)
       await Promise.all((agent.skills || []).map(async (skill: any) => {
