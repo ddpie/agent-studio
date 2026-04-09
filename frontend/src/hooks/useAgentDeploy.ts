@@ -345,17 +345,17 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
       );
 
       const deployResult = (toolResults.update_agent || toolResults.create_agent) as { error?: string; status?: string; details?: string[] } | undefined;
-      const failed = deployResult?.error != null;
+      const failed = !deployResult || deployResult.error != null;
 
       setProgressStep(null);
       setProgressPct(failed ? 0 : 100);
       setStatus(failed ? (isCreateMode ? t("agentEditor.createFailed") : t("agentEditor.updateFailed")) : (isCreateMode ? t("agentEditor.createSuccess") : t("agentEditor.updateSuccess")));
 
       if (failed) {
-        const errorMsg = deployResult!.error!;
-        const details = deployResult!.details?.join("\n") || "";
+        const errorMsg = deployResult?.error || t("agentEditor.deployToolNotCalled");
+        const details = deployResult?.details?.join("\n") || "";
         setErrorDetail(details || errorMsg);
-        setValidationResult({ valid: false, errors: [errorMsg, ...(deployResult!.details || [])], warnings: [] });
+        setValidationResult({ valid: false, errors: [errorMsg, ...(deployResult?.details || [])], warnings: [] });
         setPendingStagingKey(stagingKey);
       } else {
         setErrorDetail(null);
