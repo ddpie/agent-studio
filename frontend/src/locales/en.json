@@ -230,6 +230,7 @@
     "deploying": "Deploying...",
     "checkingStatus": "Checking status...",
     "savingMetadata": "Saving metadata...",
+    "gettingDetail": "Getting agent details...",
     "showDetails": "Show details",
     "codePreview": "Assembled Code Preview (main.py)",
     "createDesc": "Configure and deploy a new agent"

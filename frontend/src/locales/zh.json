@@ -230,6 +230,7 @@
     "deploying": "部署中...",
     "checkingStatus": "检查状态...",
     "savingMetadata": "保存元数据...",
+    "gettingDetail": "获取 Agent 详情...",
     "showDetails": "显示详情",
     "codePreview": "组装代码预览 (main.py)",
     "createDesc": "配置并部署新 Agent"

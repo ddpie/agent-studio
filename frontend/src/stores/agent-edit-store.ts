@@ -141,9 +141,12 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   setSaving: (saving) => set({ saving }),
 
   markSaved: () => {
-    const { formData } = get();
+    const { formData, pendingSkillFiles } = get();
     if (formData) {
-      set({ originalData: JSON.parse(JSON.stringify(formData)) });
+      set({
+        originalData: JSON.parse(JSON.stringify(formData)),
+        originalSkillFiles: JSON.parse(JSON.stringify(pendingSkillFiles)),
+      });
     }
   },
 
