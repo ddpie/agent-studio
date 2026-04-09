@@ -68,21 +68,25 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
       };
       const { openNewWithData, setPendingSkillFiles, initSkillFiles } = useAgentEditStore.getState();
 
-      // Copy skill files before opening draft
+      // Copy skill files before opening draft (batch to avoid API throttling)
       const skillFileMap: Record<string, Record<string, string>> = {};
-      await Promise.all((agent.skills || []).map(async (skill: any) => {
+      for (const skill of (agent.skills || [])) {
         const newId = skillIdMap.get(skill.id);
         if (!newId) return;
         const files = await fetchAgentSkillFiles(agentId, skill.id);
-        const contents = await Promise.all(files.map(f => fetchAgentSkillFile(agentId, skill.id, f).then(c => [f, c] as const)));
         const fileContents: Record<string, string> = {};
-        for (const [f, c] of contents) {
-          if (c !== null) fileContents[f] = c;
+        // Batch file reads, 10 at a time
+        for (let i = 0; i < files.length; i += 10) {
+          const batch = files.slice(i, i + 10);
+          const results = await Promise.all(batch.map(f => fetchAgentSkillFile(agentId, skill.id, f).then(c => [f, c] as const)));
+          for (const [f, c] of results) {
+            if (c !== null) fileContents[f] = c;
+          }
         }
         if (Object.keys(fileContents).length > 0) {
           skillFileMap[newId] = fileContents;
         }
-      }));
+      }
 
       openNewWithData(data);
       for (const [skillId, files] of Object.entries(skillFileMap)) {
