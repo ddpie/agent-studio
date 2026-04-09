@@ -290,6 +290,24 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
     setProgressStep(isCreateMode ? t("agentEditor.preparing") : t("agentEditor.updating"));
 
     try {
+      // Re-upload staging.json with latest formData (auto-fix may have changed fields)
+      if (agentId && !isCreateMode && formData) {
+        const stagingData = {
+          name: formData.name || agentName,
+          display_name: formData.display_name || agentName,
+          description: formData.description || "",
+          system_prompt: formData.system_prompt || "",
+          tool_definitions: formData.tool_definitions || "",
+          tool_names: formData.tool_names || "",
+          welcome_message: formData.welcome_message || "",
+          suggestions: Array.isArray(formData.suggestions) ? formData.suggestions : (formData.suggestions || "").split("|").filter(Boolean),
+          template_id: formData.template_id || "",
+          supports_images: formData.supports_images || false,
+          skills: formData.skills || [],
+          agent_id: agentId,
+        };
+        await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
+      }
       const prompt = isCreateMode
         ? `Execute create_agent with staging_key: ${stagingKey}
 The full config is in S3. Read it and use those parameters.
