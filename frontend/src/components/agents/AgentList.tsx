@@ -71,7 +71,10 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
       openNewWithData(data);
       const draftId = useAgentEditStore.getState().agentId;
 
-      // Copy skill files in parallel
+      // Navigate immediately so URL updates
+      if (draftId) navigate(`/agents/edit/${draftId}`);
+
+      // Copy skill files in parallel (runs after navigation)
       await Promise.all((agent.skills || []).map(async (skill: any) => {
         const newId = skillIdMap.get(skill.id);
         if (!newId) return;
@@ -86,8 +89,6 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
           setPendingSkillFiles(newId, fileContents);
         }
       }));
-
-      if (draftId) navigate(`/agents/edit/${draftId}`);
     } catch (err) {
       console.error("duplicate failed:", err);
     } finally {
