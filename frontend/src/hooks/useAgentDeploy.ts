@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { updateAgent, apiPut, putStorage } from "../lib/api-client";
+import { updateAgent, apiPut, putStorage, putAgentSkillFile } from "../lib/api-client";
 import { invokeMetaAgent } from "../lib/agentcore-client";
 import { useEditAssistantStore } from "../stores/edit-assistant-store";
+import { useAgentEditStore } from "../stores/agent-edit-store";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import type { AgentMetadata } from "../lib/agent-metadata";
@@ -307,6 +308,14 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
           agent_id: agentId,
         };
         await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
+
+        // Upload pending skill files to S3 before deploy
+        const { pendingSkillFiles } = useAgentEditStore.getState();
+        for (const [skillId, files] of Object.entries(pendingSkillFiles)) {
+          for (const [filePath, content] of Object.entries(files)) {
+            await putAgentSkillFile(agentId, skillId, filePath, content);
+          }
+        }
       }
       const prompt = isCreateMode
         ? `Execute create_agent with staging_key: ${stagingKey}
