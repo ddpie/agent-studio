@@ -510,16 +510,15 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
       }
 
       // Post-stream: extract __update JSON from the complete response
-      // Strip __field_edit blocks and markdown code fences
-      const cleanedText = processedText.replace(/```(?:json)?\s*/g, "").replace(/```/g, "");
-      // Match with optional whitespace: { "__update" or {"__update"
-      const updateMatch = cleanedText.match(/\{\s*"__update"/);
+      // Find {"__update" directly in processedText — do NOT strip backticks globally
+      // as JSON string values may contain ``` (e.g. code examples in system_prompt)
+      const updateMatch = processedText.match(/\{\s*"__update"/);
       const updateIdx = updateMatch ? updateMatch.index! : -1;
       if (updateIdx !== -1) {
         // JSON-aware brace matching
         let depth = 0, inStr = false, esc = false, endIdx = -1;
-        for (let i = updateIdx; i < cleanedText.length; i++) {
-          const ch = cleanedText[i];
+        for (let i = updateIdx; i < processedText.length; i++) {
+          const ch = processedText[i];
           if (esc) { esc = false; continue; }
           if (ch === "\\") { esc = true; continue; }
           if (ch === '"') { inStr = !inStr; continue; }
@@ -528,7 +527,7 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
           else if (ch === "}") { depth--; if (depth === 0) { endIdx = i + 1; break; } }
         }
         if (endIdx !== -1) {
-          const jsonStr = cleanedText.slice(updateIdx, endIdx);
+          const jsonStr = processedText.slice(updateIdx, endIdx);
           try {
             const parsed = JSON.parse(jsonStr);
             if (parsed.__update && typeof parsed.__update === "object") {
