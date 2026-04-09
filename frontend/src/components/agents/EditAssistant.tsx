@@ -291,7 +291,7 @@ export default function EditAssistant() {
 
   const onUpdateHandler = (updates: Record<string, unknown>) => {
     for (const [key, value] of Object.entries(updates)) {
-      // Handle skill hash updates from __skill_edit
+      // Handle skill hash updates from __field_value
       if (key.startsWith("__skill_hash_") && typeof value === "string") {
         const skillId = key.replace("__skill_hash_", "");
         const { updateSkillEntry } = useAgentEditStore.getState();

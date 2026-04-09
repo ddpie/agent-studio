@@ -22,7 +22,7 @@ interface EditAssistantState {
   loading: boolean;
   panelOpen: boolean;
   selectedModelId: string | null;
-  previewContent: string | null; // Raw streaming content during __update hold
+  previewContent: string | null;
 
   openPanel: (agentId: string) => void;
   closePanel: () => void;
@@ -169,15 +169,10 @@ ${(() => {
   return `## Bound Skills${editingSkillId ? " (currently editing)" : ""}
 ${skills.map(s => `- ${s.name}: ${s.description} (files: ${s.files.join(", ")})`).join("\n")}
 
-When the user asks to modify a skill file, use __skill_edit format:
-\`\`\`__skill_edit:{skillId}:{filePath}
-<<<<<<< SEARCH
-exact text to find (copy verbatim from the skill file)
-=======
-replacement text
->>>>>>> REPLACE
-\`\`\`
-CRITICAL: SEARCH text must be copied character-for-character from the skill file. Do NOT retype or paraphrase.
+When the user asks to modify a skill file, use __field_value with the skill file path:
+\`\`\`\`__field_value:skill:{skillId}:{filePath}
+complete new file content
+\`\`\`\`
 `;
 })()}
 
@@ -259,7 +254,7 @@ Apply best practices:
 
 ### Mode C: Auto-fix (message starts with "## Auto-Fix Task")
 Fix ALL listed validation issues immediately. Do NOT ask for confirmation. Rules:
-- Prefer __field_value for large changes. Use __field_edit only for tiny fixes (1-3 lines).
+- Prefer __field_value for large changes.
 - For tool_definitions: only output changed tools.
 - Fix prompt review warnings by adding missing sections/content, not by rewriting.
 - Be precise and minimal — fix only what's flagged.

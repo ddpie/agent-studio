@@ -165,7 +165,7 @@ export default function AgentFormSections({
             const { sendMessage, openPanel } = useEditAssistantStore.getState();
             openPanel(agentId);
             sendMessage(
-              `Optimize the tool \`${toolName}\`. Current code:\n\`\`\`python\n${toolCode}\n\`\`\`\n\nImprove:\n1. Docstring: clear, describes purpose, args, and return value\n2. Type hints: complete for all parameters and return\n3. Error handling: handle common failures (timeout, permission denied, empty results)\n4. Code quality: concise, no unnecessary comments\nOnly output this one tool in tool_definitions. Output __update JSON.`,
+              `Optimize the tool \`${toolName}\`. Current code:\n\`\`\`python\n${toolCode}\n\`\`\`\n\nImprove:\n1. Docstring: clear, describes purpose, args, and return value\n2. Type hints: complete for all parameters and return\n3. Error handling: handle common failures (timeout, permission denied, empty results)\n4. Code quality: concise, no unnecessary comments\nOnly output this one tool. Output using __field_value:tool_definitions format.`,
               { ...formData },
               (updates) => {
                 for (const [key, value] of Object.entries(updates)) {

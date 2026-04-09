@@ -467,10 +467,10 @@ Rules:
     const { sendMessage, openPanel } = useEditAssistantStore.getState();
     openPanel(agentId!);
     const prompts: Record<string, string> = {
-      description: `Optimize the description field. Make it concise (1-2 sentences), clear, and descriptive. Keep the same language. Output __update JSON.`,
-      display_name: `Optimize the display_name. Make it short, memorable, and descriptive. Keep the same language. Output __update JSON.`,
-      welcome_message: `Optimize the welcome_message. Make it friendly, concise, and mention key capabilities. Keep the same language. Output __update JSON.`,
-      suggestions: `Optimize the suggestions (quick-start prompts). Generate 3-5 practical, specific prompts that showcase the agent's main capabilities. Keep the same language. Output __update JSON with suggestions as an array.`,
+      description: `Optimize the description field. Make it concise (1-2 sentences), clear, and descriptive. Keep the same language. Output using __field_value format.`,
+      display_name: `Optimize the display_name. Make it short, memorable, and descriptive. Keep the same language. Output using __field_value format.`,
+      welcome_message: `Optimize the welcome_message. Make it friendly, concise, and mention key capabilities. Keep the same language. Output using __field_value format.`,
+      suggestions: `Optimize the suggestions (quick-start prompts). Generate 3-5 practical, specific prompts that showcase the agent's main capabilities. Keep the same language. Output using __field_value format.`,
       system_prompt: `Optimize the system_prompt following best practices:
 1. Structure with ## headers: Role, Capabilities, Tool Usage, Constraints, Output Format
 2. For each tool, add specific usage guidance ("When user asks X, use tool Y")
@@ -478,15 +478,15 @@ Rules:
 4. Add WRONG/CORRECT examples for common mistakes
 5. Keep the same language as the current prompt
 6. Preserve all existing capabilities and tool references
-Output __update JSON.`,
+Output using __field_value format.`,
       tool_definitions: `Review and optimize the tool code. For each tool:
 1. Ensure docstring is clear and describes what the tool does
 2. Ensure type hints are complete
 3. Add error handling for common failures (network timeout, permission denied, empty results)
 4. Keep code concise — no unnecessary comments or verbose patterns
-Only output changed tools in tool_definitions. Output __update JSON.`,
+Only output changed tools. Output using __field_value format.`,
     };
-    const prompt = prompts[fieldName] || `Optimize the ${fieldLabel} field. Improve clarity and quality. Keep the same language. Output __update JSON.`;
+    const prompt = prompts[fieldName] || `Optimize the ${fieldLabel} field. Improve clarity and quality. Keep the same language. Output using __field_value format.`;
     sendMessage(prompt, { ...formData! }, (updates) => {
       for (const [key, value] of Object.entries(updates)) {
         updateField(key as keyof typeof formData, value as never);

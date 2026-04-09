@@ -75,7 +75,7 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
     return initial.length > 0 ? initial : [];
   });
 
-  // Sync blocks when value changes externally (e.g., from AI assistant __update)
+  // Sync blocks when value changes externally (e.g., from AI assistant)
   // Compare by splitting — avoids false triggers from whitespace differences
   const prevValueRef = useRef(value);
   const internalUpdateRef = useRef(false);
