@@ -111,6 +111,17 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
 
   const { t } = useTranslation();
 
+  const toolNameMap: Record<string, string> = {
+    get_agent_detail: t("agentEditor.gettingDetail"),
+    validate_agent: t("agentEditor.validating"),
+    create_agent: t("agentEditor.creatingAgent"),
+    update_agent: t("agentEditor.updatingAgent"),
+    upload_deployment: t("agentEditor.uploadingCode"),
+    deploy_agent: t("agentEditor.deploying"),
+    get_agent_status: t("agentEditor.checkingStatus"),
+    save_metadata: t("agentEditor.savingMetadata"),
+  };
+
   const [status, setStatus] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -170,6 +181,8 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
 
       const { toolResults } = await streamMetaAgent(
         `Execute validate_agent with staging_key: ${stagingKey}\nDo NOT ask for confirmation.`,
+        (step) => { setProgressStep(step); },
+        toolNameMap,
       );
       const validation = toolResults.validate_agent as DeployValidationResult | undefined;
 
@@ -232,7 +245,10 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
       setProgressStep(t("agentEditor.validating"));
       setProgressPct(10);
       const valPrompt = `Execute validate_agent with staging_key: ${stagingKey}\nDo NOT ask for confirmation.`;
-      const { toolResults: valToolResults } = await streamMetaAgent(valPrompt);
+      const { toolResults: valToolResults } = await streamMetaAgent(valPrompt,
+        (step) => { setProgressStep(step); },
+        toolNameMap,
+      );
       setValidating(false);
       setProgressPct(30);
 
@@ -288,14 +304,6 @@ Do NOT ask for confirmation. Execute create_agent immediately.`
 The full config (system_prompt, tool_definitions, etc.) is in the S3 staging file. Pass staging_key to update_agent.
 Do NOT ask for confirmation. Execute update_agent immediately.`;
 
-      const deployToolNameMap: Record<string, string> = {
-        create_agent: t("agentEditor.creatingAgent"),
-        update_agent: t("agentEditor.updatingAgent"),
-        upload_deployment: t("agentEditor.uploadingCode"),
-        deploy_agent: t("agentEditor.deploying"),
-        get_agent_status: t("agentEditor.checkingStatus"),
-        save_metadata: t("agentEditor.savingMetadata"),
-      };
       const deployToolPctMap: Record<string, number> = {
         validate_agent: 40, create_agent: 50, update_agent: 50,
         upload_deployment: 70, deploy_agent: 80, get_agent_status: 90, save_metadata: 95,
@@ -305,7 +313,7 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
       const { toolResults } = await streamMetaAgent(
         prompt,
         (step, pct) => { setProgressStep(step); if (pct) setProgressPct(pct); },
-        deployToolNameMap,
+        toolNameMap,
         deployToolPctMap,
       );
 
@@ -386,8 +394,8 @@ Issues:
 ${allIssues.map((issue, i) => `${i + 1}. ${issue}`).join("\n")}
 
 Rules:
-- Changes of 5 lines or fewer → use __field_edit (search/replace) with precise SEARCH blocks.
-- Changes of more than 5 lines → MUST use __update with the COMPLETE new field value. NEVER use __field_edit for large changes.
+- If the change affects less than 60% of the field's lines → use __field_edit (search/replace) with precise SEARCH blocks.
+- If the change affects 60% or more of the field's lines → MUST use __update with the COMPLETE new field value.
 - Use __update JSON for short fields (description, etc.).
 - Do NOT set tool_names — it is auto-computed.
 - Fix ONLY the specific issues listed above.

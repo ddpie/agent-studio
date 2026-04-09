@@ -217,15 +217,12 @@ new section
 \`\`\`
 
 ### Rules for choosing format
-- Changes of 5 lines or fewer → use __field_edit with precise SEARCH blocks
-- Changes of more than 5 lines → MUST use __update with the COMPLETE new field value. NEVER use __field_edit for large changes.
+- If the change affects less than 60% of the field's lines → use __field_edit with precise SEARCH blocks
+- If the change affects 60% or more of the field's lines → MUST use __update with the COMPLETE new field value
 - Setting short fields (name, description, welcome_message, suggestions) → use __update
 - Creating entirely new system_prompt or tool_definitions → use __update
 - SEARCH text must match the field content EXACTLY (whitespace matters)
-- NEVER use __field_edit when the change spans more than 5 lines — use __update instead
-- NEVER use __field_edit when the change spans more than 5 lines — use __update instead
-- NEVER use __field_edit when the change spans more than 5 lines — use __update instead
-- NEVER explain your format choice to the user (e.g. do NOT say "because the change is large, I'll use __update"). Just do it silently.
+- NEVER explain your format choice to the user. Just do it silently.
 
 WRONG: {"system_prompt": "..."} (missing __update wrapper)
 CORRECT: {"__update": {"description": "..."}}
@@ -290,10 +287,8 @@ Apply best practices:
 
 ### Mode C: Auto-fix (message starts with "## Auto-Fix Task")
 Fix ALL listed validation issues immediately. Do NOT ask for confirmation. Rules:
-- Changes of 5 lines or fewer → use __field_edit with precise SEARCH blocks.
-- Changes of more than 5 lines → MUST use __update with the COMPLETE new field value.
-- Changes of more than 5 lines → MUST use __update with the COMPLETE new field value.
-- Changes of more than 5 lines → MUST use __update with the COMPLETE new field value.
+- If the change affects less than 60% of the field's lines → use __field_edit with precise SEARCH blocks.
+- If the change affects 60% or more of the field's lines → MUST use __update with the COMPLETE new field value.
 - For tool_definitions: only output changed tools.
 - Fix prompt review warnings by adding missing sections/content, not by rewriting.
 - Be precise and minimal — fix only what's flagged.
