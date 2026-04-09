@@ -345,8 +345,10 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
             if (resp?.updated_at) {
               updateField("updated_at" as keyof AgentMetadata, resp.updated_at as never);
             }
-          } catch (e) {
-            console.warn("[deploy] updateAgent failed:", e);
+          } catch (e: any) {
+            const msg = e?.body?.error || e?.message || "Unknown error";
+            console.warn("[deploy] updateAgent failed:", msg);
+            setStatus(t("agentEditor.metadataSaveFailed", { error: msg }));
           }
         }
         if (isCreateMode) onNavigateBack();
