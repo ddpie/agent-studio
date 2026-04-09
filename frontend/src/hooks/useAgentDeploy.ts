@@ -392,8 +392,8 @@ Issues:
 ${allIssues.map((issue, i) => `${i + 1}. ${issue}`).join("\n")}
 
 Rules:
-- For small changes (< 30% of field): use __field_edit (search/replace) with small precise SEARCH blocks.
-- For large changes (> 30% of field, e.g. translating, restructuring): use __update with the COMPLETE new value.
+- Changes of 5 lines or fewer → use __field_edit (search/replace) with precise SEARCH blocks.
+- Changes of more than 5 lines → MUST use __update with the COMPLETE new field value. NEVER use __field_edit for large changes.
 - Use __update JSON for short fields (description, etc.).
 - Do NOT set tool_names — it is auto-computed.
 - Fix ONLY the specific issues listed above.

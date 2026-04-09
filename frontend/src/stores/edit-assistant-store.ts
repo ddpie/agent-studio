@@ -217,14 +217,12 @@ new section
 \`\`\`
 
 ### Rules for choosing format
-- Changing < 30% of system_prompt or tool_definitions → use __field_edit with SMALL, precise SEARCH blocks (5-15 lines each)
-- Changing > 30% of system_prompt or tool_definitions → use __update with the COMPLETE new value
+- Changes of 5 lines or fewer → use __field_edit with precise SEARCH blocks
+- Changes of more than 5 lines → MUST use __update with the COMPLETE new field value. NEVER use __field_edit for large changes.
 - Setting short fields (name, description, welcome_message, suggestions) → use __update
 - Creating entirely new system_prompt or tool_definitions → use __update
-- You can mix both in one response: __field_edit for long fields + __update for short fields
 - SEARCH text must match the field content EXACTLY (whitespace matters)
-- NEVER use a single large SEARCH block covering most of the field — use __update instead
-- If you need to rewrite most of the content (e.g. translate, restructure), use __update
+- NEVER use __field_edit when the change spans more than 5 lines — use __update instead
 
 WRONG: {"system_prompt": "..."} (missing __update wrapper)
 CORRECT: {"__update": {"description": "..."}}
@@ -289,10 +287,9 @@ Apply best practices:
 
 ### Mode C: Auto-fix (message starts with "## Auto-Fix Task")
 Fix ALL listed validation issues immediately. Do NOT ask for confirmation. Rules:
-- For small changes (< 30% of field): use __field_edit with small precise SEARCH blocks (5-15 lines each).
-- For large changes (> 30% of field, e.g. translating, restructuring): use __update with the COMPLETE new value.
+- Changes of 5 lines or fewer → use __field_edit with precise SEARCH blocks.
+- Changes of more than 5 lines → MUST use __update with the COMPLETE new field value.
 - For tool_definitions: only output changed tools.
-- For tool_names: set to ONLY functions with @tool decorator. NEVER include private helper functions (starting with _).
 - Fix prompt review warnings by adding missing sections/content, not by rewriting.
 - Be precise and minimal — fix only what's flagged.
 
