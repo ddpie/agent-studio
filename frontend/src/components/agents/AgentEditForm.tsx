@@ -30,6 +30,7 @@ export default function AgentEditForm() {
   const [diffSkill, setDiffSkill] = useState<AgentSkillEntry | null>(null);
   const [editingSkill, setEditingSkill] = useState<AgentSkillEntry | null>(null);
   const formScrollRef = useRef<HTMLDivElement>(null);
+  const savedScrollTop = useRef(0);
 
   const isCreateMode = agentId?.startsWith("draft-") || agentId === "__new__";
 
@@ -42,7 +43,7 @@ export default function AgentEditForm() {
     setSaving,
     markSaved,
     fetchAgents,
-    onNavigateBack: () => navigate(agentId ? `/agents/chat/${agentId}` : "/agents"),
+    onNavigateBack: () => navigate(agentId && !isCreateMode ? `/agents/chat/${agentId}` : "/agents"),
   });
 
   const changedFields = useMemo(() => getChangedFields(), [formData, pendingSkillFiles, originalSkillFiles, getChangedFields]);
@@ -84,6 +85,10 @@ export default function AgentEditForm() {
     } else if (!routeSkillId && editingSkill) {
       setEditingSkill(null);
       setEditingSkillId(null);
+      // Restore scroll position after form re-renders
+      setTimeout(() => {
+        formScrollRef.current?.scrollTo(0, savedScrollTop.current);
+      }, 50);
     }
   }, [routeSkillId, formData]);
 
@@ -293,6 +298,7 @@ export default function AgentEditForm() {
           handleOptimizeField={deploy.handleOptimizeField}
           deployedSkillHashes={formData.deployedSkillHashes}
           onEditSkill={(skill) => {
+            savedScrollTop.current = formScrollRef.current?.scrollTop ?? 0
             navigate(`/agents/edit/${agentId}/skills/${skill.id}`)
           }}
         />

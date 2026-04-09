@@ -18,11 +18,11 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
   const isEditing = location.pathname.includes("/edit/");
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [showArchived, setShowArchived] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<{ id: string; action: string } | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ agentId: string; agentName: string; type: "archive" | "restore" | "purge" } | null>(null);
 
   const executeAgentAction = useCallback(async (agentId: string, type: "archive" | "restore" | "purge") => {
-    setActionLoading(agentId);
+    setActionLoading({ id: agentId, action: type });
     setConfirmAction(null);
     try {
       const cmdMap = { archive: "delete_agent", restore: "restore_agent", purge: "purge_agent" };
@@ -39,8 +39,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
   }, [fetchAgents]);
 
   const handleDuplicate = useCallback(async (agentId: string) => {
-    setActionLoading(agentId);
-    try {
+    setActionLoading({ id: agentId, action: "duplicate" });    try {
       const agent = await fetchAgentMetadata(agentId);
       if (!agent) throw new Error("Agent not found");
 
@@ -252,17 +251,17 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
                   onClick={(e) => { e.stopPropagation(); handleDuplicate(agent.id); }}
                   className="p-1 text-gray-300 hover:text-blue-600 rounded transition-colors"
                   title={t("agents.duplicate")}
-                  disabled={actionLoading === agent.id}
+                  disabled={actionLoading?.id === agent.id}
                 >
-                  <Copy className="w-3.5 h-3.5" />
+                  {actionLoading?.id === agent.id && actionLoading.action === "duplicate" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); setConfirmAction({ agentId: agent.id, agentName: agent.displayName, type: "archive" }); }}
                   className="p-1 text-gray-300 hover:text-orange-500 rounded transition-colors"
                   title={t("agents.archive")}
-                  disabled={actionLoading === agent.id}
+                  disabled={actionLoading?.id === agent.id}
                 >
-                  {actionLoading === agent.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
+                  {actionLoading?.id === agent.id && actionLoading.action === "archive" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
                 </button>
                 <span
                   className={`w-2 h-2 rounded-full ${
@@ -310,15 +309,15 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
                       onClick={() => setConfirmAction({ agentId: agent.id, agentName: agent.displayName, type: "restore" })}
                       className="p-1 text-gray-400 hover:text-green-600 rounded transition-colors"
                       title={t("agents.restore")}
-                      disabled={actionLoading === agent.id}
+                      disabled={actionLoading?.id === agent.id}
                     >
-                      {actionLoading === agent.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                      {actionLoading?.id === agent.id && actionLoading.action === "restore" ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
                     </button>
                     <button
                       onClick={() => setConfirmAction({ agentId: agent.id, agentName: agent.displayName, type: "purge" })}
                       className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors"
                       title={t("agents.deleteForever")}
-                      disabled={actionLoading === agent.id}
+                      disabled={actionLoading?.id === agent.id}
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
