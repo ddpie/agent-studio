@@ -187,10 +187,17 @@ CRITICAL: SEARCH text must be copied character-for-character from the skill file
 ${content}
 
 ## Output Format
-When the user asks for a plan, approach, or opinion (e.g., "怎么做", "你打算", "你觉得", "how would you", "what's your plan"), respond with ONLY text explanation. Do NOT output any __update or __field_edit block. Wait for the user to confirm before making changes.
+When the user asks for a plan, approach, or opinion (e.g., "怎么做", "你打算", "你觉得", "how would you", "what's your plan"), respond with ONLY text explanation. Do NOT output any __field_value or __field_edit block. Wait for the user to confirm before making changes.
 
-When the user gives a clear instruction to change something, use __field_edit:
+When the user gives a clear instruction to change something, choose the appropriate format:
 
+### For large changes (rewriting, translating, restructuring): use __field_value
+Output the COMPLETE new value of the field:
+\`\`\`__field_value:FIELD_NAME
+complete new content here (no escaping needed, write as-is)
+\`\`\`
+
+### For small surgical changes (fixing a typo, changing one line): use __field_edit
 \`\`\`__field_edit:FIELD_NAME
 <<<<<<< SEARCH
 exact text to find (copy verbatim from the field)
@@ -199,22 +206,11 @@ replacement text
 >>>>>>> REPLACE
 \`\`\`
 
-CRITICAL: The SEARCH text MUST be copied character-for-character from the current field content shown above. Do NOT retype, paraphrase, or reformat it. Copy-paste the exact original text including all whitespace, line breaks, and punctuation. If you cannot find the exact text, use smaller SEARCH blocks that you can match precisely.
-
-You can include multiple SEARCH/REPLACE blocks and multiple __field_edit blocks:
-\`\`\`__field_edit:system_prompt
-<<<<<<< SEARCH
-old section
-=======
-new section
->>>>>>> REPLACE
-\`\`\`
-
 ### Rules
-- ALWAYS use __field_edit for ALL fields including system_prompt, tool_definitions, description, welcome_message, suggestions, etc.
-- For short fields (name, description, welcome_message, suggestions): use a single SEARCH/REPLACE that matches the entire current value
-- SEARCH text must match the field content EXACTLY (whitespace matters)
-- NEVER explain your format choice to the user. Do NOT mention __field_edit, percentages, or line counts in your response. Just output the format block directly after your explanation of what you changed.
+- Prefer __field_value when changing more than a few lines — it is more reliable
+- Use __field_edit only for tiny, precise changes (1-3 lines)
+- For __field_edit: SEARCH text MUST be copied character-for-character from the current field content
+- NEVER explain your format choice to the user. Just output the block directly.
 
 ## Tool Update Rules
 
@@ -276,7 +272,7 @@ Apply best practices:
 
 ### Mode C: Auto-fix (message starts with "## Auto-Fix Task")
 Fix ALL listed validation issues immediately. Do NOT ask for confirmation. Rules:
-- ALWAYS use __field_edit for ALL changes. Do NOT use __update.
+- Prefer __field_value for large changes. Use __field_edit only for tiny fixes (1-3 lines).
 - For tool_definitions: only output changed tools.
 - Fix prompt review warnings by adding missing sections/content, not by rewriting.
 - Be precise and minimal — fix only what's flagged.
@@ -365,11 +361,44 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
       if (flushTimer) clearTimeout(flushTimer);
       flushPending();
 
-      // Post-stream: extract __field_edit blocks (search/replace for long fields)
-      // Use line-by-line parser to handle nested backticks in content
+      // Post-stream: extract __field_value blocks (whole-file replacement)
       const editedFields: string[] = [];
       let processedText = fullText;
       const fieldValues: Record<string, string> = {};
+
+      {
+        const lines = fullText.split("\n");
+        let i = 0;
+        while (i < lines.length) {
+          const openMatch = lines[i].match(/^```__field_value:(.+)/);
+          if (openMatch) {
+            const fieldName = openMatch[1].trim();
+            const startLine = i;
+            let depth = 1;
+            i++;
+            while (i < lines.length && depth > 0) {
+              if (lines[i].startsWith("```") && lines[i].length > 3) {
+                depth++;
+              } else if (lines[i].trim() === "```") {
+                depth--;
+              }
+              if (depth > 0) i++;
+            }
+            const endLine = i;
+            const content = lines.slice(startLine + 1, endLine).join("\n");
+            const raw = lines.slice(startLine, endLine + 1).join("\n");
+            console.log(`[field_value] "${fieldName}" = ${content.length} chars`);
+            fieldValues[fieldName] = content;
+            onUpdate({ [fieldName]: content });
+            editedFields.push(fieldName);
+            processedText = processedText.replace(raw, "");
+          }
+          i++;
+        }
+      }
+
+      // Post-stream: extract __field_edit blocks (search/replace for small changes)
+      // Use line-by-line parser to handle nested backticks in content
 
       const fieldEditBlocks: { fieldName: string; editBlock: string; raw: string }[] = [];
       {
