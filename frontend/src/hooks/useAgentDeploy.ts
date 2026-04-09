@@ -336,7 +336,12 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
       if (!failed) {
         markSaved();
         if (agentId && formData?.tool_definitions) {
-          updateAgent(agentId, { ...formData, agent_id: agentId, expected_updated_at: formData.updated_at }).catch(() => {});
+          try {
+            const resp: any = await updateAgent(agentId, { ...formData, agent_id: agentId, expected_updated_at: formData.updated_at });
+            if (resp?.updated_at) {
+              updateField("updated_at" as keyof AgentMetadata, resp.updated_at as never);
+            }
+          } catch { /* ignore */ }
         }
         if (isCreateMode) onNavigateBack();
       }
