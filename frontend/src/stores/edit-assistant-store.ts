@@ -222,7 +222,7 @@ new section
 - Setting short fields (name, description, welcome_message, suggestions) → use __update
 - Creating entirely new system_prompt or tool_definitions → use __update
 - SEARCH text must match the field content EXACTLY (whitespace matters)
-- NEVER explain your format choice to the user. Just do it silently.
+- NEVER explain your format choice to the user. Do NOT mention __update, __field_edit, percentages, or line counts in your response. Just output the format block directly after your explanation of what you changed.
 
 WRONG: {"system_prompt": "..."} (missing __update wrapper)
 CORRECT: {"__update": {"description": "..."}}
