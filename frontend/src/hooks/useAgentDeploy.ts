@@ -38,11 +38,10 @@ export interface AgentDeployState {
   validationResult: DeployValidationResult | null;
   validating: boolean;
   pendingStagingKey: string | null;
-  pendingUpdatedAt: string | null;
   autoFixing: boolean;
   handleValidateOnly: () => Promise<void>;
   handleSave: () => Promise<void>;
-  doDeploy: (stagingKey: string, latestUpdatedAt?: string) => Promise<void>;
+  doDeploy: (stagingKey: string) => Promise<void>;
   handleAutoFix: () => Promise<void>;
   handleSaveDraft: () => Promise<void>;
   handleOptimizeField: (fieldName: string, fieldLabel: string) => void;
@@ -121,7 +120,6 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
   const [validationResult, setValidationResult] = useState<DeployValidationResult | null>(null);
   const [validating, setValidating] = useState(false);
   const [pendingStagingKey, setPendingStagingKey] = useState<string | null>(null);
-  const [pendingUpdatedAt, setPendingUpdatedAt] = useState<string | null>(null);
   const [autoFixing, setAutoFixing] = useState(false);
 
   // Reset deploy state when switching agents
@@ -133,7 +131,6 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
     setValidationResult(null);
     setValidating(false);
     setPendingStagingKey(null);
-    setPendingUpdatedAt(null);
   }, [agentId]);
 
   // ---- Validate only ----
@@ -159,8 +156,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
       let stagingKey: string;
       try {
         if (agentId && !isCreateMode) {
-          const fileResp: any = await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
-          if (fileResp?.updated_at) setPendingUpdatedAt(fileResp.updated_at);
+          await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
           stagingKey = `agents/${agentId}/staging.json`;
         } else {
           const draftKey = `staging/${agentId || "new"}.json`;
@@ -217,11 +213,9 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
       };
 
       let stagingKey: string;
-      let latestUpdatedAt = formData?.updated_at;
       try {
         if (agentId && !isCreateMode) {
-          const fileResp: any = await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
-          if (fileResp?.updated_at) latestUpdatedAt = fileResp.updated_at;
+          await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
           stagingKey = `agents/${agentId}/staging.json`;
         } else {
           const draftKey = `staging/${agentId || "new"}.json`;
@@ -262,7 +256,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
       }
 
       // Step 2: Deploy
-      await doDeploy(stagingKey, latestUpdatedAt);
+      await doDeploy(stagingKey);
     } catch (err) {
       setProgressStep(null);
       setStatus(`Error: ${err instanceof Error ? err.message : "Unknown error"}`);
@@ -273,7 +267,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
   };
 
   // ---- Deploy ----
-  const doDeploy = async (stagingKey: string, latestUpdatedAt?: string) => {
+  const doDeploy = async (stagingKey: string) => {
     setSaving(true);
     setStatus(null);
     setErrorDetail(null);
@@ -337,8 +331,8 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
         markSaved();
         if (agentId && formData?.tool_definitions) {
           try {
-            const expectedAt = latestUpdatedAt || formData.updated_at;
-            const resp: any = await updateAgent(agentId, { ...formData, agent_id: agentId, expected_updated_at: expectedAt });
+            // No expected_updated_at — we just deployed, no concurrent modification risk
+            const resp: any = await updateAgent(agentId, { ...formData, agent_id: agentId });
             if (resp?.updated_at) {
               updateField("updated_at" as keyof AgentMetadata, resp.updated_at as never);
             }
@@ -487,9 +481,9 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
   return {
     status, errorDetail, savingDraft, progressStep, progressPct,
     showReview, setShowReview,
-    validationResult, validating, pendingStagingKey, pendingUpdatedAt, autoFixing,
+    validationResult, validating, pendingStagingKey, autoFixing,
     handleValidateOnly, handleSave, doDeploy, handleAutoFix,
     handleSaveDraft, handleOptimizeField,
-    dismissValidation: () => { setValidationResult(null); setPendingStagingKey(null); setPendingUpdatedAt(null); },
+    dismissValidation: () => { setValidationResult(null); setPendingStagingKey(null); },
   };
 }

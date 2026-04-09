@@ -268,7 +268,7 @@ export default function AgentEditForm() {
                 </button>
                 {deploy.validationResult.valid && deploy.pendingStagingKey && (
                   <button
-                    onClick={() => { deploy.doDeploy(deploy.pendingStagingKey!, deploy.pendingUpdatedAt || undefined); }}
+                    onClick={() => { deploy.doDeploy(deploy.pendingStagingKey!); }}
                     className="px-3 py-1 text-[12px] font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600"
                   >
                     {t("agentEditor.deployAnyway")}

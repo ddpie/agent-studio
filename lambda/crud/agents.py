@@ -200,12 +200,12 @@ def update_agent(wsId: str, agentId: str):
     body = router.current_event.json_body or {}
     now = datetime.utcnow().isoformat() + "Z"
     expected_updated_at = body.get("expected_updated_at")
-    if not expected_updated_at:
-        return bad_request("expected_updated_at is required for optimistic concurrency control")
 
     update_parts = []
     expr_names = {}
-    expr_values = {":now": now, ":ws": ws_id, ":expected": expected_updated_at}
+    expr_values = {":now": now, ":ws": ws_id}
+    if expected_updated_at:
+        expr_values[":expected"] = expected_updated_at
 
     for field in ALLOWED_AGENT_FIELDS:
         if field in body:
@@ -218,7 +218,9 @@ def update_agent(wsId: str, agentId: str):
     update_parts.append("updated_at = :now")
     update_expr = "SET " + ", ".join(update_parts)
 
-    condition = "attribute_exists(agentId) AND workspace_id = :ws AND updated_at = :expected"
+    condition = "attribute_exists(agentId) AND workspace_id = :ws"
+    if expected_updated_at:
+        condition += " AND updated_at = :expected"
 
     try:
         resp = table.update_item(
