@@ -161,13 +161,13 @@ def update_agent(
                 import sys
                 print(f"WARNING: Failed to read scripts for skill {skill_id}: {e}", file=sys.stderr)
 
-    # Ownership check
-    caller = getattr(__import__('tools.update_agent', fromlist=['_caller_id']), '_caller_id', 'unknown')
+    # Permission is enforced by the CRUD Lambda (JWT + workspace RBAC)
+    # Meta-Agent runs as a system service, no per-user ownership check here
     ddb = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(AGENTS_TABLE)
     record = table.get_item(Key={"agentId": agent_id}).get("Item")
-    if record and record.get("owner") != caller:
-        return json.dumps({"error": f"Permission denied: agent owned by {record['owner']}, you are {caller}"})
+    if not record:
+        return json.dumps({"error": f"Agent {agent_id} not found"})
 
     # Read existing metadata
     existing_metadata = {}

@@ -27,7 +27,7 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
   const { t } = useTranslation()
   const isDark = useIsDark()
   const storage = useSkillStorage(skill.sourceSkillId, agentId, skill.id)
-  const { getPendingSkillFiles, updatePendingSkillFile, initSkillFiles } = useAgentEditStore()
+  const { getPendingSkillFiles, updatePendingSkillFile, initSkillFiles, setPendingSkillFiles } = useAgentEditStore()
 
   const editor = useFileEditor({ storage })
 
@@ -69,10 +69,19 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
 
         const { content, files } = await editor.loadInitial()
         console.log(`[SkillEditor] loadInitial: ${files?.length} files, content=${content ? content.length : null} chars`)
-        // Set original baseline for diff (only SKILL.md to start)
-        const baseFiles: Record<string, string> = {}
-        if (content !== null) baseFiles["SKILL.md"] = content
-        initSkillFiles(skill.id, baseFiles)
+        // Load ALL files from S3 as baseline for diff
+        const { fetchAgentSkillFilesBulk } = await import("../../lib/api-client")
+        const allFiles = await fetchAgentSkillFilesBulk(agentId, skill.id)
+        if (Object.keys(allFiles).length > 0) {
+          initSkillFiles(skill.id, allFiles)
+          setPendingSkillFiles(skill.id, allFiles)
+        } else {
+          // Fallback: just SKILL.md
+          const baseFiles: Record<string, string> = {}
+          if (content !== null) baseFiles["SKILL.md"] = content
+          initSkillFiles(skill.id, baseFiles)
+          setPendingSkillFiles(skill.id, baseFiles)
+        }
       } catch (err) {
         console.error("[SkillEditor] load failed:", err)
         setError(t("agentSkills.failedToLoad"))

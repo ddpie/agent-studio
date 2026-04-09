@@ -63,9 +63,13 @@ function extractToolResults(rawStream: string): Record<string, unknown> {
     if (outputB64) {
       try {
         const decoded = new TextDecoder().decode(Uint8Array.from(atob(outputB64), c => c.charCodeAt(0)));
-        const parsed = JSON.parse(decoded);
-        results[name] = parsed;
-      } catch { /* skip unparseable */ }
+        try {
+          results[name] = JSON.parse(decoded);
+        } catch {
+          // Non-JSON output (e.g. error strings) — wrap as error
+          results[name] = { error: decoded };
+        }
+      } catch { /* skip decode failure */ }
     }
   }
   return results;
@@ -97,6 +101,7 @@ async function streamMetaAgent(
       }
     }
   }
+  console.log("[meta-agent] raw stream length:", raw.length, "first 500 chars:", raw.slice(0, 500));
   return { raw, toolResults: extractToolResults(raw) };
 }
 
@@ -343,6 +348,8 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
         toolNameMap,
         deployToolPctMap,
       );
+
+      console.log("[deploy] toolResults:", JSON.stringify(toolResults, null, 2));
 
       const deployResult = (toolResults.update_agent || toolResults.create_agent) as { error?: string; status?: string; details?: string[] } | undefined;
       const failed = !deployResult || deployResult.error != null;
