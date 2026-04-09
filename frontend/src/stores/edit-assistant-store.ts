@@ -192,10 +192,10 @@ When the user asks for a plan, approach, or opinion (e.g., "怎么做", "你打�
 When the user gives a clear instruction to change something, choose the appropriate format:
 
 ### For large changes (rewriting, translating, restructuring): use __field_value
-Output the COMPLETE new value of the field:
-\`\`\`__field_value:FIELD_NAME
-complete new content here (no escaping needed, write as-is)
-\`\`\`
+Output the COMPLETE new value of the field using 4 backticks (so triple backticks inside content won't break):
+\`\`\`\`__field_value:FIELD_NAME
+complete new content here (no escaping needed, write as-is, triple backticks are safe)
+\`\`\`\`
 
 ### For small surgical changes (fixing a typo, changing one line): use __field_edit
 \`\`\`__field_edit:FIELD_NAME
@@ -370,19 +370,19 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
         const lines = fullText.split("\n");
         let i = 0;
         while (i < lines.length) {
-          const openMatch = lines[i].match(/^```__field_value:(.+)/);
+          // Match 4-backtick fence: ````__field_value:FIELD_NAME
+          const openMatch = lines[i].match(/^````__field_value:(.+)/);
           if (openMatch) {
             const fieldName = openMatch[1].trim();
             const startLine = i;
-            let depth = 1;
             i++;
-            while (i < lines.length && depth > 0) {
-              if (lines[i].startsWith("```") && lines[i].length > 3) {
-                depth++;
-              } else if (lines[i].trim() === "```") {
-                depth--;
-              }
-              if (depth > 0) i++;
+            // Find closing ```` (exactly 4 backticks on its own line)
+            while (i < lines.length && !lines[i].match(/^````\s*$/)) {
+              i++;
+            }
+            if (i >= lines.length) {
+              console.warn(`[field_value] unclosed 4-backtick fence for "${fieldName}", skipping`);
+              break;
             }
             const endLine = i;
             const content = lines.slice(startLine + 1, endLine).join("\n");
