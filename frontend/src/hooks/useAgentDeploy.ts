@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { updateAgent, apiPut, putStorage, getDownloadUrl } from "../lib/api-client";
+import { updateAgent, apiPut, putStorage } from "../lib/api-client";
 import { invokeMetaAgent } from "../lib/agentcore-client";
 import { useEditAssistantStore } from "../stores/edit-assistant-store";
 import { useTranslation } from "react-i18next";
@@ -38,17 +38,14 @@ export interface AgentDeployState {
   validationResult: DeployValidationResult | null;
   validating: boolean;
   pendingStagingKey: string | null;
+  pendingUpdatedAt: string | null;
   autoFixing: boolean;
-  previewCode: string | null;
-  setPreviewCode: (v: string | null) => void;
-  previewLoading: boolean;
   handleValidateOnly: () => Promise<void>;
   handleSave: () => Promise<void>;
   doDeploy: (stagingKey: string, latestUpdatedAt?: string) => Promise<void>;
   handleAutoFix: () => Promise<void>;
   handleSaveDraft: () => Promise<void>;
   handleOptimizeField: (fieldName: string, fieldLabel: string) => void;
-  handlePreviewCode: () => Promise<void>;
   dismissValidation: () => void;
 }
 
@@ -124,9 +121,8 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
   const [validationResult, setValidationResult] = useState<DeployValidationResult | null>(null);
   const [validating, setValidating] = useState(false);
   const [pendingStagingKey, setPendingStagingKey] = useState<string | null>(null);
+  const [pendingUpdatedAt, setPendingUpdatedAt] = useState<string | null>(null);
   const [autoFixing, setAutoFixing] = useState(false);
-  const [previewCode, setPreviewCode] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
 
   // Reset deploy state when switching agents
   useEffect(() => {
@@ -137,7 +133,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
     setValidationResult(null);
     setValidating(false);
     setPendingStagingKey(null);
-    setPreviewCode(null);
+    setPendingUpdatedAt(null);
   }, [agentId]);
 
   // ---- Validate only ----
@@ -163,7 +159,8 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
       let stagingKey: string;
       try {
         if (agentId && !isCreateMode) {
-          await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
+          const fileResp: any = await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
+          if (fileResp?.updated_at) setPendingUpdatedAt(fileResp.updated_at);
           stagingKey = `agents/${agentId}/staging.json`;
         } else {
           const draftKey = `staging/${agentId || "new"}.json`;
@@ -487,39 +484,12 @@ Only output changed tools in tool_definitions. Output __update JSON.`,
     }
   };
 
-  // ---- Preview assembled code ----
-  const handlePreviewCode = async () => {
-    if (!pendingStagingKey) return;
-    setPreviewLoading(true);
-    try {
-      const prompt = `Execute preview_assembled_code with staging_key: ${pendingStagingKey}\nReturn ONLY the JSON result. Do NOT include the code in your response.`;
-      let result = "";
-      const stream = invokeMetaAgent(prompt, [], undefined, undefined, undefined, undefined);
-      for await (const chunk of stream) { result += chunk; }
-      const clean = result.replace(/\{"__tool"[^}]*\}/g, "");
-      const keyMatch = clean.match(/"preview_key"\s*:\s*"([^"]+)"/);
-      if (keyMatch) {
-        const presignedUrl = await getDownloadUrl(keyMatch[1]);
-        if (presignedUrl) {
-          const resp = await fetch(presignedUrl);
-          if (resp.ok) {
-            const buf = await resp.arrayBuffer();
-            setPreviewCode(new TextDecoder().decode(buf));
-          }
-        }
-      }
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
   return {
     status, errorDetail, savingDraft, progressStep, progressPct,
     showReview, setShowReview,
-    validationResult, validating, pendingStagingKey, autoFixing,
-    previewCode, setPreviewCode, previewLoading,
+    validationResult, validating, pendingStagingKey, pendingUpdatedAt, autoFixing,
     handleValidateOnly, handleSave, doDeploy, handleAutoFix,
-    handleSaveDraft, handleOptimizeField, handlePreviewCode,
-    dismissValidation: () => { setValidationResult(null); setPendingStagingKey(null); },
+    handleSaveDraft, handleOptimizeField,
+    dismissValidation: () => { setValidationResult(null); setPendingStagingKey(null); setPendingUpdatedAt(null); },
   };
 }

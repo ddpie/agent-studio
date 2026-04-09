@@ -1,10 +1,9 @@
 import { useAgentEditStore } from "../../stores/agent-edit-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { useEditAssistantStore } from "../../stores/edit-assistant-store";
-import { Loader2, Save, Code2, Shield, Sparkles, GitCompare, Wrench } from "lucide-react";
+import { Loader2, Save, Shield, Sparkles, GitCompare, Wrench } from "lucide-react";
 import { useMemo, useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
-import MonacoEditor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
 import EditAssistant from "./EditAssistant";
 import { preloadPyodide } from "../../lib/pyodide-checker";
@@ -267,17 +266,9 @@ export default function AgentEditForm() {
                   {deploy.autoFixing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wrench className="w-3 h-3" />}
                   {deploy.autoFixing ? t("agentEditor.fixing") : t("common.autoFix")}
                 </button>
-                <button
-                  onClick={deploy.handlePreviewCode}
-                  disabled={deploy.previewLoading || !deploy.pendingStagingKey}
-                  className="flex items-center gap-1 px-3 py-1 text-[12px] font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg disabled:opacity-50"
-                >
-                  {deploy.previewLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Code2 className="w-3 h-3" />}
-                  {t("agentEditor.viewCode")}
-                </button>
                 {deploy.validationResult.valid && deploy.pendingStagingKey && (
                   <button
-                    onClick={() => { deploy.doDeploy(deploy.pendingStagingKey!); }}
+                    onClick={() => { deploy.doDeploy(deploy.pendingStagingKey!, deploy.pendingUpdatedAt || undefined); }}
                     className="px-3 py-1 text-[12px] font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600"
                   >
                     {t("agentEditor.deployAnyway")}
@@ -316,25 +307,6 @@ export default function AgentEditForm() {
         onConfirm={deploy.showReview === "deploy" ? () => { deploy.setShowReview(false); deploy.handleSave(); } : undefined}
         onCancel={() => deploy.setShowReview(false)}
       />
-    )}
-    {/* Code Preview modal */}
-    {deploy.previewCode && (
-      <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => deploy.setPreviewCode(null)}>
-        <div className="bg-gray-900 rounded-xl w-[80vw] h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()} onWheel={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
-            <span className="text-sm font-medium text-gray-200">{t("agentEditor.codePreview")}</span>
-            <button onClick={() => deploy.setPreviewCode(null)} className="px-3 py-1 text-xs text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg">{t("common.close")}</button>
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <MonacoEditor
-              value={deploy.previewCode}
-              language="python"
-              theme="vs-dark"
-              options={{ readOnly: true, fontSize: 12, minimap: { enabled: true }, scrollBeyondLastLine: false, automaticLayout: true }}
-            />
-          </div>
-        </div>
-      </div>
     )}
     {/* Skill Diff Modal */}
     {diffSkill && agentId && (
