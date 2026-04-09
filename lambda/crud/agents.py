@@ -472,7 +472,7 @@ def get_agent_skill_file(wsId: str, agentId: str, skillId: str):
         s3 = _get_s3()
         keys = []
         try:
-            resp = s3.list_objects_v2(Bucket=ASSETS_BUCKET, Prefix=prefix, MaxKeys=200)
+            resp = s3.list_objects_v2(Bucket=ASSETS_BUCKET, Prefix=prefix, MaxKeys=1000)
             for obj in resp.get("Contents", []):
                 rel = obj["Key"][len(prefix):]
                 if rel and not rel.startswith("."):
@@ -564,7 +564,7 @@ def delete_agent_skill_files(wsId: str, agentId: str, skillId: str):
     else:
         # Delete all files for this skill
         try:
-            resp = s3.list_objects_v2(Bucket=ASSETS_BUCKET, Prefix=prefix, MaxKeys=200)
+            resp = s3.list_objects_v2(Bucket=ASSETS_BUCKET, Prefix=prefix, MaxKeys=1000)
             for obj in resp.get("Contents", []):
                 s3.delete_object(Bucket=ASSETS_BUCKET, Key=obj["Key"])
         except Exception:
