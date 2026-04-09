@@ -3,11 +3,9 @@
  * Persists to S3 for cross-browser access.
  */
 import { create } from "zustand";
-import { makePatches, applyPatches } from "@sanity/diff-match-patch";
 import { fetchAgentHistory, putAgentHistory, getStorage, putStorage } from "../lib/api-client";
 import { invokeMetaAgent } from "../lib/agentcore-client";
 import { useUISettings } from "./ui-settings-store";
-import { writeAgentSkillFile, readAllAgentSkillFiles, computeSkillHash } from "../lib/agent-skill-storage";
 import { useAgentEditStore } from "./agent-edit-store";
 
 export interface AssistantMessage {
@@ -187,29 +185,18 @@ CRITICAL: SEARCH text must be copied character-for-character from the skill file
 ${content}
 
 ## Output Format
-When the user asks for a plan, approach, or opinion (e.g., "怎么做", "你打算", "你觉得", "how would you", "what's your plan"), respond with ONLY text explanation. Do NOT output any __field_value or __field_edit block. Wait for the user to confirm before making changes.
+When the user asks for a plan, approach, or opinion (e.g., "怎么做", "你打算", "你觉得", "how would you", "what's your plan"), respond with ONLY text explanation. Do NOT output any __field_value block. Wait for the user to confirm before making changes.
 
-When the user gives a clear instruction to change something, choose the appropriate format:
+When the user gives a clear instruction to change something, output the COMPLETE new value using __field_value:
 
-### For large changes (rewriting, translating, restructuring): use __field_value
-Output the COMPLETE new value of the field using 4 backticks (so triple backticks inside content won't break):
 \`\`\`\`__field_value:FIELD_NAME
-complete new content here (no escaping needed, write as-is, triple backticks are safe)
+complete new content here (no escaping needed, write as-is, triple backticks are safe inside)
 \`\`\`\`
 
-### For small surgical changes (fixing a typo, changing one line): use __field_edit
-\`\`\`__field_edit:FIELD_NAME
-<<<<<<< SEARCH
-exact text to find (copy verbatim from the field)
-=======
-replacement text
->>>>>>> REPLACE
-\`\`\`
-
 ### Rules
-- Prefer __field_value when changing more than a few lines — it is more reliable
-- Use __field_edit only for tiny, precise changes (1-3 lines)
-- For __field_edit: SEARCH text MUST be copied character-for-character from the current field content
+- ALWAYS use __field_value. No other format.
+- Output the COMPLETE new value of the field — not a diff, not a partial edit.
+- You can output multiple __field_value blocks for different fields in one response.
 - NEVER explain your format choice to the user. Just output the block directly.
 
 ## Tool Update Rules
@@ -285,7 +272,6 @@ Fix ALL listed validation issues immediately. Do NOT ask for confirmation. Rules
 - NEVER remove tools from tool_names unless the user explicitly asks to remove them.
 - NEVER delete a tool without listing ALL current tools and getting explicit confirmation on which one to delete.
 - Keep the SAME LANGUAGE as the existing content in the field being modified.
-- Include ALL changed fields in a SINGLE __update block.
 
 ## Recognize Your Excuses
 You may be tempted to take shortcuts. Recognize these:
@@ -397,234 +383,8 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
         }
       }
 
-      // Post-stream: extract __field_edit blocks (search/replace for small changes)
-      // Use line-by-line parser to handle nested backticks in content
-
-      const fieldEditBlocks: { fieldName: string; editBlock: string; raw: string }[] = [];
-      {
-        const lines = fullText.split("\n");
-        let i = 0;
-        while (i < lines.length) {
-          const openMatch = lines[i].match(/^```__field_edit:(.+)/);
-          if (openMatch) {
-            const fieldName = openMatch[1].trim();
-            const startLine = i;
-            let depth = 1;
-            i++;
-            while (i < lines.length && depth > 0) {
-              if (lines[i].startsWith("```") && lines[i].length > 3 && !lines[i].startsWith("```\n")) {
-                depth++;  // nested opening fence (e.g. ```python)
-              } else if (lines[i].trim() === "```") {
-                depth--;  // closing fence
-              }
-              if (depth > 0) i++;
-            }
-            const endLine = i;
-            const editBlock = lines.slice(startLine + 1, endLine).join("\n");
-            const raw = lines.slice(startLine, endLine + 1).join("\n");
-            fieldEditBlocks.push({ fieldName, editBlock, raw });
-          }
-          i++;
-        }
-      }
-
-      for (const { fieldName, editBlock, raw } of fieldEditBlocks) {
-        const pairRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
-        let pairMatch;
-
-        // Use accumulated value if already edited, otherwise read from formContext
-        const currentValue = fieldValues[fieldName] ?? String(formContext[fieldName] ?? "");
-        let newValue = currentValue;
-        let applied = false;
-        let lastReplaceText = "";
-        let totalSearchLen = 0;
-
-        while ((pairMatch = pairRegex.exec(editBlock)) !== null) {
-          const searchText = pairMatch[1];
-          const replaceText = pairMatch[2];
-          lastReplaceText = replaceText;
-          totalSearchLen += searchText.length;
-          // Try exact match first
-          if (newValue.includes(searchText)) {
-            newValue = newValue.split(searchText).join(replaceText);
-            applied = true;
-          } else {
-            // Fuzzy match via diff-match-patch
-            const patches = makePatches(searchText, replaceText);
-            const [patched, results] = applyPatches(patches, newValue);
-            const matches = results.filter(Boolean).length;
-            if (matches > 0) {
-              console.warn(`[field_edit] fuzzy patch for "${fieldName}": ${matches}/${results.length} hunks applied`);
-              newValue = patched;
-              applied = true;
-            }
-          }
-        }
-
-        // Fallback: if nothing applied and SEARCH covered >50% of field, use last REPLACE as full replacement
-        if (!applied && totalSearchLen > currentValue.length * 0.5 && lastReplaceText) {
-          console.warn(`[field_edit] full replacement fallback for "${fieldName}", total SEARCH covers ${Math.round(totalSearchLen / currentValue.length * 100)}%`);
-          newValue = lastReplaceText;
-          applied = true;
-        }
-
-        if (applied) {
-          fieldValues[fieldName] = newValue;  // track for subsequent blocks on same field
-          onUpdate({ [fieldName]: newValue });
-          editedFields.push(fieldName);
-        }
-        processedText = processedText.replace(raw, "");
-      }
-
-      // Post-stream: extract __skill_edit blocks (line-by-line parser for nested backticks)
-      const editedSkillFiles: string[] = [];
-
-      const skillEditBlocks: { skillId: string; filePath: string; editBlock: string; raw: string }[] = [];
-      {
-        const lines = processedText.split("\n");
-        let i = 0;
-        while (i < lines.length) {
-          const openMatch = lines[i].match(/^```__skill_edit:([^:]+):(.+)/);
-          if (openMatch) {
-            const skillId = openMatch[1].trim();
-            const filePath = openMatch[2].trim();
-            const startLine = i;
-            let depth = 1;
-            i++;
-            while (i < lines.length && depth > 0) {
-              if (lines[i].startsWith("```") && lines[i].length > 3 && !lines[i].startsWith("```\n")) {
-                depth++;
-              } else if (lines[i].trim() === "```") {
-                depth--;
-              }
-              if (depth > 0) i++;
-            }
-            const endLine = i;
-            const editBlock = lines.slice(startLine + 1, endLine).join("\n");
-            const raw = lines.slice(startLine, endLine + 1).join("\n");
-            skillEditBlocks.push({ skillId, filePath, editBlock, raw });
-          }
-          i++;
-        }
-      }
-
-      for (const { skillId, filePath, editBlock, raw } of skillEditBlocks) {
-        const pairRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
-        let pairMatch;
-
-        const skills = (formContext.skills as Array<{ id: string; files: string[] }>) || [];
-        const skill = skills.find(s => s.id === skillId);
-        if (!skill) continue;
-
-        const currentAgentId = get().agentId;
-        if (!currentAgentId) continue;
-
-        const { readAgentSkillFile: readFile } = await import("../lib/agent-skill-storage");
-        let currentContent = await readFile(currentAgentId, skillId, filePath);
-        if (currentContent === null) continue;
-
-        let applied = false;
-        let lastReplaceText = "";
-        let totalSearchLen = 0;
-        const originalContentLength = currentContent!.length;
-        while ((pairMatch = pairRegex.exec(editBlock)) !== null) {
-          const searchText = pairMatch[1];
-          const replaceText = pairMatch[2];
-          lastReplaceText = replaceText;
-          totalSearchLen += searchText.length;
-          if (currentContent!.includes(searchText)) {
-            currentContent = currentContent!.split(searchText).join(replaceText);
-            applied = true;
-          } else {
-            // Fuzzy match via diff-match-patch
-            const patches = makePatches(searchText, replaceText);
-            const [patched, results] = applyPatches(patches, currentContent!);
-            const matches = results.filter(Boolean).length;
-            if (matches > 0) {
-              console.warn(`[skill_edit] fuzzy patch for "${skillId}/${filePath}": ${matches}/${results.length} hunks applied`);
-              currentContent = patched;
-              applied = true;
-            }
-          }
-        }
-
-        // Fallback: if nothing applied and SEARCH covered >50%, use last REPLACE as full replacement
-        if (!applied && totalSearchLen > originalContentLength * 0.5 && lastReplaceText) {
-          console.warn(`[skill_edit] full replacement fallback for "${skillId}/${filePath}", total SEARCH covers ${Math.round(totalSearchLen / originalContentLength * 100)}%`);
-          currentContent = lastReplaceText;
-          applied = true;
-        }
-
-        if (applied) {
-          const writeSuccess = await writeAgentSkillFile(currentAgentId, skillId, filePath, currentContent!)
-          if (!writeSuccess) {
-            console.error(`Failed to write skill file ${skillId}/${filePath}`)
-            continue  // Don't update hash
-          }
-          const allFiles = await readAllAgentSkillFiles(currentAgentId, skillId);
-          allFiles[filePath] = currentContent!;
-          const newHash = await computeSkillHash(allFiles);
-          onUpdate({ [`__skill_hash_${skillId}`]: newHash });
-          editedSkillFiles.push(`${skill.id}/${filePath}`);
-        }
-        processedText = processedText.replace(raw, "");
-      }
-
-      if (editedSkillFiles.length > 0) {
-        editedFields.push(...editedSkillFiles.map(f => `skill:${f}`));
-      }
-
-      // Post-stream: extract __update JSON from the complete response
-      // Find {"__update" directly in processedText — do NOT strip backticks globally
-      // as JSON string values may contain ``` (e.g. code examples in system_prompt)
-      const updateMatch = processedText.match(/\{\s*"__update"/);
-      const updateIdx = updateMatch ? updateMatch.index! : -1;
-      console.log(`[__update] search in processedText (len=${processedText.length}), found at idx=${updateIdx}`);
-      if (updateIdx !== -1) {
-        // JSON-aware brace matching
-        let depth = 0, inStr = false, esc = false, endIdx = -1;
-        for (let i = updateIdx; i < processedText.length; i++) {
-          const ch = processedText[i];
-          if (esc) { esc = false; continue; }
-          if (ch === "\\") { esc = true; continue; }
-          if (ch === '"') { inStr = !inStr; continue; }
-          if (inStr) continue;
-          if (ch === "{") depth++;
-          else if (ch === "}") { depth--; if (depth === 0) { endIdx = i + 1; break; } }
-        }
-        console.log(`[__update] brace match: endIdx=${endIdx}`);
-        if (endIdx !== -1) {
-          const jsonStr = processedText.slice(updateIdx, endIdx);
-          console.log(`[__update] jsonStr length=${jsonStr.length}, first 200:`, jsonStr.slice(0, 200));
-          try {
-            const parsed = JSON.parse(jsonStr);
-            console.log(`[__update] parsed OK, fields:`, Object.keys(parsed.__update || {}));
-            if (parsed.__update && typeof parsed.__update === "object") {
-              // Strip auto-computed fields
-              delete parsed.__update.tool_names;
-              delete parsed.__update.tools;
-              onUpdate(parsed.__update);
-              const fields = Object.keys(parsed.__update);
-              // Clean the message: remove the JSON block and code fences, add update indicator
-              // Remove from original fullText: find the JSON region (may include fences)
-              const jsonInOriginal = fullText.indexOf(jsonStr) !== -1 ? jsonStr : "";
-              const fencePattern = /```(?:json)?\s*\{[\s\S]*?\}\s*```/;
-              const fenceMatch = fullText.match(fencePattern);
-              const removeStr = fenceMatch ? fenceMatch[0] : jsonInOriginal;
-              set((s) => ({
-                messages: s.messages.map((m) =>
-                  m.id === assistantMsg.id
-                    ? { ...m, content: (removeStr ? m.content.replace(removeStr, "") : m.content).replace(/\n{3,}/g, "\n\n").trim() + `\n\n---updated:${[...fields, ...editedFields].join(",")}---\n\n` }
-                    : m
-                ),
-              }));
-            }
-          } catch { /* JSON parse failed */ }
-        }
-      }
-
-      // If only __field_edit was used (no __update JSON), still show indicator
-      if (editedFields.length > 0 && updateIdx === -1) {
+      // Post-stream: clean up and show update indicator
+      if (editedFields.length > 0) {
         set((s) => ({
           messages: s.messages.map((m) =>
             m.id === assistantMsg.id

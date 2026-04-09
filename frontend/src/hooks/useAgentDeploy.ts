@@ -430,7 +430,8 @@ Issues:
 ${allIssues.map((issue, i) => `${i + 1}. ${issue}`).join("\n")}
 
 Rules:
-- Prefer __field_value for large changes. Use __field_edit only for tiny fixes (1-3 lines).
+- ONLY use __field_value format (4 backticks). Do NOT use __field_edit or __update.
+- Output the COMPLETE new field value inside \`\`\`\`__field_value:FIELD_NAME ... \`\`\`\` blocks.
 - Do NOT set tool_names — it is auto-computed.
 - Fix ONLY the specific issues listed above.
 - NEVER delete existing content, sections, or descriptions.
