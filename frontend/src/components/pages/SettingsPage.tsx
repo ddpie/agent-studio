@@ -1,16 +1,17 @@
 import { Settings, User, Download, Trash2, Database, Shield, Sun, Moon, Monitor, Languages } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useUISettings } from "../../stores/ui-settings-store";
+import ConfirmDialog from "../ui/ConfirmDialog";
 
 export default function SettingsPage() {
   const { t } = useTranslation();
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const { sidebarWidth, inputHeight, theme, language, setSidebarWidth, setInputHeight, setTheme, setLanguage } = useUISettings();
 
   const clearLocalStorage = () => {
-    if (window.confirm(t("settings.clearConfirm"))) {
-      localStorage.clear();
-      window.location.reload();
-    }
+    localStorage.clear();
+    window.location.reload();
   };
 
   const exportAgents = () => {
@@ -156,7 +157,7 @@ export default function SettingsPage() {
               <Download className="w-3.5 h-3.5" /> {t("settings.exportLocal")}
             </button>
             <button
-              onClick={clearLocalStorage}
+              onClick={() => setShowClearConfirm(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-red-200 rounded-lg text-red-600 hover:bg-red-50"
             >
               <Trash2 className="w-3.5 h-3.5" /> {t("settings.clearLocal")}
@@ -164,6 +165,16 @@ export default function SettingsPage() {
           </div>
         </section>
       </div>
+
+      <ConfirmDialog
+        open={showClearConfirm}
+        title={t("settings.clearLocal")}
+        message={t("settings.clearConfirm")}
+        confirmLabel={t("common.delete")}
+        onConfirm={() => { setShowClearConfirm(false); clearLocalStorage(); }}
+        onCancel={() => setShowClearConfirm(false)}
+        danger
+      />
     </div>
   );
 }
