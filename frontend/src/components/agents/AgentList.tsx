@@ -6,7 +6,8 @@ import { useAgentEditStore } from "../../stores/agent-edit-store";
 import { Bot, RefreshCw, Loader2, MessageSquare, Settings2, Archive, ChevronDown, RotateCcw, Trash2, Copy } from "lucide-react";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
-import { fetchAgent, fetchAgentSkillFiles, fetchAgentSkillFile } from "../../lib/api-client";
+import { fetchAgentSkillFiles, fetchAgentSkillFile } from "../../lib/api-client";
+import { fetchAgentMetadata } from "../../lib/agent-metadata";
 
 export default function AgentList({ collapsed = false }: { collapsed?: boolean }) {
   const { t } = useTranslation();
@@ -40,7 +41,17 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
   const handleDuplicate = useCallback(async (agentId: string) => {
     setActionLoading(agentId);
     try {
-      const agent = await fetchAgent(agentId);
+      const agent = await fetchAgentMetadata(agentId);
+      if (!agent) throw new Error("Agent not found");
+
+      // Build old-to-new skill ID map
+      const skillIdMap = new Map<string, string>();
+      const newSkills = (agent.skills || []).map((s: any) => {
+        const newId = crypto.randomUUID().slice(0, 8);
+        skillIdMap.set(s.id, newId);
+        return { ...s, id: newId };
+      });
+
       const data: Record<string, any> = {
         name: (agent.name || "") + "-copy",
         display_name: (agent.display_name || "") + " (Copy)",
@@ -48,31 +59,33 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
         system_prompt: agent.system_prompt || "",
         tool_definitions: agent.tool_definitions || "",
         tool_names: agent.tool_names || "",
-        template_id: agent.template_id || "",
+        model_id: agent.model_id || "",
         default_model_id: agent.default_model_id || "",
+        template_id: agent.template_id || "",
         supports_images: agent.supports_images || false,
         welcome_message: agent.welcome_message || "",
         suggestions: agent.suggestions || [],
-        skills: (agent.skills || []).map((s: any) => ({ ...s, id: crypto.randomUUID().slice(0, 8) })),
+        skills: newSkills,
       };
-      const { openNewWithData, initSkillFiles } = useAgentEditStore.getState();
+      const { openNewWithData, setPendingSkillFiles, initSkillFiles } = useAgentEditStore.getState();
       openNewWithData(data);
       const draftId = useAgentEditStore.getState().agentId;
 
-      // Copy skill files into pending store
-      for (const skill of (agent.skills || [])) {
-        const newSkill = data.skills.find((s: any) => s.sourceSkillId === skill.sourceSkillId);
-        if (!newSkill) continue;
+      // Copy skill files in parallel
+      await Promise.all((agent.skills || []).map(async (skill: any) => {
+        const newId = skillIdMap.get(skill.id);
+        if (!newId) return;
         const files = await fetchAgentSkillFiles(agentId, skill.id);
+        const contents = await Promise.all(files.map(f => fetchAgentSkillFile(agentId, skill.id, f).then(c => [f, c] as const)));
         const fileContents: Record<string, string> = {};
-        for (const f of files) {
-          const content = await fetchAgentSkillFile(agentId, skill.id, f);
-          if (content !== null) fileContents[f] = content;
+        for (const [f, c] of contents) {
+          if (c !== null) fileContents[f] = c;
         }
         if (Object.keys(fileContents).length > 0) {
-          initSkillFiles(newSkill.id, fileContents);
+          initSkillFiles(newId, fileContents);
+          setPendingSkillFiles(newId, fileContents);
         }
-      }
+      }));
 
       if (draftId) navigate(`/agents/edit/${draftId}`);
     } catch (err) {
