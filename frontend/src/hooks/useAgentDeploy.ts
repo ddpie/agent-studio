@@ -3,6 +3,7 @@ import { updateAgent, apiPut, putStorage, getDownloadUrl } from "../lib/api-clie
 import { invokeMetaAgent } from "../lib/agentcore-client";
 import { useEditAssistantStore } from "../stores/edit-assistant-store";
 import { useTranslation } from "react-i18next";
+import i18n from "../i18n";
 import type { AgentMetadata } from "../lib/agent-metadata";
 
 /** Validation result with optional prompt quality scores */
@@ -43,7 +44,7 @@ export interface AgentDeployState {
   previewLoading: boolean;
   handleValidateOnly: () => Promise<void>;
   handleSave: () => Promise<void>;
-  doDeploy: (stagingKey: string) => Promise<void>;
+  doDeploy: (stagingKey: string, latestUpdatedAt?: string) => Promise<void>;
   handleAutoFix: () => Promise<void>;
   handleSaveDraft: () => Promise<void>;
   handleOptimizeField: (fieldName: string, fieldLabel: string) => void;
@@ -91,7 +92,7 @@ async function streamMetaAgent(
         try {
           const parsed = JSON.parse(m[0]);
           if (parsed.__tool === "start" && parsed.name) {
-            const step = toolNameMap?.[parsed.name] || `Running ${parsed.name}...`;
+            const step = toolNameMap?.[parsed.name] || i18n.t("agentEditor.runningTool", { name: parsed.name });
             const pct = toolPctMap?.[parsed.name] || 0;
             onProgress(step, pct);
           }
@@ -170,7 +171,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
           stagingKey = draftKey;
         }
       } catch {
-        setStatus("Failed to upload config");
+        setStatus(i18n.t("agentEditor.uploadFailed"));
         return;
       }
 
@@ -219,9 +220,11 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
       };
 
       let stagingKey: string;
+      let latestUpdatedAt = formData?.updated_at;
       try {
         if (agentId && !isCreateMode) {
-          await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
+          const fileResp: any = await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
+          if (fileResp?.updated_at) latestUpdatedAt = fileResp.updated_at;
           stagingKey = `agents/${agentId}/staging.json`;
         } else {
           const draftKey = `staging/${agentId || "new"}.json`;
@@ -229,7 +232,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
           stagingKey = draftKey;
         }
       } catch {
-        setStatus("Failed to upload config to S3");
+        setStatus(i18n.t("agentEditor.uploadFailed"));
         setSaving(false);
         return;
       }
@@ -262,7 +265,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
       }
 
       // Step 2: Deploy
-      await doDeploy(stagingKey);
+      await doDeploy(stagingKey, latestUpdatedAt);
     } catch (err) {
       setProgressStep(null);
       setStatus(`Error: ${err instanceof Error ? err.message : "Unknown error"}`);
@@ -273,7 +276,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
   };
 
   // ---- Deploy ----
-  const doDeploy = async (stagingKey: string) => {
+  const doDeploy = async (stagingKey: string, latestUpdatedAt?: string) => {
     setSaving(true);
     setStatus(null);
     setErrorDetail(null);
@@ -337,11 +340,14 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
         markSaved();
         if (agentId && formData?.tool_definitions) {
           try {
-            const resp: any = await updateAgent(agentId, { ...formData, agent_id: agentId, expected_updated_at: formData.updated_at });
+            const expectedAt = latestUpdatedAt || formData.updated_at;
+            const resp: any = await updateAgent(agentId, { ...formData, agent_id: agentId, expected_updated_at: expectedAt });
             if (resp?.updated_at) {
               updateField("updated_at" as keyof AgentMetadata, resp.updated_at as never);
             }
-          } catch { /* ignore */ }
+          } catch (e) {
+            console.warn("[deploy] updateAgent failed:", e);
+          }
         }
         if (isCreateMode) onNavigateBack();
       }
