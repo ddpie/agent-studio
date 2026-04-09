@@ -67,14 +67,9 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
         skills: newSkills,
       };
       const { openNewWithData, setPendingSkillFiles, initSkillFiles } = useAgentEditStore.getState();
-      openNewWithData(data);
-      const draftId = useAgentEditStore.getState().agentId;
 
-      // Navigate immediately so URL updates
-      if (draftId) navigate(`/agents/edit/${draftId}`);
-      setActionLoading(null);
-
-      // Copy skill files in parallel (runs after navigation)
+      // Copy skill files before opening draft
+      const skillFileMap: Record<string, Record<string, string>> = {};
       await Promise.all((agent.skills || []).map(async (skill: any) => {
         const newId = skillIdMap.get(skill.id);
         if (!newId) return;
@@ -85,10 +80,18 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
           if (c !== null) fileContents[f] = c;
         }
         if (Object.keys(fileContents).length > 0) {
-          initSkillFiles(newId, fileContents);
-          setPendingSkillFiles(newId, fileContents);
+          skillFileMap[newId] = fileContents;
         }
       }));
+
+      openNewWithData(data);
+      for (const [skillId, files] of Object.entries(skillFileMap)) {
+        initSkillFiles(skillId, files);
+        setPendingSkillFiles(skillId, files);
+      }
+
+      const draftId = useAgentEditStore.getState().agentId;
+      if (draftId) navigate(`/agents/edit/${draftId}`);
     } catch (err) {
       console.error("duplicate failed:", err);
     } finally {
