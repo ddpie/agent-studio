@@ -3,6 +3,7 @@
  * Persists to S3 for cross-browser access.
  */
 import { create } from "zustand";
+import { makePatches, applyPatches } from "@sanity/diff-match-patch";
 import { fetchAgentHistory, putAgentHistory, getStorage, putStorage } from "../lib/api-client";
 import { invokeMetaAgent } from "../lib/agentcore-client";
 import { useUISettings } from "./ui-settings-store";
@@ -173,11 +174,12 @@ ${skills.map(s => `- ${s.name}: ${s.description} (files: ${s.files.join(", ")})`
 When the user asks to modify a skill file, use __skill_edit format:
 \`\`\`__skill_edit:{skillId}:{filePath}
 <<<<<<< SEARCH
-exact text to find
+exact text to find (copy verbatim from the skill file)
 =======
 replacement text
 >>>>>>> REPLACE
 \`\`\`
+CRITICAL: SEARCH text must be copied character-for-character from the skill file. Do NOT retype or paraphrase.
 `;
 })()}
 
@@ -198,6 +200,8 @@ replacement text
 >>>>>>> REPLACE
 \`\`\`
 
+CRITICAL: The SEARCH text MUST be copied character-for-character from the current field content shown above. Do NOT retype, paraphrase, or reformat it. Copy-paste the exact original text including all whitespace, line breaks, and punctuation. If you cannot find the exact text, use smaller SEARCH blocks that you can match precisely.
+
 You can include multiple SEARCH/REPLACE blocks and multiple __field_edit blocks:
 \`\`\`__field_edit:system_prompt
 <<<<<<< SEARCH
@@ -213,14 +217,17 @@ new section
 \`\`\`
 
 ### Rules for choosing format
-- Changing < 30% of system_prompt or tool_definitions → use __field_edit (saves tokens)
-- Setting short fields (name, description, welcome_message, suggestions, tool_names) → use __update
+- Changing < 30% of system_prompt or tool_definitions → use __field_edit with SMALL, precise SEARCH blocks (5-15 lines each)
+- Changing > 30% of system_prompt or tool_definitions → use __update with the COMPLETE new value
+- Setting short fields (name, description, welcome_message, suggestions) → use __update
 - Creating entirely new system_prompt or tool_definitions → use __update
 - You can mix both in one response: __field_edit for long fields + __update for short fields
 - SEARCH text must match the field content EXACTLY (whitespace matters)
+- NEVER use a single large SEARCH block covering most of the field — use __update instead
+- If you need to rewrite most of the content (e.g. translate, restructure), use __update
 
 WRONG: {"system_prompt": "..."} (missing __update wrapper)
-CORRECT: {"__update": {"description": "...", "tool_names": "..."}}
+CORRECT: {"__update": {"description": "..."}}
 
 ## Tool Update Rules
 
@@ -281,10 +288,11 @@ Apply best practices:
 6. Add recovery gates (what to do when a tool call fails)
 
 ### Mode C: Auto-fix (message starts with "## Auto-Fix Task")
-Fix ALL listed validation issues. Rules:
-- For system_prompt: APPEND improvements at the end. Do NOT rewrite from scratch.
+Fix ALL listed validation issues immediately. Do NOT ask for confirmation. Rules:
+- For small changes (< 30% of field): use __field_edit with small precise SEARCH blocks (5-15 lines each).
+- For large changes (> 30% of field, e.g. translating, restructuring): use __update with the COMPLETE new value.
 - For tool_definitions: only output changed tools.
-- For tool_names: set to ONLY functions with @tool decorator. NEVER include private helper functions (starting with _). Example: if code has "@tool def smart_svg_chart" and "def _create_bar_chart", tool_names should be "smart_svg_chart" only.
+- For tool_names: set to ONLY functions with @tool decorator. NEVER include private helper functions (starting with _).
 - Fix prompt review warnings by adding missing sections/content, not by rewriting.
 - Be precise and minimal — fix only what's flagged.
 
@@ -309,7 +317,8 @@ You may be tempted to take shortcuts. Recognize these:
 Sub-agents now support skills (AgentSkills.io format). Skills are loaded dynamically at runtime via load_skill(name).
 When optimizing a system prompt (Mode B), mention that the agent can use load_skill to access specialized instructions.
 - Keep tool code concise — clear docstrings, type hints, error handling.
-- Valid fields: name, display_name, description, system_prompt, tool_definitions, tool_names, welcome_message, suggestions, template_id, supports_images
+- Valid fields: name, display_name, description, system_prompt, tool_definitions, welcome_message, suggestions, template_id, supports_images
+- tool_names is auto-computed from tool_definitions — do NOT set it manually.
 - Respond in the same language the user uses.
 - Be professional and concise.`;
 
@@ -387,14 +396,36 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
         const currentValue = String(formContext[fieldName] ?? "");
         let newValue = currentValue;
         let applied = false;
+        let lastReplaceText = "";
+        let totalSearchLen = 0;
 
         while ((pairMatch = pairRegex.exec(editBlock)) !== null) {
           const searchText = pairMatch[1];
           const replaceText = pairMatch[2];
+          lastReplaceText = replaceText;
+          totalSearchLen += searchText.length;
+          // Try exact match first
           if (newValue.includes(searchText)) {
             newValue = newValue.split(searchText).join(replaceText);
             applied = true;
+          } else {
+            // Fuzzy match via diff-match-patch
+            const patches = makePatches(searchText, replaceText);
+            const [patched, results] = applyPatches(patches, newValue);
+            const matches = results.filter(Boolean).length;
+            if (matches > 0) {
+              console.warn(`[field_edit] fuzzy patch for "${fieldName}": ${matches}/${results.length} hunks applied`);
+              newValue = patched;
+              applied = true;
+            }
           }
+        }
+
+        // Fallback: if nothing applied and SEARCH covered >50% of field, use last REPLACE as full replacement
+        if (!applied && totalSearchLen > currentValue.length * 0.5 && lastReplaceText) {
+          console.warn(`[field_edit] full replacement fallback for "${fieldName}", total SEARCH covers ${Math.round(totalSearchLen / currentValue.length * 100)}%`);
+          newValue = lastReplaceText;
+          applied = true;
         }
 
         if (applied) {
@@ -428,13 +459,35 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
         if (currentContent === null) continue;
 
         let applied = false;
+        let lastReplaceText = "";
+        let totalSearchLen = 0;
+        const originalContentLength = currentContent!.length;
         while ((pairMatch = pairRegex.exec(editBlock)) !== null) {
           const searchText = pairMatch[1];
           const replaceText = pairMatch[2];
+          lastReplaceText = replaceText;
+          totalSearchLen += searchText.length;
           if (currentContent!.includes(searchText)) {
             currentContent = currentContent!.split(searchText).join(replaceText);
             applied = true;
+          } else {
+            // Fuzzy match via diff-match-patch
+            const patches = makePatches(searchText, replaceText);
+            const [patched, results] = applyPatches(patches, currentContent!);
+            const matches = results.filter(Boolean).length;
+            if (matches > 0) {
+              console.warn(`[skill_edit] fuzzy patch for "${skillId}/${filePath}": ${matches}/${results.length} hunks applied`);
+              currentContent = patched;
+              applied = true;
+            }
           }
+        }
+
+        // Fallback: if nothing applied and SEARCH covered >50%, use last REPLACE as full replacement
+        if (!applied && totalSearchLen > originalContentLength * 0.5 && lastReplaceText) {
+          console.warn(`[skill_edit] full replacement fallback for "${skillId}/${filePath}", total SEARCH covers ${Math.round(totalSearchLen / originalContentLength * 100)}%`);
+          currentContent = lastReplaceText;
+          applied = true;
         }
 
         if (applied) {
@@ -479,6 +532,9 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
           try {
             const parsed = JSON.parse(jsonStr);
             if (parsed.__update && typeof parsed.__update === "object") {
+              // Strip auto-computed fields
+              delete parsed.__update.tool_names;
+              delete parsed.__update.tools;
               onUpdate(parsed.__update);
               const fields = Object.keys(parsed.__update);
               // Clean the message: remove the JSON block and code fences, add update indicator

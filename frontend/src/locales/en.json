@@ -215,6 +215,7 @@
     "validationError": "Validation error: {{error}}",
     "validationFailed": "Validation failed — fix errors before deploying",
     "autoFixApplied": "Auto-fix applied. Click Update to re-validate and deploy.",
+    "fixing": "Fixing...",
     "viewCode": "View Code",
     "deployAnyway": "Deploy anyway",
     "validating": "Validating...",
@@ -394,5 +395,16 @@
     "suggestion1": "Translate the system prompt to English",
     "suggestion2": "Add a region parameter to all tools",
     "suggestion3": "Make the description more concise"
+  },
+  "promptDimensions": {
+    "structure": "Structure",
+    "tool_prompt_sync": "Tool Prompt Sync",
+    "constraint_strength": "Constraint Strength",
+    "anti_patterns": "Anti Patterns",
+    "rationalization_preemption": "Rationalization Preemption",
+    "output_format": "Output Format",
+    "language_consistency": "Language Consistency",
+    "safety": "Safety",
+    "overall": "Overall"
   }
 }

@@ -239,14 +239,14 @@ export default function AgentEditForm() {
                     <span key={dim} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
                       score >= 4 ? "bg-green-100 text-green-700" : score >= 3 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"
                     }`}>
-                      {dim.replace(/_/g, " ")}: {score}/5
+                      {t(`promptDimensions.${dim}`, dim.replace(/_/g, " "))}: {score}/5
                     </span>
                   ))}
                   {deploy.validationResult.prompt_overall != null && (
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
                       deploy.validationResult.prompt_overall >= 4 ? "bg-green-200 text-green-800" : deploy.validationResult.prompt_overall >= 3 ? "bg-yellow-200 text-yellow-800" : "bg-red-200 text-red-800"
                     }`}>
-                      overall: {deploy.validationResult.prompt_overall}/5
+                      {t("promptDimensions.overall")}: {deploy.validationResult.prompt_overall}/5
                     </span>
                   )}
                 </div>
@@ -265,7 +265,7 @@ export default function AgentEditForm() {
                   className="flex items-center gap-1 px-3 py-1 text-[12px] font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
                 >
                   {deploy.autoFixing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wrench className="w-3 h-3" />}
-                  {deploy.autoFixing ? t("agentEditor.fixing", "Fixing...") : t("common.autoFix")}
+                  {deploy.autoFixing ? t("agentEditor.fixing") : t("common.autoFix")}
                 </button>
                 <button
                   onClick={deploy.handlePreviewCode}

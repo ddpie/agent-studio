@@ -381,17 +381,18 @@ Fix ONLY the following validation issues. Do NOT remove or rewrite any existing 
 Issues:
 ${allIssues.map((issue, i) => `${i + 1}. ${issue}`).join("\n")}
 
-tool_names should be: ${funcNames.join(",") || "(extract from @tool functions)"}
-
 Rules:
-- Use __field_edit (search/replace) for system_prompt and tool_definitions. Do NOT use __update for these fields.
-- Use __update JSON ONLY for short fields (tool_names, description, etc.).
+- For small changes (< 30% of field): use __field_edit (search/replace) with small precise SEARCH blocks.
+- For large changes (> 30% of field, e.g. translating, restructuring): use __update with the COMPLETE new value.
+- Use __update JSON for short fields (description, etc.).
+- Do NOT set tool_names — it is auto-computed.
 - Fix ONLY the specific issues listed above.
 - NEVER delete existing content, sections, or descriptions.
 - NEVER shorten or summarize existing text.
 - Make minimal, surgical changes.
 - If an issue appears already fixed in the current content, skip it and say so.
-- If SEARCH text cannot be found, the issue may have been fixed already — do NOT attempt alternative fixes.`;
+- If SEARCH text cannot be found, the issue may have been fixed already — do NOT attempt alternative fixes.
+- Do NOT ask for confirmation. Execute fixes immediately.`;
 
       await sendMessage(fixPrompt, { ...formData }, (updates) => {
         for (const [key, value] of Object.entries(updates)) {

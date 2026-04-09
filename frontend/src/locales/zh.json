@@ -215,6 +215,7 @@
     "validationError": "验证错误：{{error}}",
     "validationFailed": "验证失败 — 请先修复错误再部署",
     "autoFixApplied": "自动修复已应用。点击「更新」重新验证并部署。",
+    "fixing": "修复中...",
     "viewCode": "查看代码",
     "deployAnyway": "仍然部署",
     "validating": "验证中...",
@@ -394,5 +395,16 @@
     "suggestion1": "将系统提示词翻译为英文",
     "suggestion2": "给所有工具添加 region 参数",
     "suggestion3": "让描述更简洁"
+  },
+  "promptDimensions": {
+    "structure": "结构",
+    "tool_prompt_sync": "工具提示同步",
+    "constraint_strength": "约束强度",
+    "anti_patterns": "反模式",
+    "rationalization_preemption": "理性化预防",
+    "output_format": "输出格式",
+    "language_consistency": "语言一致性",
+    "safety": "安全性",
+    "overall": "综合"
   }
 }
