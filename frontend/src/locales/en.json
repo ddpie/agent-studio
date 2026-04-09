@@ -246,6 +246,7 @@
     "localChanges": "Local changes not deployed",
     "viewTemplateUpdates": "View Template Updates",
     "removeConfirm": "Remove this skill from the agent?",
+    "removeSkill": "Remove Skill",
     "templateUpdatesTitle": "Template Updates: {{name}}",
     "globalTemplate": "Global Template (latest)",
     "myVersion": "My Version (editable)",

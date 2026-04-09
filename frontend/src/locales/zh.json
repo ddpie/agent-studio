@@ -246,6 +246,7 @@
     "localChanges": "本地修改未部署",
     "viewTemplateUpdates": "查看模板更新",
     "removeConfirm": "从 Agent 中移除此技能？",
+    "removeSkill": "移除技能",
     "templateUpdatesTitle": "模板更新：{{name}}",
     "globalTemplate": "全局模板（最新版）",
     "myVersion": "我的版本（可编辑）",

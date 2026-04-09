@@ -32,6 +32,7 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
   const editor = useFileEditor({ storage })
 
   const [error, setError] = useState<string | null>(null)
+  const [confirmDeletePath, setConfirmDeletePath] = useState<string | null>(null)
 
   // Resizable sidebar
   const [sidebarWidth, setSidebarWidth] = useState(200)
@@ -147,9 +148,15 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
   // --- Delete file ---
   const handleDeleteFile = useCallback((path: string) => {
     if (path === "SKILL.md") return
-    if (!confirm(t("skillEditor.deleteConfirm", `Delete ${path}?`))) return
-    editor.stageDelete(path)
-  }, [editor, t])
+    setConfirmDeletePath(path)
+  }, [])
+
+  const confirmDeleteFile = useCallback(() => {
+    if (confirmDeletePath) {
+      editor.stageDelete(confirmDeletePath)
+      setConfirmDeletePath(null)
+    }
+  }, [editor, confirmDeletePath])
 
   // --- Resize sidebar ---
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -319,6 +326,20 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
           />
         </div>
       </div>
+
+      {/* Delete file confirm */}
+      {confirmDeletePath && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setConfirmDeletePath(null)}>
+          <div className={`rounded-xl shadow-2xl p-5 max-w-sm mx-4 ${isDark ? "bg-gray-800" : "bg-white"}`} onClick={e => e.stopPropagation()}>
+            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.deleteFile")}</p>
+            <p className="text-xs text-gray-500 mb-4">{t("skillEditor.deleteConfirm", { defaultValue: `Delete ${confirmDeletePath}?` })}</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setConfirmDeletePath(null)} className={`px-3 py-1.5 text-xs rounded-lg ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"}`}>{t("common.cancel")}</button>
+              <button onClick={confirmDeleteFile} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">{t("common.delete")}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
