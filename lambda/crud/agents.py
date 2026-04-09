@@ -625,9 +625,10 @@ def delete_agent_skill_files(wsId: str, agentId: str, skillId: str):
     else:
         # Delete all files for this skill
         try:
-            resp = s3.list_objects_v2(Bucket=ASSETS_BUCKET, Prefix=prefix, MaxKeys=1000)
-            for obj in resp.get("Contents", []):
-                s3.delete_object(Bucket=ASSETS_BUCKET, Key=obj["Key"])
+            paginator = s3.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=ASSETS_BUCKET, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    s3.delete_object(Bucket=ASSETS_BUCKET, Key=obj["Key"])
         except Exception:
             logger.exception("Failed to delete agent skill files")
             return internal_error("Failed to delete files")

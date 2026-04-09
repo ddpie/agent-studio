@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { fetchAgentMetadata, type AgentMetadata, type AgentSkillEntry } from "../lib/agent-metadata";
 import { extractToolsFromDeployment } from "../lib/tool-extractor";
-import { fetchTools } from "../lib/api-client";
+import { fetchTools, deleteAgentSkillFiles } from "../lib/api-client";
 
 interface AgentEditState {
   agentId: string | null;
@@ -211,7 +211,7 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   },
 
   removeSkill: (skillId: string) => {
-    const { formData, pendingSkillFiles, originalSkillFiles } = get();
+    const { formData, pendingSkillFiles, originalSkillFiles, agentId } = get();
     if (!formData) return;
     const skills = (formData.skills || []).filter(s => s.id !== skillId);
     const nextPending = { ...pendingSkillFiles };
@@ -219,6 +219,10 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     const nextOriginal = { ...originalSkillFiles };
     delete nextOriginal[skillId];
     set({ formData: { ...formData, skills }, pendingSkillFiles: nextPending, originalSkillFiles: nextOriginal });
+    // Clean up S3 files for existing agents (not drafts)
+    if (agentId && !agentId.startsWith("draft-")) {
+      deleteAgentSkillFiles(agentId, skillId).catch(() => {});
+    }
   },
 
   updateSkillEntry: (skillId: string, updates: Partial<AgentSkillEntry>) => {
