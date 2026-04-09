@@ -121,7 +121,7 @@ export default function AgentFormSections({
                 onChange={(e) => updateField("supports_images", e.target.checked)}
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
-              <span className="text-[13px]">{formData.supports_images ? `${t("agentEditor.multimodal")} (enabled)` : t("agentEditor.multimodal")}</span>
+              <span className="text-[13px]">{formData.supports_images ? t("agentEditor.multimodalEnabled") : t("agentEditor.multimodal")}</span>
             </label>
           </Field>
         </div>
