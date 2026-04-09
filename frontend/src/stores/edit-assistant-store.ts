@@ -378,15 +378,40 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
       flushPending();
 
       // Post-stream: extract __field_edit blocks (search/replace for long fields)
-      const fieldEditRegex = /```__field_edit:([^\n]*)\n([\s\S]*?)```/g;
-      let fieldEditMatch;
+      // Use line-by-line parser to handle nested backticks in content
       const editedFields: string[] = [];
       let processedText = fullText;
-      const fieldValues: Record<string, string> = {};  // track accumulated edits per field
+      const fieldValues: Record<string, string> = {};
 
-      while ((fieldEditMatch = fieldEditRegex.exec(fullText)) !== null) {
-        const fieldName = fieldEditMatch[1].trim();
-        const editBlock = fieldEditMatch[2];
+      const fieldEditBlocks: { fieldName: string; editBlock: string; raw: string }[] = [];
+      {
+        const lines = fullText.split("\n");
+        let i = 0;
+        while (i < lines.length) {
+          const openMatch = lines[i].match(/^```__field_edit:(.+)/);
+          if (openMatch) {
+            const fieldName = openMatch[1].trim();
+            const startLine = i;
+            let depth = 1;
+            i++;
+            while (i < lines.length && depth > 0) {
+              if (lines[i].startsWith("```") && lines[i].length > 3 && !lines[i].startsWith("```\n")) {
+                depth++;  // nested opening fence (e.g. ```python)
+              } else if (lines[i].trim() === "```") {
+                depth--;  // closing fence
+              }
+              if (depth > 0) i++;
+            }
+            const endLine = i;
+            const editBlock = lines.slice(startLine + 1, endLine).join("\n");
+            const raw = lines.slice(startLine, endLine + 1).join("\n");
+            fieldEditBlocks.push({ fieldName, editBlock, raw });
+          }
+          i++;
+        }
+      }
+
+      for (const { fieldName, editBlock, raw } of fieldEditBlocks) {
         const pairRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
         let pairMatch;
 
@@ -431,18 +456,42 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
           onUpdate({ [fieldName]: newValue });
           editedFields.push(fieldName);
         }
-        processedText = processedText.replace(fieldEditMatch[0], "");
+        processedText = processedText.replace(raw, "");
       }
 
-      // Post-stream: extract __skill_edit blocks (search/replace for skill files)
-      const skillEditRegex = /```__skill_edit:([^:]+):([^\n]*)\n([\s\S]*?)```/g;
-      let skillEditMatch;
+      // Post-stream: extract __skill_edit blocks (line-by-line parser for nested backticks)
       const editedSkillFiles: string[] = [];
 
-      while ((skillEditMatch = skillEditRegex.exec(fullText)) !== null) {
-        const skillId = skillEditMatch[1].trim();
-        const filePath = skillEditMatch[2].trim();
-        const editBlock = skillEditMatch[3];
+      const skillEditBlocks: { skillId: string; filePath: string; editBlock: string; raw: string }[] = [];
+      {
+        const lines = processedText.split("\n");
+        let i = 0;
+        while (i < lines.length) {
+          const openMatch = lines[i].match(/^```__skill_edit:([^:]+):(.+)/);
+          if (openMatch) {
+            const skillId = openMatch[1].trim();
+            const filePath = openMatch[2].trim();
+            const startLine = i;
+            let depth = 1;
+            i++;
+            while (i < lines.length && depth > 0) {
+              if (lines[i].startsWith("```") && lines[i].length > 3 && !lines[i].startsWith("```\n")) {
+                depth++;
+              } else if (lines[i].trim() === "```") {
+                depth--;
+              }
+              if (depth > 0) i++;
+            }
+            const endLine = i;
+            const editBlock = lines.slice(startLine + 1, endLine).join("\n");
+            const raw = lines.slice(startLine, endLine + 1).join("\n");
+            skillEditBlocks.push({ skillId, filePath, editBlock, raw });
+          }
+          i++;
+        }
+      }
+
+      for (const { skillId, filePath, editBlock, raw } of skillEditBlocks) {
         const pairRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
         let pairMatch;
 
@@ -501,7 +550,7 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
           onUpdate({ [`__skill_hash_${skillId}`]: newHash });
           editedSkillFiles.push(`${skill.id}/${filePath}`);
         }
-        processedText = processedText.replace(skillEditMatch[0], "");
+        processedText = processedText.replace(raw, "");
       }
 
       if (editedSkillFiles.length > 0) {
