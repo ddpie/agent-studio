@@ -366,6 +366,8 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
         setPendingStagingKey(stagingKey);
       } else {
         setErrorDetail(null);
+        setValidationResult(null);
+        setPendingStagingKey(null);
       }
       fetchAgents();
 
