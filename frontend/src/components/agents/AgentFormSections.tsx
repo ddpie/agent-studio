@@ -98,18 +98,7 @@ export default function AgentFormSections({
 
       {/* Agent Behavior */}
       <Section title={t("agentEditor.agentBehavior")} icon={<Settings2 className="w-3.5 h-3.5" />}>
-        <div className="grid grid-cols-3 gap-4">
-          <Field label={t("agentEditor.template")} changed={!!changedFields.template_id}>
-            <select
-              value={formData.template_id || ""}
-              onChange={(e) => updateField("template_id", e.target.value)}
-              className={inputClass}
-            >
-              {TEMPLATE_OPTIONS.map((tpl) => (
-                <option key={tpl.id} value={tpl.id}>{tpl.label}</option>
-              ))}
-            </select>
-          </Field>
+        <div className="grid grid-cols-2 gap-4">
           <Field label={t("agentEditor.defaultModel")} changed={!!changedFields.default_model_id} hint={t("agentEditor.modelHint")}>
             <select
               value={formData.default_model_id || ""}
