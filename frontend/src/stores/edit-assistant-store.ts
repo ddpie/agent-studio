@@ -223,6 +223,7 @@ new section
 - Creating entirely new system_prompt or tool_definitions → use __update
 - SEARCH text must match the field content EXACTLY (whitespace matters)
 - NEVER use __field_edit when the change spans more than 5 lines — use __update instead
+- NEVER explain your format choice to the user (e.g. do NOT say "because the change is large, I'll use __update"). Just do it silently.
 
 WRONG: {"system_prompt": "..."} (missing __update wrapper)
 CORRECT: {"__update": {"description": "..."}}
