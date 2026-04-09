@@ -223,6 +223,8 @@ new section
 - Creating entirely new system_prompt or tool_definitions → use __update
 - SEARCH text must match the field content EXACTLY (whitespace matters)
 - NEVER use __field_edit when the change spans more than 5 lines — use __update instead
+- NEVER use __field_edit when the change spans more than 5 lines — use __update instead
+- NEVER use __field_edit when the change spans more than 5 lines — use __update instead
 - NEVER explain your format choice to the user (e.g. do NOT say "because the change is large, I'll use __update"). Just do it silently.
 
 WRONG: {"system_prompt": "..."} (missing __update wrapper)
@@ -289,6 +291,8 @@ Apply best practices:
 ### Mode C: Auto-fix (message starts with "## Auto-Fix Task")
 Fix ALL listed validation issues immediately. Do NOT ask for confirmation. Rules:
 - Changes of 5 lines or fewer → use __field_edit with precise SEARCH blocks.
+- Changes of more than 5 lines → MUST use __update with the COMPLETE new field value.
+- Changes of more than 5 lines → MUST use __update with the COMPLETE new field value.
 - Changes of more than 5 lines → MUST use __update with the COMPLETE new field value.
 - For tool_definitions: only output changed tools.
 - Fix prompt review warnings by adding missing sections/content, not by rewriting.
@@ -383,6 +387,7 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
       let fieldEditMatch;
       const editedFields: string[] = [];
       let processedText = fullText;
+      const fieldValues: Record<string, string> = {};  // track accumulated edits per field
 
       while ((fieldEditMatch = fieldEditRegex.exec(fullText)) !== null) {
         const fieldName = fieldEditMatch[1].trim();
@@ -390,8 +395,8 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
         const pairRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
         let pairMatch;
 
-        // Get current field value from formContext
-        const currentValue = String(formContext[fieldName] ?? "");
+        // Use accumulated value if already edited, otherwise read from formContext
+        const currentValue = fieldValues[fieldName] ?? String(formContext[fieldName] ?? "");
         let newValue = currentValue;
         let applied = false;
         let lastReplaceText = "";
@@ -427,6 +432,7 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
         }
 
         if (applied) {
+          fieldValues[fieldName] = newValue;  // track for subsequent blocks on same field
           onUpdate({ [fieldName]: newValue });
           editedFields.push(fieldName);
         }
