@@ -336,7 +336,7 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
       if (!failed) {
         markSaved();
         if (agentId && formData?.tool_definitions) {
-          updateAgent(agentId, { ...formData, agent_id: agentId }).catch(() => {});
+          updateAgent(agentId, { ...formData, agent_id: agentId, expected_updated_at: formData.updated_at }).catch(() => {});
         }
         if (isCreateMode) onNavigateBack();
       }

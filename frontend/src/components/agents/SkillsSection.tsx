@@ -22,7 +22,7 @@ interface SkillsSectionProps {
 
 export default function SkillsSection({ skills, agentId, deployedHashes, onEditSkill }: SkillsSectionProps) {
   const { t } = useTranslation()
-  const { addSkill, removeSkill, setPendingSkillFiles } = useAgentEditStore()
+  const { addSkill, removeSkill, setPendingSkillFiles, initSkillFiles } = useAgentEditStore()
   const [pickerOpen, setPickerOpen] = useState(false)
   const [adding, setAdding] = useState(false)
   const [addProgress, setAddProgress] = useState("")
@@ -54,6 +54,7 @@ export default function SkillsSection({ skills, agentId, deployedHashes, onEditS
         setAddProgress(`${done}/${total}`)
       })
       addSkill(entry)
+      initSkillFiles(entry.id, {})  // empty baseline so diff shows all files as added
       setPendingSkillFiles(entry.id, files)
     } catch (err) {
       setError(err instanceof Error ? err.message : t("agentSkills.failedToAdd"))

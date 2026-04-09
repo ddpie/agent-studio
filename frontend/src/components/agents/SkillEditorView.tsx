@@ -59,16 +59,20 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
   useEffect(() => {
     const loadEverything = async () => {
       try {
-        const { content } = await editor.loadInitial()
+        // Check if we already have pending files in store (e.g. just added skill)
+        const pendingFiles = getPendingSkillFiles(skill.id)
+        if (pendingFiles && Object.keys(pendingFiles).length > 0) {
+          editor.loadFromMemory(pendingFiles)
+          console.log(`[SkillEditor] loaded ${Object.keys(pendingFiles).length} files from store`)
+          return
+        }
+
+        const { content, files } = await editor.loadInitial()
+        console.log(`[SkillEditor] loadInitial: ${files?.length} files, content=${content ? content.length : null} chars`)
         // Set original baseline for diff (only SKILL.md to start)
         const baseFiles: Record<string, string> = {}
         if (content !== null) baseFiles["SKILL.md"] = content
         initSkillFiles(skill.id, baseFiles)
-        // Restore any pending edits from store on top of loaded content
-        const pendingFiles = getPendingSkillFiles(skill.id)
-        if (pendingFiles) {
-          editor.restoreEdits(pendingFiles)
-        }
       } catch (err) {
         console.error("[SkillEditor] load failed:", err)
         setError(t("agentSkills.failedToLoad"))
