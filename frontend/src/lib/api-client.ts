@@ -520,6 +520,18 @@ export async function fetchAgentSkillFiles(agentId: string, skillId: string): Pr
   }
 }
 
+export async function fetchAgentSkillFilesBulk(agentId: string, skillId: string): Promise<Record<string, string>> {
+  try {
+    const resp = await apiGet<{ files: Record<string, string> }>(
+      `/agents/${encodeURIComponent(agentId)}/skills/${encodeURIComponent(skillId)}/files?bulk=true`
+    );
+    return resp.files || {};
+  } catch (err) {
+    console.error("fetchAgentSkillFilesBulk failed:", err);
+    return {};
+  }
+}
+
 export async function fetchAgentSkillFile(agentId: string, skillId: string, path: string): Promise<string | null> {
   try {
     const resp = await apiGet<{ content: string }>(

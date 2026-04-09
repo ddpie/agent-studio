@@ -6,7 +6,7 @@ import { useAgentEditStore } from "../../stores/agent-edit-store";
 import { Bot, RefreshCw, Loader2, MessageSquare, Settings2, Archive, ChevronDown, RotateCcw, Trash2, Copy } from "lucide-react";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
-import { fetchAgentSkillFiles, fetchAgentSkillFile } from "../../lib/api-client";
+import { fetchAgentSkillFilesBulk } from "../../lib/api-client";
 import { fetchAgentMetadata } from "../../lib/agent-metadata";
 
 export default function AgentList({ collapsed = false }: { collapsed?: boolean }) {
@@ -68,25 +68,16 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
       };
       const { openNewWithData, setPendingSkillFiles, initSkillFiles } = useAgentEditStore.getState();
 
-      // Copy skill files before opening draft (batch to avoid API throttling)
+      // Bulk read all skill files (one request per skill)
       const skillFileMap: Record<string, Record<string, string>> = {};
-      for (const skill of (agent.skills || [])) {
+      await Promise.all((agent.skills || []).map(async (skill: any) => {
         const newId = skillIdMap.get(skill.id);
         if (!newId) return;
-        const files = await fetchAgentSkillFiles(agentId, skill.id);
-        const fileContents: Record<string, string> = {};
-        // Batch file reads, 10 at a time
-        for (let i = 0; i < files.length; i += 10) {
-          const batch = files.slice(i, i + 10);
-          const results = await Promise.all(batch.map(f => fetchAgentSkillFile(agentId, skill.id, f).then(c => [f, c] as const)));
-          for (const [f, c] of results) {
-            if (c !== null) fileContents[f] = c;
-          }
+        const files = await fetchAgentSkillFilesBulk(agentId, skill.id);
+        if (Object.keys(files).length > 0) {
+          skillFileMap[newId] = files;
         }
-        if (Object.keys(fileContents).length > 0) {
-          skillFileMap[newId] = fileContents;
-        }
-      }
+      }));
 
       openNewWithData(data);
       for (const [skillId, files] of Object.entries(skillFileMap)) {

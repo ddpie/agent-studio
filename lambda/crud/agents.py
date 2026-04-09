@@ -468,17 +468,31 @@ def get_agent_skill_file(wsId: str, agentId: str, skillId: str):
     prefix = f"agents/{agentId}/skills/{skillId}/"
 
     if not path:
-        # List files
+        # List files, or bulk read all contents with ?bulk=true
         s3 = _get_s3()
+        bulk = (router.current_event.query_string_parameters or {}).get("bulk", "")
         keys = []
         try:
-            resp = s3.list_objects_v2(Bucket=ASSETS_BUCKET, Prefix=prefix, MaxKeys=1000)
-            for obj in resp.get("Contents", []):
-                rel = obj["Key"][len(prefix):]
-                if rel and not rel.startswith("."):
-                    keys.append(rel)
+            paginator = s3.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=ASSETS_BUCKET, Prefix=prefix, MaxKeys=1000):
+                for obj in page.get("Contents", []):
+                    rel = obj["Key"][len(prefix):]
+                    if rel and not rel.startswith("."):
+                        keys.append(rel)
         except Exception:
             logger.exception("Failed to list agent skill files")
+
+        if bulk:
+            # Return all file contents in one response
+            files = {}
+            for key in keys:
+                try:
+                    obj = s3.get_object(Bucket=ASSETS_BUCKET, Key=f"{prefix}{key}")
+                    files[key] = obj["Body"].read().decode("utf-8")
+                except Exception:
+                    pass  # skip unreadable files
+            return success({"files": files})
+
         return success({"files": keys})
 
     path_err = validate_path(path)
