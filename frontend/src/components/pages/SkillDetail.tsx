@@ -17,6 +17,7 @@ import { useSkillAssistantStore } from "../../stores/skill-assistant-store";
 import SkillAssistant from "../skills/SkillAssistant";
 import ValidationBanner from "../shared/ValidationBanner";
 import DiffModal from "../shared/DiffModal";
+import ConfirmDialog from "../ui/ConfirmDialog";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
 import { preloadPyodide } from "../../lib/pyodide-checker";
 import { getMonacoLanguage } from "../../lib/monaco-helpers";
@@ -793,36 +794,27 @@ Respond with ONLY a JSON block:
 
       {showDiff && <DiffModal changes={getDiffChanges()} onClose={() => setShowDiff(false)} />}
 
-      {/* Unsaved changes blocker */}
-      {blocker.state === "blocked" && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-          <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-xl shadow-2xl p-5 max-w-sm mx-4`}>
-            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.unsavedChanges")}</p>
-            <p className="text-xs text-gray-500 mb-4">
-              {t("skillEditor.unsavedDesc", { count: changedFiles.size })}
-            </p>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => blocker.reset?.()} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>{t("skillEditor.stay")}</button>
-              <button onClick={() => blocker.proceed?.()} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">{t("skillEditor.discardLeave")}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={blocker.state === "blocked"}
+        title={t("skillEditor.unsavedChanges")}
+        message={t("skillEditor.unsavedDesc", { count: changedFiles.size })}
+        confirmLabel={t("skillEditor.discardLeave")}
+        cancelLabel={t("skillEditor.stay")}
+        danger
+        onConfirm={() => blocker.proceed?.()}
+        onCancel={() => blocker.reset?.()}
+      />
 
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setShowDeleteConfirm(false)}>
-          <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-xl shadow-2xl p-5 max-w-sm mx-4`} onClick={e => e.stopPropagation()}>
-            <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.moveToTrash")}</p>
-            <p className="text-xs text-gray-500 mb-4">
-              {t("skillEditor.moveToTrashDesc", { name: skill?.name })}
-            </p>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setShowDeleteConfirm(false)} className={`px-3 py-1.5 text-xs ${isDark ? "text-gray-400 hover:bg-gray-700" : "text-gray-500 hover:bg-gray-100"} rounded-lg`}>{t("common.cancel")}</button>
-              <button onClick={handleDelete} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">{t("skillEditor.moveToTrashBtn")}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title={t("skillEditor.moveToTrash")}
+        message={t("skillEditor.moveToTrashDesc", { name: skill?.name })}
+        confirmLabel={t("skillEditor.moveToTrashBtn")}
+        cancelLabel={t("common.cancel")}
+        danger
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
 
       {/* Context menu */}
       {contextMenu && (
