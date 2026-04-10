@@ -404,6 +404,7 @@ export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): U
     const result = new Map<string, { original: string; edited: string }>()
     for (const path of changedFiles) {
       if (pendingDeletes.has(path)) continue
+      if (pendingCreates.has(path)) continue  // handled below as "(new)"
       const original = originalContents.get(path) ?? ""
       const edited = editedContents.get(path) ?? ""
       result.set(path, { original, edited })
