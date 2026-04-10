@@ -175,9 +175,11 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
           await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
           stagingKey = `agents/${agentId}/staging.json`;
         } else {
+          const { getWorkspaceId } = await import("../lib/api-client");
+          const wsId = getWorkspaceId();
           const draftKey = `staging/${agentId || "new"}.json`;
           await putStorage(draftKey, stagingData);
-          stagingKey = draftKey;
+          stagingKey = `workspaces/${wsId}/storage/${draftKey}`;
         }
       } catch {
         setStatus(i18n.t("agentEditor.uploadFailed"));
@@ -236,9 +238,11 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
           await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
           stagingKey = `agents/${agentId}/staging.json`;
         } else {
+          const { getWorkspaceId } = await import("../lib/api-client");
+          const wsId = getWorkspaceId();
           const draftKey = `staging/${agentId || "new"}.json`;
           await putStorage(draftKey, stagingData);
-          stagingKey = draftKey;
+          stagingKey = `workspaces/${wsId}/storage/${draftKey}`;
         }
       } catch {
         setStatus(i18n.t("agentEditor.uploadFailed"));
