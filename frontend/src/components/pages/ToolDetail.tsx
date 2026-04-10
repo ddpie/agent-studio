@@ -517,7 +517,7 @@ Respond with ONLY a JSON block:
                     setTimeout(() => {
                       const store = useToolAssistantStore.getState();
                       store.sendMessage(
-                        `## Auto-Fix Task\nFix ONLY the following validation issues. Do NOT remove or rewrite any existing content.\n\nIssues:\n${issues}\n\nRules:\n- Use __tool_edit (search/replace) ONLY. Do NOT use __tool_update.\n- Fix ONLY the specific issues listed above.\n- NEVER delete existing content, sections, or descriptions.\n- NEVER shorten or summarize existing text.\n- Make minimal, surgical changes.\n- If an issue appears already fixed in the current code, skip it and say so.\n- If SEARCH text cannot be found, the issue may have been fixed already — do NOT attempt alternative fixes.`,
+                        `## Auto-Fix Task\nFix ONLY the following validation issues. Do NOT remove or rewrite any existing content.\n\nIssues:\n${issues}\n\nRules:\n- Use __tool_code (4 backticks) to output the COMPLETE fixed tool function.\n- Fix ONLY the specific issues listed above.\n- NEVER delete existing content, sections, or descriptions.\n- NEVER shorten or summarize existing text.\n- If an issue appears already fixed in the current code, skip it and say so.\n- Do NOT ask for confirmation. Execute fixes immediately.`,
                         { name, description, category: "custom", code },
                         handleCodeUpdate,
                       );
