@@ -110,6 +110,7 @@ You are an AI assistant that helps users edit skill files in Agent Studio. Skill
 
 ## Current File
 - Path: ${fileContext.path}
+- Lines: ${fileContext.content.split("\\n").length}
 - Content:
 \`\`\`
 ${fileContext.content}
@@ -118,7 +119,7 @@ ${fileContext.content}
 ## All Files in This Skill
 ${fileContext.allFiles.map(f => {
   const c = f === fileContext.path ? null : fileContext.getFileContent(f);
-  return c ? `### ${f}\n\`\`\`\n${c}\n\`\`\`` : `- ${f}`;
+  return c ? `### ${f} (${c.split("\\n").length} lines)\n\`\`\`\n${c}\n\`\`\`` : `- ${f}`;
 }).join("\\n")}
 
 ## User Request
