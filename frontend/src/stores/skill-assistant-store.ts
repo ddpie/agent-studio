@@ -139,29 +139,30 @@ EXCEPTION: You may skip the plan ONLY for trivial, non-destructive changes like 
 
 ## Output Format
 
-Output the complete file content using 4 backticks:
+### For files under 200 lines OR large rewrites: use __file_content (whole file)
+Output the COMPLETE file content using 4 backticks:
 \`\`\`\`__file_content:PATH
 (entire file content here — every line)
 \`\`\`\`
 
-You can update multiple files in one response:
-\`\`\`\`__file_content:SKILL.md
----
-name: "my-skill"
-...
----
-# My Skill
-...
+### For files over 200 lines with small changes: use __file_edit (search/replace)
+\`\`\`\`__file_edit:PATH
+<<<<<<< SEARCH
+exact text to find (copy verbatim from the file)
+=======
+replacement text
+>>>>>>> REPLACE
 \`\`\`\`
 
-\`\`\`\`__file_content:scripts/clean_csv.py
-import csv
-...
-\`\`\`\`
+You can include multiple SEARCH/REPLACE pairs in one __file_edit block.
 
-Rules:
-- ALWAYS use 4 backticks (\`\`\`\`) so triple backticks inside content are safe.
-- ALWAYS output the COMPLETE file content. The frontend replaces the entire file.
+### Rules for choosing format
+- File under 200 lines → ALWAYS use __file_content (whole file replacement, most reliable)
+- File over 200 lines with small changes → use __file_edit (saves tokens, avoids max_tokens limit)
+- File over 200 lines with large rewrite → use __file_content
+- Creating a new file → use __file_content
+- ALWAYS use 4 backticks (\`\`\`\`) for both formats
+- For __file_edit: SEARCH text must match the file EXACTLY (whitespace matters)
 - After the code blocks, add 1-2 sentences explaining what you changed.
 - When the user asks a question or for advice (not a modification), respond with text only — no code blocks.
 
@@ -176,7 +177,7 @@ WRONG (partial output without markers — destroys the file):
 Added content here.
 \`\`\`
 
-RIGHT (complete file with 4 backticks):
+RIGHT (complete file with 4 backticks for small files):
 \`\`\`\`__file_content:SKILL.md
 ---
 name: "my-skill"
@@ -192,6 +193,17 @@ Original content preserved.
 Added content here.
 \`\`\`\`
 
+RIGHT (search/replace with 4 backticks for large files):
+\`\`\`\`__file_edit:scripts/large_script.py
+<<<<<<< SEARCH
+def old_function():
+    return None
+=======
+def old_function():
+    return result
+>>>>>>> REPLACE
+\`\`\`\`
+
 ## Constraints
 - NEVER output a __file_content for SKILL.md without valid YAML frontmatter (---\\nname: ...\\n---). Missing frontmatter will break the skill.
 - For multi-file changes, ALWAYS describe the plan first and wait for confirmation.
@@ -202,9 +214,9 @@ Added content here.
 
 ## Recognize Your Excuses
 You may be tempted to take shortcuts. Recognize these:
-- "The file is long, I'll just show the changed part" — NO. Output the COMPLETE file with __file_content.
-- "I'll describe the changes instead of outputting code" — If the user confirmed changes, you MUST output __file_content blocks.
-- "The frontmatter looks fine, I'll skip it" — When outputting SKILL.md, ALWAYS include frontmatter.
+- "The file is long, I'll just show the changed part" — NO. Use __file_edit with SEARCH/REPLACE or __file_content for the whole file.
+- "I'll describe the changes instead of outputting code" — If the user confirmed changes, you MUST output __file_content or __file_edit blocks.
+- "The frontmatter looks fine, I'll skip it" — When outputting SKILL.md with __file_content, ALWAYS include frontmatter.
 - "I'll make all the changes without asking" — For multi-file changes, ALWAYS plan first.`;
 
     // Inject language instruction based on user settings
@@ -277,6 +289,60 @@ You may be tempted to take shortcuts. Recognize these:
               const raw = lines.slice(startLine, i + 1).join("\n");
               onFileUpdate(targetPath, newContent);
               updatedPaths.push(targetPath);
+              cleanedContent = cleanedContent.replace(raw, "");
+            }
+          }
+          i++;
+        }
+      }
+
+      // Extract __file_edit blocks (4-backtick fence, search/replace for large files)
+      {
+        const lines = cleanedContent.split("\n");
+        let i = 0;
+        while (i < lines.length) {
+          const openMatch = lines[i].match(/^````__file_edit:(.+)/);
+          if (openMatch) {
+            const targetPath = openMatch[1].trim() || fileContext.path;
+            const startLine = i;
+            i++;
+            while (i < lines.length && !lines[i].match(/^````\s*$/)) {
+              i++;
+            }
+            if (i < lines.length) {
+              const editBlock = lines.slice(startLine + 1, i).join("\n");
+              const raw = lines.slice(startLine, i + 1).join("\n");
+
+              // Parse SEARCH/REPLACE pairs
+              const pairRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
+              let pairMatch;
+              let fileContent = fileContext.getFileContent(targetPath) ?? fileContext.content;
+              let applied = false;
+              const failedSearches: string[] = [];
+
+              while ((pairMatch = pairRegex.exec(editBlock)) !== null) {
+                const searchText = pairMatch[1];
+                const replaceText = pairMatch[2];
+                if (fileContent.includes(searchText)) {
+                  fileContent = fileContent.split(searchText).join(replaceText);
+                  applied = true;
+                } else {
+                  failedSearches.push(searchText.slice(0, 50) + (searchText.length > 50 ? "..." : ""));
+                }
+              }
+
+              if (applied) {
+                onFileUpdate(targetPath, fileContent);
+                updatedPaths.push(targetPath);
+              }
+              if (failedSearches.length > 0) {
+                const notice = `\n\n> ${failedSearches.length} search/replace block(s) failed to match in ${targetPath}`;
+                set((s) => ({
+                  messages: s.messages.map((m) =>
+                    m.id === assistantMsg.id ? { ...m, content: m.content + notice } : m
+                  ),
+                }));
+              }
               cleanedContent = cleanedContent.replace(raw, "");
             }
           }
