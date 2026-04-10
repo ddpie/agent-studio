@@ -133,27 +133,19 @@ EXCEPTION: You may skip the plan ONLY for trivial, non-destructive changes like 
 
 ## Output Format
 
-### Option A: Full replacement (for new tools or major rewrites)
-\`\`\`__tool_update
-(complete @tool function code — every line, not just changes)
-\`\`\`
+Output the complete tool code using 4 backticks:
+\`\`\`\`__tool_code
+@tool
+def my_tool(query: str) -> str:
+    """..."""
+    ...
+\`\`\`\`
 
-### Option B: Incremental edit (for small fixes — PREFERRED for auto-fix)
-\`\`\`__tool_edit
-<<<<<<< SEARCH
-(exact lines to find)
-=======
-(replacement lines)
->>>>>>> REPLACE
-\`\`\`
-
-You can include multiple SEARCH/REPLACE pairs in one __tool_edit block.
-Use Option B when fixing specific issues (syntax errors, adding a missing colon, etc.) — it is faster and preserves the rest of the code.
-Use Option A only when rewriting the entire function.
-
-After the code block, add 1-2 sentences explaining what you changed.
-
-When the user asks a question or for advice (not a modification), respond with text only — no code blocks.
+Rules:
+- ALWAYS output the COMPLETE function. The frontend replaces the entire code with your output.
+- ALWAYS use 4 backticks (\`\`\`\`) so triple backticks inside code comments are safe.
+- After the code block, add 1-2 sentences explaining what you changed.
+- When the user asks a question or for advice (not a modification), respond with text only — no code blocks.
 
 ## Code Requirements
 - MUST have @tool decorator (from strands import tool)
@@ -171,8 +163,8 @@ WRONG (partial output — destroys the rest of the function):
     return result
 \`\`\`
 
-RIGHT (complete function):
-\`\`\`__tool_update
+RIGHT (complete function with 4 backticks):
+\`\`\`\`__tool_code
 @tool
 def my_tool(query: str, max_results: int = 5) -> str:
     """Search for information.
@@ -189,17 +181,17 @@ def my_tool(query: str, max_results: int = 5) -> str:
         return json.dumps(results, ensure_ascii=False)
     except Exception as e:
         return f"Error: {e}"
-\`\`\`
+\`\`\`\`
 
 ## Constraints
-- NEVER output a __tool_update without the @tool decorator. Missing decorator will break the tool.
-- ALWAYS output the COMPLETE function. The frontend replaces the entire code with your output. Partial output = data loss.
+- NEVER output a __tool_code without the @tool decorator. Missing decorator will break the tool.
+- ALWAYS output the COMPLETE function. Partial output = data loss.
 - Respond in the SAME LANGUAGE the user uses.
 - Be concise and professional.
 
 ## Recognize Your Excuses
 - "The function is long, I'll just show the changed part" — NO. Output the COMPLETE function.
-- "I'll describe the changes instead of outputting code" — If the user confirmed changes, you MUST output the __tool_update block.`;
+- "I'll describe the changes instead of outputting code" — If the user confirmed changes, you MUST output the __tool_code block.`;
 
     // Inject language preference
     const lang = useUISettings.getState().language;
@@ -250,54 +242,30 @@ def my_tool(query: str, max_results: int = 5) -> str:
       if (flushTimer) clearTimeout(flushTimer);
       flushPending();
 
-      // Extract __tool_update block (full replacement)
-      const updateRegex = /```__tool_update\s*\n([\s\S]*?)```/g;
-      const updateMatch = updateRegex.exec(fullText);
+      // Extract __tool_code block (4-backtick fence)
       let cleanedContent = fullText;
       let updated = false;
 
-      if (updateMatch) {
-        const newCode = updateMatch[1].trimEnd();
-        onCodeUpdate(newCode);
-        cleanedContent = cleanedContent.replace(updateMatch[0], "");
-        updated = true;
-      }
-
-      // Extract __tool_edit blocks (incremental search/replace)
-      const editRegex = /```__tool_edit\s*\n([\s\S]*?)```/g;
-      let editMatch;
-      while ((editMatch = editRegex.exec(fullText)) !== null) {
-        const editBlock = editMatch[1];
-        const pairRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
-        let pairMatch;
-        let currentCode = toolContext.code;
-        let applied = false;
-        const failedSearches: string[] = [];
-
-        while ((pairMatch = pairRegex.exec(editBlock)) !== null) {
-          const searchText = pairMatch[1];
-          const replaceText = pairMatch[2];
-          if (currentCode.includes(searchText)) {
-            currentCode = currentCode.split(searchText).join(replaceText);
-            applied = true;
-          } else {
-            failedSearches.push(searchText.slice(0, 50) + (searchText.length > 50 ? "..." : ""));
+      {
+        const lines = fullText.split("\n");
+        let i = 0;
+        while (i < lines.length) {
+          if (lines[i].match(/^````__tool_code/)) {
+            const startLine = i;
+            i++;
+            while (i < lines.length && !lines[i].match(/^````\s*$/)) {
+              i++;
+            }
+            if (i < lines.length) {
+              const newCode = lines.slice(startLine + 1, i).join("\n").trimEnd();
+              const raw = lines.slice(startLine, i + 1).join("\n");
+              onCodeUpdate(newCode);
+              cleanedContent = cleanedContent.replace(raw, "");
+              updated = true;
+            }
           }
+          i++;
         }
-
-        if (applied) {
-          onCodeUpdate(currentCode);
-          updated = true;
-        }
-        if (failedSearches.length > 0) {
-          const notice = `\n\n> ${failedSearches.length} search/replace block(s) failed to match`;
-          set((s) => ({
-            messages: s.messages.map((m) =>
-              m.id === assistantMsg.id ? { ...m, content: m.content + notice } : m
-            ),
-          }));
-        }
-        cleanedContent = cleanedContent.replace(editMatch[0], "");
       }
 
       if (updated) {

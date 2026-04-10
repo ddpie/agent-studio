@@ -139,69 +139,45 @@ EXCEPTION: You may skip the plan ONLY for trivial, non-destructive changes like 
 
 ## Output Format
 
-### For small changes (1-2 edits): use SEARCH/REPLACE blocks
-\`\`\`__file_edit:PATH
-<<<<<<< SEARCH
-exact text to find (copy from the file verbatim)
-=======
-replacement text
->>>>>>> REPLACE
-\`\`\`
-
-You can include multiple SEARCH/REPLACE blocks in one \`__file_edit\` block:
-\`\`\`__file_edit:scripts/clean_csv.py
-<<<<<<< SEARCH
-def old_func():
-=======
-def new_func():
->>>>>>> REPLACE
-
-<<<<<<< SEARCH
-    return None
-=======
-    return result
->>>>>>> REPLACE
-\`\`\`
-
-### For large rewrites or new files: use full file update
-\`\`\`__file_update:PATH
+Output the complete file content using 4 backticks:
+\`\`\`\`__file_content:PATH
 (entire file content here — every line)
-\`\`\`
+\`\`\`\`
 
-### Rules for choosing format
-- Changing < 30% of the file → use __file_edit (search/replace)
-- Rewriting > 30% or creating a new file → use __file_update (full content)
-- SEARCH text must match the file EXACTLY (whitespace matters)
+You can update multiple files in one response:
+\`\`\`\`__file_content:SKILL.md
+---
+name: "my-skill"
+...
+---
+# My Skill
+...
+\`\`\`\`
 
-After the code blocks, add 1-2 sentences explaining what you changed.
+\`\`\`\`__file_content:scripts/clean_csv.py
+import csv
+...
+\`\`\`\`
 
-When the user asks a question or for advice (not a modification), respond with text only — no code blocks.
+Rules:
+- ALWAYS use 4 backticks (\`\`\`\`) so triple backticks inside content are safe.
+- ALWAYS output the COMPLETE file content. The frontend replaces the entire file.
+- After the code blocks, add 1-2 sentences explaining what you changed.
+- When the user asks a question or for advice (not a modification), respond with text only — no code blocks.
 
 ## Reading Other Files
 If you need to see a file that is not the current file, tell the user to switch to it, OR if the file content was provided in the conversation history, use that.
 
 ## Anti-Patterns
 
-WRONG (partial output without SEARCH/REPLACE markers — destroys the file):
+WRONG (partial output without markers — destroys the file):
 \`\`\`
 ## New Section
 Added content here.
 \`\`\`
 
-RIGHT (search/replace for small edits):
-\`\`\`__file_edit:SKILL.md
-<<<<<<< SEARCH
-# Original Title
-=======
-# Original Title
-
-## New Section
-Added content here.
->>>>>>> REPLACE
-\`\`\`
-
-RIGHT (full file for large rewrites):
-\`\`\`__file_update:SKILL.md
+RIGHT (complete file with 4 backticks):
+\`\`\`\`__file_content:SKILL.md
 ---
 name: "my-skill"
 description: "..."
@@ -214,10 +190,10 @@ Original content preserved.
 
 ## New Section
 Added content here.
-\`\`\`
+\`\`\`\`
 
 ## Constraints
-- NEVER output a __file_update for SKILL.md without valid YAML frontmatter (---\\nname: ...\\n---). Missing frontmatter will break the skill.
+- NEVER output a __file_content for SKILL.md without valid YAML frontmatter (---\\nname: ...\\n---). Missing frontmatter will break the skill.
 - For multi-file changes, ALWAYS describe the plan first and wait for confirmation.
 - Respond in the SAME LANGUAGE the user uses.
 - For SKILL.md: preserve all valid YAML frontmatter fields (name, description, type, source, user-invocable, files).
@@ -226,11 +202,10 @@ Added content here.
 
 ## Recognize Your Excuses
 You may be tempted to take shortcuts. Recognize these:
-- "The file is long, I'll just show the changed part without markers" — NO. Use __file_edit with SEARCH/REPLACE blocks. Unmarked partial output = data loss.
-- "I'll describe the changes instead of outputting code" — If the user confirmed changes, you MUST output __file_edit or __file_update blocks.
-- "The frontmatter looks fine, I'll skip it" — When using __file_update for SKILL.md, ALWAYS include frontmatter.
-- "I'll make all the changes without asking" — For multi-file changes, ALWAYS plan first.
-- "The SEARCH text is close enough" — SEARCH text must match EXACTLY. Copy it verbatim from the file.`;
+- "The file is long, I'll just show the changed part" — NO. Output the COMPLETE file with __file_content.
+- "I'll describe the changes instead of outputting code" — If the user confirmed changes, you MUST output __file_content blocks.
+- "The frontmatter looks fine, I'll skip it" — When outputting SKILL.md, ALWAYS include frontmatter.
+- "I'll make all the changes without asking" — For multi-file changes, ALWAYS plan first.`;
 
     // Inject language instruction based on user settings
     const lang = useUISettings.getState().language;
@@ -281,55 +256,32 @@ You may be tempted to take shortcuts. Recognize these:
       if (flushTimer) clearTimeout(flushTimer);
       flushPending();
 
-      // Extract __file_update blocks (full file replacement)
-      const updateRegex = /```__file_update(?::([^\n]*))?\n([\s\S]*?)```/g;
-      let match;
+      // Extract __file_content blocks (4-backtick fence)
       const updatedPaths: string[] = [];
       let cleanedContent = fullText;
 
-      while ((match = updateRegex.exec(fullText)) !== null) {
-        const targetPath = match[1]?.trim() || fileContext.path;
-        const newContent = match[2].trimEnd();
-        onFileUpdate(targetPath, newContent);
-        updatedPaths.push(targetPath);
-        cleanedContent = cleanedContent.replace(match[0], "");
-      }
-
-      // Extract __file_edit blocks (search/replace incremental edits)
-      const editRegex = /```__file_edit(?::([^\n]*))?\n([\s\S]*?)```/g;
-      while ((match = editRegex.exec(fullText)) !== null) {
-        const targetPath = match[1]?.trim() || fileContext.path;
-        const editBlock = match[2];
-        // Parse SEARCH/REPLACE pairs
-        const pairRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
-        let pairMatch;
-        let fileContent = fileContext.getFileContent(targetPath) ?? fileContext.content;
-        let applied = false;
-        const failedSearches: string[] = [];
-        while ((pairMatch = pairRegex.exec(editBlock)) !== null) {
-          const searchText = pairMatch[1];
-          const replaceText = pairMatch[2];
-          if (fileContent.includes(searchText)) {
-            fileContent = fileContent.split(searchText).join(replaceText);
-            applied = true;
-          } else {
-            failedSearches.push(searchText.slice(0, 50) + (searchText.length > 50 ? "..." : ""));
+      {
+        const lines = fullText.split("\n");
+        let i = 0;
+        while (i < lines.length) {
+          const openMatch = lines[i].match(/^````__file_content:(.+)/);
+          if (openMatch) {
+            const targetPath = openMatch[1].trim() || fileContext.path;
+            const startLine = i;
+            i++;
+            while (i < lines.length && !lines[i].match(/^````\s*$/)) {
+              i++;
+            }
+            if (i < lines.length) {
+              const newContent = lines.slice(startLine + 1, i).join("\n").trimEnd();
+              const raw = lines.slice(startLine, i + 1).join("\n");
+              onFileUpdate(targetPath, newContent);
+              updatedPaths.push(targetPath);
+              cleanedContent = cleanedContent.replace(raw, "");
+            }
           }
+          i++;
         }
-        if (applied) {
-          onFileUpdate(targetPath, fileContent);
-          updatedPaths.push(targetPath);
-        }
-        if (failedSearches.length > 0) {
-          // Append failure notice to assistant message
-          const notice = `\n\n> ⚠ ${failedSearches.length} search/replace block(s) failed to match in ${targetPath}`;
-          set((s) => ({
-            messages: s.messages.map((m) =>
-              m.id === assistantMsg.id ? { ...m, content: m.content + notice } : m
-            ),
-          }));
-        }
-        cleanedContent = cleanedContent.replace(match[0], "");
       }
 
       if (updatedPaths.length > 0) {
