@@ -347,6 +347,8 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
       let processedText = fullText;
       const fieldValues: Record<string, string> = {};
 
+      const ALLOWED_FIELDS = new Set(["name", "display_name", "description", "system_prompt", "tool_definitions", "welcome_message", "suggestions", "template_id", "supports_images"]);
+
       {
         const lines = fullText.split("\n");
         let i = 0;
@@ -365,10 +367,14 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
               console.warn(`[field_value] unclosed 4-backtick fence for "${fieldName}", skipping`);
               break;
             }
+            if (!ALLOWED_FIELDS.has(fieldName)) {
+              console.warn(`[field_value] unknown field "${fieldName}", skipping`);
+              i++;
+              continue;
+            }
             const endLine = i;
             const content = lines.slice(startLine + 1, endLine).join("\n");
             const raw = lines.slice(startLine, endLine + 1).join("\n");
-            console.log(`[field_value] "${fieldName}" = ${content.length} chars`);
             fieldValues[fieldName] = content;
             onUpdate({ [fieldName]: content });
             editedFields.push(fieldName);

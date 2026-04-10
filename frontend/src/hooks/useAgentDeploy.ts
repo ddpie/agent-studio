@@ -101,7 +101,6 @@ async function streamMetaAgent(
       }
     }
   }
-  console.log("[meta-agent] raw stream length:", raw.length, "first 500 chars:", raw.slice(0, 500));
   return { raw, toolResults: extractToolResults(raw) };
 }
 
@@ -318,7 +317,12 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
         const { pendingSkillFiles } = useAgentEditStore.getState();
         for (const [skillId, files] of Object.entries(pendingSkillFiles)) {
           for (const [filePath, content] of Object.entries(files)) {
-            await putAgentSkillFile(agentId, skillId, filePath, content);
+            const ok = await putAgentSkillFile(agentId, skillId, filePath, content);
+            if (!ok) {
+              setStatus(t("agentEditor.uploadFailed"));
+              setSaving(false);
+              return;
+            }
           }
         }
       }
@@ -348,8 +352,6 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
         toolNameMap,
         deployToolPctMap,
       );
-
-      console.log("[deploy] toolResults:", JSON.stringify(toolResults, null, 2));
 
       const deployResult = (toolResults.update_agent || toolResults.create_agent) as { error?: string; status?: string; details?: string[] } | undefined;
       const failed = !deployResult || deployResult.error != null;
