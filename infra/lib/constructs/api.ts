@@ -9,6 +9,9 @@ import { AgentStudioConfig } from "../config";
 
 export interface ApiProps {
   config: AgentStudioConfig;
+  cognitoUserPoolId: string;
+  cognitoClientId: string;
+  metaAgentArn: string;
   workspacesTable: dynamodb.Table;
   agentsTable: dynamodb.ITable;
   skillsTable: dynamodb.Table;
@@ -46,9 +49,9 @@ export class Api extends Construct {
         AGENTS_TABLE: props.agentsTable.tableName,
         SKILLS_TABLE: props.skillsTable.tableName,
         TOOLS_TABLE: props.toolsTable.tableName,
-        COGNITO_USER_POOL_ID: props.config.cognitoUserPoolId,
-        COGNITO_CLIENT_ID: props.config.cognitoClientId,
-        META_AGENT_ARN: `arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:runtime/${props.config.metaAgentId}`,
+        COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
+        COGNITO_CLIENT_ID: props.cognitoClientId,
+        META_AGENT_ARN: props.metaAgentArn,
       },
     });
 

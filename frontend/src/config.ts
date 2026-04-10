@@ -3,7 +3,6 @@ declare const __AGENT_STUDIO_ACCOUNT_ID__: string;
 declare const __AGENT_STUDIO_META_AGENT_ID__: string;
 declare const __AGENT_STUDIO_COGNITO_USER_POOL_ID__: string;
 declare const __AGENT_STUDIO_COGNITO_CLIENT_ID__: string;
-declare const __AGENT_STUDIO_COGNITO_IDENTITY_POOL_ID__: string;
 declare const __AGENT_STUDIO_S3_BUCKET__: string;
 declare const __AGENT_STUDIO_API_URL__: string;
 
@@ -16,7 +15,6 @@ export const awsConfig = {
     Cognito: {
       userPoolId: __AGENT_STUDIO_COGNITO_USER_POOL_ID__,
       userPoolClientId: __AGENT_STUDIO_COGNITO_CLIENT_ID__,
-      identityPoolId: __AGENT_STUDIO_COGNITO_IDENTITY_POOL_ID__,
     },
   },
 };

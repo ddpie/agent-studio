@@ -112,6 +112,7 @@ export class Cdn extends Construct {
     new cdk.CfnOutput(this, "CloudFrontDomain", { value: this.distribution.distributionDomainName });
     new cdk.CfnOutput(this, "CloudFrontId", { value: this.distribution.distributionId });
     new cdk.CfnOutput(this, "FrontendBucketName", { value: this.frontendBucket.bucketName });
+    new cdk.CfnOutput(this, "ApiUrl", { value: props.restApi.url });
 
     // S3 CORS for assets bucket (external, not CDK-managed)
     // Needed for presigned URL downloads from browser

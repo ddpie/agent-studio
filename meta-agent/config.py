@@ -3,7 +3,9 @@
 import os
 
 REGION = os.getenv("AWS_REGION", "us-east-1")
-ACCOUNT_ID = os.getenv("AWS_ACCOUNT_ID", "557690613480")
+ACCOUNT_ID = os.environ.get("AWS_ACCOUNT_ID")
+if not ACCOUNT_ID:
+    raise RuntimeError("AWS_ACCOUNT_ID environment variable is required")
 S3_BUCKET = os.getenv(
     "AGENT_STUDIO_S3_BUCKET",
     f"bedrock-agentcore-codebuild-sources-{ACCOUNT_ID}-{REGION}",

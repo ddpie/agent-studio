@@ -20,7 +20,6 @@ export default defineConfig(({ mode }) => {
       __AGENT_STUDIO_META_AGENT_ID__: JSON.stringify(env.AGENT_STUDIO_META_AGENT_ID || ''),
       __AGENT_STUDIO_COGNITO_USER_POOL_ID__: JSON.stringify(env.AGENT_STUDIO_COGNITO_USER_POOL_ID || ''),
       __AGENT_STUDIO_COGNITO_CLIENT_ID__: JSON.stringify(env.AGENT_STUDIO_COGNITO_CLIENT_ID || ''),
-      __AGENT_STUDIO_COGNITO_IDENTITY_POOL_ID__: JSON.stringify(env.AGENT_STUDIO_COGNITO_IDENTITY_POOL_ID || ''),
       __AGENT_STUDIO_S3_BUCKET__: JSON.stringify(env.AGENT_STUDIO_S3_BUCKET || ''),
       // Empty API_URL so browser uses relative paths → Vite proxy → CloudFront
       __AGENT_STUDIO_API_URL__: JSON.stringify(''),

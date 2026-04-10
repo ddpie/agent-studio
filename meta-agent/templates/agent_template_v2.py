@@ -280,7 +280,7 @@ import boto3 as _boto3
 from strands import tool as _tool
 
 _REGION = _os.getenv("AWS_REGION", "us-east-1")
-_ACCOUNT_ID = _os.getenv("AWS_ACCOUNT_ID", "557690613480")
+_ACCOUNT_ID = _os.environ.get("AWS_ACCOUNT_ID", "")
 _S3_BUCKET = _os.getenv(
     "AGENT_STUDIO_S3_BUCKET",
     f"bedrock-agentcore-codebuild-sources-{_ACCOUNT_ID}-{_REGION}",

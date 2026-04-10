@@ -8,6 +8,9 @@ import { AgentStudioConfig } from "../config";
 
 export interface InvokeProps {
   config: AgentStudioConfig;
+  cognitoUserPoolId: string;
+  cognitoClientId: string;
+  metaAgentArn: string;
   workspacesTable: dynamodb.Table;
   agentsTable: dynamodb.ITable;
 }
@@ -40,9 +43,9 @@ export class Invoke extends Construct {
         ACCOUNT_ID: props.config.accountId,
         WORKSPACES_TABLE: props.workspacesTable.tableName,
         AGENTS_TABLE: props.agentsTable.tableName,
-        COGNITO_USER_POOL_ID: props.config.cognitoUserPoolId,
-        COGNITO_CLIENT_ID: props.config.cognitoClientId,
-        META_AGENT_ARN: `arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:runtime/${props.config.metaAgentId}`,
+        COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
+        COGNITO_CLIENT_ID: props.cognitoClientId,
+        META_AGENT_ARN: props.metaAgentArn,
       },
     });
 

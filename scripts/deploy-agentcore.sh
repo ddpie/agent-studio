@@ -1,47 +1,34 @@
 #!/usr/bin/env bash
-# Deploy all AgentCore-related resources for Agent Studio.
-# Reads configuration from .env in the project root.
+# Deploy Meta-Agent to AgentCore Runtime.
+# Supports both create (first time) and update (subsequent).
+# Reads configuration from .env in the project root, or from environment variables.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="${PROJECT_ROOT}/.env"
 
-# Load .env
-if [[ ! -f "$ENV_FILE" ]]; then
-  echo "ERROR: .env not found at $ENV_FILE"
-  echo "Copy .env.example to .env and fill in your values."
-  exit 1
+# Load .env if it exists
+if [[ -f "$ENV_FILE" ]]; then
+  set -a; source "$ENV_FILE"; set +a
 fi
-set -a; source "$ENV_FILE"; set +a
 
 # Validate required vars
-REQUIRED_VARS=(
-  AGENT_STUDIO_REGION
-  AGENT_STUDIO_ACCOUNT_ID
-  AGENT_STUDIO_META_AGENT_ID
-  AGENT_STUDIO_S3_BUCKET
-)
-for var in "${REQUIRED_VARS[@]}"; do
-  if [[ -z "${!var:-}" ]]; then
-    echo "ERROR: $var is not set in .env"
-    exit 1
-  fi
-done
-
-REGION="$AGENT_STUDIO_REGION"
-BUCKET="$AGENT_STUDIO_S3_BUCKET"
-META_AGENT_ID="$AGENT_STUDIO_META_AGENT_ID"
+REGION="${AGENT_STUDIO_REGION:?AGENT_STUDIO_REGION is required}"
+ACCOUNT_ID="${AGENT_STUDIO_ACCOUNT_ID:?AGENT_STUDIO_ACCOUNT_ID is required}"
+BUCKET="${AGENT_STUDIO_S3_BUCKET:?AGENT_STUDIO_S3_BUCKET is required}"
+META_AGENT_ID="${AGENT_STUDIO_META_AGENT_ID:-}"
+ROLE_ARN="${AGENT_STUDIO_ROLE_ARN:-arn:aws:iam::${ACCOUNT_ID}:role/AgentStudioSubAgentRole-${REGION}}"
 
 echo "=== Agent Studio Deploy ==="
 echo "Region:  $REGION"
-echo "Account: $AGENT_STUDIO_ACCOUNT_ID"
+echo "Account: $ACCOUNT_ID"
 echo "Bucket:  $BUCKET"
-echo "Meta-Agent: $META_AGENT_ID"
+echo "Meta-Agent: ${META_AGENT_ID:-<will be created>}"
 echo ""
 
 # --- 1. Initialize skills/index.json if missing ---
-echo "[1/2] Checking skills/index.json..."
+echo "[1/3] Checking skills/index.json..."
 if aws s3api head-object --bucket "$BUCKET" --key "skills/index.json" --region "$REGION" 2>/dev/null; then
   echo "  skills/index.json exists, skipping."
 else
@@ -51,23 +38,23 @@ else
   echo "  Done."
 fi
 
-# --- 2. Deploy Meta-Agent ---
+# --- 2. Package Meta-Agent ---
 echo ""
-echo "[2/2] Deploying Meta-Agent..."
+echo "[2/3] Packaging Meta-Agent..."
 cd "${PROJECT_ROOT}/meta-agent"
 
 python3 - <<'PYEOF'
-import io, os, zipfile, time
+import io, os, zipfile
 import boto3
 
 region = os.environ["AGENT_STUDIO_REGION"]
 bucket = os.environ["AGENT_STUDIO_S3_BUCKET"]
-agent_id = os.environ["AGENT_STUDIO_META_AGENT_ID"]
-source_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in dir() else os.getcwd()
+agent_id = os.environ.get("AGENT_STUDIO_META_AGENT_ID", "")
+source_dir = os.getcwd()
 
 print(f"  Packaging {source_dir}...")
 
-# Download base zip (contains dependencies: strands, boto3, etc.)
+# Download base zip
 s3 = boto3.client("s3", region_name=region)
 base_key = "base/deployment.zip"
 print(f"  Downloading base zip from s3://{bucket}/{base_key}...")
@@ -93,61 +80,126 @@ for root, dirs, files in os.walk(source_dir):
 buf = io.BytesIO()
 with zipfile.ZipFile(io.BytesIO(base_data), "r") as base_zip:
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        # Copy base dependencies (skip files we'll replace with source)
         for item in base_zip.namelist():
             if item in source_files:
                 continue
             zf.writestr(item, base_zip.read(item))
-        # Add source files on top
         for arcname, full in source_files.items():
             zf.write(full, arcname)
 
 package = buf.getvalue()
 print(f"  Package size: {len(package) / 1024 / 1024:.1f} MB ({len(source_files)} source files)")
 
-# Upload to S3
-s3 = boto3.client("s3", region_name=region)
-s3_key = f"agents/{agent_id}/deployment.zip"
+# Upload — use agent_id if known, otherwise use the runtime name
+s3_name = agent_id if agent_id else "agentStudioMeta"
+s3_key = f"agents/{s3_name}/deployment.zip"
 s3.put_object(Bucket=bucket, Key=s3_key, Body=package)
 print(f"  Uploaded to s3://{bucket}/{s3_key}")
 
-# Update agent runtime (must include roleArn + networkConfiguration)
+# Also upload to the fixed CfnRuntime key (keeps CDK artifact fresh)
+fixed_key = "agents/agentStudioMeta/deployment.zip"
+if s3_key != fixed_key:
+    s3.put_object(Bucket=bucket, Key=fixed_key, Body=package)
+    print(f"  Also uploaded to s3://{bucket}/{fixed_key}")
+PYEOF
+
+# --- 3. Create or Update Runtime ---
+echo ""
+echo "[3/3] Deploying Meta-Agent..."
+cd "${PROJECT_ROOT}/meta-agent"
+
+META_AGENT_ID=$(python3 - <<'PYEOF'
+import json, os, time, sys
+import boto3
+
+region = os.environ["AGENT_STUDIO_REGION"]
+bucket = os.environ["AGENT_STUDIO_S3_BUCKET"]
+agent_id = os.environ.get("AGENT_STUDIO_META_AGENT_ID", "")
+role_arn = os.environ.get("AGENT_STUDIO_ROLE_ARN",
+    f"arn:aws:iam::{os.environ['AGENT_STUDIO_ACCOUNT_ID']}:role/AgentStudioSubAgentRole-{region}")
+
 control = boto3.client("bedrock-agentcore-control", region_name=region)
-existing = control.get_agent_runtime(agentRuntimeId=agent_id)
-control.update_agent_runtime(
-    agentRuntimeId=agent_id,
-    roleArn=existing["roleArn"],
-    networkConfiguration={"networkMode": existing["networkConfiguration"]["networkMode"]},
-    agentRuntimeArtifact={
-        "codeConfiguration": {
-            "code": {"s3": {"bucket": bucket, "prefix": s3_key}},
-            "runtime": "PYTHON_3_10",
-            "entryPoint": ["main.py"],
-        }
-    },
-)
-print(f"  Update triggered for {agent_id}")
+
+# Auto-detect: create or update
+if agent_id:
+    try:
+        existing = control.get_agent_runtime(agentRuntimeId=agent_id)
+        mode = "update"
+    except control.exceptions.ResourceNotFoundException:
+        print(f"  Runtime {agent_id} not found, will create new.", file=sys.stderr)
+        agent_id = ""
+        mode = "create"
+    except Exception as e:
+        if "ResourceNotFoundException" in str(type(e).__name__) or "not found" in str(e).lower():
+            agent_id = ""
+            mode = "create"
+        else:
+            raise
+else:
+    mode = "create"
+
+if mode == "update":
+    s3_key = f"agents/{agent_id}/deployment.zip"
+    existing = control.get_agent_runtime(agentRuntimeId=agent_id)
+    control.update_agent_runtime(
+        agentRuntimeId=agent_id,
+        roleArn=existing["roleArn"],
+        networkConfiguration={"networkMode": existing["networkConfiguration"]["networkMode"]},
+        agentRuntimeArtifact={
+            "codeConfiguration": {
+                "code": {"s3": {"bucket": bucket, "prefix": s3_key}},
+                "runtime": "PYTHON_3_10",
+                "entryPoint": ["main.py"],
+            }
+        },
+    )
+    print(f"  Update triggered for {agent_id}", file=sys.stderr)
+else:
+    s3_key = "agents/agentStudioMeta/deployment.zip"
+    resp = control.create_agent_runtime(
+        agentRuntimeName="agentStudioMeta",
+        description="Agent Studio Meta-Agent",
+        roleArn=role_arn,
+        agentRuntimeArtifact={
+            "codeConfiguration": {
+                "code": {"s3": {"bucket": bucket, "prefix": s3_key}},
+                "runtime": "PYTHON_3_10",
+                "entryPoint": ["main.py"],
+            }
+        },
+        networkConfiguration={"networkMode": "PUBLIC"},
+        protocolConfiguration={"serverProtocol": "HTTP"},
+        filesystemConfigurations=[{
+            "sessionStorage": {"mountPath": "/mnt/workspace"}
+        }],
+    )
+    agent_id = resp["agentRuntimeId"]
+    print(f"  Created runtime: {agent_id}", file=sys.stderr)
 
 # Wait for READY
-print("  Waiting for READY...", end="", flush=True)
+print("  Waiting for READY...", end="", flush=True, file=sys.stderr)
 for _ in range(30):
     time.sleep(10)
     resp = control.get_agent_runtime(agentRuntimeId=agent_id)
     status = resp["status"]
-    print(".", end="", flush=True)
+    print(".", end="", flush=True, file=sys.stderr)
     if status == "READY":
-        print(f"\n  Status: {status}")
+        print(f"\n  Status: {status}", file=sys.stderr)
         break
-    if status in ("FAILED", "DELETING"):
-        print(f"\n  Status: {status} — deployment failed!")
-        exit(1)
+    if status in ("FAILED", "CREATE_FAILED", "DELETING"):
+        print(f"\n  Status: {status} — deployment failed!", file=sys.stderr)
+        sys.exit(1)
 else:
-    print("\n  TIMEOUT — agent did not become READY in 5 minutes")
-    exit(1)
-PYEOF
+    print("\n  TIMEOUT — agent did not become READY in 5 minutes", file=sys.stderr)
+    sys.exit(1)
 
-echo "  Meta-Agent deployed."
+# Output agent ID to stdout (for deploy-all.sh to capture)
+print(agent_id)
+PYEOF
+)
+
+echo "  Meta-Agent deployed: $META_AGENT_ID"
 
 echo ""
 echo "=== Deploy complete ==="
-echo "Meta-Agent runtime: $META_AGENT_ID"
+echo "META_AGENT_ID=$META_AGENT_ID"
