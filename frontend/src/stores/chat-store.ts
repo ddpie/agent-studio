@@ -241,27 +241,42 @@ export const useChatStore = create<ChatState>()(
             }
           };
 
+          let toolBuffer = "";  // Buffer for incomplete tool markers across chunks
+
           for await (const chunk of stream) {
             if (signal.aborted) break;
 
-            // Tool markers are JSON with __tool key. Base64-encoded values have no braces.
+            // Tool markers are JSON with __tool key. Buffer across chunks for split markers.
             const toolJsonRe = /\{"__tool"[^}]*\}/g;
-            let remaining = chunk;
+            toolBuffer += chunk;
+            let remaining = "";
             const markers: { type: string; name: string; input?: string; output?: string }[] = [];
 
             let jsonMatch: RegExpExecArray | null;
-            while ((jsonMatch = toolJsonRe.exec(chunk)) !== null) {
+            let lastMatchEnd = 0;
+            while ((jsonMatch = toolJsonRe.exec(toolBuffer)) !== null) {
               try {
                 const parsed = JSON.parse(jsonMatch[0]);
                 if (parsed.__tool && parsed.name) {
                   markers.push({ type: parsed.__tool, name: parsed.name, input: parsed.input, output: parsed.output });
                 }
               } catch { /* skip */ }
+              lastMatchEnd = jsonMatch.index + jsonMatch[0].length;
+            }
+
+            // Check if there's an incomplete marker at the end (starts with {"__tool but no closing })
+            const lastOpenBrace = toolBuffer.lastIndexOf('{"__tool"');
+            if (lastOpenBrace >= lastMatchEnd) {
+              // Incomplete marker — keep in buffer, emit text before it
+              remaining = toolBuffer.slice(0, lastOpenBrace).replace(toolJsonRe, "");
+              toolBuffer = toolBuffer.slice(lastOpenBrace);
+            } else {
+              // All markers matched — emit remaining text, clear buffer
+              remaining = toolBuffer.replace(toolJsonRe, "");
+              toolBuffer = "";
             }
 
             if (markers.length > 0) {
-              remaining = chunk.replace(toolJsonRe, "").trim();
-
               // Flush any pending text before inserting tool markers
               flushPending();
 
@@ -299,9 +314,9 @@ export const useChatStore = create<ChatState>()(
                   set({ activeTool: null });
                 }
               }
-
-              if (!remaining) continue;
             }
+
+            if (!remaining) continue;
 
             pendingText += remaining;
             scheduleFlush();
