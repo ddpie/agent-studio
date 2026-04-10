@@ -486,13 +486,13 @@ export async function getStorage<T = unknown>(key: string): Promise<T | null> {
   }
 }
 
-export async function putStorage(key: string, data: unknown): Promise<boolean> {
+export async function putStorage(key: string, data: unknown): Promise<string | null> {
   try {
-    await apiPut("/storage", { key, data });
-    return true;
+    const resp = await apiPut<{ key: string }>("/storage", { key, data });
+    return resp.key || key;
   } catch {
     console.error("putStorage failed");
-    return false;
+    return null;
   }
 }
 
