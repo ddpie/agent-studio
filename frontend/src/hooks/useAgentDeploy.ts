@@ -156,6 +156,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
     setValidationResult(null);
 
     try {
+      const { getWorkspaceId: getWsId } = await import("../lib/api-client");
       const stagingData = {
         name: formData?.name || agentName,
         display_name: formData?.display_name || agentName,
@@ -167,6 +168,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
         supports_images: formData?.supports_images || false,
         skills: formData?.skills || [],
         agent_id: agentId,
+        workspace_id: getWsId(),
       };
 
       let stagingKey: string;

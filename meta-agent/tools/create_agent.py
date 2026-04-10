@@ -214,16 +214,18 @@ def create_agent(
     # Write to DynamoDB
     ddb = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(AGENTS_TABLE)
-    owner = getattr(__import__('tools.create_agent', fromlist=['_caller_id']), '_caller_id', 'unknown')
-    table.put_item(Item={
+    workspace_id = staged.get("workspace_id", "") if staging_key else ""
+    item = {
         "agentId": agent_id,
         "agentName": agent_name,
         "displayName": agent_name,
         "description": description,
-        "owner": owner,
         "visibility": "private",
         "permissionTier": tier,
-    })
+    }
+    if workspace_id:
+        item["workspace_id"] = workspace_id
+    table.put_item(Item=item)
 
     # Wait for ready
     status = wait_for_ready(result["agent_id"])
