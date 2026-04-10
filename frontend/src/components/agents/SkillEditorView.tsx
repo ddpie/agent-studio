@@ -335,6 +335,7 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
               lineNumbers: "on",
               automaticLayout: true,
               padding: { top: 8 },
+              contextmenu: false,
             }}
           />
         </div>

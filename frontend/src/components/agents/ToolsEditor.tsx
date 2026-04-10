@@ -193,7 +193,7 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
               }));
               monacoInstance.editor.setModelMarkers(model, "python-lint", errors);
             }}
-            options={{ fontSize: 13, minimap: { enabled: true }, scrollBeyondLastLine: false, automaticLayout: true }}
+            options={{ fontSize: 13, minimap: { enabled: true }, scrollBeyondLastLine: false, automaticLayout: true, contextmenu: false }}
           />
         </div>
       </div>
@@ -281,7 +281,7 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
                     }));
                     monacoInstance.editor.setModelMarkers(model, "python-lint", errors);
                   }}
-                  options={{ fontSize: 12, minimap: { enabled: false }, scrollBeyondLastLine: false, automaticLayout: true, tabSize: 4 }}
+                  options={{ fontSize: 12, minimap: { enabled: false }, scrollBeyondLastLine: false, automaticLayout: true, tabSize: 4, contextmenu: false }}
                 />
               </div>
             )}

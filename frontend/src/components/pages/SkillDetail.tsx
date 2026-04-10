@@ -754,6 +754,7 @@ Respond with ONLY a JSON block:
                     folding: true,
                     automaticLayout: true,
                     tabSize: 2,
+                    contextmenu: false,
                   }}
                 />
               </div>
