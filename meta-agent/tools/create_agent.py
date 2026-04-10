@@ -215,6 +215,7 @@ def create_agent(
     ddb = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(AGENTS_TABLE)
     workspace_id = staged.get("workspace_id", "") if staging_key else ""
+    now = datetime.now(timezone.utc).isoformat()
     item = {
         "agentId": agent_id,
         "agentName": agent_name,
@@ -222,6 +223,8 @@ def create_agent(
         "description": description,
         "visibility": "private",
         "permissionTier": tier,
+        "created_at": now,
+        "updated_at": now,
     }
     if workspace_id:
         item["workspace_id"] = workspace_id
