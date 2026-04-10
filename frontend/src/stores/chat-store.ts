@@ -118,6 +118,7 @@ export const useChatStore = create<ChatState>()(
             selectedModelId: recent.modelId || null,
             sessionId: undefined,
             statusText: null,
+            activeTool: null,
           });
         } else {
           set({
@@ -128,6 +129,7 @@ export const useChatStore = create<ChatState>()(
             activeSessionId: null,
             selectedModelId: null,
             statusText: null,
+            activeTool: null,
           });
         }
       },
@@ -140,6 +142,7 @@ export const useChatStore = create<ChatState>()(
           sessionId: undefined,
           activeSessionId: null,
           statusText: null,
+          activeTool: null,
         });
       },
 
