@@ -461,8 +461,10 @@ export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): U
     editedContents.set(path, c)
     const orig = originalContents.get(path)
     const next = new Set(changedFiles)
-    if (orig !== undefined && c !== orig) {
+    if (orig !== undefined && c.trimEnd() !== orig.trimEnd()) {
       next.add(path)
+    } else if (orig !== undefined) {
+      next.delete(path)  // content matches after trim — not changed
     } else if (orig === undefined) {
       if (!pendingCreates.has(path)) pendingCreates.set(path, "")
       next.add(path)
