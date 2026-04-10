@@ -2,7 +2,6 @@ import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import Editor from "@monaco-editor/react";
 import type * as MonacoNS from "monaco-editor";
-import { applyLintMarkers } from "../../lib/monaco-lint";
 import { isPyodideReady, checkPythonSyntax } from "../../lib/pyodide-checker";
 import { validatePython } from "../../lib/validators/python-validator";
 import useIsDark from "../../hooks/useIsDark";

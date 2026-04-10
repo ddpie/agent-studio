@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Send, Loader2, X, Square, Paperclip, FileText, Image as ImageIcon } from "lucide-react";
+import { Send, Loader2, X, Square, Paperclip, FileText } from "lucide-react";
 import { uploadImageToS3, uploadFileToS3 } from "../../lib/s3-utils";
 import { agentConfig } from "../../config";
 
@@ -29,13 +29,15 @@ export default function ChatInput({
   const savedInputRef = useRef("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const prevStreamingRef = useRef(isStreaming);
 
   // Focus textarea when streaming ends
-  const prevStreamingRef = useRef(isStreaming);
-  if (prevStreamingRef.current && !isStreaming) {
-    setTimeout(() => textareaRef.current?.focus(), 0);
-  }
-  prevStreamingRef.current = isStreaming;
+  useEffect(() => {
+    if (prevStreamingRef.current && !isStreaming) {
+      textareaRef.current?.focus();
+    }
+    prevStreamingRef.current = isStreaming;
+  }, [isStreaming]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     if (!imagesAllowed) return;

@@ -11,7 +11,7 @@ interface SkillFileTreeProps {
   changedFiles: Set<string>;
   pendingDeletes: Set<string>;
   pendingDeleteDirs: Set<string>;
-  pendingCreates: Map<string, string>;
+  pendingCreates: ReadonlyMap<string, string>;
   sidebarWidth: number;
   dragHandleProps: { onMouseDown: (e: React.MouseEvent) => void; onDoubleClick: () => void };
   onSelectFile: (path: string) => void;

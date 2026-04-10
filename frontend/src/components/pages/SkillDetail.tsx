@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
-import { Loader2 } from "lucide-react";
 import { deleteSkill, listSkills, type SkillIndexEntry } from "../../lib/skill-storage";
 import { useSkillStorage } from "../../hooks/useSkillStorage";
 import { useFileEditor } from "../../hooks/useFileEditor";
@@ -15,7 +14,6 @@ import ConfirmDialog from "../ui/ConfirmDialog";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
 import { preloadPyodide } from "../../lib/pyodide-checker";
 import type { ValidationResult } from "../../lib/types/validation";
-import useIsDark from "../../hooks/useIsDark";
 import useUnsavedGuard from "../../hooks/useUnsavedGuard";
 import useResizable from "../../hooks/useResizable";
 import { applyLintMarkers } from "../../lib/monaco-lint";
@@ -30,7 +28,6 @@ import SkillFileDialogs, { type DialogState, type DialogType } from "./SkillFile
 export default function SkillDetail() {
   const { skillId } = useParams<{ skillId: string }>();
   const navigate = useNavigate();
-  const isDark = useIsDark();
   const { t } = useTranslation();
   const [skill, setSkill] = useState<SkillIndexEntry | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();

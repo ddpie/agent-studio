@@ -40,7 +40,7 @@ export default function CopyButtons({ content, contentRef }: { content: string; 
     if (mode === "text") {
       const text = stripNonContent(content)
         .replace(/<div class="tool-rich-output">[\s\S]*?<\/div>/g, "\n[Chart]\n")
-        .replace(/[#*`_~\[\]()>|\\-]/g, "")
+        .replace(/[#*`_~[\]()>|\\-]/g, "")
         .replace(/\n{3,}/g, "\n\n")
         .trim();
       await navigator.clipboard.writeText(text);
