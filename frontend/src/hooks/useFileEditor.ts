@@ -52,7 +52,7 @@ interface UseFileEditorReturn {
   getEditedContent: (path: string) => string | undefined
   setEditedContent: (path: string, content: string) => void
   markChanged: (path: string) => void
-  markNewFromExternal: (path: string, content: string) => void
+  markNewFromExternal: (path: string, content: string) => Promise<void>
   restoreEdits: (edits: Record<string, string>) => void
 }
 
@@ -446,7 +446,17 @@ export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): U
     setChangedFiles(next)
   }, [changedFiles, originalContents, editedContents])
 
-  const markNewFromExternal = useCallback((path: string, c: string) => {
+  const markNewFromExternal = useCallback(async (path: string, c: string) => {
+    // If file exists but original not loaded yet, load it first
+    if (!originalContents.has(path) && files.includes(path)) {
+      try {
+        const origContent = await storage.getFile(path);
+        if (origContent !== null) {
+          originalContents.set(path, origContent);
+        }
+      } catch { /* ignore */ }
+    }
+
     editedContents.set(path, c)
     const orig = originalContents.get(path)
     const next = new Set(changedFiles)
@@ -458,7 +468,7 @@ export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): U
     }
     setChangedFiles(next)
     if (path === currentFileRef.current) setContent(c)
-  }, [changedFiles, editedContents, originalContents, pendingCreates])
+  }, [changedFiles, editedContents, originalContents, pendingCreates, files, storage])
 
   const restoreEdits = useCallback((edits: Record<string, string>) => {
     const next = new Set(changedFiles)
