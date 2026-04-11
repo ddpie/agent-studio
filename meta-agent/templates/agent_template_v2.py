@@ -281,6 +281,11 @@ from strands import tool as _tool
 
 _REGION = _os.getenv("AWS_REGION", "us-east-1")
 _ACCOUNT_ID = _os.environ.get("AWS_ACCOUNT_ID", "")
+if not _ACCOUNT_ID:
+    try:
+        _ACCOUNT_ID = _boto3.client("sts").get_caller_identity()["Account"]
+    except Exception:
+        pass
 _S3_BUCKET = _os.getenv(
     "AGENT_STUDIO_S3_BUCKET",
     f"bedrock-agentcore-codebuild-sources-{_ACCOUNT_ID}-{_REGION}",
