@@ -15,10 +15,11 @@ interface ToolEditorPaneProps {
   onCodeChange: (v: string | undefined) => void;
   editorRef: React.MutableRefObject<MonacoNS.editor.IStandaloneCodeEditor | null>;
   monacoRef: React.MutableRefObject<typeof MonacoNS | null>;
+  errorBar?: React.ReactNode;
 }
 
 export default function ToolEditorPane({
-  name, description, code, onNameChange, onDescriptionChange, onCodeChange, editorRef, monacoRef,
+  name, description, code, onNameChange, onDescriptionChange, onCodeChange, editorRef, monacoRef, errorBar,
 }: ToolEditorPaneProps) {
   const { t } = useTranslation();
   const isDark = useIsDark();
@@ -72,6 +73,7 @@ export default function ToolEditorPane({
           options={{ minimap: { enabled: false }, fontSize: 13, lineNumbers: "on", scrollBeyondLastLine: false, tabSize: 4, insertSpaces: true, wordWrap: "on", automaticLayout: true }}
         />
       </div>
+      {errorBar}
     </div>
   );
 }

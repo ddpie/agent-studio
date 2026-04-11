@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useImperativeHandle, forwardRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Send, Loader2, X, Square, Paperclip, FileText } from "lucide-react";
 import { uploadImageToS3, uploadFileToS3 } from "../../lib/s3-utils";
@@ -16,10 +16,14 @@ interface ChatInputProps {
   activeSessionId: string | null;
 }
 
-export default function ChatInput({
+export interface ChatInputHandle {
+  setInput: (text: string) => void;
+}
+
+const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput({
   onSend, isStreaming, onCancel, imagesAllowed, selectedModel,
   inputHeight, dragHandleProps, sentMessages, activeSessionId,
-}: ChatInputProps) {
+}, ref) {
   const { t } = useTranslation();
   const [input, setInput] = useState("");
   const [pastedImages, setPastedImages] = useState<string[]>([]);
@@ -30,6 +34,8 @@ export default function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevStreamingRef = useRef(isStreaming);
+
+  useImperativeHandle(ref, () => ({ setInput }), []);
 
   // Focus textarea when streaming ends
   useEffect(() => {
@@ -215,4 +221,6 @@ export default function ChatInput({
       </div>
     </div>
   );
-}
+});
+
+export default ChatInput;

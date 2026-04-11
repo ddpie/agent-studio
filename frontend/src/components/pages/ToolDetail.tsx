@@ -262,7 +262,7 @@ export default function ToolDetail() {
                   openPanel(toolId);
                   setTimeout(() => {
                     useToolAssistantStore.getState().sendMessage(
-                      `## Auto-Fix Task\nFix ONLY the following validation issues.\n\nIssues:\n${issues}\n\nRules:\n- Use __tool_code (4 backticks) to output the COMPLETE fixed tool function.\n- Fix ONLY the specific issues listed above.\n- Do NOT ask for confirmation. Execute fixes immediately.`,
+                      `## Auto-Fix Task\nFix ONLY the following validation issues. Do NOT remove or rewrite any existing content.\n\nIssues:\n${issues}\n\nRules:\n- Use __tool_code (4 backticks) to output the COMPLETE fixed tool function.\n- Fix ONLY the specific issues listed above.\n- NEVER delete existing content, sections, or descriptions.\n- NEVER shorten or summarize existing text.\n- If an issue appears already fixed in the current code, skip it and say so.\n- Do NOT ask for confirmation. Execute fixes immediately.`,
                       { name, description, category: "custom", code }, handleCodeUpdate,
                     );
                   }, 100);
@@ -281,19 +281,17 @@ export default function ToolDetail() {
           name={name} description={description} code={code}
           onNameChange={setName} onDescriptionChange={setDescription} onCodeChange={handleCodeChange}
           editorRef={editorRef} monacoRef={monacoRef}
+          errorBar={(error || validationError) ? (
+            <div className={`px-4 py-2 text-xs flex items-center justify-between ${isDark ? "bg-red-900/20 border-t border-red-800 text-red-400" : "bg-red-50 border-t border-red-200 text-red-600"}`}>
+              <span>{validationError || error}</span>
+              <button onClick={() => { setValidationError(null); clearError(); }} className="text-red-400 hover:text-red-600 text-[10px]">{t("common.dismiss")}</button>
+            </div>
+          ) : null}
         />
         {panelOpen && toolId && (
           <ToolAssistant toolId={toolId} currentCode={code} toolName={name} toolDescription={description} toolCategory="custom" onCodeUpdate={handleCodeUpdate} />
         )}
       </div>
-
-      {/* Error bar */}
-      {(error || validationError) && (
-        <div className={`px-4 py-2 text-xs flex items-center justify-between ${isDark ? "bg-red-900/20 border-t border-red-800 text-red-400" : "bg-red-50 border-t border-red-200 text-red-600"}`}>
-          <span>{validationError || error}</span>
-          <button onClick={() => { setValidationError(null); clearError(); }} className="text-red-400 hover:text-red-600 text-[10px]">{t("common.dismiss")}</button>
-        </div>
-      )}
 
       {/* Diff modal */}
       {showDiff && (

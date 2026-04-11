@@ -9,7 +9,7 @@ import { DEFAULT_MODEL_ID } from "../../lib/models";
 import "katex/dist/katex.min.css";
 import ChatHeader from "./ChatHeader";
 import MessageList from "./MessageList";
-import ChatInput from "./ChatInput";
+import ChatInput, { type ChatInputHandle } from "./ChatInput";
 
 export default function ChatPanel() {
   const { t } = useTranslation();
@@ -27,6 +27,7 @@ export default function ChatPanel() {
   const [metadata, setMetadata] = useState<AgentMetadata | null>(null);
   const { inputHeight, setInputHeight } = useUISettings();
   const prevStreamingRef = useRef(false);
+  const chatInputRef = useRef<ChatInputHandle>(null);
 
   const imagesAllowed = !agentId || metadata?.supports_images === true;
   const agentSessions = getAgentSessions();
@@ -72,7 +73,7 @@ export default function ChatPanel() {
       {!agentId && <p className="text-sm mt-1">{t("chat.metaSubtitle")}</p>}
       <div className="mt-6 grid gap-2 text-sm w-full max-w-lg">
         {(metadata?.suggestions || (!agentId ? [t("chat.defaultSuggestion1"), t("chat.defaultSuggestion2"), t("chat.defaultSuggestion3")] : [])).map((suggestion) => (
-          <button key={suggestion} className="text-left px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400">
+          <button key={suggestion} onClick={() => chatInputRef.current?.setInput(suggestion)} className="text-left px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400">
             {suggestion}
           </button>
         ))}
@@ -103,6 +104,7 @@ export default function ChatPanel() {
         emptyState={emptyState}
       />
       <ChatInput
+        ref={chatInputRef}
         onSend={sendMessage}
         isStreaming={isStreaming}
         onCancel={cancelStreaming}

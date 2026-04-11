@@ -147,6 +147,12 @@ export default function SkillDetail() {
     } else {
       setValidationResult({ valid: allErrors.length === 0, errors: allErrors, warnings: allWarnings });
     }
+    // Update Monaco markers for current file
+    const monacoInstance = (window as unknown as { monaco?: typeof MonacoNS }).monaco;
+    if (monacoInstance && skillContent) {
+      const model = monacoInstance.editor.getModels().find(m => m.getValue() === skillContent);
+      if (model) applyLintMarkers(monacoInstance, model, currentPath, skillContent);
+    }
     setValidating(false);
   };
 
@@ -216,6 +222,7 @@ export default function SkillDetail() {
   }, [virtualFiles, editor.pendingCreates, changedFiles]);
 
   const blocker = useUnsavedGuard({ hasChanges: hasPendingOps, onSave: handleSaveAll, saving: editor.saving });
+  const assistantOpen = useSkillAssistantStore(s => s.panelOpen);
 
   const toggleAssistant = () => {
     if (!skillId) return;
@@ -237,7 +244,7 @@ export default function SkillDetail() {
         pendingCount={pendingCount}
         saving={editor.saving}
         validating={validating}
-        assistantOpen={useSkillAssistantStore.getState().panelOpen}
+        assistantOpen={assistantOpen}
         onBack={() => navigate(storage.isAgentMode ? `/agents/edit/${agentId}` : "/skills")}
         onSave={handleSaveAll}
         onDiscard={() => editor.handleDiscard()}

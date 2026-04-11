@@ -21,6 +21,7 @@ export function applyLintMarkers(
   filePath: string,
   content: string,
 ): void {
+  if (!filePath.endsWith(".py") && !filePath.endsWith(".sh") && !filePath.endsWith(".bash")) return;
   const owner = filePath.endsWith(".py") ? "python-lint" : "shell-lint";
   const diagnostics = lint(filePath, content);
   const markers = diagnostics.map((d) => ({
