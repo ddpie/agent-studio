@@ -1,12 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#2563EB"/>
-      <stop offset="100%" stop-color="#7C3AED"/>
+    <linearGradient id="g1" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
     </linearGradient>
   </defs>
-  <rect x="2" y="2" width="28" height="28" rx="7" fill="url(#bg)"/>
-  <!-- Stylized "A" with network node -->
-  <path d="M16 6 L8 26 L12 26 L16 14 L20 26 L24 26 Z" fill="white" opacity="0.9"/>
-  <circle cx="16" cy="10.5" r="3" fill="url(#bg)" stroke="white" stroke-width="1.5"/>
+  <!-- Rounded square background -->
+  <rect x="1" y="1" width="30" height="30" rx="8" fill="url(#g1)"/>
+  <!-- Connection lines (full length, extending past bottom nodes to form "A" legs) -->
+  <line x1="14" y1="12" x2="7" y2="28" stroke="white" stroke-width="1.2" opacity="0.5" stroke-linecap="round"/>
+  <line x1="18" y1="12" x2="25" y2="28" stroke="white" stroke-width="1.2" opacity="0.5" stroke-linecap="round"/>
+  <line x1="12" y1="22" x2="20" y2="22" stroke="white" stroke-width="1.2" opacity="0.5"/>
+  <!-- Network nodes: 3 connected circles -->
+  <circle cx="16" cy="9" r="3.5" fill="white" opacity="0.95"/>
+  <circle cx="9" cy="22" r="3" fill="white"/>
+  <circle cx="23" cy="22" r="3" fill="white"/>
+  <!-- Center dot in main node -->
+  <circle cx="16" cy="9" r="1.5" fill="url(#g1)"/>
 </svg>
