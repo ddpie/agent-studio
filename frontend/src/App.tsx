@@ -4,6 +4,7 @@ import "@aws-amplify/ui-react/styles.css";
 import { RouterProvider } from "react-router";
 import { createRouter } from "./router";
 import { ensureWorkspaceId } from "./lib/api-client";
+import { useTranslation } from "react-i18next";
 
 export default function App() {
   return (
@@ -59,6 +60,7 @@ export default function App() {
 
 function AuthenticatedApp({ signOut, user }: { signOut?: () => void; user?: { signInDetails?: { loginId?: string } } }) {
   const [ready, setReady] = useState(false);
+  const { t } = useTranslation();
 
   useEffect(() => {
     ensureWorkspaceId().then(() => setReady(true));
@@ -69,7 +71,7 @@ function AuthenticatedApp({ signOut, user }: { signOut?: () => void; user?: { si
   if (!ready) {
     return (
       <div className="flex items-center justify-center h-screen text-gray-400">
-        Loading workspace...
+        {t("common.loadingWorkspace")}
       </div>
     );
   }
