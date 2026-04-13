@@ -93,7 +93,7 @@ export default function AgentEditForm() {
 
   if (!agentId || loading) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-400">
+      <div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-500">
         {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : null}
       </div>
     );

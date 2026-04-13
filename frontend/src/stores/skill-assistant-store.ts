@@ -221,6 +221,8 @@ After code blocks, briefly explain what changed.
               onFileUpdate(targetPath, newContent);
               updatedPaths.push(targetPath);
               cleanedContent = cleanedContent.replace(raw, "");
+            } else {
+              console.warn(`[file_content] unclosed 4-backtick fence for "${targetPath}", skipping`);
             }
           }
           i++;

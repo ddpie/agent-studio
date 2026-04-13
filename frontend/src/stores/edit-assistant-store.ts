@@ -365,9 +365,10 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
             }
             if (i >= lines.length) {
               console.warn(`[field_value] unclosed 4-backtick fence for "${fieldName}", skipping`);
-              break;
+              i++;
+              continue;
             }
-            if (!ALLOWED_FIELDS.has(fieldName)) {
+            if (!ALLOWED_FIELDS.has(fieldName) && !fieldName.startsWith("skill:")) {
               console.warn(`[field_value] unknown field "${fieldName}", skipping`);
               i++;
               continue;
@@ -375,10 +376,26 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
             const endLine = i;
             const content = lines.slice(startLine + 1, endLine).join("\n");
             const raw = lines.slice(startLine, endLine + 1).join("\n");
-            fieldValues[fieldName] = content;
-            onUpdate({ [fieldName]: content });
-            editedFields.push(fieldName);
-            processedText = processedText.replace(raw, "");
+
+            // Handle skill file updates: skill:{skillId}:{filePath}
+            if (fieldName.startsWith("skill:")) {
+              const parts = fieldName.split(":");
+              if (parts.length >= 3) {
+                const skillId = parts[1];
+                const filePath = parts.slice(2).join(":");
+                // Write skill file via pending skill files in agent-edit-store
+                const { setPendingSkillFiles, getPendingSkillFiles } = useAgentEditStore.getState();
+                const existing = getPendingSkillFiles(skillId) || {};
+                setPendingSkillFiles(skillId, { ...existing, [filePath]: content });
+                editedFields.push(`skill:${skillId}:${filePath}`);
+                processedText = processedText.replace(raw, "");
+              }
+            } else {
+              fieldValues[fieldName] = content;
+              onUpdate({ [fieldName]: content });
+              editedFields.push(fieldName);
+              processedText = processedText.replace(raw, "");
+            }
           }
           i++;
         }

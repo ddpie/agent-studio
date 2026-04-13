@@ -262,6 +262,8 @@ def my_tool(query: str, max_results: int = 5) -> str:
               onCodeUpdate(newCode);
               cleanedContent = cleanedContent.replace(raw, "");
               updated = true;
+            } else {
+              console.warn("[tool_code] unclosed 4-backtick fence, skipping");
             }
           }
           i++;
