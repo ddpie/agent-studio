@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { invokeMetaAgent, invokeAgentById } from "../lib/agentcore-client";
+import i18next from "i18next";
 
 export interface Message {
   id: string;
@@ -56,7 +57,7 @@ function agentKey(agentId: string | null): string {
 
 function deriveTitle(messages: Message[]): string {
   const first = messages.find((m) => m.role === "user");
-  if (!first?.content) return "New conversation";
+  if (!first?.content) return i18next.t("chat.newConversation", "New conversation");
   return first.content.length > 40
     ? first.content.slice(0, 40) + "..."
     : first.content;
@@ -333,7 +334,7 @@ export const useChatStore = create<ChatState>()(
             set((s) => ({
               messages: s.messages.map((m) =>
                 m.id === assistantMsg.id
-                  ? { ...m, content: `Error: ${err instanceof Error ? err.message : "Unknown error"}` }
+                  ? { ...m, content: i18next.t("chat.errorPrefix", "Error") + `: ${err instanceof Error ? err.message : "Unknown error"}` }
                   : m
               ),
             }));

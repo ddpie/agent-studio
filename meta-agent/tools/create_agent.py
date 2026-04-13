@@ -89,7 +89,7 @@ def create_agent(
         for skill_entry in skills_config:
             skill_id = skill_entry.get("id", "")
             skill_name = skill_entry.get("name", "").replace(" ", "_").replace("-", "_")
-            agent_name_for_path = staged.get("name", agent_name) if staging_key else agent_name
+            agent_name_for_path = staged.get("agent_id", agent_name) if staging_key else agent_name
 
             skill_md_content = ""
             try:
@@ -214,8 +214,12 @@ def create_agent(
     # Write to DynamoDB
     ddb = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(AGENTS_TABLE)
+    # workspace_id from staging config, or from the invoke payload (set by main.py)
     workspace_id = staged.get("workspace_id", "") if staging_key else ""
+    if not workspace_id:
+        workspace_id = getattr(__import__('tools.create_agent', fromlist=['_workspace_id']), '_workspace_id', '')
     now = datetime.now(timezone.utc).isoformat()
+    caller = getattr(__import__('tools.create_agent', fromlist=['_caller_id']), '_caller_id', 'unknown')
     item = {
         "agentId": agent_id,
         "agentName": agent_name,
@@ -225,6 +229,7 @@ def create_agent(
         "permissionTier": tier,
         "created_at": now,
         "updated_at": now,
+        "created_by": caller,
     }
     if workspace_id:
         item["workspace_id"] = workspace_id

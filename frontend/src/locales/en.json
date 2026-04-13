@@ -61,6 +61,7 @@
     "noMatching": "No matching skills",
     "trashEmpty": "Trash is empty",
     "createHint": "Click \"Create\" or import a file to get started",
+    "notFound": "Skill not found",
     "createSkill": "Create Skill",
     "name": "Name",
     "namePlaceholder": "my-skill",
@@ -277,6 +278,8 @@
   "chat": {
     "placeholder": "Type a message... (Shift+Enter for new line, paste images)",
     "newSession": "New session",
+    "newConversation": "New conversation",
+    "errorPrefix": "Error",
     "sessionHistory": "Session history",
     "deleteSession": "Delete session",
     "exportMarkdown": "Export as Markdown",

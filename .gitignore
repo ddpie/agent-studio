@@ -23,6 +23,12 @@ coverage/
 .coverage
 htmlcov/
 
+# Playwright
+frontend/.auth/
+frontend/e2e/.env.e2e
+frontend/test-results/
+frontend/playwright-report/
+
 # AgentCore CLI
 .bedrock_agentcore/
 .bedrock_agentcore.yaml

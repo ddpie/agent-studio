@@ -355,13 +355,15 @@ async def invoke(payload, context):
     images = payload.get("images") or []
     model_id = payload.get("model_id", MODEL_ID)
     caller_id = payload.get("caller_id", "unknown")
+    workspace_id = payload.get("workspace_id", "")
 
-    # Make caller_id available to tools via module-level variable
+    # Make caller_id and workspace_id available to tools via module-level variable
     import tools.create_agent as _ca
     import tools.update_agent as _ua
     import tools.delete_agent as _da
     import tools.manage_secrets as _ms
     _ca._caller_id = caller_id
+    _ca._workspace_id = workspace_id
     _ua._caller_id = caller_id
     _da._caller_id = caller_id
     _ms._caller_id = caller_id

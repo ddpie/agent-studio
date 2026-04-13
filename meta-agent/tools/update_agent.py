@@ -310,11 +310,17 @@ def update_agent(
         ContentType="application/json",
     )
 
-    # Update DynamoDB display_name
+    # Update DynamoDB — sync all frontend-visible fields
+    update_expr_parts = ["displayName = :dn", "description = :desc", "updated_at = :ua"]
+    expr_values = {
+        ":dn": final_display,
+        ":desc": description or existing_metadata.get("description", ""),
+        ":ua": metadata["updated_at"],
+    }
     table.update_item(
         Key={"agentId": agent_id},
-        UpdateExpression="SET displayName = :dn",
-        ExpressionAttributeValues={":dn": final_display},
+        UpdateExpression="SET " + ", ".join(update_expr_parts),
+        ExpressionAttributeValues=expr_values,
     )
 
     return json.dumps({

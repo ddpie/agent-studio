@@ -232,7 +232,7 @@ export default function SkillDetail() {
   };
 
   if (!skill && !editor.loadingContent) {
-    return <div className="flex items-center justify-center h-full text-gray-400">Skill not found</div>;
+    return <div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-500">{t("skills.notFound", "Skill not found")}</div>;
   }
 
   return (

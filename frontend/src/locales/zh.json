@@ -61,6 +61,7 @@
     "noMatching": "没有匹配的技能",
     "trashEmpty": "回收站为空",
     "createHint": "点击「创建」或导入文件开始",
+    "notFound": "技能未找到",
     "createSkill": "创建技能",
     "name": "名称",
     "namePlaceholder": "my-skill",
@@ -277,6 +278,8 @@
   "chat": {
     "placeholder": "输入消息...（Shift+Enter 换行，可粘贴图片）",
     "newSession": "新会话",
+    "newConversation": "新对话",
+    "errorPrefix": "错误",
     "sessionHistory": "会话历史",
     "deleteSession": "删除会话",
     "exportMarkdown": "导出为 Markdown",

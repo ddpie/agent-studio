@@ -208,6 +208,7 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
   };
   if (route.type === "meta-agent") {
     payload.caller_id = auth.userId;
+    payload.workspace_id = route.wsId;
   }
 
   const commandInput = {
