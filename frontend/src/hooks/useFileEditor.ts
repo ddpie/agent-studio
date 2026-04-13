@@ -449,7 +449,8 @@ export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): U
 
   const markNewFromExternal = useCallback(async (path: string, c: string) => {
     // If file exists but original not loaded yet, load it first
-    if (!originalContents.has(path) && files.includes(path)) {
+    // Guard: skip S3 load if user already has edits for this file (race condition prevention)
+    if (!originalContents.has(path) && !editedContents.has(path) && files.includes(path)) {
       try {
         const origContent = await storage.getFile(path);
         if (origContent !== null) {
