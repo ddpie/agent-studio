@@ -59,6 +59,7 @@ export default function SkillDetail() {
     });
     useSkillAssistantStore.getState().openPanel(skillId);
     preloadPyodide();
+    return () => { useSkillAssistantStore.getState().closePanel(); };
   }, [skillId, storage]);
 
   const handleNodeClick = async (nodeId: string) => {
