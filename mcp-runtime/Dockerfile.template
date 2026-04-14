@@ -4,10 +4,14 @@ ARG MCP_PACKAGE=awslabs-billing-cost-management-mcp-server
 ARG MCP_PACKAGE_VERSION=0.0.17
 ARG MCP_COMMAND=awslabs.billing-cost-management-mcp-server
 ARG MCP_PROXY_VERSION=0.11.0
+ARG EXTRA_PACKAGES=""
 
 ENV MCP_COMMAND=${MCP_COMMAND}
 
-RUN pip install --no-cache-dir mcp-proxy==${MCP_PROXY_VERSION} ${MCP_PACKAGE}==${MCP_PACKAGE_VERSION}
+RUN apt-get update && apt-get install -y --no-install-recommends gcc g++ python3-dev libffi-dev && \
+    pip install --no-cache-dir mcp-proxy==${MCP_PROXY_VERSION} ${MCP_PACKAGE}==${MCP_PACKAGE_VERSION} ${EXTRA_PACKAGES} && \
+    apt-get purge -y gcc g++ python3-dev libffi-dev && apt-get autoremove -y && rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /root/.aws && printf '[default]\nregion = us-east-1\n' > /root/.aws/config
 
 EXPOSE 8000
 

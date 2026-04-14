@@ -61,6 +61,7 @@ if __name__ == "__main__":
 # ── main.py template (with MCP Gateway) ────────────────────────────────────
 MAIN_PY_MCP_TEMPLATE = '''\
 import json
+import contextlib
 from pathlib import Path
 from strands import Agent
 from strands.models import BedrockModel
@@ -80,30 +81,30 @@ _config = json.loads(Path("config.json").read_text())
 MODEL_ID = _config["model_id"]
 SYSTEM_PROMPT = Path("prompt.txt").read_text(encoding="utf-8")
 REGION = os.getenv("AWS_REGION", "us-east-1")
-GATEWAY_URL = _config.get("gateway_url", "")
 
-# SigV4 auth for MCP Gateway
+# SigV4 auth for MCP Runtime invocation (official AWS pattern)
 _session = boto3.Session(region_name=REGION)
 _credentials = _session.get_credentials().get_frozen_credentials()
 
 class _SigV4Auth(httpx.Auth):
     def auth_flow(self, request):
+        headers = dict(request.headers)
+        headers.pop("connection", None)
         aws_req = AWSRequest(
             method=request.method, url=str(request.url),
-            headers=dict(request.headers), data=request.content,
+            headers=headers, data=request.content,
         )
         SigV4Auth(_credentials, "bedrock-agentcore", REGION).add_auth(aws_req)
-        for k, v in aws_req.headers.items():
-            request.headers[k] = v
+        request.headers.update(dict(aws_req.headers))
         yield request
 
-def _make_httpx_client(**kwargs):
-    kwargs["auth"] = _SigV4Auth()
-    return httpx.AsyncClient(**kwargs)
+_sigv4_auth = _SigV4Auth()
 
-mcp_client = MCPClient(lambda: streamablehttp_client(
-    GATEWAY_URL, httpx_client_factory=_make_httpx_client,
-))
+# One MCPClient per MCP Runtime endpoint (direct connection, no Gateway)
+_mcp_clients = [
+    MCPClient(lambda url=ep["url"]: streamablehttp_client(url, auth=_sigv4_auth))
+    for ep in _config.get("mcp_endpoints", [])
+]
 
 # Import all @tool functions from tools.py
 import tools as _tools_module
@@ -128,14 +129,11 @@ async def invoke(payload, context):
             + "\\n\\nUse load_skill(name) to load a skill\\'s full instructions when needed."
         )
     prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), save them to /mnt/workspace/ (persistent across sessions) instead of /tmp/ (ephemeral). ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files. After uploading, the download button appears automatically — do NOT create markdown links like [filename](url) for downloads."
-    with mcp_client as mcp:
-        all_tools = mcp.list_tools_sync()
-        allowed_targets = _config.get("mcp_targets", [])
-        if allowed_targets:
-            mcp_tools = [t for t in all_tools
-                         if any(t.name.startswith(f"{target}___") for target in allowed_targets)]
-        else:
-            mcp_tools = all_tools
+    with contextlib.ExitStack() as stack:
+        mcp_tools = []
+        for client in _mcp_clients:
+            ctx = stack.enter_context(client)
+            mcp_tools.extend(ctx.list_tools_sync())
         agent = Agent(
             model=BedrockModel(model_id=model_id),
             system_prompt=prompt,

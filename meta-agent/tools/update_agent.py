@@ -7,15 +7,15 @@ from datetime import datetime, timezone
 import boto3
 from strands import tool
 
-from config import MODEL_ID, REGION, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE, MCP_GATEWAY_URL
+from config import MODEL_ID, REGION, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE
 from deploy import build_deployment_package_v2, upload_deployment, wait_for_ready, validate_agent_files, build_skill_prompt_section
 from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_template_prompt, BASE_GUIDELINES
 from tools_library.registry import get_tool_code_by_func_name as _get_builtin_code
-from tools.create_agent import _get_workspace_mcp_policy, _check_mcp_policy
+from tools.create_agent import _get_workspace_mcp_policy, _check_mcp_policy, _resolve_mcp_endpoints
 
 # Fields that require AgentCore redeploy when changed
-_REDEPLOY_FIELDS = {"system_prompt", "tool_definitions", "tool_names", "template_id", "gateway_url", "mcp_targets"}
+_REDEPLOY_FIELDS = {"system_prompt", "tool_definitions", "tool_names", "template_id", "mcp_targets"}
 
 
 def _clean_tool_definitions(defs: str) -> str:
@@ -129,6 +129,7 @@ def update_agent(
 
     # Parse mcp_targets and validate against workspace policy
     mcp_targets_list = [t.strip() for t in mcp_targets.split(",") if t.strip()] if mcp_targets else []
+    mcp_endpoints = []
     if mcp_targets_list:
         workspace_id = staged.get("workspace_id", "") if staging_key else ""
         if not workspace_id:
@@ -137,7 +138,7 @@ def update_agent(
         denied = _check_mcp_policy(mcp_targets_list, policy)
         if denied:
             return json.dumps({"error": f"MCP targets not allowed in this workspace: {denied}"})
-        gateway_url = MCP_GATEWAY_URL
+        mcp_endpoints = _resolve_mcp_endpoints(mcp_targets_list)
 
     if skills_config:
         s3_client = boto3.client("s3", region_name=REGION)
@@ -205,19 +206,20 @@ def update_agent(
     final_suggestions = suggestions or "|".join(existing_metadata.get("suggestions", []))
     final_template = template_id or existing_metadata.get("template_id", "")
 
-    # Preserve existing MCP config when neither gateway_url nor mcp_targets is explicitly provided
-    if not gateway_url and not mcp_targets_list:
-        gateway_url = existing_metadata.get("gateway_url", "") or ""
-        # Also check config.json for gateway_url (metadata may not have it)
+    # Preserve existing MCP config when mcp_targets is not explicitly provided
+    if not mcp_targets_list:
         try:
             cfg_obj = s3.get_object(Bucket=S3_BUCKET, Key=f"agents/{agent_id}/config.json")
             existing_config = json.loads(cfg_obj["Body"].read().decode("utf-8"))
-            gateway_url = gateway_url or existing_config.get("gateway_url", "")
             mcp_targets_list = existing_config.get("mcp_targets", [])
+            mcp_endpoints = existing_config.get("mcp_endpoints", [])
         except Exception:
             pass
         if not mcp_targets_list:
             mcp_targets_list = existing_metadata.get("mcp_targets", [])
+        # Re-resolve endpoints if we have targets but no endpoints
+        if mcp_targets_list and not mcp_endpoints:
+            mcp_endpoints = _resolve_mcp_endpoints(mcp_targets_list)
 
     # Diff: check if any redeploy-triggering field actually changed
     needs_redeploy = False
@@ -228,8 +230,6 @@ def update_agent(
     if tool_names and tool_names != ",".join(existing_metadata.get("tools", [])):
         needs_redeploy = True
     if template_id and template_id != existing_metadata.get("template_id", ""):
-        needs_redeploy = True
-    if gateway_url:
         needs_redeploy = True
     if mcp_targets and mcp_targets != ",".join(existing_metadata.get("mcp_targets", [])):
         needs_redeploy = True
@@ -258,7 +258,7 @@ def update_agent(
                     builtin_code_parts.append(code.strip())
 
         # Generate multi-file structure (no more repr()!)
-        main_py = MAIN_PY_MCP_TEMPLATE if gateway_url else MAIN_PY_TEMPLATE
+        main_py = MAIN_PY_MCP_TEMPLATE if mcp_endpoints else MAIN_PY_TEMPLATE
         tools_py = TOOLS_PY_HEADER + "\n\n".join(builtin_code_parts + ([custom_code] if custom_code.strip() else []))
 
         # Inject skill content into prompt (progressive disclosure)
@@ -272,8 +272,8 @@ def update_agent(
             "model_id": MODEL_ID,
             "tool_names": tool_names_list,
         }
-        if gateway_url:
-            config_data["gateway_url"] = gateway_url
+        if mcp_endpoints:
+            config_data["mcp_endpoints"] = mcp_endpoints
         if mcp_targets_list:
             config_data["mcp_targets"] = mcp_targets_list
         config_json = json.dumps(config_data, indent=2, ensure_ascii=False)

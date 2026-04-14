@@ -103,7 +103,7 @@ runtime_targets:
   - name: ecs
     enabled: true
     package: awslabs-ecs-mcp-server
-    command: awslabs.ecs-mcp-server
+    command: ecs-mcp-server
     version: 0.1.28
     description: "ECS 服务管理 + Express Mode 一键部署"
     category: compute
@@ -125,7 +125,7 @@ runtime_targets:
     category: compute
 
   - name: stepfunctions-tool
-    enabled: true
+    enabled: false  # registers state machines as tools — 0 state machines = 0 tools = Gateway rejects
     package: awslabs-stepfunctions-tool-mcp-server
     command: awslabs.stepfunctions-tool-mcp-server
     version: 0.1.21
@@ -283,7 +283,7 @@ runtime_targets:
     category: ai_ml
 
   - name: sagemaker-ai
-    enabled: true
+    enabled: false  # package bug: PydanticUserError in manage_hyperpod_stacks (DeployStackResponse not defined)
     package: awslabs-sagemaker-ai-mcp-server
     command: awslabs.sagemaker-ai-mcp-server
     version: 1.0.7
@@ -322,6 +322,7 @@ runtime_targets:
     version: 0.0.11
     description: "Amazon Q Index 搜索"
     category: search
+    extra_packages: "mypy-boto3-qbusiness"
 
   - name: qbusiness-anonymous
     enabled: true
@@ -416,7 +417,7 @@ runtime_targets:
     category: devtools
 
   - name: openapi
-    enabled: true
+    enabled: false  # requires api_spec_url env var — user-specific config
     package: awslabs-openapi-mcp-server
     command: awslabs.openapi-mcp-server
     version: 0.2.15

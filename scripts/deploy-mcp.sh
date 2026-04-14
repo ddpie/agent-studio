@@ -767,11 +767,16 @@ fi
 # ============================================================
 # Step 5: Write Gateway URL to .env
 # ============================================================
-echo "[5/6] Updating .env..."
+echo "[5/6] Updating .env + S3 config..."
 update_env "AGENT_STUDIO_MCP_GATEWAY_URL" "$GATEWAY_URL"
 update_env "AGENT_STUDIO_MCP_GATEWAY_ID" "$GATEWAY_ID"
 echo "  AGENT_STUDIO_MCP_GATEWAY_URL=$GATEWAY_URL"
 echo "  AGENT_STUDIO_MCP_GATEWAY_ID=$GATEWAY_ID"
+
+# Upload gateway URL to S3 for Meta-Agent (codeConfiguration runtimes can't read env vars)
+echo "$GATEWAY_URL" | aws s3 cp - "s3://${S3_BUCKET}/config/mcp_gateway_url.txt" \
+  --content-type text/plain --region "$REGION"
+echo "  Uploaded gateway URL to s3://${S3_BUCKET}/config/mcp_gateway_url.txt"
 echo ""
 
 # ============================================================

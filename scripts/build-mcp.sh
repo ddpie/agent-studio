@@ -93,6 +93,7 @@ for target in runtime_targets:
         "package": target["package"],
         "command": target["command"],
         "version": target["version"],
+        "extra_packages": target.get("extra_packages", ""),
     })
 
 print(json.dumps(filtered, indent=2))
@@ -140,6 +141,7 @@ for i in $(seq 0 $((TARGET_COUNT - 1))); do
   PACKAGE=$(echo "$TARGET" | python3 -c "import sys, json; print(json.load(sys.stdin)['package'])")
   COMMAND=$(echo "$TARGET" | python3 -c "import sys, json; print(json.load(sys.stdin)['command'])")
   VERSION=$(echo "$TARGET" | python3 -c "import sys, json; print(json.load(sys.stdin)['version'])")
+  EXTRA_PACKAGES=$(echo "$TARGET" | python3 -c "import sys, json; print(json.load(sys.stdin).get('extra_packages',''))")
 
   REPO_NAME="mcp-${NAME}"
   IMAGE_TAG="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${REPO_NAME}:${VERSION}"
@@ -174,6 +176,7 @@ for i in $(seq 0 $((TARGET_COUNT - 1))); do
     --build-arg MCP_PACKAGE_VERSION="$VERSION" \
     --build-arg MCP_COMMAND="$COMMAND" \
     --build-arg MCP_PROXY_VERSION="$MCP_PROXY_VERSION" \
+    --build-arg EXTRA_PACKAGES="$EXTRA_PACKAGES" \
     -t "$IMAGE_TAG" \
     -t "$IMAGE_TAG_LATEST" \
     -f "$DOCKERFILE" \

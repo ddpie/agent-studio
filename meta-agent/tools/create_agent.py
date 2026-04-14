@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import boto3
 from strands import tool
 
-from config import MODEL_ID, REGION, S3_BUCKET, AGENTS_TABLE, PERMISSION_TIER_ROLES, DEFAULT_PERMISSION_TIER, MCP_GATEWAY_URL
+from config import MODEL_ID, REGION, S3_BUCKET, AGENTS_TABLE, PERMISSION_TIER_ROLES, DEFAULT_PERMISSION_TIER
 from deploy import build_deployment_package_v2, upload_deployment, create_runtime, wait_for_ready, validate_agent_files, build_skill_prompt_section
 from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_template_prompt, get_template_names, BASE_GUIDELINES
@@ -35,6 +35,51 @@ def _check_mcp_policy(targets: list, policy: dict) -> list:
         denied = set(policy.get("deniedTargets", []))
         return [t for t in targets if t in denied]
     return []
+
+
+def _resolve_mcp_endpoints(target_names: list) -> list:
+    """Resolve MCP target names to Runtime invoke URLs.
+
+    Args:
+        target_names: List of target names (e.g. ["mcp-cloudwatch", "mcp-iam"]).
+
+    Returns:
+        List of dicts with "name" and "url" for each resolved target.
+    """
+    import urllib.parse
+
+    control = boto3.client("bedrock-agentcore-control", region_name=REGION)
+
+    # List all runtimes (paginated)
+    all_runtimes = {}
+    resp = control.list_agent_runtimes()
+    for rt in resp.get("agentRuntimes", []):
+        all_runtimes[rt.get("agentRuntimeName", "")] = rt
+    while resp.get("nextToken"):
+        resp = control.list_agent_runtimes(nextToken=resp["nextToken"])
+        for rt in resp.get("agentRuntimes", []):
+            all_runtimes[rt.get("agentRuntimeName", "")] = rt
+
+    endpoints = []
+    for target in target_names:
+        # target "mcp-cloudwatch" → runtime name "mcp_cloudwatch"
+        runtime_name = target.replace("-", "_")
+        rt = all_runtimes.get(runtime_name)
+        if not rt:
+            import sys
+            print(f"WARNING: MCP runtime '{runtime_name}' not found for target '{target}'", file=sys.stderr)
+            continue
+
+        rt_id = rt.get("agentRuntimeId", "")
+        rt_info = control.get_agent_runtime(agentRuntimeId=rt_id)
+        runtime_arn = rt_info.get("agentRuntimeArn", "")
+
+        encoded_arn = urllib.parse.quote(runtime_arn, safe="")
+        invoke_url = f"https://bedrock-agentcore.{REGION}.amazonaws.com/runtimes/{encoded_arn}/invocations?qualifier=DEFAULT"
+
+        endpoints.append({"name": target, "url": invoke_url})
+
+    return endpoints
 
 
 @tool
@@ -114,6 +159,7 @@ def create_agent(
 
     # Parse mcp_targets and validate against workspace policy
     mcp_targets_list = [t.strip() for t in mcp_targets.split(",") if t.strip()] if mcp_targets else []
+    mcp_endpoints = []
     if mcp_targets_list:
         workspace_id = staged.get("workspace_id", "") if staging_key else ""
         if not workspace_id:
@@ -122,7 +168,7 @@ def create_agent(
         denied = _check_mcp_policy(mcp_targets_list, policy)
         if denied:
             return json.dumps({"error": f"MCP targets not allowed in this workspace: {denied}"})
-        gateway_url = MCP_GATEWAY_URL
+        mcp_endpoints = _resolve_mcp_endpoints(mcp_targets_list)
 
     if skills_config:
         s3_client = boto3.client("s3", region_name=REGION)
@@ -186,7 +232,7 @@ def create_agent(
                 builtin_code_parts.append(code.strip())
 
     # Generate multi-file structure (no more repr() or string template substitution!)
-    main_py = MAIN_PY_MCP_TEMPLATE if gateway_url else MAIN_PY_TEMPLATE
+    main_py = MAIN_PY_MCP_TEMPLATE if mcp_endpoints else MAIN_PY_TEMPLATE
     tools_py = TOOLS_PY_HEADER + "\n\n".join(builtin_code_parts + ([custom_code] if custom_code.strip() else []))
 
     # Inject skill content into prompt (progressive disclosure)
@@ -200,8 +246,8 @@ def create_agent(
         "model_id": MODEL_ID,
         "tool_names": tool_names_list,
     }
-    if gateway_url:
-        config_data["gateway_url"] = gateway_url
+    if mcp_endpoints:
+        config_data["mcp_endpoints"] = mcp_endpoints
     if mcp_targets_list:
         config_data["mcp_targets"] = mcp_targets_list
     config_json = json.dumps(config_data, indent=2, ensure_ascii=False)

@@ -32,3 +32,12 @@ PERMISSION_TIER_ROLES = {
 DEFAULT_PERMISSION_TIER = "readonly"
 
 MCP_GATEWAY_URL = os.getenv("MCP_GATEWAY_URL", "")
+if not MCP_GATEWAY_URL:
+    try:
+        import boto3 as _b3
+        _resp = _b3.client("s3", region_name=REGION).get_object(
+            Bucket=S3_BUCKET, Key="config/mcp_gateway_url.txt"
+        )
+        MCP_GATEWAY_URL = _resp["Body"].read().decode().strip()
+    except Exception:
+        pass

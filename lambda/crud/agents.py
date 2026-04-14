@@ -38,7 +38,7 @@ def _get_s3():
 ALLOWED_AGENT_FIELDS = {
     "name", "display_name", "description", "model_id", "default_model_id",
     "template_id", "supports_images", "welcome_message", "suggestions",
-    "tool_names", "skill_ids", "skills",
+    "tool_names", "skill_ids", "skills", "mcp_targets",
 }
 
 
