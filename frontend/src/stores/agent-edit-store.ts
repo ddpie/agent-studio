@@ -77,9 +77,11 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   editingSkillId: null,
 
   hasChanges: () => {
-    const { formData, originalData } = get();
+    const { formData, originalData, pendingSkillFiles, originalSkillFiles } = get();
     if (!formData || !originalData) return false;
-    return JSON.stringify(formData) !== JSON.stringify(originalData);
+    // Include skill files in change detection
+    return JSON.stringify(formData) !== JSON.stringify(originalData) ||
+           JSON.stringify(pendingSkillFiles) !== JSON.stringify(originalSkillFiles);
   },
 
   loadAgent: async (agentId, agentName) => {
@@ -155,10 +157,20 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     if (!formData || !originalData) return {};
     const changes: Record<string, { old: string; new: string }> = {};
     // Skip complex object fields that can't be meaningfully diffed as strings
-    const skipKeys = new Set(["deployedSkillHashes", "tools", "updated_at", "created_at"]);
+    const skipKeys = new Set(["deployedSkillHashes", "tools", "updated_at", "created_at", "gateway_url"]);
     const keys = new Set([...Object.keys(formData), ...Object.keys(originalData)]);
     for (const key of keys) {
       if (skipKeys.has(key)) continue;
+      if (key === "mcp_targets") {
+        const oldTargets = ((originalData as Record<string, unknown>).mcp_targets as string[]) || [];
+        const newTargets = ((formData as Record<string, unknown>).mcp_targets as string[]) || [];
+        const oldVal = oldTargets.sort().join(", ");
+        const newVal = newTargets.sort().join(", ");
+        if (oldVal !== newVal) {
+          changes[key] = { old: oldVal, new: newVal };
+        }
+        continue;
+      }
       if (key === "skills") {
         // Per-file diff for each skill's changed files
         const { pendingSkillFiles: pending, originalSkillFiles: original } = get();

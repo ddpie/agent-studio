@@ -53,8 +53,13 @@ SYSTEM_PROMPT = textwrap.dedent("""\
 
     **Agent Lifecycle:**
     - create_agent: Use when the user wants to create a new agent. Requires user confirmation before calling.
+      When creating an agent that needs MCP tools, use the `mcp_targets` parameter with comma-separated target names
+      (e.g., "cloudwatch,iam,billing-cost-management"). Available targets can be listed with list_mcp_servers.
+      The `gateway_url` parameter is deprecated — use `mcp_targets` instead.
     - list_prompt_templates: Use when the user asks what prompt templates are available for agent creation.
     - update_agent: Use when the user wants to change an existing agent's prompt, tools, or config. Requires confirmation.
+      Supports `mcp_targets` parameter (comma-separated target names) to add or change MCP tool access.
+      The `gateway_url` parameter is deprecated — use `mcp_targets` instead.
     - delete_agent / restore_agent / purge_agent: Use when the user wants to archive, restore, or permanently remove an agent.
     - validate_agent: Use BEFORE deploying to check syntax, field completeness, and tool-prompt consistency.
     - list_agents: Use when the user asks "what agents do I have?" or needs to find an agent.

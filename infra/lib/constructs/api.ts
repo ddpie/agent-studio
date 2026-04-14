@@ -52,6 +52,7 @@ export class Api extends Construct {
         COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
         COGNITO_CLIENT_ID: props.cognitoClientId,
         META_AGENT_ARN: props.metaAgentArn,
+        MCP_GATEWAY_URL: props.config.mcpGatewayUrl || '',
       },
     });
 

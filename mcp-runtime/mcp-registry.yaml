@@ -1,0 +1,433 @@
+# MCP Registry — AWS 官方 MCP Servers 完整清单
+# 用户在 enabled 字段选择要部署哪些，CDK 读取此文件一键部署
+# 部署方式：Runtime + mcp-proxy 桥接 stdio → Streamable HTTP → Gateway mcpServer target
+
+# ─── Gateway 配置 ───
+gateway:
+  name: aws-mcp-tools
+  semantic_search: false  # Gateway 语义搜索，自动筛选最相关的工具给 Agent
+
+# ─── 零部署：直接注册远程 URL ───
+remote_targets:
+  - name: aws-api
+    enabled: true
+    description: "AWS 云资源操作，15000+ API"
+    endpoint: "https://aws-mcp.us-east-1.api.aws/mcp"
+    auth: sigv4
+    category: general
+
+  - name: aws-knowledge
+    enabled: true
+    description: "AWS 文档和最佳实践查询，无需凭证"
+    endpoint: "https://knowledge-mcp.global.api.aws"
+    auth: none
+    category: general
+
+# ─── Runtime 部署：awslabs MCP Servers ───
+# 每个 target 部署为独立 Runtime，通过 mcp-proxy 桥接
+# category: 用于前端分组展示
+# vpc_required: 需要 VPC 配置才能连接数据库
+# deprecated: 已废弃，建议用替代方案
+# iam_actions: Runtime 执行角色需要的 IAM 权限（示例，需按实际调整）
+
+runtime_targets:
+
+  # ━━━ 监控与可观测 ━━━
+  - name: cloudwatch
+    enabled: true
+    package: awslabs-cloudwatch-mcp-server
+    command: awslabs.cloudwatch-mcp-server
+    version: 0.0.24
+    description: "CloudWatch 指标、日志、告警、调查技能"
+    category: observability
+
+  - name: cloudwatch-applicationsignals
+    enabled: true
+    package: awslabs-cloudwatch-applicationsignals-mcp-server
+    command: awslabs.cloudwatch-applicationsignals-mcp-server
+    version: 0.1.29
+    description: "Application Signals 性能监控"
+    category: observability
+
+  - name: cloudtrail
+    enabled: true
+    package: awslabs-cloudtrail-mcp-server
+    command: awslabs.cloudtrail-mcp-server
+    version: 0.0.12
+    description: "CloudTrail 审计日志查询"
+    category: observability
+
+  - name: prometheus
+    enabled: true
+    package: awslabs-prometheus-mcp-server
+    command: awslabs.prometheus-mcp-server
+    version: 0.2.14
+    description: "Managed Prometheus 指标查询"
+    category: observability
+
+  # ━━━ 安全与合规 ━━━
+  - name: iam
+    enabled: true
+    package: awslabs-iam-mcp-server
+    command: awslabs.iam-mcp-server
+    version: 1.0.17
+    description: "IAM 权限管理和策略分析"
+    category: security
+
+  - name: well-architected-security
+    enabled: true
+    package: awslabs-well-architected-security-mcp-server
+    command: awslabs.well-architected-security-mcp-server
+    version: 0.1.7
+    description: "Well-Architected 安全评估"
+    category: security
+
+  # ━━━ 成本与计费 ━━━
+  - name: billing-cost-management
+    enabled: true
+    package: awslabs-billing-cost-management-mcp-server
+    command: awslabs.billing-cost-management-mcp-server
+    version: 0.0.17
+    description: "账单和预算管理（cost-explorer 升级版）"
+    category: cost
+
+  - name: aws-pricing
+    enabled: true
+    package: awslabs-aws-pricing-mcp-server
+    command: awslabs.aws-pricing-mcp-server
+    version: 1.0.27
+    description: "AWS 定价查询"
+    category: cost
+
+  # ━━━ 计算 ━━━
+  - name: ecs
+    enabled: true
+    package: awslabs-ecs-mcp-server
+    command: awslabs.ecs-mcp-server
+    version: 0.1.28
+    description: "ECS 服务管理 + Express Mode 一键部署"
+    category: compute
+
+  - name: eks
+    enabled: true
+    package: awslabs-eks-mcp-server
+    command: awslabs.eks-mcp-server
+    version: 0.1.27
+    description: "EKS 集群和 K8s 资源管理"
+    category: compute
+
+  - name: lambda-tool
+    enabled: true
+    package: awslabs-lambda-tool-mcp-server
+    command: awslabs.lambda-tool-mcp-server
+    version: 2.0.16
+    description: "Lambda 函数调用和日志查询"
+    category: compute
+
+  - name: stepfunctions-tool
+    enabled: true
+    package: awslabs-stepfunctions-tool-mcp-server
+    command: awslabs.stepfunctions-tool-mcp-server
+    version: 0.1.21
+    description: "Step Functions 状态机管理"
+    category: compute
+
+  # ━━━ 数据库（无需 VPC）━━━
+  - name: dynamodb
+    enabled: true
+    package: awslabs-dynamodb-mcp-server
+    command: awslabs.dynamodb-mcp-server
+    version: 2.0.24
+    description: "DynamoDB 数据建模、schema 校验、CDK 代码生成"
+    category: database
+
+  - name: s3-tables
+    enabled: true
+    package: awslabs-s3-tables-mcp-server
+    command: awslabs.s3-tables-mcp-server
+    version: 0.0.22
+    description: "S3 Tables Iceberg 格式"
+    category: database
+
+  # ━━━ 数据库（需要 VPC）━━━
+  - name: postgres
+    enabled: false
+    package: awslabs-postgres-mcp-server
+    command: awslabs.postgres-mcp-server
+    version: 1.1.0
+    description: "RDS PostgreSQL 操作"
+    category: database
+    vpc_required: true
+
+  - name: mysql
+    enabled: false
+    package: awslabs-mysql-mcp-server
+    command: awslabs.mysql-mcp-server
+    version: 1.0.17
+    description: "RDS MySQL 操作"
+    category: database
+    vpc_required: true
+
+  - name: documentdb
+    enabled: false
+    package: awslabs-documentdb-mcp-server
+    command: awslabs.documentdb-mcp-server
+    version: 1.0.12
+    description: "DocumentDB 文档数据库操作"
+    category: database
+    vpc_required: true
+
+  - name: redshift
+    enabled: false
+    package: awslabs-redshift-mcp-server
+    command: awslabs.redshift-mcp-server
+    version: 0.0.20
+    description: "Redshift 数据仓库查询"
+    category: database
+    vpc_required: true
+
+  - name: aurora-dsql
+    enabled: false
+    package: awslabs-aurora-dsql-mcp-server
+    command: awslabs.aurora-dsql-mcp-server
+    version: 1.0.24
+    description: "Aurora DSQL 分布式 SQL"
+    category: database
+    vpc_required: true
+
+  - name: neptune
+    enabled: false
+    package: awslabs-amazon-neptune-mcp-server
+    command: awslabs.amazon-neptune-mcp-server
+    version: 1.0.15
+    description: "Neptune 图数据库查询"
+    category: database
+    vpc_required: true
+
+  - name: elasticache
+    enabled: false
+    package: awslabs-elasticache-mcp-server
+    command: awslabs.elasticache-mcp-server
+    version: 0.1.16
+    description: "ElastiCache Redis/Memcached"
+    category: database
+    vpc_required: true
+
+  - name: valkey
+    enabled: false
+    package: awslabs-valkey-mcp-server
+    command: awslabs.valkey-mcp-server
+    version: 1.0.15
+    description: "Valkey 缓存服务"
+    category: database
+    vpc_required: true
+
+  - name: memcached
+    enabled: false
+    package: awslabs-memcached-mcp-server
+    command: awslabs.memcached-mcp-server
+    version: 1.0.15
+    description: "Memcached 缓存操作"
+    category: database
+    vpc_required: true
+
+  - name: timestream-for-influxdb
+    enabled: false
+    package: awslabs-timestream-for-influxdb-mcp-server
+    command: awslabs.timestream-for-influxdb-mcp-server
+    version: 0.0.15
+    description: "Timestream 时序数据"
+    category: database
+    vpc_required: true
+
+  # ━━━ 消息队列 ━━━
+  - name: sns-sqs
+    enabled: true
+    package: awslabs-amazon-sns-sqs-mcp-server
+    command: awslabs.amazon-sns-sqs-mcp-server
+    version: 2.0.17
+    description: "SNS + SQS 消息管理"
+    category: messaging
+
+  - name: amazon-mq
+    enabled: true
+    package: awslabs-amazon-mq-mcp-server
+    command: awslabs.amazon-mq-mcp-server
+    version: 2.0.19
+    description: "Amazon MQ 消息代理"
+    category: messaging
+
+  - name: msk
+    enabled: true
+    package: awslabs-aws-msk-mcp-server
+    command: awslabs.aws-msk-mcp-server
+    version: 0.0.17
+    description: "MSK (Kafka) 集群管理"
+    category: messaging
+
+  # ━━━ AI/ML ━━━
+  - name: bedrock-kb-retrieval
+    enabled: true
+    package: awslabs-bedrock-kb-retrieval-mcp-server
+    command: awslabs.bedrock-kb-retrieval-mcp-server
+    version: 1.0.19
+    description: "Bedrock 知识库 RAG 检索"
+    category: ai_ml
+
+  - name: nova-canvas
+    enabled: true
+    package: awslabs-nova-canvas-mcp-server
+    command: awslabs.nova-canvas-mcp-server
+    version: 1.0.15
+    description: "Nova Canvas 图像生成"
+    category: ai_ml
+
+  - name: sagemaker-ai
+    enabled: true
+    package: awslabs-sagemaker-ai-mcp-server
+    command: awslabs.sagemaker-ai-mcp-server
+    version: 1.0.7
+    description: "SageMaker 模型部署和推理"
+    category: ai_ml
+
+  - name: bedrock-data-automation
+    enabled: true
+    package: awslabs-aws-bedrock-data-automation-mcp-server
+    command: awslabs.aws-bedrock-data-automation-mcp-server
+    version: 0.0.19
+    description: "Bedrock 文档理解和数据提取"
+    category: ai_ml
+
+  - name: bedrock-agentcore
+    enabled: true
+    package: awslabs-amazon-bedrock-agentcore-mcp-server
+    command: awslabs.amazon-bedrock-agentcore-mcp-server
+    version: 0.0.16
+    description: "AgentCore 资源管理和文档查询"
+    category: ai_ml
+
+  # ━━━ 搜索与知识 ━━━
+  - name: kendra-index
+    enabled: true
+    package: awslabs-amazon-kendra-index-mcp-server
+    command: awslabs.amazon-kendra-index-mcp-server
+    version: 1.0.15
+    description: "Kendra 企业搜索"
+    category: search
+
+  - name: qindex
+    enabled: true
+    package: awslabs-amazon-qindex-mcp-server
+    command: awslabs.amazon-qindex-mcp-server
+    version: 0.0.11
+    description: "Amazon Q Index 搜索"
+    category: search
+
+  - name: qbusiness-anonymous
+    enabled: true
+    package: awslabs-amazon-qbusiness-anonymous-mcp-server
+    command: awslabs.amazon-qbusiness-anonymous-mcp-server
+    version: 0.0.14
+    description: "Amazon Q Business 知识问答"
+    category: search
+
+  # ━━━ 网络 ━━━
+  - name: network
+    enabled: true
+    package: awslabs-aws-network-mcp-server
+    command: awslabs.aws-network-mcp-server
+    version: 0.0.9
+    description: "VPC 网络管理"
+    category: networking
+
+  - name: appsync
+    enabled: true
+    package: awslabs-aws-appsync-mcp-server
+    command: awslabs.aws-appsync-mcp-server
+    version: 0.1.11
+    description: "AppSync GraphQL 管理"
+    category: networking
+
+  # ━━━ 行业专用 ━━━
+  - name: healthomics
+    enabled: true
+    package: awslabs-aws-healthomics-mcp-server
+    command: awslabs.aws-healthomics-mcp-server
+    version: 0.0.34
+    description: "HealthOmics 基因组处理"
+    category: industry
+
+  - name: healthlake
+    enabled: true
+    package: awslabs-healthlake-mcp-server
+    command: awslabs.healthlake-mcp-server
+    version: 0.0.10
+    description: "HealthLake FHIR 医疗数据"
+    category: industry
+
+  - name: iot-sitewise
+    enabled: true
+    package: awslabs-aws-iot-sitewise-mcp-server
+    command: awslabs.aws-iot-sitewise-mcp-server
+    version: 11.0.14
+    description: "IoT SiteWise 工业数据"
+    category: industry
+
+  - name: location
+    enabled: true
+    package: awslabs-aws-location-mcp-server
+    command: awslabs.aws-location-mcp-server
+    version: 2.0.15
+    description: "Location Service 地图服务"
+    category: industry
+
+  # ━━━ 数据处理 ━━━
+  - name: dataprocessing
+    enabled: true
+    package: awslabs-aws-dataprocessing-mcp-server
+    command: awslabs.aws-dataprocessing-mcp-server
+    version: 0.1.27
+    description: "Glue ETL 工作流"
+    category: data
+
+  - name: syntheticdata
+    enabled: true
+    package: awslabs-syntheticdata-mcp-server
+    command: awslabs.syntheticdata-mcp-server
+    version: 1.0.15
+    description: "合成测试数据生成"
+    category: data
+
+  # ━━━ 开发工具 ━━━
+  - name: diagram
+    enabled: true
+    package: awslabs-aws-diagram-mcp-server
+    command: awslabs.aws-diagram-mcp-server
+    version: 1.0.23
+    description: "AWS 架构图自动生成"
+    category: devtools
+
+  - name: code-doc-gen
+    enabled: true
+    package: awslabs-code-doc-gen-mcp-server
+    command: awslabs.code-doc-gen-mcp-server
+    version: 1.0.10
+    description: "代码文档自动生成"
+    category: devtools
+
+  - name: openapi
+    enabled: true
+    package: awslabs-openapi-mcp-server
+    command: awslabs.openapi-mcp-server
+    version: 0.2.15
+    description: "OpenAPI 规范处理"
+    category: devtools
+
+  # ━━━ 运维支持 ━━━
+  - name: support
+    enabled: true
+    package: awslabs-aws-support-mcp-server
+    command: awslabs.aws-support-mcp-server
+    version: 0.1.19
+    description: "AWS Support 工单管理"
+    category: operations

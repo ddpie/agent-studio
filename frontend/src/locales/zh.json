@@ -416,5 +416,39 @@
     "language_consistency": "语言一致性",
     "safety": "安全性",
     "overall": "综合"
+  },
+  "mcpPolicy": {
+    "title": "MCP 工具策略",
+    "mode": {
+      "all": "全部工具",
+      "allowlist": "允许列表",
+      "denylist": "拒绝列表",
+      "allDesc": "此工作区可使用所有 MCP 工具",
+      "allowlistDesc": "仅允许选中的工具",
+      "denylistDesc": "除选中的工具外全部可用"
+    },
+    "save": "保存策略",
+    "saved": "策略已保存",
+    "category": {
+      "observability": "监控与可观测",
+      "security": "安全与合规",
+      "cost": "成本与计费",
+      "compute": "计算",
+      "database": "数据库",
+      "messaging": "消息队列",
+      "ai_ml": "AI/ML",
+      "search": "搜索与知识",
+      "networking": "网络",
+      "industry": "行业专用",
+      "data": "数据处理",
+      "devtools": "开发工具",
+      "operations": "运维支持",
+      "general": "通用"
+    }
+  },
+  "agentEdit": {
+    "mcpTargets": "MCP 工具",
+    "mcpTargetsDesc": "选择此 Agent 可使用的 AWS MCP 工具",
+    "mcpLegacy": "此 Agent 使用旧版 MCP 配置（gateway_url），通过 Meta-Agent 编辑以迁移。"
   }
 }

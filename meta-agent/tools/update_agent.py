@@ -7,14 +7,15 @@ from datetime import datetime, timezone
 import boto3
 from strands import tool
 
-from config import MODEL_ID, REGION, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE
+from config import MODEL_ID, REGION, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE, MCP_GATEWAY_URL
 from deploy import build_deployment_package_v2, upload_deployment, wait_for_ready, validate_agent_files, build_skill_prompt_section
 from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_template_prompt, BASE_GUIDELINES
 from tools_library.registry import get_tool_code_by_func_name as _get_builtin_code
+from tools.create_agent import _get_workspace_mcp_policy, _check_mcp_policy
 
 # Fields that require AgentCore redeploy when changed
-_REDEPLOY_FIELDS = {"system_prompt", "tool_definitions", "tool_names", "template_id", "gateway_url"}
+_REDEPLOY_FIELDS = {"system_prompt", "tool_definitions", "tool_names", "template_id", "gateway_url", "mcp_targets"}
 
 
 def _clean_tool_definitions(defs: str) -> str:
@@ -66,6 +67,7 @@ def update_agent(
     suggestions: str = "",
     template_id: str = "",
     gateway_url: str = "",
+    mcp_targets: str = "",
     supports_images: bool = False,
     staging_key: str = "",
 ) -> str:
@@ -86,7 +88,8 @@ def update_agent(
         welcome_message: Updated welcome message.
         suggestions: Updated suggestions separated by |.
         template_id: Prompt template to apply.
-        gateway_url: Optional MCP Gateway URL.
+        gateway_url: Optional MCP Gateway URL (deprecated, use mcp_targets).
+        mcp_targets: Comma-separated MCP target names (e.g. "cloudwatch,iam"). Validated against workspace policy.
         supports_images: Whether this agent can process image inputs.
         staging_key: S3 key to a JSON file containing all update parameters.
 
@@ -113,6 +116,9 @@ def update_agent(
             template_id = staged.get("template_id", template_id) or template_id
             supports_images = staged.get("supports_images", supports_images)
             gateway_url = staged.get("gateway_url", gateway_url) or gateway_url
+            mcp_targets = staged.get("mcp_targets", mcp_targets) or mcp_targets
+            if isinstance(mcp_targets, list):
+                mcp_targets = ",".join(mcp_targets)
         except Exception as e:
             return json.dumps({"error": f"Failed to read staging config: {e}"})
 
@@ -120,6 +126,18 @@ def update_agent(
     skills_config = staged.get("skills", []) if staging_key else []
     skills_data = []
     skill_scripts = {}
+
+    # Parse mcp_targets and validate against workspace policy
+    mcp_targets_list = [t.strip() for t in mcp_targets.split(",") if t.strip()] if mcp_targets else []
+    if mcp_targets_list:
+        workspace_id = staged.get("workspace_id", "") if staging_key else ""
+        if not workspace_id:
+            workspace_id = getattr(__import__('tools.create_agent', fromlist=['_workspace_id']), '_workspace_id', '')
+        policy = _get_workspace_mcp_policy(workspace_id)
+        denied = _check_mcp_policy(mcp_targets_list, policy)
+        if denied:
+            return json.dumps({"error": f"MCP targets not allowed in this workspace: {denied}"})
+        gateway_url = MCP_GATEWAY_URL
 
     if skills_config:
         s3_client = boto3.client("s3", region_name=REGION)
@@ -187,6 +205,20 @@ def update_agent(
     final_suggestions = suggestions or "|".join(existing_metadata.get("suggestions", []))
     final_template = template_id or existing_metadata.get("template_id", "")
 
+    # Preserve existing MCP config when neither gateway_url nor mcp_targets is explicitly provided
+    if not gateway_url and not mcp_targets_list:
+        gateway_url = existing_metadata.get("gateway_url", "") or ""
+        # Also check config.json for gateway_url (metadata may not have it)
+        try:
+            cfg_obj = s3.get_object(Bucket=S3_BUCKET, Key=f"agents/{agent_id}/config.json")
+            existing_config = json.loads(cfg_obj["Body"].read().decode("utf-8"))
+            gateway_url = gateway_url or existing_config.get("gateway_url", "")
+            mcp_targets_list = existing_config.get("mcp_targets", [])
+        except Exception:
+            pass
+        if not mcp_targets_list:
+            mcp_targets_list = existing_metadata.get("mcp_targets", [])
+
     # Diff: check if any redeploy-triggering field actually changed
     needs_redeploy = False
     if system_prompt and system_prompt != existing_metadata.get("system_prompt", ""):
@@ -198,6 +230,8 @@ def update_agent(
     if template_id and template_id != existing_metadata.get("template_id", ""):
         needs_redeploy = True
     if gateway_url:
+        needs_redeploy = True
+    if mcp_targets and mcp_targets != ",".join(existing_metadata.get("mcp_targets", [])):
         needs_redeploy = True
 
     status = "metadata_only"
@@ -240,6 +274,8 @@ def update_agent(
         }
         if gateway_url:
             config_data["gateway_url"] = gateway_url
+        if mcp_targets_list:
+            config_data["mcp_targets"] = mcp_targets_list
         config_json = json.dumps(config_data, indent=2, ensure_ascii=False)
 
         # Validate each file independently
@@ -300,6 +336,7 @@ def update_agent(
         "supports_images": supports_images or existing_metadata.get("supports_images", False),
         "skills": skills_config,
         "deployedSkillHashes": deployed_skill_hashes,
+        "mcp_targets": mcp_targets_list,
         "created_at": existing_metadata.get("created_at", datetime.now(timezone.utc).isoformat()),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }

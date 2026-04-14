@@ -30,3 +30,5 @@ PERMISSION_TIER_ROLES = {
     "data-access": f"arn:aws:iam::{ACCOUNT_ID}:role/AgentStudioSubAgent-dataaccess-{REGION}",
 }
 DEFAULT_PERMISSION_TIER = "readonly"
+
+MCP_GATEWAY_URL = os.getenv("MCP_GATEWAY_URL", "")

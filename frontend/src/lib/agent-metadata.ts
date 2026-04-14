@@ -30,6 +30,8 @@ export interface AgentMetadata {
   visibility: string;
   skills: AgentSkillEntry[];
   deployedSkillHashes?: Record<string, string>;
+  mcp_targets?: string[];
+  gateway_url?: string;
 }
 
 /**
@@ -62,6 +64,8 @@ export async function fetchAgentMetadataLight(agentId: string): Promise<AgentMet
       visibility: item.visibility || "private",
       skills: item.skills || item.skill_ids || [],
       deployedSkillHashes: item.deployedSkillHashes,
+      mcp_targets: item.mcp_targets || [],
+      gateway_url: item.gateway_url,
     } as AgentMetadata;
   } catch (err) {
     console.error("fetchAgentMetadataLight error:", err);
@@ -105,6 +109,8 @@ export async function fetchAgentMetadata(agentId: string): Promise<AgentMetadata
       visibility: item.visibility || "private",
       skills: item.skills || item.skill_ids || [],
       deployedSkillHashes: item.deployedSkillHashes,
+      mcp_targets: item.mcp_targets || [],
+      gateway_url: item.gateway_url,
     } as AgentMetadata;
   } catch (err) {
     console.error("fetchAgentMetadata error:", err);

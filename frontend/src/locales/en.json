@@ -416,5 +416,39 @@
     "language_consistency": "Language Consistency",
     "safety": "Safety",
     "overall": "Overall"
+  },
+  "mcpPolicy": {
+    "title": "MCP Tool Policy",
+    "mode": {
+      "all": "All Tools",
+      "allowlist": "Allowlist",
+      "denylist": "Denylist",
+      "allDesc": "All MCP tools are available in this workspace",
+      "allowlistDesc": "Only selected tools are available",
+      "denylistDesc": "All tools except selected are available"
+    },
+    "save": "Save Policy",
+    "saved": "Policy saved successfully",
+    "category": {
+      "observability": "Monitoring & Observability",
+      "security": "Security & Compliance",
+      "cost": "Cost & Billing",
+      "compute": "Compute",
+      "database": "Database",
+      "messaging": "Messaging",
+      "ai_ml": "AI/ML",
+      "search": "Search & Knowledge",
+      "networking": "Networking",
+      "industry": "Industry",
+      "data": "Data Processing",
+      "devtools": "Developer Tools",
+      "operations": "Operations",
+      "general": "General"
+    }
+  },
+  "agentEdit": {
+    "mcpTargets": "MCP Tools",
+    "mcpTargetsDesc": "Select AWS MCP tools this agent can use",
+    "mcpLegacy": "This agent uses legacy MCP configuration (gateway_url). Edit via Meta-Agent to migrate."
   }
 }

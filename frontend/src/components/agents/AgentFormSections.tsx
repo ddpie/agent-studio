@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Code2, MessageSquare, Settings2, Sparkles } from "lucide-react";
+import { Code2, MessageSquare, Settings2, Sparkles, Network } from "lucide-react";
 import { MODEL_GROUPS } from "../../lib/models";
 import { useEditAssistantStore } from "../../stores/edit-assistant-store";
 import type { AgentMetadata, AgentSkillEntry } from "../../lib/agent-metadata";
@@ -8,6 +8,7 @@ import Field from "./shared/Field";
 import SkillsSection from "./SkillsSection";
 import ToolsEditor from "./ToolsEditor";
 import SecretsSection from "./SecretsSection";
+import McpTargetSelector from "./McpTargetSelector";
 
 export const TEMPLATE_OPTIONS = [
   { id: "", label: "None" },
@@ -183,6 +184,18 @@ export default function AgentFormSections({
               }
             );
           }}
+        />
+      </Section>
+
+      {/* MCP Tools */}
+      <Section title={t("agentEdit.mcpTargets")} icon={<Network className="w-3.5 h-3.5" />}>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+          {t("agentEdit.mcpTargetsDesc")}
+        </p>
+        <McpTargetSelector
+          selectedTargets={formData.mcp_targets || []}
+          onChange={(targets) => updateField("mcp_targets", targets)}
+          hasLegacyConfig={!!formData.gateway_url && !formData.mcp_targets?.length}
         />
       </Section>
 

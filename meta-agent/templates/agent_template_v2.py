@@ -129,7 +129,13 @@ async def invoke(payload, context):
         )
     prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), save them to /mnt/workspace/ (persistent across sessions) instead of /tmp/ (ephemeral). ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files. After uploading, the download button appears automatically — do NOT create markdown links like [filename](url) for downloads."
     with mcp_client as mcp:
-        mcp_tools = mcp.list_tools_sync()
+        all_tools = mcp.list_tools_sync()
+        allowed_targets = _config.get("mcp_targets", [])
+        if allowed_targets:
+            mcp_tools = [t for t in all_tools
+                         if any(t.name.startswith(f"{target}___") for target in allowed_targets)]
+        else:
+            mcp_tools = all_tools
         agent = Agent(
             model=BedrockModel(model_id=model_id),
             system_prompt=prompt,

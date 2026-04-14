@@ -8,6 +8,7 @@ import SkillDetail from "./components/pages/SkillDetail";
 import ToolLibraryPage from "./components/pages/ToolLibraryPage";
 import ToolDetail from "./components/pages/ToolDetail";
 import McpPage from "./components/pages/McpPage";
+import McpPolicyPage from "./components/pages/McpPolicyPage";
 import SettingsPage from "./components/pages/SettingsPage";
 
 export function createRouter(
@@ -35,6 +36,7 @@ export function createRouter(
         { path: "tools", element: <ToolLibraryPage /> },
         { path: "tools/:toolId", element: <ToolDetail /> },
         { path: "mcp", element: <McpPage /> },
+        { path: "mcp-policy", element: <McpPolicyPage /> },
         { path: "settings", element: <SettingsPage /> },
       ],
     },

@@ -7,11 +7,34 @@ from datetime import datetime, timezone
 import boto3
 from strands import tool
 
-from config import MODEL_ID, REGION, S3_BUCKET, AGENTS_TABLE, PERMISSION_TIER_ROLES, DEFAULT_PERMISSION_TIER
+from config import MODEL_ID, REGION, S3_BUCKET, AGENTS_TABLE, PERMISSION_TIER_ROLES, DEFAULT_PERMISSION_TIER, MCP_GATEWAY_URL
 from deploy import build_deployment_package_v2, upload_deployment, create_runtime, wait_for_ready, validate_agent_files, build_skill_prompt_section
 from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_template_prompt, get_template_names, BASE_GUIDELINES
 from tools_library.registry import get_tool_code_by_func_name as _get_builtin_code
+
+
+def _get_workspace_mcp_policy(workspace_id: str) -> dict:
+    """Fetch MCP policy from workspace metadata."""
+    if not workspace_id:
+        return {"mode": "all"}
+    table = boto3.resource("dynamodb", region_name=REGION).Table("agent-studio-workspaces")
+    item = table.get_item(Key={"workspaceId": workspace_id, "sk": "META"}).get("Item", {})
+    return item.get("mcpPolicy", {"mode": "all"})
+
+
+def _check_mcp_policy(targets: list, policy: dict) -> list:
+    """Return list of targets denied by the workspace policy."""
+    mode = policy.get("mode", "all")
+    if mode == "all":
+        return []
+    if mode == "allowlist":
+        allowed = set(policy.get("allowedTargets", []))
+        return [t for t in targets if t not in allowed]
+    if mode == "denylist":
+        denied = set(policy.get("deniedTargets", []))
+        return [t for t in targets if t in denied]
+    return []
 
 
 @tool
@@ -35,6 +58,7 @@ def create_agent(
     suggestions: str = "",
     template_id: str = "",
     gateway_url: str = "",
+    mcp_targets: str = "",
     supports_images: bool = False,
     permission_tier: str = "",
     staging_key: str = "",
@@ -50,7 +74,8 @@ def create_agent(
         welcome_message: Welcome message shown when user opens this agent's chat.
         suggestions: Three suggested prompts separated by | (e.g., "Ask about X|Try Y|Help with Z").
         template_id: Optional prompt template to use as base.
-        gateway_url: Optional AgentCore Gateway MCP URL.
+        gateway_url: Optional AgentCore Gateway MCP URL (deprecated, use mcp_targets).
+        mcp_targets: Comma-separated MCP target names (e.g. "cloudwatch,iam"). Validated against workspace policy.
         supports_images: Whether this agent can process image inputs.
         permission_tier: IAM permission level: basic/readonly/data-access. Default: readonly.
         staging_key: S3 key to a JSON file containing all parameters.
@@ -76,6 +101,9 @@ def create_agent(
             template_id = staged.get("template_id", template_id) or template_id
             supports_images = staged.get("supports_images", supports_images)
             gateway_url = staged.get("gateway_url", gateway_url) or gateway_url
+            mcp_targets = staged.get("mcp_targets", mcp_targets) or mcp_targets
+            if isinstance(mcp_targets, list):
+                mcp_targets = ",".join(mcp_targets)
         except Exception as e:
             return json.dumps({"error": f"Failed to read staging config: {e}"})
 
@@ -83,6 +111,18 @@ def create_agent(
     skills_config = staged.get("skills", []) if staging_key else []
     skills_data = []
     skill_scripts = {}
+
+    # Parse mcp_targets and validate against workspace policy
+    mcp_targets_list = [t.strip() for t in mcp_targets.split(",") if t.strip()] if mcp_targets else []
+    if mcp_targets_list:
+        workspace_id = staged.get("workspace_id", "") if staging_key else ""
+        if not workspace_id:
+            workspace_id = getattr(__import__('tools.create_agent', fromlist=['_workspace_id']), '_workspace_id', '')
+        policy = _get_workspace_mcp_policy(workspace_id)
+        denied = _check_mcp_policy(mcp_targets_list, policy)
+        if denied:
+            return json.dumps({"error": f"MCP targets not allowed in this workspace: {denied}"})
+        gateway_url = MCP_GATEWAY_URL
 
     if skills_config:
         s3_client = boto3.client("s3", region_name=REGION)
@@ -162,6 +202,8 @@ def create_agent(
     }
     if gateway_url:
         config_data["gateway_url"] = gateway_url
+    if mcp_targets_list:
+        config_data["mcp_targets"] = mcp_targets_list
     config_json = json.dumps(config_data, indent=2, ensure_ascii=False)
 
     # Validate each file independently
@@ -201,6 +243,7 @@ def create_agent(
         "supports_images": supports_images,
         "skills": skills_config,
         "deployedSkillHashes": deployed_skill_hashes,
+        "mcp_targets": mcp_targets_list,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     s3 = boto3.client("s3", region_name=REGION)

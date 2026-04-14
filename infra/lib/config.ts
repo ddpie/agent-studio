@@ -2,6 +2,7 @@ export interface AgentStudioConfig {
   region: string;
   accountId: string;
   s3Bucket: string;
+  mcpGatewayUrl: string;
 }
 
 export function getConfig(): AgentStudioConfig {
@@ -14,5 +15,6 @@ export function getConfig(): AgentStudioConfig {
     region: required("AGENT_STUDIO_REGION"),
     accountId: required("AGENT_STUDIO_ACCOUNT_ID"),
     s3Bucket: required("AGENT_STUDIO_S3_BUCKET"),
+    mcpGatewayUrl: process.env.AGENT_STUDIO_MCP_GATEWAY_URL || '',
   };
 }

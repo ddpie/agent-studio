@@ -1,0 +1,17 @@
+FROM python:3.13-slim
+
+ARG MCP_PACKAGE=awslabs-billing-cost-management-mcp-server
+ARG MCP_PACKAGE_VERSION=0.0.17
+ARG MCP_COMMAND=awslabs.billing-cost-management-mcp-server
+ARG MCP_PROXY_VERSION=0.11.0
+
+ENV MCP_COMMAND=${MCP_COMMAND}
+
+RUN pip install --no-cache-dir mcp-proxy==${MCP_PROXY_VERSION} ${MCP_PACKAGE}==${MCP_PACKAGE_VERSION}
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/mcp')" || exit 1
+
+CMD ["sh", "-c", "exec mcp-proxy --port 8000 --host 0.0.0.0 --stateless -e AWS_REGION ${AWS_REGION:-us-east-1} -e AWS_DEFAULT_REGION ${AWS_DEFAULT_REGION:-us-east-1} -- ${MCP_COMMAND}"]
