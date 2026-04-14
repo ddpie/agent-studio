@@ -777,6 +777,11 @@ echo "  AGENT_STUDIO_MCP_GATEWAY_ID=$GATEWAY_ID"
 echo "$GATEWAY_URL" | aws s3 cp - "s3://${S3_BUCKET}/config/mcp_gateway_url.txt" \
   --content-type text/plain --region "$REGION"
 echo "  Uploaded gateway URL to s3://${S3_BUCKET}/config/mcp_gateway_url.txt"
+
+# Upload registry to S3 for Meta-Agent endpoint resolution (remote vs runtime)
+aws s3 cp "$REGISTRY_FILE" "s3://${S3_BUCKET}/mcp-runtime/mcp-registry.yaml" \
+  --content-type text/yaml --region "$REGION"
+echo "  Uploaded registry to s3://${S3_BUCKET}/mcp-runtime/mcp-registry.yaml"
 echo ""
 
 # ============================================================

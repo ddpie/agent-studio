@@ -49,10 +49,17 @@ export class AgentCoreRoles extends Construct {
         actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:Converse", "bedrock:ConverseStream"],
         resources: [`arn:aws:bedrock:${props.region}::foundation-model/*`],
       }),
-      // Allow sub-agents to invoke MCP Runtimes directly (mcp_* naming convention)
+      // Allow sub-agents to discover and invoke MCP Runtimes directly
       new iam.PolicyStatement({
-        actions: ["bedrock-agentcore:InvokeAgentRuntime"],
-        resources: [`arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/mcp_*`],
+        actions: [
+          "bedrock-agentcore:InvokeAgentRuntime",
+          "bedrock-agentcore:ListAgentRuntimes",
+          "bedrock-agentcore:GetAgentRuntime",
+        ],
+        resources: [
+          `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/mcp_*`,
+          `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*`,
+        ],
       }),
     ];
 

@@ -38,46 +38,80 @@ def _check_mcp_policy(targets: list, policy: dict) -> list:
 
 
 def _resolve_mcp_endpoints(target_names: list) -> list:
-    """Resolve MCP target names to Runtime invoke URLs.
+    """Resolve MCP target names to endpoint configs (discriminated union).
+
+    Runtime targets get lazy-resolved at sub-agent startup (only target_name stored).
+    Remote targets get their URL stored directly.
 
     Args:
-        target_names: List of target names (e.g. ["mcp-cloudwatch", "mcp-iam"]).
+        target_names: List of target names (e.g. ["mcp-cloudwatch", "aws-api"]).
 
     Returns:
-        List of dicts with "name" and "url" for each resolved target.
+        List of endpoint dicts:
+        - Runtime: {"type": "runtime", "target_name": "mcp_cloudwatch", "auth": "runtime"}
+        - Remote:  {"type": "remote", "url": "https://...", "auth": "aws-mcp"|"none"}
     """
-    import urllib.parse
+    # Load catalog to distinguish remote vs runtime
+    remote_map = {}
+    try:
+        s3 = boto3.client("s3", region_name=REGION)
+        import yaml
+        resp = s3.get_object(Bucket=S3_BUCKET, Key="mcp-runtime/mcp-registry.yaml")
+        registry = yaml.safe_load(resp["Body"].read().decode())
+        for rt in registry.get("remote_targets", []):
+            if rt.get("enabled"):
+                auth = "none" if rt.get("auth") == "none" else "aws-mcp"
+                remote_map[rt["name"]] = {"url": rt["endpoint"], "auth": auth}
+    except Exception:
+        # Fallback: hardcoded known remotes
+        remote_map = {
+            "aws-api": {"url": "https://aws-mcp.us-east-1.api.aws/mcp", "auth": "aws-mcp"},
+            "aws-knowledge": {"url": "https://knowledge-mcp.global.api.aws", "auth": "none"},
+        }
 
-    control = boto3.client("bedrock-agentcore-control", region_name=REGION)
+    # Verify runtime targets exist
+    runtime_names = set()
+    for target in target_names:
+        if target not in remote_map:
+            runtime_names.add(target.replace("-", "_"))
 
-    # List all runtimes (paginated)
-    all_runtimes = {}
-    resp = control.list_agent_runtimes()
-    for rt in resp.get("agentRuntimes", []):
-        all_runtimes[rt.get("agentRuntimeName", "")] = rt
-    while resp.get("nextToken"):
-        resp = control.list_agent_runtimes(nextToken=resp["nextToken"])
+    if runtime_names:
+        control = boto3.client("bedrock-agentcore-control", region_name=REGION)
+        found = set()
+        resp = control.list_agent_runtimes()
         for rt in resp.get("agentRuntimes", []):
-            all_runtimes[rt.get("agentRuntimeName", "")] = rt
+            name = rt.get("agentRuntimeName", "")
+            if name in runtime_names:
+                found.add(name)
+        while resp.get("nextToken") and found != runtime_names:
+            resp = control.list_agent_runtimes(nextToken=resp["nextToken"])
+            for rt in resp.get("agentRuntimes", []):
+                name = rt.get("agentRuntimeName", "")
+                if name in runtime_names:
+                    found.add(name)
+
+        missing = runtime_names - found
+        if missing:
+            import sys
+            print(f"WARNING: MCP runtimes not found: {missing}", file=sys.stderr)
 
     endpoints = []
     for target in target_names:
-        # target "mcp-cloudwatch" → runtime name "mcp_cloudwatch"
-        runtime_name = target.replace("-", "_")
-        rt = all_runtimes.get(runtime_name)
-        if not rt:
-            import sys
-            print(f"WARNING: MCP runtime '{runtime_name}' not found for target '{target}'", file=sys.stderr)
-            continue
-
-        rt_id = rt.get("agentRuntimeId", "")
-        rt_info = control.get_agent_runtime(agentRuntimeId=rt_id)
-        runtime_arn = rt_info.get("agentRuntimeArn", "")
-
-        encoded_arn = urllib.parse.quote(runtime_arn, safe="")
-        invoke_url = f"https://bedrock-agentcore.{REGION}.amazonaws.com/runtimes/{encoded_arn}/invocations?qualifier=DEFAULT"
-
-        endpoints.append({"name": target, "url": invoke_url})
+        if target in remote_map:
+            endpoints.append({
+                "type": "remote",
+                "name": target,
+                "url": remote_map[target]["url"],
+                "auth": remote_map[target]["auth"],
+            })
+        else:
+            runtime_name = target.replace("-", "_")
+            endpoints.append({
+                "type": "runtime",
+                "name": target,
+                "target_name": runtime_name,
+                "auth": "runtime",
+            })
 
     return endpoints
 

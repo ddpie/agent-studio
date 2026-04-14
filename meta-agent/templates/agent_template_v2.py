@@ -58,10 +58,11 @@ if __name__ == "__main__":
     app.run()
 '''
 
-# ── main.py template (with MCP Gateway) ────────────────────────────────────
+# ── main.py template (with MCP) ───────────────────────────────────────────
 MAIN_PY_MCP_TEMPLATE = '''\
 import json
 import contextlib
+import urllib.parse
 from pathlib import Path
 from strands import Agent
 from strands.models import BedrockModel
@@ -73,7 +74,7 @@ import boto3
 import httpx
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
-import os
+import os, sys
 
 app = BedrockAgentCoreApp()
 
@@ -82,11 +83,13 @@ MODEL_ID = _config["model_id"]
 SYSTEM_PROMPT = Path("prompt.txt").read_text(encoding="utf-8")
 REGION = os.getenv("AWS_REGION", "us-east-1")
 
-# SigV4 auth for MCP Runtime invocation (official AWS pattern)
 _session = boto3.Session(region_name=REGION)
 _credentials = _session.get_credentials().get_frozen_credentials()
 
+# --- SigV4 auth factories (per-service) ---
 class _SigV4Auth(httpx.Auth):
+    def __init__(self, service):
+        self.service = service
     def auth_flow(self, request):
         headers = dict(request.headers)
         headers.pop("connection", None)
@@ -94,25 +97,67 @@ class _SigV4Auth(httpx.Auth):
             method=request.method, url=str(request.url),
             headers=headers, data=request.content,
         )
-        SigV4Auth(_credentials, "bedrock-agentcore", REGION).add_auth(aws_req)
+        SigV4Auth(_credentials, self.service, REGION).add_auth(aws_req)
         request.headers.update(dict(aws_req.headers))
         yield request
 
-_sigv4_auth = _SigV4Auth()
+_AUTH_MAP = {
+    "runtime": _SigV4Auth("bedrock-agentcore"),
+    "aws-mcp": _SigV4Auth("aws-mcp"),
+    "none": None,
+}
 
-# One MCPClient per MCP Runtime endpoint (direct connection, no Gateway)
-_mcp_clients = [
-    MCPClient(lambda url=ep["url"]: streamablehttp_client(url, auth=_sigv4_auth))
-    for ep in _config.get("mcp_endpoints", [])
-]
+# --- Lazy resolve: runtime target_name → invoke URL at startup ---
+def _resolve_runtime_url(target_name):
+    """Resolve a runtime target name to its invoke URL."""
+    runtime_name = target_name.replace("-", "_")
+    control = boto3.client("bedrock-agentcore-control", region_name=REGION)
+    try:
+        resp = control.list_agent_runtimes()
+        runtimes = resp.get("agentRuntimes", [])
+        while True:
+            for rt in runtimes:
+                if rt.get("agentRuntimeName") == runtime_name:
+                    rt_info = control.get_agent_runtime(agentRuntimeId=rt["agentRuntimeId"])
+                    arn = rt_info["agentRuntimeArn"]
+                    encoded = urllib.parse.quote(arn, safe="")
+                    return f"https://bedrock-agentcore.{REGION}.amazonaws.com/runtimes/{encoded}/invocations?qualifier=DEFAULT"
+            if not resp.get("nextToken"):
+                break
+            resp = control.list_agent_runtimes(nextToken=resp["nextToken"])
+            runtimes = resp.get("agentRuntimes", [])
+    except Exception as e:
+        print(f"WARNING: Failed to resolve runtime {target_name}: {e}", file=sys.stderr)
+    return None
+
+def _build_mcp_clients():
+    """Build MCPClient list from config, lazy-resolving runtime URLs."""
+    clients = []
+    for ep in _config.get("mcp_endpoints", []):
+        ep_type = ep.get("type", "runtime")
+        auth = _AUTH_MAP.get(ep.get("auth", ep_type))
+
+        if ep_type == "runtime":
+            url = _resolve_runtime_url(ep["target_name"])
+            if not url:
+                print(f"WARNING: Skipping unresolvable MCP target: {ep['target_name']}", file=sys.stderr)
+                continue
+        else:
+            url = ep["url"]
+
+        clients.append(MCPClient(
+            lambda u=url, a=auth: streamablehttp_client(u, auth=a, timeout=30),
+        ))
+    return clients
+
+_mcp_clients = _build_mcp_clients()
 
 # Import all @tool functions from tools.py
 import tools as _tools_module
 _ALL_TOOLS = []
 for _name in _config.get("tool_names", []):
     if not hasattr(_tools_module, _name):
-        import sys
-        print(f"WARNING: Tool '{_name}' listed in config.json but not found in tools.py", file=sys.stderr)
+        print(f"WARNING: Tool \\'{_name}\\' listed in config.json but not found in tools.py", file=sys.stderr)
         continue
     _ALL_TOOLS.append(getattr(_tools_module, _name))
 
