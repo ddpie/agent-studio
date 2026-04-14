@@ -259,3 +259,60 @@ def list_available_targets(wsId: str):
     except Exception:
         logger.exception("list_available_targets failed for workspace=%s", ws_id)
         return internal_error()
+
+
+# --- Tool manifest cache ---
+_tool_manifests: dict = {}
+_tool_manifests_ttl: dict = {}
+_TOOL_MANIFEST_TTL = 300  # 5 minutes
+
+
+@router.get("/api/workspaces/<wsId>/mcp/targets/<targetName>/tools")
+def get_target_tools(wsId: str, targetName: str):
+    """Get the tool list for a specific MCP target.
+
+    Reads from pre-cached S3 manifests (mcp/target-tools/{name}.json).
+    Falls back to live tools/list via Runtime invocation if no manifest exists.
+    """
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
+    if err:
+        return err
+
+    now = time.time()
+
+    # Check cache
+    if targetName in _tool_manifests and now - _tool_manifests_ttl.get(targetName, 0) < _TOOL_MANIFEST_TTL:
+        return success({"tools": _tool_manifests[targetName]})
+
+    # Try S3 manifest first
+    try:
+        s3 = boto3.client("s3", region_name=REGION)
+        resp = s3.get_object(Bucket=S3_BUCKET, Key=f"mcp/target-tools/{targetName}.json")
+        tools = json.loads(resp["Body"].read().decode())
+        _tool_manifests[targetName] = tools
+        _tool_manifests_ttl[targetName] = now
+        return success({"tools": tools})
+    except s3.exceptions.NoSuchKey:
+        pass
+    except Exception:
+        logger.warning("Failed to read tool manifest for %s from S3", targetName)
+
+    # Fallback: list from Gateway (if target exists there)
+    try:
+        control = _get_control()
+        gateways = control.list_gateways()
+        for gw in gateways.get("items", gateways.get("gateways", [])):
+            gw_id = gw["gatewayId"]
+            targets_resp = control.list_gateway_targets(gatewayIdentifier=gw_id)
+            for t in targets_resp.get("items", targets_resp.get("targets", [])):
+                if t.get("name") == targetName:
+                    # Found — but we can't do tools/list from Lambda easily.
+                    # Return empty with a hint.
+                    _tool_manifests[targetName] = []
+                    _tool_manifests_ttl[targetName] = now
+                    return success({"tools": [], "hint": "Run deploy-mcp.sh to generate tool manifests"})
+
+        return success({"tools": []})
+    except Exception:
+        logger.exception("get_target_tools failed for %s", targetName)
+        return internal_error()

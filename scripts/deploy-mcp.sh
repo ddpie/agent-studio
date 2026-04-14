@@ -785,6 +785,76 @@ echo "  Uploaded registry to s3://${S3_BUCKET}/mcp-runtime/mcp-registry.yaml"
 echo ""
 
 # ============================================================
+# Step 5b: Generate per-target tool manifests from Gateway
+# ============================================================
+if [[ "$SKIP_CATALOG" == false ]]; then
+  echo "[5b/6] Generating tool manifests..."
+
+  python3 << 'PYEOF'
+import json, os, sys, urllib.request, urllib.parse
+import boto3
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
+
+region = os.environ["REGION"]
+bucket = os.environ["S3_BUCKET"]
+gateway_url = os.environ["GATEWAY_URL"]
+
+session = boto3.Session(region_name=region)
+credentials = session.get_credentials().get_frozen_credentials()
+
+# Paginate tools/list from Gateway
+all_tools = []
+cursor = None
+for page in range(30):
+    body = json.dumps({"jsonrpc": "2.0", "id": str(page), "method": "tools/list",
+                        "params": {"cursor": cursor} if cursor else {}})
+    req = AWSRequest(method="POST", url=gateway_url, data=body, headers={
+        "Content-Type": "application/json", "Accept": "application/json, text/event-stream"})
+    SigV4Auth(credentials, "bedrock-agentcore", region).add_auth(req)
+    try:
+        http_req = urllib.request.Request(url=gateway_url, data=body.encode(),
+                                          headers=dict(req.headers), method="POST")
+        with urllib.request.urlopen(http_req, timeout=30) as resp:
+            result = json.loads(resp.read().decode())
+        page_tools = result.get("result", {}).get("tools", [])
+        all_tools.extend(page_tools)
+        cursor = result.get("result", {}).get("nextCursor")
+        if not cursor:
+            break
+    except Exception as e:
+        print(f"  WARNING: tools/list page {page} failed: {e}", file=sys.stderr)
+        break
+
+print(f"  Fetched {len(all_tools)} tools from Gateway")
+
+# Group by target prefix (target___toolname)
+by_target = {}
+for tool in all_tools:
+    name = tool.get("name", "")
+    if "___" in name:
+        prefix, tool_name = name.split("___", 1)
+        by_target.setdefault(prefix, []).append(tool_name)
+    else:
+        by_target.setdefault("_ungrouped", []).append(name)
+
+# Upload per-target manifests to S3
+s3 = boto3.client("s3", region_name=region)
+for target, tools in by_target.items():
+    if target == "_ungrouped":
+        continue
+    tools.sort()
+    body = json.dumps(tools, ensure_ascii=False)
+    s3.put_object(Bucket=bucket, Key=f"mcp/target-tools/{target}.json",
+                  Body=body.encode(), ContentType="application/json")
+
+print(f"  Uploaded manifests for {len(by_target) - (1 if '_ungrouped' in by_target else 0)} targets")
+PYEOF
+
+  echo ""
+fi
+
+# ============================================================
 # Step 6: Summary
 # ============================================================
 TOTAL=$((SUCCESS + FAILED + SKIPPED))
