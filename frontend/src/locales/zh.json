@@ -451,5 +451,16 @@
     "mcpTargets": "MCP 工具",
     "mcpTargetsDesc": "选择此 Agent 可使用的 AWS MCP 工具",
     "mcpLegacy": "此 Agent 使用旧版 MCP 配置（gateway_url），通过 Meta-Agent 编辑以迁移。"
+  },
+  "mcpPage": {
+    "toolsAvailable": "个工具可用",
+    "searchPlaceholder": "搜索工具...",
+    "allCategories": "全部",
+    "noTools": "暂无 MCP 工具",
+    "deployHint": "运行 scripts/deploy-mcp.sh 部署 MCP 运行时",
+    "noMatch": "没有匹配的工具",
+    "tools": "个工具",
+    "loadingTools": "加载工具中...",
+    "noToolsAvailable": "暂无可用工具"
   }
 }

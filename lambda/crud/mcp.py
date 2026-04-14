@@ -39,7 +39,9 @@ def _load_target_catalog():
     try:
         s3 = boto3.client("s3", region_name=REGION)
         resp = s3.get_object(Bucket=S3_BUCKET, Key="mcp/target-catalog.json")
-        data = json.loads(resp["Body"].read())
+        items = json.loads(resp["Body"].read())
+        # Convert list to dict keyed by name
+        data = {item["name"]: item for item in items} if isinstance(items, list) else items
         _catalog_cache["data"] = data
         _catalog_cache["expires"] = now + 300
         return data
@@ -70,23 +72,26 @@ def _filter_by_policy(targets, policy):
 
 
 def _list_all_gateway_targets():
-    """List all targets from all gateways."""
+    """List all targets from all gateways (paginated)."""
     try:
         control = _get_control()
         gateways_resp = control.list_gateways()
         all_targets = []
-        for gw in gateways_resp.get("gateways", []):
+        for gw in gateways_resp.get("items", gateways_resp.get("gateways", [])):
             gw_id = gw.get("gatewayId")
             if not gw_id:
                 continue
             try:
-                targets_resp = control.list_gateway_targets(gatewayIdentifier=gw_id)
-                for t in targets_resp.get("targets", []):
+                resp = control.list_gateway_targets(gatewayIdentifier=gw_id)
+                targets = resp.get("items", resp.get("targets", []))
+                while resp.get("nextToken"):
+                    resp = control.list_gateway_targets(gatewayIdentifier=gw_id, nextToken=resp["nextToken"])
+                    targets.extend(resp.get("items", resp.get("targets", [])))
+                for t in targets:
                     all_targets.append({
                         "name": t.get("name", ""),
                         "status": t.get("status", "UNKNOWN"),
                         "description": t.get("description", ""),
-                        "endpointUrl": t.get("endpointUrl", ""),
                     })
             except Exception as e:
                 logger.warning("Failed to list targets for gateway %s: %s", gw_id, str(e))
@@ -97,7 +102,10 @@ def _list_all_gateway_targets():
 
 
 def _merge_catalog_and_targets(catalog, gateway_targets):
-    """Merge catalog metadata with gateway status."""
+    """Merge catalog metadata with gateway status.
+
+    Catalog names may lack the 'mcp-' prefix that gateway target names have.
+    """
     merged = {}
     # Add all catalog entries
     for name, info in catalog.items():
@@ -105,18 +113,25 @@ def _merge_catalog_and_targets(catalog, gateway_targets):
             "name": name,
             "description": info.get("description", ""),
             "category": info.get("category", "uncategorized"),
+            "type": info.get("type", "runtime"),
             "status": "unavailable",
         }
-    # Overlay gateway status
+    # Overlay gateway status — try both exact name and with 'mcp-' prefix stripped
     for t in gateway_targets:
-        name = t.get("name", "")
-        if name in merged:
-            merged[name]["status"] = t.get("status", "UNKNOWN")
+        gw_name = t.get("name", "")
+        catalog_name = gw_name
+        if catalog_name not in merged:
+            catalog_name = gw_name.replace("mcp-", "", 1)
+        if catalog_name in merged:
+            merged[catalog_name]["status"] = t.get("status", "UNKNOWN")
+            # Use gateway name for display consistency
+            merged[catalog_name]["name"] = gw_name
         else:
-            merged[name] = {
-                "name": name,
+            merged[gw_name] = {
+                "name": gw_name,
                 "description": t.get("description", ""),
                 "category": "uncategorized",
+                "type": "runtime",
                 "status": t.get("status", "UNKNOWN"),
             }
     return list(merged.values())
@@ -137,7 +152,7 @@ def list_gateways(wsId: str):
                 "name": gw.get("name", ""),
                 "status": gw.get("status", ""),
             }
-            for gw in resp.get("gateways", [])
+            for gw in resp.get("items", resp.get("gateways", []))
         ]
         return success({"items": gateways})
     except Exception:
@@ -161,7 +176,7 @@ def list_targets(wsId: str, gatewayId: str):
                 "endpointUrl": t.get("endpointUrl", ""),
                 "status": t.get("status", ""),
             }
-            for t in resp.get("targets", [])
+            for t in resp.get("items", resp.get("targets", []))
         ]
         return success({"items": targets})
     except Exception:

@@ -828,22 +828,23 @@ for page in range(30):
 
 print(f"  Fetched {len(all_tools)} tools from Gateway")
 
-# Group by target prefix (target___toolname)
+# Group by target prefix (target___toolname) — keep name + description
 by_target = {}
 for tool in all_tools:
-    name = tool.get("name", "")
-    if "___" in name:
-        prefix, tool_name = name.split("___", 1)
-        by_target.setdefault(prefix, []).append(tool_name)
+    full_name = tool.get("name", "")
+    desc = tool.get("description", "")
+    if "___" in full_name:
+        prefix, tool_name = full_name.split("___", 1)
+        by_target.setdefault(prefix, []).append({"name": tool_name, "description": desc[:200]})
     else:
-        by_target.setdefault("_ungrouped", []).append(name)
+        by_target.setdefault("_ungrouped", []).append({"name": full_name, "description": desc[:200]})
 
 # Upload per-target manifests to S3
 s3 = boto3.client("s3", region_name=region)
 for target, tools in by_target.items():
     if target == "_ungrouped":
         continue
-    tools.sort()
+    tools.sort(key=lambda t: t["name"])
     body = json.dumps(tools, ensure_ascii=False)
     s3.put_object(Bucket=bucket, Key=f"mcp/target-tools/{target}.json",
                   Body=body.encode(), ContentType="application/json")

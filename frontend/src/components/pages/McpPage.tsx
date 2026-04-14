@@ -1,15 +1,14 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Plug,
   RefreshCw,
   Loader2,
   Search,
-  ChevronDown,
-  ChevronRight,
-  Wrench,
+  Plug,
   Globe,
   Server,
+  Wrench,
+  ChevronRight,
 } from "lucide-react";
 import { apiGet } from "../../lib/api-client";
 
@@ -22,6 +21,7 @@ interface McpTarget {
 }
 
 const CATEGORIES = [
+  "all",
   "general",
   "observability",
   "security",
@@ -38,12 +38,29 @@ const CATEGORIES = [
   "operations",
 ] as const;
 
+const CAT_COLORS: Record<string, string> = {
+  general: "bg-gray-500/10 text-gray-600 dark:text-gray-400",
+  observability: "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
+  security: "bg-red-500/10 text-red-600 dark:text-red-400",
+  cost: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  compute: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  database: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  messaging: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+  ai_ml: "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400",
+  search: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+  networking: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+  industry: "bg-teal-500/10 text-teal-600 dark:text-teal-400",
+  data: "bg-lime-500/10 text-lime-600 dark:text-lime-400",
+  devtools: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+  operations: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+};
+
 export default function McpPage() {
   const { t } = useTranslation();
   const [targets, setTargets] = useState<McpTarget[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [category, setCategory] = useState<string>("all");
   const [expandedTarget, setExpandedTarget] = useState<string | null>(null);
 
   const load = async () => {
@@ -62,75 +79,90 @@ export default function McpPage() {
     load();
   }, []);
 
-  const filtered = search.trim()
-    ? targets.filter(
-        (t) =>
-          t.name.toLowerCase().includes(search.toLowerCase()) ||
-          t.description.toLowerCase().includes(search.toLowerCase())
-      )
-    : targets;
+  const filtered = targets.filter((t) => {
+    const matchSearch =
+      !searchQuery.trim() ||
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchCategory = category === "all" || t.category === category;
+    return matchSearch && matchCategory;
+  });
 
-  const byCategory = filtered.reduce(
-    (acc, target) => {
-      const cat = target.category || "general";
-      if (!acc[cat]) acc[cat] = [];
-      acc[cat].push(target);
+  const readyCount = targets.filter(
+    (t) => t.status === "READY" || t.status === "ACTIVE"
+  ).length;
+
+  // Count per category for pills
+  const catCounts = targets.reduce(
+    (acc, t) => {
+      const c = t.category || "general";
+      acc[c] = (acc[c] || 0) + 1;
       return acc;
     },
-    {} as Record<string, McpTarget[]>
+    {} as Record<string, number>
   );
-
-  const toggleCategory = (cat: string) => {
-    setExpandedCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(cat)) next.delete(cat);
-      else next.add(cat);
-      return next;
-    });
-  };
-
-  const readyCount = targets.filter((t) => t.status === "READY" || t.status === "ACTIVE").length;
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-        <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+      {/* Hero section */}
+      <div className="px-8 pt-8 pb-5">
+        <div className="flex items-center justify-between mb-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50">
             MCP Tools
-          </h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            {readyCount}/{targets.length} {t("common.available")}
-          </p>
+          </h1>
+          <button
+            onClick={load}
+            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+          </button>
         </div>
-        <button
-          onClick={load}
-          className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-        >
-          {loading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4" />
-          )}
-        </button>
-      </div>
-
-      {/* Search */}
-      <div className="px-6 py-3 border-b border-gray-100 dark:border-gray-800">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
+          {readyCount} {t("mcpPage.toolsAvailable")}
+        </p>
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search tools..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 text-gray-900 dark:text-gray-100 placeholder-gray-400"
+            placeholder={t("mcpPage.searchPlaceholder")}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500 outline-none transition-shadow"
           />
         </div>
       </div>
 
+      {/* Category pills */}
+      <div className="px-8 pb-4 flex items-center gap-2 overflow-x-auto border-b border-gray-100 dark:border-gray-800">
+        {CATEGORIES.map((cat) => {
+          if (cat !== "all" && !catCounts[cat]) return null;
+          const isActive = category === cat;
+          const count = cat === "all" ? targets.length : catCounts[cat] || 0;
+          return (
+            <button
+              key={cat}
+              onClick={() => setCategory(cat)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors shrink-0 ${
+                isActive
+                  ? "bg-purple-500 text-white"
+                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+              }`}
+            >
+              {cat === "all"
+                ? t("mcpPage.allCategories")
+                : t(`mcpPolicy.category.${cat}`)}
+              <span className="ml-1 opacity-60">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto px-8 py-6">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
@@ -139,188 +171,192 @@ export default function McpPage() {
           <div className="flex flex-col items-center justify-center h-full text-gray-400">
             <Plug className="w-12 h-12 mb-3 opacity-30" />
             <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-              No MCP tools available
+              {t("mcpPage.noTools")}
             </p>
-            <p className="text-xs mt-1">
-              Deploy MCP runtimes with scripts/deploy-mcp.sh
-            </p>
+            <p className="text-xs mt-1">{t("mcpPage.deployHint")}</p>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+          <div className="flex flex-col items-center justify-center py-16 text-gray-400">
             <Search className="w-8 h-8 mb-2 opacity-30" />
-            <p className="text-sm">No tools match "{search}"</p>
+            <p className="text-sm">{t("mcpPage.noMatch")}</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {CATEGORIES.map((category) => {
-              const categoryTargets = byCategory[category];
-              if (!categoryTargets?.length) return null;
-
-              const isExpanded = expandedCategories.has(category);
-
-              return (
-                <div
-                  key={category}
-                  className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
-                >
-                  {/* Category header */}
-                  <button
-                    onClick={() => toggleCategory(category)}
-                    className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 dark:bg-gray-800/60 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      {isExpanded ? (
-                        <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-                      ) : (
-                        <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
-                      )}
-                      <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">
-                        {t(`mcpPolicy.category.${category}`)}
-                      </span>
-                      <span className="text-[10px] text-gray-400">
-                        ({categoryTargets.length})
-                      </span>
-                    </div>
-                  </button>
-
-                  {/* Target cards */}
-                  {isExpanded && (
-                    <div className="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 bg-white dark:bg-gray-900/50">
-                      {categoryTargets.map((target) => {
-                        const isReady =
-                          target.status === "READY" || target.status === "ACTIVE";
-                        const isRemote = target.type === "remote";
-                        const isOpen = expandedTarget === target.name;
-
-                        return (
-                          <button
-                            key={target.name}
-                            onClick={() =>
-                              setExpandedTarget(isOpen ? null : target.name)
-                            }
-                            className={`text-left p-3 rounded-lg border transition-colors ${
-                              isOpen
-                                ? "border-purple-300 dark:border-purple-700 bg-purple-50/50 dark:bg-purple-900/10"
-                                : "border-gray-100 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 bg-white dark:bg-gray-900"
-                            }`}
-                          >
-                            <div className="flex items-center justify-between mb-1">
-                              <div className="flex items-center gap-1.5">
-                                {isRemote ? (
-                                  <Globe className="w-3 h-3 text-blue-500" />
-                                ) : (
-                                  <Server className="w-3 h-3 text-purple-500" />
-                                )}
-                                <span className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">
-                                  {target.name.replace(/^mcp-/, "")}
-                                </span>
-                              </div>
-                              <span
-                                className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                                  isReady ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"
-                                }`}
-                              />
-                            </div>
-                            {target.description && (
-                              <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2">
-                                {target.description}
-                              </p>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div
+            className="grid gap-4"
+            style={{
+              gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+            }}
+          >
+            {filtered.map((target) => (
+              <TargetCard
+                key={target.name}
+                target={target}
+                isOpen={expandedTarget === target.name}
+                onToggle={() =>
+                  setExpandedTarget(
+                    expandedTarget === target.name ? null : target.name
+                  )
+                }
+              />
+            ))}
           </div>
         )}
       </div>
-
-      {/* Expanded target detail panel */}
-      {expandedTarget && (
-        <TargetDetail
-          targetName={expandedTarget}
-          onClose={() => setExpandedTarget(null)}
-        />
-      )}
     </div>
   );
 }
 
-function TargetDetail({
-  targetName,
-  onClose,
+interface ToolInfo {
+  name: string;
+  description: string;
+}
+
+function TargetCard({
+  target,
+  isOpen,
+  onToggle,
 }: {
-  targetName: string;
-  onClose: () => void;
+  target: McpTarget;
+  isOpen: boolean;
+  onToggle: () => void;
 }) {
-  const [tools, setTools] = useState<string[] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { t } = useTranslation();
+  const isReady = target.status === "READY" || target.status === "ACTIVE";
+  const isRemote = target.type === "remote";
+  const catColor = CAT_COLORS[target.category] || CAT_COLORS.general;
+  const displayName = target.name.replace(/^mcp-/, "");
+
+  const [tools, setTools] = useState<ToolInfo[] | null>(null);
+  const [loadingTools, setLoadingTools] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setTools(null);
+    if (!isOpen) return;
+    if (tools !== null) return;
 
-    apiGet<{ tools: string[] }>(`/mcp/targets/${encodeURIComponent(targetName)}/tools`)
+    let cancelled = false;
+    setLoadingTools(true);
+    apiGet<{ tools: ToolInfo[] | string[] }>(
+      `/mcp/targets/${encodeURIComponent(target.name)}/tools`
+    )
       .then((data) => {
-        if (!cancelled) setTools(data.tools || []);
+        if (cancelled) return;
+        const raw = data.tools || [];
+        // Handle both [{name, description}] and [string] formats
+        const normalized: ToolInfo[] = raw.map((t: ToolInfo | string) =>
+          typeof t === "string" ? { name: t, description: "" } : t
+        );
+        setTools(normalized);
       })
       .catch(() => {
         if (!cancelled) setTools([]);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoadingTools(false);
       });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [targetName]);
+    return () => { cancelled = true; };
+  }, [isOpen, target.name, tools]);
 
   return (
-    <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-6 py-4 max-h-64 overflow-y-auto">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Wrench className="w-3.5 h-3.5 text-purple-500" />
-          <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">
-            {targetName.replace(/^mcp-/, "")}
+    <div
+      className={`group relative flex flex-col rounded-xl border transition-all duration-200 ${
+        isOpen
+          ? "border-purple-300 dark:border-purple-700 shadow-lg shadow-purple-500/5 col-span-full"
+          : "border-gray-200 dark:border-gray-800 hover:border-purple-300 dark:hover:border-purple-700 hover:shadow-md hover:shadow-purple-500/5"
+      } bg-white dark:bg-gray-900`}
+    >
+      {/* Card header (always visible) */}
+      <div className="p-5 cursor-pointer" onClick={onToggle}>
+        <div className="flex items-start gap-3">
+          <div
+            className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${catColor}`}
+          >
+            {isRemote ? (
+              <Globe className="w-5 h-5" />
+            ) : (
+              <Server className="w-5 h-5" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-50 truncate">
+                {displayName}
+              </h3>
+              <span
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  isReady ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"
+                }`}
+              />
+              {tools && (
+                <span className="text-[10px] text-gray-400">
+                  {tools.length} {t("mcpPage.tools")}
+                </span>
+              )}
+            </div>
+            {target.description && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 leading-relaxed">
+                {target.description}
+              </p>
+            )}
+          </div>
+          <ChevronRight
+            className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${
+              isOpen ? "rotate-90" : "opacity-0 group-hover:opacity-100"
+            }`}
+          />
+        </div>
+
+        {/* Tags */}
+        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+          <span
+            className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${catColor}`}
+          >
+            {target.category}
           </span>
-          {tools && (
-            <span className="text-[10px] text-gray-400">
-              {tools.length} tools
+          {isRemote && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+              remote
             </span>
           )}
         </div>
-        <button
-          onClick={onClose}
-          className="text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-        >
-          Close
-        </button>
       </div>
 
-      {loading ? (
-        <div className="flex items-center gap-2 text-xs text-gray-400">
-          <Loader2 className="w-3 h-3 animate-spin" /> Loading tools...
+      {/* Inline tool list (expanded) */}
+      {isOpen && (
+        <div className="px-5 pb-5 pt-0 border-t border-gray-100 dark:border-gray-800">
+          <div className="pt-4">
+            {loadingTools ? (
+              <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
+                <Loader2 className="w-3 h-3 animate-spin" /> {t("mcpPage.loadingTools")}
+              </div>
+            ) : tools && tools.length > 0 ? (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {tools.map((tool) => (
+                  <div
+                    key={tool.name}
+                    className="flex items-start gap-3 py-2 px-3 rounded-lg bg-gray-50 dark:bg-gray-800/50"
+                  >
+                    <Wrench className="w-3 h-3 text-gray-400 mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-gray-900 dark:text-gray-100 font-mono">
+                        {tool.name}
+                      </p>
+                      {tool.description && (
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
+                          {tool.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 py-2">{t("mcpPage.noToolsAvailable")}</p>
+            )}
+          </div>
         </div>
-      ) : tools && tools.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1">
-          {tools.map((tool) => (
-            <div
-              key={tool}
-              className="text-[11px] text-gray-700 dark:text-gray-300 px-2 py-1 bg-white dark:bg-gray-900 rounded border border-gray-100 dark:border-gray-700 truncate"
-              title={tool}
-            >
-              {tool}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="text-xs text-gray-400">No tools available</p>
       )}
     </div>
   );
 }
+
+// end of file

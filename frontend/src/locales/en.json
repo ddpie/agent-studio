@@ -451,5 +451,16 @@
     "mcpTargets": "MCP Tools",
     "mcpTargetsDesc": "Select AWS MCP tools this agent can use",
     "mcpLegacy": "This agent uses legacy MCP configuration (gateway_url). Edit via Meta-Agent to migrate."
+  },
+  "mcpPage": {
+    "toolsAvailable": "tools available",
+    "searchPlaceholder": "Search tools...",
+    "allCategories": "All",
+    "noTools": "No MCP tools available",
+    "deployHint": "Deploy MCP runtimes with scripts/deploy-mcp.sh",
+    "noMatch": "No tools match your search",
+    "tools": "tools",
+    "loadingTools": "Loading tools...",
+    "noToolsAvailable": "No tools available"
   }
 }
