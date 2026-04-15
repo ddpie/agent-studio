@@ -58,6 +58,7 @@ def _build_agent_item(body: dict, ws_id: str, agent_id: str, user_id: str, now: 
         "tool_names": body.get("tool_names", []),
         "skill_ids": body.get("skill_ids", []),
         "skills": body.get("skills", []),
+        "mcp_targets": body.get("mcp_targets", []),
         "status": "active",
         "visibility": "private",
         "created_by": user_id,

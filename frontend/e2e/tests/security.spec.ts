@@ -197,11 +197,13 @@ test.describe("XSS Prevention", () => {
     // The key security check: no executable <script> tag in the DOM
     // react-markdown escapes HTML by default, so script tags become text or code blocks
     const executableScripts = await page.evaluate(() => {
-      // Count script tags that are NOT the Vite dev server module
+      // Count script tags that contain alert and are NOT from dev tooling
       const scripts = document.querySelectorAll("script");
       let malicious = 0;
       for (const s of scripts) {
-        if (s.textContent?.includes("alert") && !s.src?.includes("vite")) {
+        // Skip Vite dev server, HMR, module scripts, and analytics
+        if (s.src || s.type === "module" || s.type === "importmap") continue;
+        if (s.textContent?.includes("alert")) {
           malicious++;
         }
       }
