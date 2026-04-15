@@ -11,7 +11,7 @@
 - **实时对话测试** — 流式响应 + tool-use 过程可视化，看到 Agent 每一步在做什么
 - **Skill 热插拔** — AgentSkills.io 格式，多文件编辑器，运行时按需加载，Agent 之间共享
 - **预构建工具库** — Web 搜索、S3 读写、图表生成、网页抓取等开箱即用
-- **MCP Gateway 集成** — 一行配置接入企业内部 API，Agent 自动发现可用工具
+- **MCP 工具市场** — 36 个预部署 MCP 工具服务器，覆盖 14 个 AWS 服务类别，Agent 直连 Runtime，支持分类浏览和搜索
 - **多模型切换** — Claude 4.6 / 4.5 / 4 / 3.x，运行时随时切换，不需要重新部署
 - **多模态输入** — 支持图片上传，Agent 可以看图理解、分析数据截图
 
@@ -36,7 +36,7 @@ graph LR
     end
 
     subgraph 基础设施
-        MCP[MCP Gateway]
+        MCP[36 MCP Runtimes]
         S3[(S3)]
         DDB[(DynamoDB)]
     end
@@ -74,6 +74,15 @@ bash scripts/deploy-all.sh --skip-frontend    # 只更新基础设施 + Meta-Age
 bash scripts/deploy-all.sh --dry-run          # 预检查 + cdk diff，不实际部署
 ```
 
+### MCP 工具部署
+
+```bash
+bash scripts/build-mcp.sh    # 构建 36 个 MCP Runtime Docker 镜像
+bash scripts/deploy-mcp.sh   # 部署到 AgentCore Runtime + 生成工具清单
+bash scripts/deploy-mcp.sh --list            # 查看会部署哪些 target
+bash scripts/deploy-mcp.sh --only cloudwatch # 只部署单个 target
+```
+
 ### 本地开发
 
 ```bash
@@ -103,7 +112,10 @@ agent-studio/
 │   └── templates/         # 代码生成 + 提示词模板
 ├── lambda/                # Lambda 函数 (CRUD + SSE streaming)
 ├── infra/                 # AWS CDK 基础设施
-├── scripts/               # 部署脚本 (deploy-all.sh, deploy-agentcore.sh)
+├── mcp-runtime/           # MCP 工具服务器 (Dockerfile + 注册表)
+│   ├── mcp-registry.yaml  # 36 个 MCP target 定义
+│   └── Dockerfile.template
+├── scripts/               # 部署脚本 (deploy-all.sh, deploy-agentcore.sh, deploy-mcp.sh)
 └── .env.example
 ```
 
@@ -128,7 +140,7 @@ Built on AWS Bedrock AgentCore. From zero-code to full-code, from idea to produc
 - **Real-time chat testing** — Streaming responses with tool-use visualization. See exactly what your agent does at each step.
 - **Hot-swappable Skills** — AgentSkills.io format, multi-file editor, runtime on-demand loading, shared across agents.
 - **Built-in tool library** — Web search, S3 read/write, chart generation, web scraping — ready to use out of the box.
-- **MCP Gateway integration** — One-line config to connect enterprise APIs. Agents auto-discover available tools.
+- **MCP Tool Marketplace** — 36 pre-deployed MCP tool servers across 14 AWS service categories. Agents connect directly to Runtimes with category browsing and search.
 - **Multi-model switching** — Claude 4.6 / 4.5 / 4 / 3.x, switch at runtime without redeployment.
 - **Multimodal input** — Image upload support. Agents can understand screenshots and analyze visual data.
 
