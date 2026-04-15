@@ -87,6 +87,8 @@ export class AgentCoreRoles extends Construct {
           `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-agents/index/*`,
           `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-tools`,
           `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-tools/index/*`,
+          `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-workspaces`,
+          `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-workspaces/index/*`,
         ],
       }),
     ];
