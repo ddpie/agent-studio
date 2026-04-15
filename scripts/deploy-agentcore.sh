@@ -200,6 +200,66 @@ PYEOF
 
 echo "  Meta-Agent deployed: $META_AGENT_ID"
 
+# --- Ensure Meta-Agent role has required permissions ---
+echo ""
+echo "[4/4] Ensuring Meta-Agent IAM permissions..."
+python3 - <<'PYEOF'
+import boto3, json, os
+
+region = os.environ["AGENT_STUDIO_REGION"]
+account_id = os.environ["AGENT_STUDIO_ACCOUNT_ID"]
+agent_id = os.environ.get("AGENT_STUDIO_META_AGENT_ID", "")
+if not agent_id:
+    print("  Skipping — no META_AGENT_ID")
+    exit(0)
+
+control = boto3.client("bedrock-agentcore-control", region_name=region)
+rt = control.get_agent_runtime(agentRuntimeId=agent_id)
+role_arn = rt["roleArn"]
+role_name = role_arn.split("/")[-1]
+print(f"  Role: {role_name}")
+
+iam = boto3.client("iam")
+
+# Workspaces table read (for MCP policy check)
+iam.put_role_policy(
+    RoleName=role_name,
+    PolicyName="AgentStudioWorkspacesTableRead",
+    PolicyDocument=json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Action": ["dynamodb:GetItem", "dynamodb:Query"],
+            "Resource": [
+                f"arn:aws:dynamodb:{region}:{account_id}:table/agent-studio-workspaces",
+                f"arn:aws:dynamodb:{region}:{account_id}:table/agent-studio-workspaces/index/*",
+            ]
+        }]
+    }),
+)
+print("  Added: workspaces table read")
+
+# MCP config read from S3 (for MCP_GATEWAY_URL fallback + registry)
+iam.put_role_policy(
+    RoleName=role_name,
+    PolicyName="AgentStudioMcpConfigRead",
+    PolicyDocument=json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Action": ["s3:GetObject"],
+            "Resource": [
+                f"arn:aws:s3:::{os.environ['AGENT_STUDIO_S3_BUCKET']}/config/*",
+                f"arn:aws:s3:::{os.environ['AGENT_STUDIO_S3_BUCKET']}/mcp-runtime/*",
+            ]
+        }]
+    }),
+)
+print("  Added: MCP config S3 read")
+PYEOF
+
+export AGENT_STUDIO_META_AGENT_ID="$META_AGENT_ID"
+
 echo ""
 echo "=== Deploy complete ==="
 echo "META_AGENT_ID=$META_AGENT_ID"
