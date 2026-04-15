@@ -348,12 +348,21 @@ def update_agent(
     )
 
     # Update DynamoDB — sync all frontend-visible fields
-    update_expr_parts = ["displayName = :dn", "description = :desc", "updated_at = :ua"]
+    update_expr_parts = [
+        "display_name = :dn",
+        "description = :desc",
+        "updated_at = :ua",
+        "mcp_targets = :mcp",
+    ]
     expr_values = {
         ":dn": final_display,
         ":desc": description or existing_metadata.get("description", ""),
         ":ua": metadata["updated_at"],
+        ":mcp": mcp_targets_list,
     }
+    if tool_names_list:
+        update_expr_parts.append("tool_names = :tn")
+        expr_values[":tn"] = tool_names_list
     table.update_item(
         Key={"agentId": agent_id},
         UpdateExpression="SET " + ", ".join(update_expr_parts),
