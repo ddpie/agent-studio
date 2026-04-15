@@ -4,8 +4,8 @@ test.describe("MCP Marketplace Page", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/#/mcp");
     await page.waitForLoadState("networkidle");
-    // Wait for targets to load
-    await page.waitForTimeout(3_000);
+    // Wait for targets to load (Lambda cold start + Gateway pagination can take 10-15s)
+    await page.waitForTimeout(5_000);
   });
 
   test("page loads with hero, search, and category pills", async ({ page }) => {
@@ -25,7 +25,7 @@ test.describe("MCP Marketplace Page", () => {
   test("displays target cards with categories", async ({ page }) => {
     // Cards should load (each has data-testid="mcp-card-*")
     const cards = page.locator("[data-testid^='mcp-card-']");
-    await expect(cards.first()).toBeVisible({ timeout: 10_000 });
+    await expect(cards.first()).toBeVisible({ timeout: 15_000 });
     const count = await cards.count();
     expect(count).toBeGreaterThan(0);
   });
@@ -67,7 +67,7 @@ test.describe("MCP Marketplace Page", () => {
 
   test("clicking a card expands inline tool list", async ({ page }) => {
     const cards = page.locator("[data-testid^='mcp-card-']");
-    await expect(cards.first()).toBeVisible({ timeout: 10_000 });
+    await expect(cards.first()).toBeVisible({ timeout: 15_000 });
 
     // Click first card
     await cards.first().click();
@@ -101,7 +101,7 @@ test.describe("MCP Marketplace Page", () => {
 
   test("dark mode renders correctly", async ({ page }) => {
     const cards = page.locator("[data-testid^='mcp-card-']");
-    await expect(cards.first()).toBeVisible({ timeout: 10_000 });
+    await expect(cards.first()).toBeVisible({ timeout: 15_000 });
 
     // Enable dark mode
     await page.evaluate(() => document.documentElement.classList.add("dark"));
