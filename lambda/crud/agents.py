@@ -202,6 +202,12 @@ def update_agent(wsId: str, agentId: str):
     now = datetime.utcnow().isoformat() + "Z"
     expected_updated_at = body.get("expected_updated_at")
 
+    # Debug: log mcp_targets in update body
+    if "mcp_targets" in body:
+        logger.info("update_agent mcp_targets=%s for agent=%s", body["mcp_targets"], agentId)
+    else:
+        logger.info("update_agent NO mcp_targets in body, keys=%s for agent=%s", list(body.keys()), agentId)
+
     update_parts = []
     expr_names = {}
     expr_values = {":now": now, ":ws": ws_id}
