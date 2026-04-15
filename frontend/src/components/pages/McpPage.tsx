@@ -104,12 +104,27 @@ export default function McpPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Hero section */}
-      <div className="px-8 pt-8 pb-5">
-        <div className="flex items-center justify-between mb-1">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50">
+      {/* Header — matches ToolLibraryPage style */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
             MCP Tools
-          </h1>
+          </h2>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {readyCount} {t("mcpPage.toolsAvailable")}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <input
+              type="text"
+              placeholder={t("mcpPage.searchPlaceholder")}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-7 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg w-48 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+            />
+          </div>
           <button
             onClick={load}
             className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -121,23 +136,10 @@ export default function McpPage() {
             )}
           </button>
         </div>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
-          {readyCount} {t("mcpPage.toolsAvailable")}
-        </p>
-        <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder={t("mcpPage.searchPlaceholder")}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500 outline-none transition-shadow"
-          />
-        </div>
       </div>
 
       {/* Category pills */}
-      <div className="px-8 pb-4 flex items-center gap-2 overflow-x-auto border-b border-gray-100 dark:border-gray-800">
+      <div className="px-6 py-3 flex items-center gap-2 overflow-x-auto border-b border-gray-100 dark:border-gray-800">
         {CATEGORIES.map((cat) => {
           if (cat !== "all" && !catCounts[cat]) return null;
           const isActive = category === cat;
@@ -162,7 +164,7 @@ export default function McpPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="flex-1 overflow-y-auto p-6">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-6 h-6 animate-spin text-gray-400" />

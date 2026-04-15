@@ -7,6 +7,7 @@
     "dismiss": "Dismiss",
     "confirm": "Confirm",
     "close": "Close",
+    "add": "Add",
     "available": "available",
     "loadingWorkspace": "Loading workspace...",
     "create": "Create",
@@ -449,8 +450,9 @@
   },
   "agentEdit": {
     "mcpTargets": "MCP Tools",
-    "mcpTargetsDesc": "Select AWS MCP tools this agent can use",
-    "mcpLegacy": "This agent uses legacy MCP configuration (gateway_url). Edit via Meta-Agent to migrate."
+    "mcpTargetsDesc": "Select MCP tools this agent can use",
+    "mcpLegacy": "This agent uses legacy MCP configuration (gateway_url). Edit via Meta-Agent to migrate.",
+    "addMcp": "Add MCP Tool"
   },
   "mcpPage": {
     "toolsAvailable": "tools available",

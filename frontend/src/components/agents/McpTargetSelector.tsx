@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import {
+  Loader2,
+  Globe,
+  Server,
+  Plus,
+  Trash2,
+  X,
+  Search,
+  Wrench,
+  ChevronRight,
+} from "lucide-react";
 import { apiGet } from "../../lib/api-client";
 
 interface McpTarget {
@@ -8,6 +18,12 @@ interface McpTarget {
   description: string;
   category: string;
   status: string;
+  type?: string;
+}
+
+interface ToolInfo {
+  name: string;
+  description: string;
 }
 
 interface McpTargetSelectorProps {
@@ -17,161 +33,334 @@ interface McpTargetSelectorProps {
 }
 
 const CATEGORIES = [
-  "observability",
-  "security",
-  "cost",
-  "compute",
-  "database",
-  "messaging",
-  "ai_ml",
-  "search",
-  "networking",
-  "industry",
-  "data",
-  "devtools",
-  "operations",
-  "general",
+  "all", "general", "observability", "security", "cost", "compute",
+  "database", "messaging", "ai_ml", "search", "networking",
+  "industry", "data", "devtools", "operations",
 ] as const;
 
 export default function McpTargetSelector({ selectedTargets, onChange, hasLegacyConfig }: McpTargetSelectorProps) {
   const { t } = useTranslation();
+  const [allTargets, setAllTargets] = useState<McpTarget[]>([]);
   const [loading, setLoading] = useState(true);
-  const [targets, setTargets] = useState<McpTarget[]>([]);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [expandedTarget, setExpandedTarget] = useState<string | null>(null);
 
   useEffect(() => {
-    loadTargets();
+    apiGet<{ items: McpTarget[] }>("/mcp/targets")
+      .then((data) => setAllTargets(data.items || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
-
-  const loadTargets = async () => {
-    setLoading(true);
-    try {
-      const data = await apiGet<{ items: McpTarget[] }>("/mcp/targets");
-      setTargets(data.items || []);
-    } catch (err) {
-      console.error("Failed to load MCP targets:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const toggleTarget = (targetName: string) => {
-    const newSelected = new Set(selectedTargets);
-    if (newSelected.has(targetName)) {
-      newSelected.delete(targetName);
-    } else {
-      newSelected.add(targetName);
-    }
-    onChange(Array.from(newSelected));
-  };
-
-  const toggleCategory = (category: string) => {
-    const newExpanded = new Set(expandedCategories);
-    if (newExpanded.has(category)) {
-      newExpanded.delete(category);
-    } else {
-      newExpanded.add(category);
-    }
-    setExpandedCategories(newExpanded);
-  };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+      <div className="flex items-center justify-center py-6">
+        <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
       </div>
     );
-  }
-
-  if (targets.length === 0) {
-    return null;
   }
 
   if (hasLegacyConfig) {
     return (
       <div className="px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-        <p className="text-xs text-amber-700 dark:text-amber-300">
-          {t("agentEdit.mcpLegacy")}
-        </p>
+        <p className="text-xs text-amber-700 dark:text-amber-300">{t("agentEdit.mcpLegacy")}</p>
       </div>
     );
   }
 
-  const targetsByCategory = targets.reduce((acc, target) => {
-    const cat = target.category || "general";
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(target);
-    return acc;
-  }, {} as Record<string, McpTarget[]>);
+  const selectedSet = new Set(selectedTargets);
+  const selectedItems = allTargets.filter((t) => selectedSet.has(t.name));
+
+  const removeTarget = (name: string) => {
+    onChange(selectedTargets.filter((t) => t !== name));
+  };
 
   return (
     <div className="space-y-2">
-      {CATEGORIES.map((category) => {
-        const categoryTargets = targetsByCategory[category] || [];
-        if (categoryTargets.length === 0) return null;
-
-        const isExpanded = expandedCategories.has(category);
-
+      {/* Selected targets list */}
+      {selectedItems.map((target) => {
+        const isExpanded = expandedTarget === target.name;
+        const displayName = target.name.replace(/^mcp-/, "");
+        const isRemote = target.type === "remote";
         return (
-          <div key={category} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-            <button
-              onClick={() => toggleCategory(category)}
-              className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          <div
+            key={target.name}
+            className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
+          >
+            <div
+              className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors"
+              onClick={() => setExpandedTarget(isExpanded ? null : target.name)}
             >
-              <div className="flex items-center gap-2">
-                {isExpanded ? (
-                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-                ) : (
-                  <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
-                )}
-                <span className="text-xs font-medium text-gray-900 dark:text-gray-100">
-                  {t(`mcpPolicy.category.${category}`)}
-                </span>
-                <span className="text-[10px] text-gray-400">({categoryTargets.length})</span>
-              </div>
-            </button>
-
-            {isExpanded && (
-              <div className="p-2 space-y-1 bg-white dark:bg-gray-900">
-                {categoryTargets.map((target) => (
-                  <label
-                    key={target.name}
-                    className="flex items-start gap-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedTargets.includes(target.name)}
-                      onChange={() => toggleTarget(target.name)}
-                      className="mt-0.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-gray-900 dark:text-gray-100">
-                          {target.name}
-                        </span>
-                        <span
-                          className={`text-[10px] px-1.5 py-0.5 rounded ${
-                            target.status === "ACTIVE"
-                              ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                              : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
-                          }`}
-                        >
-                          {target.status}
-                        </span>
-                      </div>
-                      {target.description && (
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                          {target.description}
-                        </p>
-                      )}
-                    </div>
-                  </label>
-                ))}
-              </div>
-            )}
+              {isRemote ? (
+                <Globe className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+              ) : (
+                <Server className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+              )}
+              <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
+                {displayName}
+              </span>
+              <span className="text-[11px] text-gray-400 truncate flex-1">
+                {target.description}
+              </span>
+              <ChevronRight
+                className={`w-3 h-3 text-gray-400 shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+              />
+              <button
+                onClick={(e) => { e.stopPropagation(); removeTarget(target.name); }}
+                className="p-1 text-gray-300 hover:text-red-500 transition-colors"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+            {isExpanded && <ToolDetailInline targetName={target.name} />}
           </div>
         );
       })}
+
+      {/* Add button — below the list */}
+      <button
+        onClick={() => setPickerOpen(true)}
+        className="flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 px-3 py-2 border border-dashed border-blue-300 dark:border-blue-700 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors w-full justify-center"
+      >
+        <Plus className="w-3.5 h-3.5" /> {t("agentEdit.addMcp")}
+      </button>
+
+      {/* Picker modal */}
+      <McpPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        allTargets={allTargets}
+        selectedTargets={selectedTargets}
+        onToggle={(name) => {
+          if (selectedSet.has(name)) {
+            onChange(selectedTargets.filter((t) => t !== name));
+          } else {
+            onChange([...selectedTargets, name]);
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+/* ── Picker Modal ── */
+
+function McpPicker({
+  open,
+  onClose,
+  allTargets,
+  selectedTargets,
+  onToggle,
+}: {
+  open: boolean;
+  onClose: () => void;
+  allTargets: McpTarget[];
+  selectedTargets: string[];
+  onToggle: (name: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState<string>("all");
+  const [expandedTarget, setExpandedTarget] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) { setSearch(""); setCategory("all"); setExpandedTarget(null); }
+  }, [open]);
+
+  if (!open) return null;
+
+  const selectedSet = new Set(selectedTargets);
+
+  const catCounts = allTargets.reduce((acc, t) => {
+    const c = t.category || "general";
+    acc[c] = (acc[c] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const filtered = allTargets.filter((t) => {
+    const matchSearch = !search.trim() ||
+      t.name.toLowerCase().includes(search.toLowerCase()) ||
+      t.description.toLowerCase().includes(search.toLowerCase());
+    const matchCat = category === "all" || t.category === category;
+    return matchSearch && matchCat;
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center animate-[fadeSlideIn_0.15s_ease-out]"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-gray-900 rounded-xl w-[700px] max-h-[75vh] flex flex-col shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-2">
+            <Server className="w-4 h-4 text-purple-500" />
+            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+              {t("agentEdit.addMcp")}
+            </span>
+          </div>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-800">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("mcpPage.searchPlaceholder")}
+              autoFocus
+              className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            />
+          </div>
+        </div>
+
+        {/* Category pills */}
+        <div className="px-4 py-2 flex items-center gap-1.5 overflow-x-auto border-b border-gray-100 dark:border-gray-800">
+          {CATEGORIES.map((cat) => {
+            if (cat !== "all" && !catCounts[cat]) return null;
+            const isActive = category === cat;
+            return (
+              <button
+                key={cat}
+                onClick={() => setCategory(cat)}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded-full whitespace-nowrap transition-colors shrink-0 ${
+                  isActive
+                    ? "bg-purple-500 text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+                }`}
+              >
+                {cat === "all" ? t("mcpPage.allCategories") : t(`mcpPolicy.category.${cat}`)}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Grid */}
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          {filtered.length === 0 ? (
+            <p className="text-center text-xs text-gray-400 py-8">{t("mcpPage.noMatch")}</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {filtered.map((target) => {
+                const isSelected = selectedSet.has(target.name);
+                const isRemote = target.type === "remote";
+                const displayName = target.name.replace(/^mcp-/, "");
+                const isExpanded = expandedTarget === target.name;
+
+                return (
+                  <div key={target.name} className={`rounded-lg border transition-all ${
+                    isExpanded ? "col-span-2 border-purple-300 dark:border-purple-700" :
+                    isSelected ? "border-purple-300 dark:border-purple-600 bg-purple-50/50 dark:bg-purple-900/20" :
+                    "border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-700"
+                  }`}>
+                    <div
+                      className="flex items-center gap-2 p-3 cursor-pointer"
+                      onClick={() => setExpandedTarget(isExpanded ? null : target.name)}
+                    >
+                      {isRemote ? (
+                        <Globe className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                      ) : (
+                        <Server className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
+                            {displayName}
+                          </span>
+                          {isSelected && (
+                            <span className="text-[10px] text-purple-500 shrink-0">{t("agentSkills.added")}</span>
+                          )}
+                        </div>
+                        {target.description && (
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1 mt-0.5">
+                            {target.description}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onToggle(target.name); }}
+                        className={`px-2 py-0.5 text-[10px] font-medium rounded shrink-0 transition-colors ${
+                          isSelected
+                            ? "text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            : "text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                        }`}
+                      >
+                        {isSelected ? t("common.delete") : t("common.add")}
+                      </button>
+                    </div>
+                    {isExpanded && <ToolDetailInline targetName={target.name} />}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Inline tool detail ── */
+
+function ToolDetailInline({ targetName }: { targetName: string }) {
+  const { t } = useTranslation();
+  const [tools, setTools] = useState<ToolInfo[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    apiGet<{ tools: ToolInfo[] | string[] }>(`/mcp/targets/${encodeURIComponent(targetName)}/tools`)
+      .then((data) => {
+        if (cancelled) return;
+        const raw = data.tools || [];
+        setTools(raw.map((t: ToolInfo | string) => typeof t === "string" ? { name: t, description: "" } : t));
+      })
+      .catch(() => { if (!cancelled) setTools([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [targetName]);
+
+  return (
+    <div className="px-3 pb-3 border-t border-gray-100 dark:border-gray-800">
+      <div className="pt-2">
+        {loading ? (
+          <div className="flex items-center gap-2 text-xs text-gray-400 py-1">
+            <Loader2 className="w-3 h-3 animate-spin" /> {t("mcpPage.loadingTools")}
+          </div>
+        ) : tools && tools.length > 0 ? (
+          <div className="space-y-1 max-h-48 overflow-y-auto">
+            {tools.map((tool) => (
+              <div key={tool.name} className="flex items-start gap-2 py-1.5 px-2 rounded bg-gray-50 dark:bg-gray-800/50">
+                <Wrench className="w-2.5 h-2.5 text-gray-400 mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-medium text-gray-900 dark:text-gray-100 font-mono">{tool.name}</p>
+                  {tool.description && (
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-1">{tool.description}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[11px] text-gray-400 py-1">{t("mcpPage.noToolsAvailable")}</p>
+        )}
+      </div>
     </div>
   );
 }
