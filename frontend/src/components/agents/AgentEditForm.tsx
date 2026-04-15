@@ -67,7 +67,11 @@ export default function AgentEditForm() {
   useEffect(() => {
     if (routeAgentId) {
       // Skip loadAgent for draft IDs if store already has data (from openNewWithData)
-      if (routeAgentId.startsWith("draft-") && agentId === routeAgentId && formData) return;
+      if (routeAgentId.startsWith("draft-") && agentId === routeAgentId && formData) {
+        console.log("[EditForm] SKIP loadAgent for draft, mcp_targets:", formData.mcp_targets);
+        return;
+      }
+      console.log("[EditForm] CALLING loadAgent for", routeAgentId, "agentId:", agentId, "formData:", !!formData);
       const agent = agents.find(a => a.id === routeAgentId);
       loadAgent(routeAgentId, agent?.displayName || routeAgentId);
     }

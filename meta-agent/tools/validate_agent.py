@@ -87,6 +87,46 @@ def _get_builtin_tool_names() -> set[str]:
     except Exception:
         return set()
 
+def _get_mcp_tool_names(mcp_targets_list: list[str]) -> list[str]:
+    """Fetch tool names from S3 manifests for the given MCP targets.
+
+    Reads mcp/target-tools/{target}.json from S3 for each target.
+    Falls back to hyphen→underscore conversion if exact key not found.
+    Silently skips targets whose manifests are missing.
+    """
+    if not mcp_targets_list:
+        return []
+    try:
+        import boto3
+        from config import REGION, S3_BUCKET
+        s3 = boto3.client("s3", region_name=REGION)
+    except Exception:
+        return []
+
+    names = []
+    for target in mcp_targets_list:
+        # Try multiple key variants: exact, hyphen→underscore, mcp- prefix
+        candidates = [target]
+        alt = target.replace("-", "_")
+        if alt != target:
+            candidates.append(alt)
+        candidates.append(f"mcp-{target}")
+        candidates.append(f"mcp_{alt}")
+
+        for key_name in candidates:
+            try:
+                resp = s3.get_object(Bucket=S3_BUCKET, Key=f"mcp/target-tools/{key_name}.json")
+                tools = json.loads(resp["Body"].read().decode("utf-8"))
+                for t in tools:
+                    name = t.get("name", "")
+                    if name:
+                        names.append(name)
+                break  # found manifest, skip alternate key
+            except Exception:
+                continue
+    return names
+
+
 _PROMPT_REVIEW_SYSTEM = """\
 ## Role
 You are a prompt quality reviewer for AI agent system prompts. Score each dimension 1-5 based on the ACTUAL agent configuration provided (tools, permission tier, description). Find specific, actionable problems — not generic advice.
@@ -160,6 +200,7 @@ Evaluate based on the ACTUAL tools and permission tier — not generic rules.
   - "The intent is clear enough" — if a tool is not mentioned BY NAME with usage guidance, score tool_prompt_sync low.
   - "The constraints are implied" — implicit constraints don't work. The agent needs explicit "NEVER" statements.
 - Issues must be SPECIFIC to this agent's actual tools and purpose: "Tool 'list_alarms' has no usage guidance" not "improve tool section".
+- Issues must be ACTIONABLE PROBLEMS that need fixing. Do NOT include positive observations, compliments, or things that are already good. If a dimension scores 4-5, do NOT add an issue for it.
 - Max 5 issues, most important first.
 - Respond in the same language as the system prompt being reviewed.
 
@@ -270,6 +311,7 @@ def validate_agent(
         JSON with validation results: {valid: bool, errors: [...], warnings: [...]}
     """
     # If staging_key provided, read params from S3
+    mcp_targets_raw = []
     if staging_key:
         try:
             import boto3
@@ -284,6 +326,7 @@ def validate_agent(
             description = staged.get("description", description) or description
             welcome_message = staged.get("welcome_message", welcome_message) or welcome_message
             permission_tier = staged.get("permission_tier", permission_tier) or permission_tier
+            mcp_targets_raw = staged.get("mcp_targets", [])
         except Exception as e:
             return json.dumps({"valid": False, "errors": [f"Failed to read staging config: {e}"], "warnings": []})
 
@@ -377,16 +420,24 @@ def validate_agent(
         if "import os" in tool_definitions and ("os.system" in tool_definitions or "subprocess" in tool_definitions):
             warnings.append("Tool code uses os.system or subprocess — ensure this is intentional and safe.")
 
-    # 3. tool_names vs actual @tool functions (exclude built-in tools)
+    # 3. tool_names vs actual @tool functions (exclude built-in tools and MCP tools)
     declared_names = [t.strip() for t in tool_names.split(",") if t.strip()] if tool_names else []
     builtin_names = _get_builtin_tool_names()
+
+    # Resolve MCP tool names (for steps 3 and 8)
+    mcp_target_names = (
+        [t.strip() for t in mcp_targets_raw.split(",") if t.strip()]
+        if isinstance(mcp_targets_raw, str) else list(mcp_targets_raw)
+    )
+    mcp_tool_names = _get_mcp_tool_names(mcp_target_names)
+    mcp_tool_names_set = set(mcp_tool_names)
 
     if defined_funcs and declared_names:
         defined_set = set(defined_funcs)
         declared_set = set(declared_names)
 
-        # Built-in tools won't be in tool_definitions — that's expected
-        missing_in_code = (declared_set - defined_set) - builtin_names
+        # Built-in and MCP tools won't be in tool_definitions — that's expected
+        missing_in_code = (declared_set - defined_set) - builtin_names - mcp_tool_names_set
         missing_in_names = defined_set - declared_set
 
         if missing_in_code:
@@ -397,7 +448,7 @@ def validate_agent(
         warnings.append(f"tool_definitions has {len(defined_funcs)} @tool functions but tool_names is empty. Tools won't be registered.")
     elif declared_names and not defined_funcs:
         # All declared names are built-in — no warning needed
-        custom_names = set(declared_names) - builtin_names
+        custom_names = set(declared_names) - builtin_names - mcp_tool_names_set
         if custom_names:
             warnings.append(f"tool_names declares [{', '.join(sorted(custom_names))}] but tool_definitions has no matching @tool functions.")
 
@@ -480,7 +531,9 @@ def validate_agent(
     # 8. LLM-based prompt quality review (covers structure, tool sync, constraints, safety, etc.)
     prompt_review = None
     if system_prompt and system_prompt.strip() and len(errors) == 0:
-        tool_names_list = declared_names or defined_funcs
+        tool_names_list = list(declared_names or defined_funcs or [])
+        if mcp_tool_names:
+            tool_names_list.extend(mcp_tool_names)
         try:
             prompt_review = _review_prompt_quality(
                 system_prompt, tool_names_list, permission_tier,
@@ -495,9 +548,11 @@ def validate_agent(
 
             if overall < 3:
                 warnings.append(f"Prompt quality score: {overall}/5 — consider optimizing with Auto-fix or AI assistant.")
-            for issue in issues[:5]:
-                if isinstance(issue, str) and issue.strip():
-                    warnings.append(f"Prompt review: {issue}")
+            # Only show issues when overall score is low — high scores mean the prompt is good
+            if overall < 4:
+                for issue in issues[:5]:
+                    if isinstance(issue, str) and issue.strip():
+                        warnings.append(f"Prompt review: {issue}")
 
     valid = len(errors) == 0
     result = {

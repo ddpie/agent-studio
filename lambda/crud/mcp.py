@@ -124,8 +124,7 @@ def _merge_catalog_and_targets(catalog, gateway_targets):
             catalog_name = gw_name.replace("mcp-", "", 1)
         if catalog_name in merged:
             merged[catalog_name]["status"] = t.get("status", "UNKNOWN")
-            # Use gateway name for display consistency
-            merged[catalog_name]["name"] = gw_name
+            # Keep catalog name (without mcp- prefix) for consistency with mcp_targets config
         else:
             merged[gw_name] = {
                 "name": gw_name,
@@ -299,18 +298,19 @@ def get_target_tools(wsId: str, targetName: str):
     if targetName in _tool_manifests and now - _tool_manifests_ttl.get(targetName, 0) < _TOOL_MANIFEST_TTL:
         return success({"tools": _tool_manifests[targetName]})
 
-    # Try S3 manifest first
-    try:
-        s3 = boto3.client("s3", region_name=REGION)
-        resp = s3.get_object(Bucket=S3_BUCKET, Key=f"mcp/target-tools/{targetName}.json")
-        tools = json.loads(resp["Body"].read().decode())
-        _tool_manifests[targetName] = tools
-        _tool_manifests_ttl[targetName] = now
-        return success({"tools": tools})
-    except s3.exceptions.NoSuchKey:
-        pass
-    except Exception:
-        logger.warning("Failed to read tool manifest for %s from S3", targetName)
+    # Try S3 manifest — with fallback for mcp- prefix mismatch
+    s3 = boto3.client("s3", region_name=REGION)
+    alt = targetName.replace("-", "_")
+    candidates = [targetName, f"mcp-{targetName}", f"mcp_{alt}"]
+    for key_name in candidates:
+        try:
+            resp = s3.get_object(Bucket=S3_BUCKET, Key=f"mcp/target-tools/{key_name}.json")
+            tools = json.loads(resp["Body"].read().decode())
+            _tool_manifests[targetName] = tools
+            _tool_manifests_ttl[targetName] = now
+            return success({"tools": tools})
+        except Exception:
+            continue
 
     # Fallback: list from Gateway (if target exists there)
     try:

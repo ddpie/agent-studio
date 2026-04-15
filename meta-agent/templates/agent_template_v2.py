@@ -109,15 +109,25 @@ _AUTH_MAP = {
 
 # --- Lazy resolve: runtime target_name → invoke URL at startup ---
 def _resolve_runtime_url(target_name):
-    """Resolve a runtime target name to its invoke URL."""
-    runtime_name = target_name.replace("-", "_")
+    """Resolve a runtime target name to its invoke URL.
+
+    Handles naming inconsistency: catalog stores 'cloudwatch' but
+    deploy-mcp.sh creates runtimes as 'mcp_cloudwatch'. Tries both.
+    """
+    base = target_name.replace("-", "_")
+    # Try: exact, mcp_ prefixed, and stripped mcp_ prefix (covers both directions)
+    candidates = {base}
+    if not base.startswith("mcp_"):
+        candidates.add(f"mcp_{base}")
+    else:
+        candidates.add(base[4:])  # strip mcp_ prefix
     control = boto3.client("bedrock-agentcore-control", region_name=REGION)
     try:
         resp = control.list_agent_runtimes()
         runtimes = resp.get("agentRuntimes", [])
         while True:
             for rt in runtimes:
-                if rt.get("agentRuntimeName") == runtime_name:
+                if rt.get("agentRuntimeName") in candidates:
                     rt_info = control.get_agent_runtime(agentRuntimeId=rt["agentRuntimeId"])
                     arn = rt_info["agentRuntimeArn"]
                     encoded = urllib.parse.quote(arn, safe="")

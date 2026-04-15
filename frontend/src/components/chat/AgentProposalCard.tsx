@@ -57,9 +57,15 @@ export default function AgentProposalCard({ json }: { json: string }) {
   const supportsImages = Boolean(proposal.supports_images);
   const systemPrompt = String(proposal.system_prompt || "");
   const toolDefs = String(proposal.tool_definitions || "");
+  const mcpTargets = Array.isArray(proposal.mcp_targets)
+    ? proposal.mcp_targets as string[]
+    : typeof proposal.mcp_targets === "string" && proposal.mcp_targets
+      ? (proposal.mcp_targets as string).split(",").map(s => s.trim()).filter(Boolean)
+      : [];
 
   const handleEditAndCreate = () => {
-    openNewWithData({
+    console.log("[ProposalCard] mcp_targets from proposal:", proposal.mcp_targets, "→ mcpTargets:", mcpTargets);
+    const data = {
       name,
       display_name: name,
       description: desc,
@@ -67,11 +73,15 @@ export default function AgentProposalCard({ json }: { json: string }) {
       system_prompt: systemPrompt,
       tool_definitions: toolDefs,
       tool_names: toolNames.join(","),
+      mcp_targets: mcpTargets,
       welcome_message: welcome,
       suggestions,
       supports_images: supportsImages,
-    } as Partial<AgentMetadata>);
+    } as Partial<AgentMetadata>;
+    console.log("[ProposalCard] openNewWithData data.mcp_targets:", data.mcp_targets);
+    openNewWithData(data);
     const draftId = useAgentEditStore.getState().agentId;
+    console.log("[ProposalCard] after openNewWithData, store formData.mcp_targets:", useAgentEditStore.getState().formData?.mcp_targets);
     if (draftId) navigate(`/agents/edit/${draftId}`);
   };
 
@@ -88,6 +98,11 @@ export default function AgentProposalCard({ json }: { json: string }) {
         {toolNames.length > 0 && (
           <div className="col-span-2">{t("chat.proposalTools")} {toolNames.map(t2 => (
             <span key={t2} className="inline-block px-1.5 py-0.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-[10px] mr-1">{t2.trim()}</span>
+          ))}</div>
+        )}
+        {mcpTargets.length > 0 && (
+          <div className="col-span-2">MCP {mcpTargets.map(t2 => (
+            <span key={t2} className="inline-block px-1.5 py-0.5 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300 rounded text-[10px] mr-1">{t2}</span>
           ))}</div>
         )}
       </div>

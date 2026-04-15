@@ -29,7 +29,7 @@ _mock_tl.registry = _mock_registry
 sys.modules.setdefault("tools_library", _mock_tl)
 sys.modules.setdefault("tools_library.registry", _mock_registry)
 
-from tools.validate_agent import validate_agent, _WRITE_RE, _UNAVAILABLE_LIBS
+from tools.validate_agent import validate_agent, _WRITE_RE, _UNAVAILABLE_LIBS, _get_mcp_tool_names
 
 
 def _parse(result: str) -> dict:
@@ -402,3 +402,93 @@ class TestWriteRegex:
     ])
     def test_does_not_match_read_pattern(self, text):
         assert not _WRITE_RE.search(text), f"Unexpected match for: {text}"
+
+
+# ── MCP tool name recognition ──────────────────────────────────
+
+class TestGetMcpToolNames:
+    """Unit tests for _get_mcp_tool_names helper."""
+
+    def test_empty_list_returns_empty(self):
+        assert _get_mcp_tool_names([]) == []
+
+    @patch("boto3.client")
+    def test_reads_manifest_from_s3(self, mock_boto):
+        mock_s3 = MagicMock()
+        mock_boto.return_value = mock_s3
+        manifest = json.dumps([
+            {"name": "generate_image", "description": "Generate images"},
+            {"name": "edit_image", "description": "Edit images"},
+        ]).encode()
+        mock_s3.get_object.return_value = {"Body": MagicMock(read=lambda: manifest)}
+
+        result = _get_mcp_tool_names(["nova-canvas"])
+        assert "generate_image" in result
+        assert "edit_image" in result
+
+    @patch("boto3.client")
+    def test_hyphen_to_underscore_fallback(self, mock_boto):
+        mock_s3 = MagicMock()
+        mock_boto.return_value = mock_s3
+
+        def side_effect(**kwargs):
+            key = kwargs.get("Key", "")
+            if "nova-canvas" in key:
+                raise Exception("NoSuchKey")
+            return {"Body": MagicMock(read=lambda: json.dumps([
+                {"name": "gen_img", "description": "d"},
+            ]).encode())}
+
+        mock_s3.get_object.side_effect = side_effect
+        result = _get_mcp_tool_names(["nova-canvas"])
+        assert "gen_img" in result
+
+    @patch("boto3.client")
+    def test_missing_manifest_returns_empty(self, mock_boto):
+        mock_s3 = MagicMock()
+        mock_boto.return_value = mock_s3
+        mock_s3.get_object.side_effect = Exception("NoSuchKey")
+
+        result = _get_mcp_tool_names(["custom-mcp"])
+        assert result == []
+
+    @patch("boto3.client")
+    def test_multiple_targets(self, mock_boto):
+        mock_s3 = MagicMock()
+        mock_boto.return_value = mock_s3
+
+        def side_effect(**kwargs):
+            key = kwargs.get("Key", "")
+            if "alpha" in key:
+                return {"Body": MagicMock(read=lambda: json.dumps([{"name": "tool_a"}]).encode())}
+            if "beta" in key:
+                return {"Body": MagicMock(read=lambda: json.dumps([{"name": "tool_b"}]).encode())}
+            raise Exception("NoSuchKey")
+
+        mock_s3.get_object.side_effect = side_effect
+        result = _get_mcp_tool_names(["alpha", "beta"])
+        assert "tool_a" in result
+        assert "tool_b" in result
+
+
+class TestMcpToolValidationIntegration:
+    """MCP tool names should not trigger false positives in validation."""
+
+    @patch("tools.validate_agent._get_mcp_tool_names", return_value=["generate_image"])
+    def test_mcp_tool_in_tool_names_not_flagged(self, _mock):
+        code = '@tool\ndef my_tool() -> str:\n    """M."""\n    return ""'
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="Use my_tool and generate_image",
+            tool_definitions=code, tool_names="my_tool,generate_image", description="d",
+        ))
+        # generate_image is MCP-provided — should NOT appear in errors
+        assert not any("generate_image" in e for e in r["errors"])
+
+    @patch("tools.validate_agent._get_mcp_tool_names", return_value=["generate_image"])
+    def test_mcp_only_no_code_not_flagged(self, _mock):
+        r = _parse(validate_agent(
+            agent_name="Agent1", system_prompt="Use generate_image",
+            tool_definitions="", tool_names="generate_image", description="d",
+        ))
+        # No custom code, only MCP tool — should not warn about missing @tool
+        assert not any("generate_image" in w for w in r["warnings"])

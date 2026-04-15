@@ -60,7 +60,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
             }}
             autoFocus
             rows={3}
-            className="w-full px-4 py-3 rounded-2xl border-2 border-blue-400 text-sm focus:outline-none resize-none"
+            className="w-full px-4 py-3 rounded-2xl border-2 border-blue-400 text-sm focus:outline-none resize-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
           />
           <div className="flex justify-end gap-1.5 mt-1">
             <button onClick={() => setEditing(false)} className="text-[11px] px-2 py-0.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded">{t("common.cancel")}</button>
@@ -126,7 +126,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
         )}
         {message.content ? (
           <>
-          <div ref={contentDivRef} className={`prose prose-sm max-w-none ${isUser ? "prose-invert" : "dark:prose-invert"}`}>
+          <div ref={contentDivRef} className={`prose prose-sm max-w-none ${isUser ? "prose-invert [&_*]:text-white" : "dark:prose-invert"}`}>
             <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]} components={mdComponents}>{
               (() => {
                 let text = message.content;

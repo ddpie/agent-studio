@@ -33,6 +33,7 @@ from tools.update_skill import update_skill
 from tools.delete_skill import delete_skill
 from tools.import_skill import import_skill
 from tools.list_mcp_servers import list_mcp_servers
+from tools.list_mcp_target_tools import list_mcp_target_tools
 from tools.manage_secrets import set_agent_secrets, list_agent_secrets, delete_agent_secret
 from tools_library.registry import list_tool_library, get_tool_library_code
 from tools.analyze_trace import analyze_trace
@@ -77,6 +78,9 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     - list_tool_library: Use when selecting tools for a new agent — ALWAYS check built-in tools first.
     - get_tool_library_code: Use after list_tool_library to get the source code for built-in tools.
     - list_mcp_servers: Use when the user asks about available MCP tool servers from Gateway.
+    - list_mcp_target_tools: Use to get the exact tool names and descriptions for a specific MCP target.
+      ALWAYS call this before writing system_prompt for agents with MCP targets, so you can reference
+      the real tool names (e.g., "generate_image") instead of guessing.
 
     **Operations:**
     - set_agent_secrets / list_agent_secrets / delete_agent_secret: Use when the user needs to manage API keys for an agent.
@@ -136,6 +140,13 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     Do NOT output a Markdown summary or table first — go straight to the card.
     The frontend will render this as an editable card for the user to review and modify.
 
+    IMPORTANT — MCP target selection:
+    Before designing the agent, consider whether any MCP targets would enhance its capabilities.
+    If the agent's purpose aligns with available MCP servers (e.g., image generation → nova-canvas,
+    cost analysis → aws-pricing), include them in the proposal's `mcp_targets` field.
+    When you include MCP targets, ALWAYS call list_mcp_target_tools for each target FIRST to get
+    the exact tool names and descriptions, then reference those real tool names in the system_prompt.
+
     CRITICAL JSON RULES:
     - The JSON MUST be valid and parseable by JSON.parse()
     - All string values MUST use \\n for newlines, NEVER actual line breaks inside strings
@@ -146,8 +157,9 @@ SYSTEM_PROMPT = textwrap.dedent("""\
 
     Format:
     ```agent-proposal
-    {"agent_name": "MyAgent", "description": "Brief description", "template_id": "expert", "system_prompt": "Line 1\\nLine 2\\nLine 3", "tool_definitions": "", "tool_names": "func1,func2", "welcome_message": "Hello, I am...", "suggestions": "Suggestion 1|Suggestion 2|Suggestion 3", "supports_images": true, "permission_tier": "readonly"}
+    {"agent_name": "MyAgent", "description": "Brief description", "template_id": "expert", "system_prompt": "Line 1\\nLine 2\\nLine 3", "tool_definitions": "", "tool_names": "func1,func2", "mcp_targets": ["nova-canvas", "cloudwatch"], "welcome_message": "Hello, I am...", "suggestions": "Suggestion 1|Suggestion 2|Suggestion 3", "supports_images": true, "permission_tier": "readonly"}
     ```
+    Note: `mcp_targets` is an array of target name strings. Use [] if no MCP targets are needed.
     After the code block, add a brief one-line explanation and ask if they want to edit
     anything before creating. The user can edit directly in the card or ask you to change things.
 
@@ -326,8 +338,10 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     - Always call list_mcp_servers to show the latest available targets before recommending
 
     MCP targets are passed as comma-separated names in the `mcp_targets` parameter of create_agent/update_agent.
-    The sub-agent will automatically connect to the Gateway and load tools from the specified targets.
-    Each target's tools are prefixed with `{target_name}___` (e.g., `cloudwatch___describe_log_groups`).
+    The sub-agent connects directly to each MCP runtime and loads tools with their ORIGINAL names
+    (e.g., "generate_image", NOT "nova_canvas___generate_image"). The triple-underscore prefix is only
+    used by the Gateway — sub-agents never see it.
+    ALWAYS call list_mcp_target_tools to get the exact tool names before writing system_prompt.
 
     ## Safety Rules
     - NEVER call create_agent, create_skill, delete_agent, or update_agent without explicit user confirmation
@@ -369,6 +383,7 @@ ALL_TOOLS = [
     delete_skill,
     import_skill,
     list_mcp_servers,
+    list_mcp_target_tools,
     analyze_trace,
     create_schedule,
     validate_agent,
@@ -402,7 +417,7 @@ async def invoke(payload, context):
     _ms._caller_id = caller_id
 
     agent = Agent(
-        model=BedrockModel(model_id=model_id),
+        model=BedrockModel(model_id=model_id, max_tokens=16384),
         system_prompt=SYSTEM_PROMPT,
         tools=ALL_TOOLS,
     )
