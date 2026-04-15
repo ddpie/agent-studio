@@ -258,6 +258,7 @@ function TargetCard({
 
   return (
     <div
+      data-testid={`mcp-card-${target.name}`}
       className={`group relative flex flex-col rounded-xl border transition-all duration-200 ${
         isOpen
           ? "border-purple-300 dark:border-purple-700 shadow-lg shadow-purple-500/5 col-span-full"

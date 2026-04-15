@@ -119,7 +119,7 @@ test.describe("Browser Navigation", () => {
     // MCP page
     await page.goto("/#/mcp");
     await page.waitForLoadState("networkidle");
-    await expect(page.locator("h2").first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 10_000 });
 
     // Settings page
     await page.goto("/#/settings");
