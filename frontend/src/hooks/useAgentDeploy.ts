@@ -167,6 +167,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
         template_id: formData?.template_id || "",
         supports_images: formData?.supports_images || false,
         skills: formData?.skills || [],
+        mcp_targets: formData?.mcp_targets || [],
         agent_id: agentId,
         workspace_id: getWsId(),
       };
@@ -232,6 +233,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
         template_id: formData?.template_id || "",
         supports_images: formData?.supports_images || false,
         skills: formData?.skills || [],
+        mcp_targets: formData?.mcp_targets || [],
         agent_id: agentId,
       };
 

@@ -164,8 +164,8 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
       if (key === "mcp_targets") {
         const oldTargets = ((originalData as Record<string, unknown>).mcp_targets as string[]) || [];
         const newTargets = ((formData as Record<string, unknown>).mcp_targets as string[]) || [];
-        const oldVal = oldTargets.sort().join(", ");
-        const newVal = newTargets.sort().join(", ");
+        const oldVal = [...oldTargets].sort().join(", ");
+        const newVal = [...newTargets].sort().join(", ");
         if (oldVal !== newVal) {
           changes[key] = { old: oldVal, new: newVal };
         }
