@@ -177,8 +177,11 @@ async def invoke(payload, context):
     with contextlib.ExitStack() as stack:
         mcp_tools = []
         for client in _mcp_clients:
-            ctx = stack.enter_context(client)
-            mcp_tools.extend(ctx.list_tools_sync())
+            try:
+                ctx = stack.enter_context(client)
+                mcp_tools.extend(ctx.list_tools_sync())
+            except Exception as _mcp_err:
+                print(f"WARNING: MCP client failed to connect, skipping: {_mcp_err}", file=sys.stderr)
         agent = Agent(
             model=BedrockModel(model_id=model_id),
             system_prompt=prompt,
