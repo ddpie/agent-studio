@@ -69,10 +69,11 @@ export function parseToolDefinitions(source: string): string {
 
 /**
  * Extract tool_names from parsed tool definitions.
+ * Only extracts names of @tool decorated functions, not all defs.
  */
 export function extractToolNames(toolDefs: string): string {
   const names: string[] = [];
-  const re = /def\s+(\w+)\s*\(/g;
+  const re = /@tool\s*\ndef\s+(\w+)\s*\(/g;
   let m;
   while ((m = re.exec(toolDefs)) !== null) {
     names.push(m[1]);
