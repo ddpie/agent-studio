@@ -414,9 +414,9 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
     if (!validationResult || !formData) return;
     setAutoFixing(true);
 
-    // 1. Fix tool_names — always sync from tool_definitions
+    // 1. Fix tool_names — always sync from @tool decorated functions in tool_definitions
     const toolDefs = formData.tool_definitions || "";
-    const funcNames = [...toolDefs.matchAll(/def\s+(\w+)\s*\(/g)].map(m => m[1]);
+    const funcNames = [...toolDefs.matchAll(/@tool\s*\ndef\s+(\w+)\s*\(/g)].map(m => m[1]);
     if (funcNames.length > 0) {
       const currentNames = (formData.tool_names || "").split(",").map(s => s.trim()).filter(Boolean);
       const definedSet = new Set(funcNames);
