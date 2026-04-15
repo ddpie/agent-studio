@@ -9,6 +9,49 @@ from strands.models import BedrockModel
 
 from config import MODEL_ID
 
+
+def _extract_tool_blocks(source: str) -> str:
+    """Extract only @tool decorated function blocks from source code.
+
+    Skips template boilerplate like _stream_with_tools, @app.entrypoint, etc.
+    Returns concatenated @tool blocks, or empty string if none found.
+    """
+    lines = source.split("\n")
+    blocks = []
+    in_tool = False
+    current: list = []
+    imports: list = []
+    found_first = False
+
+    for line in lines:
+        trimmed = line.lstrip()
+        if trimmed == "@tool":
+            if in_tool and current:
+                blocks.append("\n".join(current))
+            in_tool = True
+            found_first = True
+            current = [line]
+            continue
+        if in_tool:
+            if trimmed and not line[0:1] in (" ", "\t") and not trimmed.startswith("def ") and not trimmed.startswith("#"):
+                blocks.append("\n".join(current))
+                in_tool = False
+                current = []
+                if trimmed.startswith(("async def _", "def _", "@app.")):
+                    break
+            else:
+                current.append(line)
+        elif not found_first:
+            if trimmed.startswith(("import ", "from ")):
+                imports.append(line)
+
+    if in_tool and current:
+        blocks.append("\n".join(current))
+
+    if not blocks:
+        return ""
+    return "\n".join(imports) + "\n\n" + "\n\n".join(blocks) if imports else "\n\n".join(blocks)
+
 # Write-operation patterns that readonly agents should not use
 _WRITE_PATTERNS = [
     r'\bput_item\b', r'\bdelete_item\b', r'\bupdate_item\b',
@@ -270,10 +313,12 @@ def validate_agent(
         # 2b. Dry-run: exec tool code and verify @tool functions are callable
         if not any("syntax error" in e.lower() for e in errors):
             try:
+                # Extract only @tool blocks for dry-run (skip template boilerplate)
+                tool_code_for_exec = _extract_tool_blocks(tool_definitions) or tool_definitions
                 # Create a mock @tool decorator that just returns the function
                 exec_globals = {"__builtins__": __builtins__}
                 exec_globals["tool"] = lambda f: f  # mock @tool
-                exec(tool_definitions, exec_globals)
+                exec(tool_code_for_exec, exec_globals)
                 # Verify each @tool function exists and is callable
                 for fname in defined_funcs:
                     fn = exec_globals.get(fname)
