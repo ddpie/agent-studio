@@ -385,7 +385,7 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
 
       if (!failed) {
         markSaved();
-        if (agentId && formData?.tool_definitions) {
+        if (agentId) {
           try {
             // No expected_updated_at — we just deployed, no concurrent modification risk
             const resp: any = await updateAgent(agentId, { ...formData, agent_id: agentId });
