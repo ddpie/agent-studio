@@ -79,9 +79,11 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   hasChanges: () => {
     const { formData, originalData, pendingSkillFiles, originalSkillFiles } = get();
     if (!formData || !originalData) return false;
-    // Include skill files in change detection
-    return JSON.stringify(formData) !== JSON.stringify(originalData) ||
-           JSON.stringify(pendingSkillFiles) !== JSON.stringify(originalSkillFiles);
+    // Use getChangedFields for consistency — if diff shows nothing, no unsaved changes
+    const fieldChanges = get().getChangedFields();
+    if (Object.keys(fieldChanges).length > 0) return true;
+    // Also check skill file changes
+    return JSON.stringify(pendingSkillFiles) !== JSON.stringify(originalSkillFiles);
   },
 
   loadAgent: async (agentId, agentName) => {
