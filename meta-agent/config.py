@@ -19,7 +19,7 @@ AGENT_ROLE_ARN = os.getenv(
     f"arn:aws:iam::{ACCOUNT_ID}:role/AgentStudioSubAgentRole-{REGION}",
 )
 BASE_DEPLOYMENT_KEY = "base/deployment.zip"
-MODEL_ID = os.getenv("AGENT_STUDIO_MODEL_ID", "us.anthropic.claude-sonnet-4-20250514-v1:0")
+MODEL_ID = os.getenv("AGENT_STUDIO_MODEL_ID", "us.anthropic.claude-opus-4-7")
 AGENTS_TABLE = os.getenv("AGENT_STUDIO_AGENTS_TABLE", "agent-studio-agents")
 TOOLS_TABLE = os.getenv("AGENT_STUDIO_TOOLS_TABLE", "agent-studio-tools")
 
