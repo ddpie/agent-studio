@@ -43,5 +43,5 @@ def version_conflict(message: str) -> Response:
     return error(message, "VALIDATION_ERROR", 409)
 
 
-def internal_error() -> Response:
-    return error("Internal server error", "INTERNAL_ERROR", 500)
+def internal_error(message: str = "Internal server error") -> Response:
+    return error(message, "INTERNAL_ERROR", 500)
