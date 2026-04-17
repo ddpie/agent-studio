@@ -63,6 +63,42 @@ function deriveTitle(messages: Message[]): string {
     : first.content;
 }
 
+// Persist-side caps. Images are expected to be S3 URLs (~150 bytes) after the
+// ChatInput rewrite that refuses to send unuploaded images. These caps are a
+// defence-in-depth against accidental data-URL leakage (old sessions from
+// before the fix, future bugs, or Meta-Agent assistant messages).
+const MAX_ACTIVE_MESSAGES = 100;
+const MAX_SESSIONS = 30;
+const MAX_MESSAGES_PER_SESSION = 50;
+
+function _stripDataUrlImages(msg: Message): Message {
+  if (!msg.images || msg.images.length === 0) return msg;
+  const safeImages = msg.images.filter((url) => !url.startsWith("data:"));
+  if (safeImages.length === msg.images.length) return msg;
+  return { ...msg, images: safeImages.length > 0 ? safeImages : undefined };
+}
+
+function _sanitizeForPersist(state: ChatState): Partial<ChatState> {
+  const trimmedMessages = state.messages.slice(-MAX_ACTIVE_MESSAGES).map(_stripDataUrlImages);
+  const trimmedSessions = [...state.sessions]
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, MAX_SESSIONS)
+    .map((sess) => ({
+      ...sess,
+      messages: sess.messages.slice(-MAX_MESSAGES_PER_SESSION).map(_stripDataUrlImages),
+    }));
+  return {
+    messages: trimmedMessages,
+    sessionId: state.sessionId,
+    activeSessionId: state.activeSessionId,
+    selectedModelId: state.selectedModelId,
+    currentAgentId: state.currentAgentId,
+    currentAgentName: state.currentAgentName,
+    sessions: trimmedSessions,
+    lastActiveSessionByAgent: state.lastActiveSessionByAgent,
+  };
+}
+
 export const useChatStore = create<ChatState>()(
   persist(
     (set, get) => ({
@@ -400,16 +436,7 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: "agent-studio-chat",
-      partialize: (state) => ({
-        messages: state.messages,
-        sessionId: state.sessionId,
-        activeSessionId: state.activeSessionId,
-        selectedModelId: state.selectedModelId,
-        currentAgentId: state.currentAgentId,
-        currentAgentName: state.currentAgentName,
-        sessions: state.sessions,
-        lastActiveSessionByAgent: state.lastActiveSessionByAgent,
-      }),
+      partialize: (state) => _sanitizeForPersist(state),
     }
   )
 );

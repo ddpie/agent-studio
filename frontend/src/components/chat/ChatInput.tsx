@@ -26,8 +26,16 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
 }, ref) {
   const { t } = useTranslation();
   const [input, setInput] = useState("");
-  const [pastedImages, setPastedImages] = useState<string[]>([]);
-  const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]);
+  // Each image tracks its upload lifecycle so we can surface failures and
+  // refuse to send until every image has a stable S3 URL. Storing only
+  // S3 URLs (never raw data URLs) in the final message keeps localStorage
+  // bounded — see chat-store sanitize logic.
+  const [pendingImages, setPendingImages] = useState<Array<{
+    id: string;
+    previewUrl: string;           // local data URL, only for inline preview
+    s3Url?: string;               // populated when upload succeeds
+    status: "uploading" | "success" | "failed";
+  }>>([]);
   const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; size: number; s3Key: string; uploading?: boolean }>>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
   const savedInputRef = useRef("");
@@ -57,13 +65,18 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         const reader = new FileReader();
         reader.onload = async () => {
           const dataUrl = reader.result as string;
-          setPastedImages((prev) => [...prev, dataUrl]);
+          const id = crypto.randomUUID();
+          setPendingImages((prev) => [...prev, { id, previewUrl: dataUrl, status: "uploading" }]);
           try {
             const s3Url = await uploadImageToS3(dataUrl);
-            setUploadedImageUrls((prev) => [...prev, s3Url]);
+            setPendingImages((prev) => prev.map((img) =>
+              img.id === id ? { ...img, s3Url, status: "success" } : img
+            ));
           } catch (err) {
             console.error("Image upload failed:", err);
-            setUploadedImageUrls((prev) => [...prev, dataUrl]);
+            setPendingImages((prev) => prev.map((img) =>
+              img.id === id ? { ...img, status: "failed" } : img
+            ));
           }
         };
         reader.readAsDataURL(file);
@@ -71,9 +84,8 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     }
   }, [imagesAllowed]);
 
-  const removeImage = (idx: number) => {
-    setPastedImages((prev) => prev.filter((_, i) => i !== idx));
-    setUploadedImageUrls((prev) => prev.filter((_, i) => i !== idx));
+  const removeImage = (id: string) => {
+    setPendingImages((prev) => prev.filter((img) => img.id !== id));
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -106,6 +118,14 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     if (!input.trim() || isStreaming) return;
     if (attachedFiles.some((f) => f.uploading)) return;
 
+    // Require every pending image to have finished uploading successfully.
+    // Failed or still-uploading images block the send so we never embed
+    // raw data URLs into the persisted message history.
+    if (pendingImages.some((img) => img.status !== "success")) {
+      alert(t("chat.imageUploadIncomplete", "Some images are still uploading or failed. Please wait or remove them."));
+      return;
+    }
+
     let messageText = input.trim();
     const fileAttachments = attachedFiles.filter((f) => f.s3Key);
     if (fileAttachments.length > 0) {
@@ -115,11 +135,12 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
       }
     }
 
-    const imageUrlsToSend = uploadedImageUrls.length > 0 ? uploadedImageUrls : (pastedImages.length > 0 ? pastedImages : undefined);
+    const imageUrlsToSend = pendingImages.length > 0
+      ? pendingImages.map((img) => img.s3Url!) // guarded by status check above
+      : undefined;
     onSend(messageText, imageUrlsToSend, selectedModel, fileAttachments.length > 0 ? fileAttachments : undefined);
     setInput("");
-    setPastedImages([]);
-    setUploadedImageUrls([]);
+    setPendingImages([]);
     setAttachedFiles([]);
     setHistoryIdx(-1);
     savedInputRef.current = "";
@@ -163,12 +184,34 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         title={t("chat.dragExpand")}
       />
       <div className="px-4 py-2">
-        {pastedImages.length > 0 && (
+        {pendingImages.length > 0 && (
           <div className="flex gap-2 mb-2 flex-wrap">
-            {pastedImages.map((src, idx) => (
-              <div key={idx} className="relative group">
-                <img src={src} className="w-16 h-16 rounded-lg object-cover border border-gray-200 dark:border-gray-700" />
-                <button onClick={() => removeImage(idx)} className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            {pendingImages.map((img) => (
+              <div key={img.id} className="relative group">
+                <img
+                  src={img.previewUrl}
+                  className={`w-16 h-16 rounded-lg object-cover border ${
+                    img.status === "failed"
+                      ? "border-red-500 opacity-50"
+                      : "border-gray-200 dark:border-gray-700"
+                  }`}
+                />
+                {img.status === "uploading" && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg">
+                    <Loader2 className="w-4 h-4 text-white animate-spin" />
+                  </div>
+                )}
+                {img.status === "failed" && (
+                  <div
+                    className="absolute inset-0 flex items-center justify-center rounded-lg"
+                    title={t("chat.imageUploadFailed", "Upload failed — remove and retry")}
+                  >
+                    <span className="text-[10px] font-semibold text-red-600 bg-white/90 px-1 rounded">
+                      {t("chat.uploadFailedShort", "Failed")}
+                    </span>
+                  </div>
+                )}
+                <button onClick={() => removeImage(img.id)} className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                   <X className="w-3 h-3" />
                 </button>
               </div>
