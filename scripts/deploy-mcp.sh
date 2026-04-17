@@ -127,16 +127,9 @@ print(f\"Total: {len(data['remote']) + len(data['runtime'])} targets\")
 fi
 
 # ============================================================
-# Helper: update or append a key in .env
+# Helpers: shared .env utilities
 # ============================================================
-update_env() {
-  local key="$1" value="$2"
-  if [[ -f "$ENV_FILE" ]] && grep -q "^${key}=" "$ENV_FILE"; then
-    sed -i.bak "s|^${key}=.*|${key}=${value}|" "$ENV_FILE" && rm -f "$ENV_FILE.bak"
-  else
-    echo "${key}=${value}" >> "$ENV_FILE"
-  fi
-}
+source "${SCRIPT_DIR}/lib/env-utils.sh"
 
 # ============================================================
 # Step 1: Create or find MCP Gateway
@@ -330,7 +323,7 @@ echo ""
 export GATEWAY_ID GATEWAY_URL GATEWAY_ARN GATEWAY_ROLE_ARN
 
 if [[ "$GATEWAY_ONLY" == true ]]; then
-  update_env "AGENT_STUDIO_MCP_GATEWAY_URL" "$GATEWAY_URL"
+  update_env "$ENV_FILE" "AGENT_STUDIO_MCP_GATEWAY_URL" "$GATEWAY_URL"
   echo "Gateway-only mode. Done."
   exit 0
 fi
@@ -768,8 +761,8 @@ fi
 # Step 5: Write Gateway URL to .env
 # ============================================================
 echo "[5/6] Updating .env + S3 config..."
-update_env "AGENT_STUDIO_MCP_GATEWAY_URL" "$GATEWAY_URL"
-update_env "AGENT_STUDIO_MCP_GATEWAY_ID" "$GATEWAY_ID"
+update_env "$ENV_FILE" "AGENT_STUDIO_MCP_GATEWAY_URL" "$GATEWAY_URL"
+update_env "$ENV_FILE" "AGENT_STUDIO_MCP_GATEWAY_ID" "$GATEWAY_ID"
 echo "  AGENT_STUDIO_MCP_GATEWAY_URL=$GATEWAY_URL"
 echo "  AGENT_STUDIO_MCP_GATEWAY_ID=$GATEWAY_ID"
 
