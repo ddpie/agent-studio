@@ -84,9 +84,10 @@ SYSTEM_PROMPT = Path("prompt.txt").read_text(encoding="utf-8")
 REGION = os.getenv("AWS_REGION", "us-east-1")
 
 _session = boto3.Session(region_name=REGION)
-_credentials = _session.get_credentials().get_frozen_credentials()
 
 # --- SigV4 auth factories (per-service) ---
+# Credentials are resolved per-request (not frozen at import) so AgentCore
+# role-assumed credentials auto-refresh before the 1h expiry.
 class _SigV4Auth(httpx.Auth):
     def __init__(self, service):
         self.service = service
@@ -97,7 +98,8 @@ class _SigV4Auth(httpx.Auth):
             method=request.method, url=str(request.url),
             headers=headers, data=request.content,
         )
-        SigV4Auth(_credentials, self.service, REGION).add_auth(aws_req)
+        creds = _session.get_credentials().get_frozen_credentials()
+        SigV4Auth(creds, self.service, REGION).add_auth(aws_req)
         request.headers.update(dict(aws_req.headers))
         yield request
 
