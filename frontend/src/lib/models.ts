@@ -12,6 +12,13 @@ export interface ModelGroup {
 
 export const MODEL_GROUPS: ModelGroup[] = [
   {
+    label: "Claude 4.7",
+    models: [
+      { id: "us.anthropic.claude-opus-4-7", label: "Opus 4.7 (US)" },
+      { id: "global.anthropic.claude-opus-4-7", label: "Opus 4.7 (Global)" },
+    ],
+  },
+  {
     label: "Claude 4.6",
     models: [
       { id: "us.anthropic.claude-opus-4-6-v1", label: "Opus 4.6 (US)" },
