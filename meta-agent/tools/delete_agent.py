@@ -26,8 +26,8 @@ def delete_agent(agent_id: str) -> str:
 
     if not record:
         return json.dumps({"error": f"Agent {agent_id} not found in registry"})
-    if record.get("owner") != caller:
-        return json.dumps({"error": f"Permission denied: agent owned by {record['owner']}"})
+    if record.get("created_by") != caller:
+        return json.dumps({"error": f"Permission denied: agent owned by {record.get('created_by', 'unknown')}"})
     if record.get("status") == "archived":
         return json.dumps({"error": "Agent is already archived"})
 
@@ -65,8 +65,8 @@ def restore_agent(agent_id: str) -> str:
 
     if not record:
         return json.dumps({"error": f"Agent {agent_id} not found in registry"})
-    if record.get("owner") != caller:
-        return json.dumps({"error": f"Permission denied: agent owned by {record['owner']}"})
+    if record.get("created_by") != caller:
+        return json.dumps({"error": f"Permission denied: agent owned by {record.get('created_by', 'unknown')}"})
     if record.get("status") != "archived":
         return json.dumps({"error": "Agent is not archived, cannot restore"})
 
@@ -142,8 +142,8 @@ def purge_agent(agent_id: str) -> str:
 
     if not record:
         return json.dumps({"error": f"Agent {agent_id} not found in registry"})
-    if record.get("owner") != caller:
-        return json.dumps({"error": f"Permission denied: agent owned by {record['owner']}"})
+    if record.get("created_by") != caller:
+        return json.dumps({"error": f"Permission denied: agent owned by {record.get('created_by', 'unknown')}"})
     if record.get("status") != "archived":
         return json.dumps({"error": "Only archived agents can be permanently deleted. Archive it first."})
 
