@@ -102,14 +102,13 @@ def list_agents(wsId: str):
     limit, cursor = parse_pagination(router.current_event.query_string_parameters or {})
     table = _get_table()
 
+    # Return all statuses (active + archived). Frontend splits them into two
+    # sections; archived agents need to be visible for restore/purge actions.
     query_kwargs = {
         "IndexName": "workspace-index",
         "KeyConditionExpression": Key("workspace_id").eq(ws_id),
         "ScanIndexForward": False,
         "Limit": limit,
-        "FilterExpression": "attribute_not_exists(#st) OR #st <> :archived",
-        "ExpressionAttributeNames": {"#st": "status"},
-        "ExpressionAttributeValues": {":archived": "archived"},
     }
     if cursor:
         try:
