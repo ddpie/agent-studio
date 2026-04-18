@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import remarkMath from "remark-math";
-import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeKatex from "rehype-katex";
 import { useChatStore, type Message } from "../../stores/chat-store";
 import { generateDownloadUrl } from "../../lib/s3-storage";
@@ -14,6 +14,16 @@ import { agentConfig } from "../../config";
 import ImageLightbox from "../ui/ImageLightbox";
 import CopyButtons from "./CopyButtons";
 import { mdComponents } from "./CodeBlock";
+
+const sanitizeSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    code: [...(defaultSchema.attributes?.code || []), ["className"]],
+    span: [...(defaultSchema.attributes?.span || []), ["className"]],
+    div: [...(defaultSchema.attributes?.div || []), ["className"]],
+  },
+};
 
 const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStreaming }: { message: Message; isLastAssistant: boolean; isStreaming: boolean }) {
   const { t } = useTranslation();
@@ -127,7 +137,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
         {message.content ? (
           <>
           <div ref={contentDivRef} className={`prose prose-sm max-w-none ${isUser ? "prose-invert [&_*]:text-white" : "dark:prose-invert"}`}>
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]} components={mdComponents}>{
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[[rehypeSanitize, sanitizeSchema], rehypeKatex]} components={mdComponents}>{
               (() => {
                 let text = message.content;
                 if (message.attachments?.length) text = text.replace(/\n\n\[Attached file:[^\]]*\]/g, "").trim();

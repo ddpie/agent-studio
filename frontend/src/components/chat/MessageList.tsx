@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useTranslation } from "react-i18next";
+import { useTranslation, Trans } from "react-i18next";
 import { Loader2, RefreshCw } from "lucide-react";
 import type { Message } from "../../stores/chat-store";
 import ChatMessage from "./ChatMessage";
@@ -80,7 +80,7 @@ export default function MessageList({ messages, isStreaming, statusText, activeT
           <div className="rounded-xl px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700">
             <div className="flex items-center gap-2 text-xs">
               <Loader2 className="w-3 h-3 animate-spin" />
-              <span dangerouslySetInnerHTML={{ __html: t("chat.calling", { tool: activeTool }) }} />
+              <span><Trans i18nKey="chat.calling" values={{ tool: activeTool }} components={[<strong />]} /></span>
             </div>
           </div>
         </div>

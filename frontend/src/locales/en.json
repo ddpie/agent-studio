@@ -308,7 +308,7 @@
     "chattingWith": "Chatting with {{name}}",
     "welcomeMeta": "Welcome to Meta Agent",
     "metaSubtitle": "Create & manage agents through conversation",
-    "calling": "Calling <strong>{{tool}}</strong>",
+    "calling": "Calling <1>{{tool}}</1>",
     "working": "Working...",
     "defaultSuggestion1": "Create an agent that can search the web and summarize results",
     "defaultSuggestion2": "Build a math tutor that can solve equations step by step",

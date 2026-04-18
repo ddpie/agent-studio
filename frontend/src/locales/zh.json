@@ -308,7 +308,7 @@
     "chattingWith": "正在与 {{name}} 对话",
     "welcomeMeta": "欢迎使用 Meta Agent",
     "metaSubtitle": "通过对话创建和管理 Agent",
-    "calling": "正在调用 <strong>{{tool}}</strong>",
+    "calling": "正在调用 <1>{{tool}}</1>",
     "working": "处理中...",
     "defaultSuggestion1": "创建一个可以搜索网页并总结结果的 Agent",
     "defaultSuggestion2": "构建一个可以逐步解方程的数学辅导 Agent",

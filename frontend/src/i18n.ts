@@ -8,7 +8,7 @@ i18n.use(initReactI18next).init({
   resources: { en: { translation: en }, zh: { translation: zh } },
   lng: useUISettings.getState().language,
   fallbackLng: "en",
-  interpolation: { escapeValue: false },
+  interpolation: { escapeValue: true },
 });
 
 // Sync language changes from store
