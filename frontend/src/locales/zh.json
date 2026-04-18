@@ -43,6 +43,15 @@
       "details": "技术详情"
     }
   },
+  "deployments": {
+    "tab": "部署",
+    "version": "版本",
+    "status": "状态",
+    "lastUpdated": "最近更新",
+    "viewLogs": "查看日志",
+    "empty": "暂无部署。点击 Deploy 创建第一个版本。",
+    "loadError": "无法加载部署记录"
+  },
   "runtime": {
     "status": {
       "active": "就绪",

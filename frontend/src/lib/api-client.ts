@@ -197,6 +197,21 @@ export async function getAgentRuntime(agentId: string): Promise<AgentRuntimeInfo
   return apiGet<AgentRuntimeInfo>(`/agents/${encodeURIComponent(agentId)}/runtime`);
 }
 
+export interface AgentRuntimeVersion {
+  agentRuntimeVersion: string;
+  status: string;
+  lastUpdatedAt?: string;
+  description?: string;
+  agentRuntimeName?: string;
+}
+
+export async function listAgentVersions(agentId: string): Promise<AgentRuntimeVersion[]> {
+  const resp = await apiGet<{ versions?: AgentRuntimeVersion[] }>(
+    `/agents/${encodeURIComponent(agentId)}/versions`
+  );
+  return resp.versions ?? [];
+}
+
 export async function fetchAgentFile(agentId: string, filePath: string): Promise<string> {
   try {
     const data = await apiGet<{ content?: string }>(

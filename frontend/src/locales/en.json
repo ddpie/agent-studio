@@ -43,6 +43,15 @@
       "details": "Technical details"
     }
   },
+  "deployments": {
+    "tab": "Deployments",
+    "version": "Version",
+    "status": "Status",
+    "lastUpdated": "Last updated",
+    "viewLogs": "View logs",
+    "empty": "No deployments yet. Click Deploy to create the first version.",
+    "loadError": "Could not load deployments"
+  },
   "runtime": {
     "status": {
       "active": "Ready",

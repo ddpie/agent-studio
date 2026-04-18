@@ -82,3 +82,40 @@ def get_runtime(wsId: str, agentId: str):
         return internal_error()
 
     return success(_strip_sensitive(resp))
+
+
+@router.get("/api/workspaces/<wsId>/agents/<agentId>/versions")
+def list_versions(wsId: str, agentId: str):
+    """Passthrough list_agent_runtime_versions, sorted newest first."""
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
+    if err:
+        return err
+
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+
+    item = _get_agent_item(agentId)
+    if not item or item.get("workspace_id") != ws_id:
+        return forbidden()
+
+    try:
+        resp = _get_control().list_agent_runtime_versions(agentRuntimeId=agentId)
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code")
+        if code == "ResourceNotFoundException":
+            return not_found()
+        logger.exception("list_agent_runtime_versions failed", extra={"agentId": agentId, "code": code})
+        return internal_error()
+
+    raw = resp.get("agentRuntimes", [])
+    cleaned = [_strip_sensitive(v) for v in raw]
+
+    def _key(v):
+        try:
+            return int(v.get("agentRuntimeVersion", "0"))
+        except (TypeError, ValueError):
+            return 0
+
+    cleaned.sort(key=_key, reverse=True)
+    return success({"versions": cleaned})
