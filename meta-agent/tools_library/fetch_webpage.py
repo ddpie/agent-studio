@@ -1,9 +1,9 @@
-"""Fetch and parse a webpage."""
+"""Fetch a webpage via AgentCore Browser (CDP)."""
 
 TOOL_META = {
     "id": "fetch_webpage",
     "name": "Fetch Webpage",
-    "description": "Fetch a URL and extract text content as markdown",
+    "description": "Fetch a URL via the AgentCore managed Browser and return text content.",
     "category": "web",
 }
 
@@ -12,85 +12,86 @@ TOOL_NAMES = "fetch_webpage"
 TOOL_CODE = '''
 @tool
 def fetch_webpage(url: str, max_length: int = 8000) -> str:
-    """Fetch a webpage and return its content as clean markdown.
+    """Fetch a webpage via AgentCore Browser and return the main text.
 
     Args:
-        url: The URL to fetch.
+        url: The URL to load (http/https only).
         max_length: Maximum characters to return. Default 8000.
 
     Returns:
-        The page content converted to markdown, truncated to max_length.
-
-    Example:
-        fetch_webpage("https://docs.aws.amazon.com/bedrock/latest/userguide/what-is-bedrock.html")
+        Page text, truncated. Errors surface as a plain message.
     """
-    import urllib.request
-    import socket
-    import ipaddress
-    from urllib.parse import urlparse
+    import os, json, time, boto3, websocket  # websocket-client
 
     if not url or not url.startswith(("http://", "https://")):
         return "Error: Invalid URL. Must start with http:// or https://"
 
-    # SSRF protection: validate initial URL and every redirect target
-    _BLOCKED = [ipaddress.ip_network(n) for n in (
-        "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8",
-        "169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24", "192.168.0.0/16",
-        "198.18.0.0/15", "224.0.0.0/4", "240.0.0.0/4", "255.255.255.255/32",
-        "::/128", "::1/128", "fc00::/7", "fe80::/10", "ff00::/8",
-    )]
+    browser_id = os.environ.get("AGENT_STUDIO_BROWSER_ID")
+    if not browser_id:
+        return "Error: AGENT_STUDIO_BROWSER_ID not configured"
 
-    def _validate(u):
-        p = urlparse(u)
-        if p.scheme not in ("http", "https"):
-            raise ValueError(f"bad scheme: {p.scheme!r}")
-        if not p.hostname:
-            raise ValueError("no hostname")
-        for _f, _t, _p, _c, sa in socket.getaddrinfo(p.hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM):
-            ip = ipaddress.ip_address(sa[0])
-            for net in _BLOCKED:
-                if ip in net:
-                    raise ValueError(f"blocked IP: {ip}")
-
-    class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
-        def redirect_request(self, req, fp, code, msg, headers, newurl):
-            _validate(newurl)
-            return super().redirect_request(req, fp, code, msg, headers, newurl)
+    region = os.environ.get("AGENT_STUDIO_REGION", "us-east-1")
+    client = boto3.client("bedrock-agentcore", region_name=region)
 
     try:
-        _validate(url)
+        sess = client.start_browser_session(
+            browserIdentifier=browser_id,
+            name="agentstudio-fetch",
+            sessionTimeoutSeconds=180,
+            viewPort={"width": 1280, "height": 800},
+        )
     except Exception as e:
-        return f"Error validating URL: {e}"
+        return f"Error: start_browser_session failed: {e}"
 
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; AgentStudio/1.0)"}
-    req = urllib.request.Request(url, headers=headers)
-    opener = urllib.request.build_opener(_ValidatingRedirectHandler)
+    session_id = sess["sessionId"]
+    cdp_url = sess["streams"]["automationStream"]["streamEndpoint"]
 
     try:
-        with opener.open(req, timeout=15) as resp:
-            html = resp.read().decode("utf-8", errors="ignore")
+        ws = websocket.create_connection(cdp_url, timeout=30)
     except Exception as e:
-        return f"Error fetching URL: {e}"
+        try:
+            client.stop_browser_session(browserIdentifier=browser_id, sessionId=session_id)
+        except Exception:
+            pass
+        return f"Error: CDP connect failed: {e}"
 
-    # Try markdownify first (better output)
+    def _send(method, params=None, _id=[1]):
+        msg_id = _id[0]
+        _id[0] += 1
+        ws.send(json.dumps({"id": msg_id, "method": method, "params": params or {}}))
+        while True:
+            raw = ws.recv()
+            data = json.loads(raw)
+            if data.get("id") == msg_id:
+                return data
+
     try:
-        from markdownify import markdownify as md
-        text = md(html, heading_style="ATX", strip=["script", "style", "nav", "footer"])
-    except ImportError:
-        # Fallback: regex-based cleanup
-        import re
-        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL)
-        html = re.sub(r"<style[^>]*>.*?</style>", "", html, flags=re.DOTALL)
-        html = re.sub(r"<nav[^>]*>.*?</nav>", "", html, flags=re.DOTALL)
-        text = re.sub(r"<[^>]+>", " ", html)
+        _send("Target.getTargets")
+        _send("Page.enable")
+        _send("Page.navigate", {"url": url})
+        time.sleep(3)
+        resp = _send("Runtime.evaluate", {
+            "expression": "document.body ? document.body.innerText : ''",
+            "returnByValue": True,
+            "awaitPromise": False,
+        })
+        text = ((resp.get("result") or {}).get("result") or {}).get("value") or ""
+    except Exception as e:
+        text = f"Error: CDP interaction failed: {e}"
+    finally:
+        try:
+            ws.close()
+        except Exception:
+            pass
+        try:
+            client.stop_browser_session(browserIdentifier=browser_id, sessionId=session_id)
+        except Exception:
+            pass
 
-    # Clean excessive whitespace
     import re
     text = re.sub(r"\\n{3,}", "\\n\\n", text)
     text = re.sub(r" {2,}", " ", text).strip()
-
     if len(text) > max_length:
         text = text[:max_length] + f"\\n\\n... (truncated at {max_length} chars)"
-
     return text
 '''

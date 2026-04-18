@@ -218,7 +218,7 @@ if [[ "$SKIP_INFRA" == false ]]; then
   if ! aws s3api head-object --bucket "$S3_BUCKET" --key "base/deployment.zip" --region "$REGION" 2>/dev/null; then
     echo "  Building base/deployment.zip..."
     TMPDIR=$(mktemp -d)
-    pip install -q -t "$TMPDIR" strands-agents bedrock-agentcore boto3 requests httpx beautifulsoup4 markdownify pyyaml python-dateutil pydantic tabulate
+    pip install -q -t "$TMPDIR" strands-agents bedrock-agentcore boto3 requests httpx beautifulsoup4 markdownify pyyaml python-dateutil pydantic tabulate websocket-client
     (cd "$TMPDIR" && zip -qr /tmp/agent-studio-base.zip .)
     aws s3 cp /tmp/agent-studio-base.zip "s3://$S3_BUCKET/base/deployment.zip" --region "$REGION"
     rm -rf "$TMPDIR" /tmp/agent-studio-base.zip
