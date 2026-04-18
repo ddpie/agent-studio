@@ -221,6 +221,22 @@ If you already have Cognito or a Meta-Agent Runtime, the script auto-detects exi
 - **Data isolation**: Workspace-level isolation, agent ownership verification, per-agent secret storage
 - **Least privilege**: S3 IAM policies scoped by path prefix, no broad Lambda resource-based policies
 
+## Runtime observability
+
+Each agent row shows a live AgentCore status badge (ACTIVE / CREATING /
+UPDATING / FAILED) backed by a passthrough over `get_agent_runtime`.
+Per-agent tabs surface version history (`list_agent_runtime_versions`)
+and blue/green endpoints (`create/update/delete_agent_runtime_endpoint`).
+No DDB mirror — AgentCore is the source of truth.
+
+## Sub-agent sandbox
+
+`run_command` and `fetch_webpage` run inside AgentCore Code Interpreter
+and Browser respectively. There is no in-process subprocess call; the
+account-shared sandbox resources are provisioned once via
+`scripts/provision-agentcore-shared.sh` and their IDs travel to
+sub-agents via env vars.
+
 ## Project Structure
 
 ```
