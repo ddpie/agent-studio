@@ -317,15 +317,27 @@ def _build_input(payload):
             try:
                 import socket, ipaddress
                 from urllib.parse import urlparse as _urlparse
-                _host = _urlparse(img_url).hostname
-                if _host:
-                    _blocked = ["127.0.0.0/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16","169.254.0.0/16","::1/128","fc00::/7","fe80::/10"]
-                    for _f,_t,_p,_c,_sa in socket.getaddrinfo(_host, None, socket.AF_UNSPEC, socket.SOCK_STREAM):
+                _BLOCKED = [ipaddress.ip_network(n) for n in (
+                    "0.0.0.0/8","10.0.0.0/8","100.64.0.0/10","127.0.0.0/8",
+                    "169.254.0.0/16","172.16.0.0/12","192.0.0.0/24","192.168.0.0/16",
+                    "198.18.0.0/15","224.0.0.0/4","240.0.0.0/4","255.255.255.255/32",
+                    "::/128","::1/128","fc00::/7","fe80::/10","ff00::/8",
+                )]
+                def _ck(u):
+                    p = _urlparse(u)
+                    if p.scheme not in ("http","https"): raise ValueError(f"bad scheme: {p.scheme}")
+                    if not p.hostname: raise ValueError("no hostname")
+                    for _f,_t,_pr,_c,_sa in socket.getaddrinfo(p.hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM):
                         _ip = ipaddress.ip_address(_sa[0])
-                        if any(_ip in ipaddress.ip_network(n) for n in _blocked):
-                            raise ValueError(f"Blocked IP: {_ip}")
+                        for net in _BLOCKED:
+                            if _ip in net: raise ValueError(f"blocked IP: {_ip}")
+                class _RH(urllib.request.HTTPRedirectHandler):
+                    def redirect_request(self, rq, fp, code, msg, hdrs, newurl):
+                        _ck(newurl)
+                        return super().redirect_request(rq, fp, code, msg, hdrs, newurl)
+                _ck(img_url)
                 req = urllib.request.Request(img_url)
-                with urllib.request.urlopen(req, timeout=10) as resp:
+                with urllib.request.build_opener(_RH).open(req, timeout=10) as resp:
                     img_bytes = resp.read()
                     content_type = resp.headers.get("Content-Type", "image/png")
                     fmt = content_type.split("/")[-1].replace("jpg", "jpeg")

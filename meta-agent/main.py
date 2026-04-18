@@ -458,10 +458,9 @@ async def invoke(payload, context):
                 })
             elif img_url.startswith("http"):
                 try:
-                    from url_validation import validate_url
-                    validate_url(img_url)
+                    from url_validation import safe_urlopen
                     req = urllib.request.Request(img_url)
-                    with urllib.request.urlopen(req, timeout=10) as resp:
+                    with safe_urlopen(req, timeout=10) as resp:
                         img_bytes = resp.read()
                         content_type = resp.headers.get("Content-Type", "image/png")
                         fmt = content_type.split("/")[-1].replace("jpg", "jpeg")

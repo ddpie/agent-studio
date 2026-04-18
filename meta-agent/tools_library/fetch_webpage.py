@@ -32,23 +32,42 @@ def fetch_webpage(url: str, max_length: int = 8000) -> str:
     if not url or not url.startswith(("http://", "https://")):
         return "Error: Invalid URL. Must start with http:// or https://"
 
-    # SSRF protection: reject private/metadata IPs
+    # SSRF protection: validate initial URL and every redirect target
+    _BLOCKED = [ipaddress.ip_network(n) for n in (
+        "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8",
+        "169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24", "192.168.0.0/16",
+        "198.18.0.0/15", "224.0.0.0/4", "240.0.0.0/4", "255.255.255.255/32",
+        "::/128", "::1/128", "fc00::/7", "fe80::/10", "ff00::/8",
+    )]
+
+    def _validate(u):
+        p = urlparse(u)
+        if p.scheme not in ("http", "https"):
+            raise ValueError(f"bad scheme: {p.scheme!r}")
+        if not p.hostname:
+            raise ValueError("no hostname")
+        for _f, _t, _p, _c, sa in socket.getaddrinfo(p.hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM):
+            ip = ipaddress.ip_address(sa[0])
+            for net in _BLOCKED:
+                if ip in net:
+                    raise ValueError(f"blocked IP: {ip}")
+
+    class _ValidatingRedirectHandler(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            _validate(newurl)
+            return super().redirect_request(req, fp, code, msg, headers, newurl)
+
     try:
-        hostname = urlparse(url).hostname
-        if hostname:
-            _blocked = ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10"]
-            for _fam, _t, _p, _c, sa in socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM):
-                ip = ipaddress.ip_address(sa[0])
-                if any(ip in ipaddress.ip_network(n) for n in _blocked):
-                    return f"Error: URL resolves to blocked IP range: {ip}"
+        _validate(url)
     except Exception as e:
         return f"Error validating URL: {e}"
 
     headers = {"User-Agent": "Mozilla/5.0 (compatible; AgentStudio/1.0)"}
     req = urllib.request.Request(url, headers=headers)
+    opener = urllib.request.build_opener(_ValidatingRedirectHandler)
 
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with opener.open(req, timeout=15) as resp:
             html = resp.read().decode("utf-8", errors="ignore")
     except Exception as e:
         return f"Error fetching URL: {e}"
