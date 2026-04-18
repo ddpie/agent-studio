@@ -8,7 +8,7 @@ import boto3
 from strands import tool
 
 from config import MODEL_ID, REGION, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE
-from deploy import build_deployment_package_v2, upload_deployment, wait_for_ready, validate_agent_files, build_skill_prompt_section
+from deploy import build_deployment_package_v2, upload_deployment, wait_for_ready, validate_agent_files, build_skill_prompt_section, _shared_env_vars
 from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_template_prompt, BASE_GUIDELINES
 from tools_library.registry import get_tool_code_by_func_name as _get_builtin_code
@@ -305,6 +305,7 @@ def update_agent(
                     "mountPath": "/mnt/workspace"
                 }
             }],
+            environmentVariables=_shared_env_vars(),
         )
 
         status = wait_for_ready(agent_id)

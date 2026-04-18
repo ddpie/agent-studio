@@ -61,6 +61,23 @@ export class AgentCoreRoles extends Construct {
           `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*`,
         ],
       }),
+      // Shared Code Interpreter + Browser (provisioned via scripts/provision-agentcore-shared.sh)
+      new iam.PolicyStatement({
+        actions: [
+          "bedrock-agentcore:StartCodeInterpreterSession",
+          "bedrock-agentcore:InvokeCodeInterpreter",
+          "bedrock-agentcore:StopCodeInterpreterSession",
+          "bedrock-agentcore:StartBrowserSession",
+          "bedrock-agentcore:InvokeBrowser",
+          "bedrock-agentcore:StopBrowserSession",
+          "bedrock-agentcore:GetBrowserSession",
+          "bedrock-agentcore:UpdateBrowserStream",
+        ],
+        resources: [
+          `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:code-interpreter-custom/*`,
+          `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:browser-custom/*`,
+        ],
+      }),
     ];
 
     const s3ReadStatements = [

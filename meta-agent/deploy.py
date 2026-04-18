@@ -4,10 +4,25 @@ import ast
 import boto3
 import io
 import json
+import os
 import time
 import zipfile
 
 from config import REGION, ACCOUNT_ID, S3_BUCKET, AGENT_ROLE_ARN, BASE_DEPLOYMENT_KEY
+
+
+def _shared_env_vars() -> dict:
+    """Environment variables forwarded to every sub-agent runtime."""
+    env = {
+        "AGENT_STUDIO_REGION": REGION,
+    }
+    ci = os.environ.get("AGENT_STUDIO_CODE_INTERPRETER_ID", "")
+    br = os.environ.get("AGENT_STUDIO_BROWSER_ID", "")
+    if ci:
+        env["AGENT_STUDIO_CODE_INTERPRETER_ID"] = ci
+    if br:
+        env["AGENT_STUDIO_BROWSER_ID"] = br
+    return env
 
 # Always inject the latest stream_utils.py into deployment packages
 try:
@@ -209,6 +224,7 @@ def create_runtime(agent_name: str, description: str, s3_key: str, role_arn: str
                 "mountPath": "/mnt/workspace"
             }
         }],
+        environmentVariables=_shared_env_vars(),
     )
 
     return {
