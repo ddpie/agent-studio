@@ -8,6 +8,7 @@ import { Database } from "./constructs/database";
 import { Api } from "./constructs/api";
 import { Invoke } from "./constructs/invoke";
 import { Cdn } from "./constructs/cdn";
+import { AgentCoreShared } from "./constructs/agentcore-shared";
 
 export interface AgentStudioStackProps extends cdk.StackProps {
   config: AgentStudioConfig;
@@ -34,6 +35,12 @@ export class AgentStudioStack extends cdk.Stack {
       region: config.region,
       accountId: config.accountId,
       s3Bucket: config.s3Bucket,
+    });
+
+    // Account-shared CodeInterpreter + Browser. Sub-agents' run_command and
+    // fetch_webpage tools route through these.
+    const agentCoreShared = new AgentCoreShared(this, "AgentCoreShared", {
+      executionRoleArn: roles.basicRoleArn,
     });
 
     // Meta-Agent Runtime (CfnRuntime or existing reference)

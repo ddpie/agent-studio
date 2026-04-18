@@ -1,31 +1,51 @@
 import { Construct } from "constructs";
-import { Stack } from "aws-cdk-lib";
+import { CfnOutput } from "aws-cdk-lib";
+import { CfnCodeInterpreterCustom, CfnBrowserCustom } from "aws-cdk-lib/aws-bedrockagentcore";
 
 export interface AgentCoreSharedProps {
-  region: string;
-  accountId: string;
   executionRoleArn: string;
+  codeInterpreterName?: string;
+  browserName?: string;
 }
 
 /**
- * Surfaces the account-shared CodeInterpreter and Browser IDs to the
- * rest of the stack. Provisioning happens via
- * scripts/provision-agentcore-shared.sh because cdk-lib has not yet
- * published L1 resources for bedrock-agentcore CodeInterpreter/Browser.
+ * Account-shared CodeInterpreter + Browser for Agent Studio sub-agents.
+ *
+ * `run_command` routes into the CodeInterpreter; `fetch_webpage` routes
+ * into the Browser via CDP. IDs are exposed as CfnOutputs so
+ * deploy-agentcore.sh can forward them to sub-agent runtimes via env vars.
  */
 export class AgentCoreShared extends Construct {
   public readonly codeInterpreterId: string;
   public readonly browserId: string;
 
-  constructor(scope: Construct, id: string, _props: AgentCoreSharedProps) {
+  constructor(scope: Construct, id: string, props: AgentCoreSharedProps) {
     super(scope, id);
-    const codeInterpreterId = Stack.of(this).node.tryGetContext("codeInterpreterId")
-      ?? process.env.AGENT_STUDIO_CODE_INTERPRETER_ID
-      ?? "";
-    const browserId = Stack.of(this).node.tryGetContext("browserId")
-      ?? process.env.AGENT_STUDIO_BROWSER_ID
-      ?? "";
-    this.codeInterpreterId = codeInterpreterId;
-    this.browserId = browserId;
+
+    const ci = new CfnCodeInterpreterCustom(this, "CodeInterpreter", {
+      name: props.codeInterpreterName ?? "agentstudio_ci_shared",
+      description: "Shared Code Interpreter for Agent Studio sub-agents",
+      executionRoleArn: props.executionRoleArn,
+      networkConfiguration: { networkMode: "PUBLIC" },
+    });
+
+    const browser = new CfnBrowserCustom(this, "Browser", {
+      name: props.browserName ?? "agentstudio_br_shared",
+      description: "Shared Browser for Agent Studio sub-agents",
+      executionRoleArn: props.executionRoleArn,
+      networkConfiguration: { networkMode: "PUBLIC" },
+    });
+
+    this.codeInterpreterId = ci.attrCodeInterpreterId;
+    this.browserId = browser.attrBrowserId;
+
+    new CfnOutput(this, "CodeInterpreterId", {
+      value: this.codeInterpreterId,
+      exportName: "AgentStudio-CodeInterpreterId",
+    });
+    new CfnOutput(this, "BrowserId", {
+      value: this.browserId,
+      exportName: "AgentStudio-BrowserId",
+    });
   }
 }
