@@ -81,7 +81,7 @@ def list_mcp_servers() -> str:
             cat = m["category"]
             by_category.setdefault(cat, []).append(m)
 
-        ready_count = sum(1 for m in merged if m["status"] == "READY")
+        ready_count = sum(1 for m in merged if m["status"] == "ACTIVE")
 
         result = {
             "total": len(merged),

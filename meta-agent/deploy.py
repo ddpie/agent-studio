@@ -218,16 +218,20 @@ def create_runtime(agent_name: str, description: str, s3_key: str, role_arn: str
 
 
 def wait_for_ready(agent_id: str, timeout: int = 300) -> str:
-    """Wait for agent to become READY. Returns final status."""
+    """Wait for agent to become ACTIVE. Returns final status.
+
+    AgentCore Control Plane status enum (verified via boto3 docs + live probe):
+    CREATING | ACTIVE | UPDATING | DELETING | FAILED | INACTIVE.
+    """
     control = boto3.client("bedrock-agentcore-control", region_name=REGION)
     start = time.time()
 
     while time.time() - start < timeout:
         resp = control.get_agent_runtime(agentRuntimeId=agent_id)
         status = resp["status"]
-        if status == "READY":
+        if status == "ACTIVE":
             return status
-        if status in ("FAILED", "DELETING"):
+        if status in ("FAILED", "DELETING", "INACTIVE"):
             return status
         time.sleep(10)
 
