@@ -186,7 +186,7 @@ export async function deleteAgent(agentId: string) {
 // ── Agent runtime (AgentCore Control Plane passthrough) ──
 
 export interface AgentRuntimeInfo {
-  status: "CREATING" | "ACTIVE" | "UPDATING" | "DELETING" | "FAILED" | "INACTIVE";
+  status: "CREATING" | "CREATE_FAILED" | "UPDATING" | "UPDATE_FAILED" | "READY" | "DELETING";
   lastUpdatedAt?: string;
   description?: string;
   agentRuntimeVersion?: string;

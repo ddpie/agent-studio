@@ -72,12 +72,12 @@
   },
   "runtime": {
     "status": {
-      "active": "Ready",
+      "ready": "Ready",
       "creating": "Creating",
       "updating": "Updating",
       "deleting": "Deleting",
-      "failed": "Failed",
-      "inactive": "Inactive",
+      "create_failed": "Create failed",
+      "update_failed": "Update failed",
       "unknown": "Unknown"
     },
     "drawer": {

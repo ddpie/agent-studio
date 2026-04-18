@@ -138,6 +138,12 @@ if agent_id:
 else:
     mode = "create"
 
+env_vars = {"AGENT_STUDIO_REGION": region}
+for _k in ("AGENT_STUDIO_CODE_INTERPRETER_ID", "AGENT_STUDIO_BROWSER_ID"):
+    _v = os.environ.get(_k, "")
+    if _v:
+        env_vars[_k] = _v
+
 if mode == "update":
     s3_key = f"agents/{agent_id}/deployment.zip"
     existing = control.get_agent_runtime(agentRuntimeId=agent_id)
@@ -152,6 +158,7 @@ if mode == "update":
                 "entryPoint": ["main.py"],
             }
         },
+        environmentVariables=env_vars,
     )
     print(f"  Update triggered for {agent_id}", file=sys.stderr)
 else:
@@ -172,11 +179,13 @@ else:
         filesystemConfigurations=[{
             "sessionStorage": {"mountPath": "/mnt/workspace"}
         }],
+        environmentVariables=env_vars,
     )
     agent_id = resp["agentRuntimeId"]
     print(f"  Created runtime: {agent_id}", file=sys.stderr)
 
-# Wait for READY
+# Wait for READY (AgentCore returns CREATING | CREATE_FAILED | UPDATING |
+# UPDATE_FAILED | READY | DELETING per boto3 service model).
 print("  Waiting for READY...", end="", flush=True, file=sys.stderr)
 for _ in range(30):
     time.sleep(10)
@@ -186,7 +195,7 @@ for _ in range(30):
     if status == "READY":
         print(f"\n  Status: {status}", file=sys.stderr)
         break
-    if status in ("FAILED", "CREATE_FAILED", "DELETING"):
+    if status in ("CREATE_FAILED", "UPDATE_FAILED", "DELETING"):
         print(f"\n  Status: {status} — deployment failed!", file=sys.stderr)
         sys.exit(1)
 else:

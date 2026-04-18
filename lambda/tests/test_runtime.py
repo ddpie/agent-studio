@@ -42,7 +42,7 @@ def test_get_runtime_returns_filtered_fields(mock_jwt, user_id, workspace_id, aw
             "agentRuntimeArn": "arn:aws:bedrock-agentcore:us-east-1:123:runtime/agt-test",
             "agentRuntimeId": "agt-test",
             "agentRuntimeName": "TestAgent",
-            "status": "ACTIVE",
+            "status": "READY",
             "lastUpdatedAt": "2026-04-18T00:00:00Z",
             "description": "desc",
             "executionRoleArn": "arn:aws:iam::123:role/secret",
@@ -56,7 +56,7 @@ def test_get_runtime_returns_filtered_fields(mock_jwt, user_id, workspace_id, aw
 
     assert resp["statusCode"] == 200
     data = json.loads(resp["body"])
-    assert data["status"] == "ACTIVE"
+    assert data["status"] == "READY"
     assert data["agentRuntimeVersion"] == "4"
     assert "agentRuntimeArn" not in data
     assert "executionRoleArn" not in data
@@ -113,9 +113,9 @@ def test_list_versions_returns_sorted(mock_jwt, user_id, workspace_id, aws_event
         control = MagicMock()
         control.list_agent_runtime_versions.return_value = {
             "agentRuntimes": [
-                {"agentRuntimeVersion": "3", "status": "ACTIVE", "lastUpdatedAt": "2026-04-18T00:00:00Z"},
-                {"agentRuntimeVersion": "2", "status": "ACTIVE", "lastUpdatedAt": "2026-04-17T00:00:00Z"},
-                {"agentRuntimeVersion": "1", "status": "ACTIVE", "lastUpdatedAt": "2026-04-16T00:00:00Z"},
+                {"agentRuntimeVersion": "3", "status": "READY", "lastUpdatedAt": "2026-04-18T00:00:00Z"},
+                {"agentRuntimeVersion": "2", "status": "READY", "lastUpdatedAt": "2026-04-17T00:00:00Z"},
+                {"agentRuntimeVersion": "1", "status": "READY", "lastUpdatedAt": "2026-04-16T00:00:00Z"},
             ]
         }
         mock_control_factory.return_value = control
