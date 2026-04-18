@@ -43,6 +43,26 @@
       "details": "技术详情"
     }
   },
+  "runtime": {
+    "status": {
+      "active": "就绪",
+      "creating": "创建中",
+      "updating": "更新中",
+      "deleting": "删除中",
+      "failed": "失败",
+      "inactive": "未激活",
+      "unknown": "未知"
+    },
+    "drawer": {
+      "title": "运行时详情",
+      "lastUpdated": "最近更新",
+      "version": "版本",
+      "description": "描述",
+      "viewLogs": "在 CloudWatch 查看日志",
+      "refresh": "刷新",
+      "close": "关闭"
+    }
+  },
   "settings": {
     "title": "设置",
     "interface": "界面",

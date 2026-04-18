@@ -183,6 +183,20 @@ export async function deleteAgent(agentId: string) {
   return apiDelete(`/agents/${encodeURIComponent(agentId)}`);
 }
 
+// ── Agent runtime (AgentCore Control Plane passthrough) ──
+
+export interface AgentRuntimeInfo {
+  status: "CREATING" | "ACTIVE" | "UPDATING" | "DELETING" | "FAILED" | "INACTIVE";
+  lastUpdatedAt?: string;
+  description?: string;
+  agentRuntimeVersion?: string;
+  agentRuntimeName?: string;
+}
+
+export async function getAgentRuntime(agentId: string): Promise<AgentRuntimeInfo> {
+  return apiGet<AgentRuntimeInfo>(`/agents/${encodeURIComponent(agentId)}/runtime`);
+}
+
 export async function fetchAgentFile(agentId: string, filePath: string): Promise<string> {
   try {
     const data = await apiGet<{ content?: string }>(

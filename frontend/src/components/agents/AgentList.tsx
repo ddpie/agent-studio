@@ -6,6 +6,14 @@ import { useAgentEditStore } from "../../stores/agent-edit-store";
 import { Bot, RefreshCw, Loader2, MessageSquare, Settings2, Archive, ChevronDown, RotateCcw, Trash2 } from "lucide-react";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
+import StatusBadge from "../common/StatusBadge";
+import AgentRuntimeDrawer from "./AgentRuntimeDrawer";
+import { useRuntimeStatus } from "../../hooks/useRuntimeStatus";
+
+function AgentRowBadge({ agentId, onClick }: { agentId: string; onClick: () => void }) {
+  const { data } = useRuntimeStatus(agentId);
+  return <StatusBadge status={data?.status ?? null} onClick={onClick} />;
+}
 
 export default function AgentList({ collapsed = false }: { collapsed?: boolean }) {
   const { t } = useTranslation();
@@ -18,6 +26,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
   const [showArchived, setShowArchived] = useState(false);
   const [actionLoading, setActionLoading] = useState<{ id: string; action: string } | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ agentId: string; agentName: string; type: "archive" | "restore" | "purge" } | null>(null);
+  const [runtimeDrawerAgentId, setRuntimeDrawerAgentId] = useState<string | null>(null);
 
   const executeAgentAction = useCallback(async (agentId: string, type: "archive" | "restore" | "purge") => {
     setActionLoading({ id: agentId, action: type });
@@ -196,12 +205,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
                 >
                   {actionLoading?.id === agent.id && actionLoading.action === "archive" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
                 </button>
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    agent.status === "active" ? "bg-green-500" : "bg-yellow-500"
-                  }`}
-                  title={agent.status}
-                />
+                <AgentRowBadge agentId={agent.id} onClick={() => setRuntimeDrawerAgentId(agent.id)} />
               </div>
             </div>
             {agent.description && (
@@ -272,6 +276,8 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
         onConfirm={() => { pendingAction?.(); setPendingAction(null); }}
         onCancel={() => setPendingAction(null)}
       />
+
+      <AgentRuntimeDrawer agentId={runtimeDrawerAgentId} onClose={() => setRuntimeDrawerAgentId(null)} />
 
       <ConfirmDialog
         open={!!confirmAction}

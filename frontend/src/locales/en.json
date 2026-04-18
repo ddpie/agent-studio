@@ -43,6 +43,26 @@
       "details": "Technical details"
     }
   },
+  "runtime": {
+    "status": {
+      "active": "Ready",
+      "creating": "Creating",
+      "updating": "Updating",
+      "deleting": "Deleting",
+      "failed": "Failed",
+      "inactive": "Inactive",
+      "unknown": "Unknown"
+    },
+    "drawer": {
+      "title": "Runtime details",
+      "lastUpdated": "Last updated",
+      "version": "Version",
+      "description": "Description",
+      "viewLogs": "View logs in CloudWatch",
+      "refresh": "Refresh",
+      "close": "Close"
+    }
+  },
   "settings": {
     "title": "Settings",
     "interface": "Interface",
