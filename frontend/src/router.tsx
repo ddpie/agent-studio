@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { createHashRouter, Navigate } from "react-router";
 import AppShell from "./components/layout/AppShell";
 import AgentsLayout from "./components/layout/AgentsLayout";
@@ -10,6 +11,11 @@ import ToolDetail from "./components/pages/ToolDetail";
 import McpPage from "./components/pages/McpPage";
 import McpPolicyPage from "./components/pages/McpPolicyPage";
 import SettingsPage from "./components/pages/SettingsPage";
+import PageErrorBoundary from "./components/common/PageErrorBoundary";
+
+function withBoundary(element: ReactNode) {
+  return <PageErrorBoundary>{element}</PageErrorBoundary>;
+}
 
 export function createRouter(
   signOut?: () => void,
@@ -25,19 +31,19 @@ export function createRouter(
           path: "agents",
           element: <AgentsLayout />,
           children: [
-            { index: true, element: <ChatPanel /> },
-            { path: "chat/:agentId", element: <ChatPanel /> },
-            { path: "edit/:agentId", element: <AgentEditForm /> },
-            { path: "edit/:agentId/skills/:skillId", element: <AgentEditForm /> },
+            { index: true, element: withBoundary(<ChatPanel />) },
+            { path: "chat/:agentId", element: withBoundary(<ChatPanel />) },
+            { path: "edit/:agentId", element: withBoundary(<AgentEditForm />) },
+            { path: "edit/:agentId/skills/:skillId", element: withBoundary(<AgentEditForm />) },
           ],
         },
-        { path: "skills", element: <SkillsPage /> },
-        { path: "skills/:skillId", element: <SkillDetail /> },
-        { path: "tools", element: <ToolLibraryPage /> },
-        { path: "tools/:toolId", element: <ToolDetail /> },
-        { path: "mcp", element: <McpPage /> },
-        { path: "mcp-policy", element: <McpPolicyPage /> },
-        { path: "settings", element: <SettingsPage /> },
+        { path: "skills", element: withBoundary(<SkillsPage />) },
+        { path: "skills/:skillId", element: withBoundary(<SkillDetail />) },
+        { path: "tools", element: withBoundary(<ToolLibraryPage />) },
+        { path: "tools/:toolId", element: withBoundary(<ToolDetail />) },
+        { path: "mcp", element: withBoundary(<McpPage />) },
+        { path: "mcp-policy", element: withBoundary(<McpPolicyPage />) },
+        { path: "settings", element: withBoundary(<SettingsPage />) },
       ],
     },
   ]);

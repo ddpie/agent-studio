@@ -6,6 +6,7 @@ import { createRouter } from "./router";
 import { ensureWorkspaceId } from "./lib/api-client";
 import { useTranslation } from "react-i18next";
 import Toaster from "./components/common/Toaster";
+import RootErrorBoundary from "./components/common/RootErrorBoundary";
 
 export default function App() {
   return (
@@ -78,9 +79,9 @@ function AuthenticatedApp({ signOut, user }: { signOut?: () => void; user?: { si
   }
 
   return (
-    <>
+    <RootErrorBoundary>
       <RouterProvider router={router} />
       <Toaster />
-    </>
+    </RootErrorBoundary>
   );
 }

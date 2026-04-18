@@ -30,7 +30,16 @@
     "send": "Send",
     "copy": "Copy",
     "reset": "Reset to default",
-    "autoFix": "Auto-fix"
+    "autoFix": "Auto-fix",
+    "errorBoundary": {
+      "rootTitle": "Something went wrong",
+      "rootMessage": "Agent Studio ran into an unexpected error. Please reload the page.",
+      "rootReload": "Reload page",
+      "pageTitle": "This page couldn't load",
+      "pageMessage": "Try again, or navigate to another page via the sidebar.",
+      "pageRetry": "Try again",
+      "details": "Technical details"
+    }
   },
   "settings": {
     "title": "Settings",

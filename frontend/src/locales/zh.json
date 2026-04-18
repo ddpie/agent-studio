@@ -30,7 +30,16 @@
     "send": "发送",
     "copy": "复制",
     "reset": "恢复默认",
-    "autoFix": "自动修复"
+    "autoFix": "自动修复",
+    "errorBoundary": {
+      "rootTitle": "出现错误",
+      "rootMessage": "Agent Studio 遇到意外错误，请刷新页面。",
+      "rootReload": "刷新页面",
+      "pageTitle": "页面加载失败",
+      "pageMessage": "可以重试，或通过侧边栏跳转到其他页面。",
+      "pageRetry": "重试",
+      "details": "技术详情"
+    }
   },
   "settings": {
     "title": "设置",
