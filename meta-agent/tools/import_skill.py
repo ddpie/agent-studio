@@ -43,8 +43,10 @@ user-invocable: true
 
 
 def _http_get(url: str, accept: str = "*/*", binary: bool = False):
-    """Simple HTTP GET with User-Agent header."""
+    """Simple HTTP GET with User-Agent header. Rejects private/metadata IPs."""
     import urllib.request
+    from url_validation import validate_url
+    validate_url(url)
     req = urllib.request.Request(url, headers={
         "User-Agent": "AgentStudio/1.0",
         "Accept": accept,

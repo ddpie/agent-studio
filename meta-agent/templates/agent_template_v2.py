@@ -315,6 +315,15 @@ def _build_input(payload):
             blocks.append({"image": {"format": fmt, "source": {"bytes": base64.b64decode(b64)}}})
         elif img_url.startswith("http"):
             try:
+                import socket, ipaddress
+                from urllib.parse import urlparse as _urlparse
+                _host = _urlparse(img_url).hostname
+                if _host:
+                    _blocked = ["127.0.0.0/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16","169.254.0.0/16","::1/128","fc00::/7","fe80::/10"]
+                    for _f,_t,_p,_c,_sa in socket.getaddrinfo(_host, None, socket.AF_UNSPEC, socket.SOCK_STREAM):
+                        _ip = ipaddress.ip_address(_sa[0])
+                        if any(_ip in ipaddress.ip_network(n) for n in _blocked):
+                            raise ValueError(f"Blocked IP: {_ip}")
                 req = urllib.request.Request(img_url)
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     img_bytes = resp.read()
@@ -587,9 +596,20 @@ def run_command(command: str, language: str = "python") -> str:
             return _json.dumps({"error": str(e)})
 
     elif language == "shell":
+        import shlex as _shlex
+        _ALLOWED_CMDS = {"python3", "python", "pip", "pip3", "ls", "cat", "head", "tail", "grep", "find", "wc", "sort", "uniq", "jq", "curl", "wget", "echo", "mkdir", "cp", "mv", "touch", "date", "env", "pwd", "cd", "tree"}
+        try:
+            _parts = _shlex.split(command)
+        except ValueError as e:
+            return _json.dumps({"error": f"Invalid shell command: {e}"})
+        if not _parts:
+            return _json.dumps({"error": "Empty command"})
+        _base = _os.path.basename(_parts[0])
+        if _base not in _ALLOWED_CMDS:
+            return _json.dumps({"error": f"Command not allowed: {_base}. Allowed: {', '.join(sorted(_ALLOWED_CMDS))}"})
         try:
             result = _sp.run(
-                command, shell=True,
+                _parts, shell=False,
                 capture_output=True, text=True, timeout=timeout, cwd="/tmp",
             )
             output = result.stdout

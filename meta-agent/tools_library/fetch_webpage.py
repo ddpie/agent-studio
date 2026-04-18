@@ -25,9 +25,24 @@ def fetch_webpage(url: str, max_length: int = 8000) -> str:
         fetch_webpage("https://docs.aws.amazon.com/bedrock/latest/userguide/what-is-bedrock.html")
     """
     import urllib.request
+    import socket
+    import ipaddress
+    from urllib.parse import urlparse
 
     if not url or not url.startswith(("http://", "https://")):
         return "Error: Invalid URL. Must start with http:// or https://"
+
+    # SSRF protection: reject private/metadata IPs
+    try:
+        hostname = urlparse(url).hostname
+        if hostname:
+            _blocked = ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10"]
+            for _fam, _t, _p, _c, sa in socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM):
+                ip = ipaddress.ip_address(sa[0])
+                if any(ip in ipaddress.ip_network(n) for n in _blocked):
+                    return f"Error: URL resolves to blocked IP range: {ip}"
+    except Exception as e:
+        return f"Error validating URL: {e}"
 
     headers = {"User-Agent": "Mozilla/5.0 (compatible; AgentStudio/1.0)"}
     req = urllib.request.Request(url, headers=headers)

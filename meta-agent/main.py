@@ -458,6 +458,8 @@ async def invoke(payload, context):
                 })
             elif img_url.startswith("http"):
                 try:
+                    from url_validation import validate_url
+                    validate_url(img_url)
                     req = urllib.request.Request(img_url)
                     with urllib.request.urlopen(req, timeout=10) as resp:
                         img_bytes = resp.read()
