@@ -10,6 +10,7 @@ export interface AuthProps {
 export class Auth extends Construct {
   public readonly userPoolId: string;
   public readonly userPoolClientId: string;
+  public readonly userPoolArn: string;
 
   constructor(scope: Construct, id: string, props?: AuthProps) {
     super(scope, id);
@@ -17,6 +18,8 @@ export class Auth extends Construct {
     if (props?.existingUserPoolId && props?.existingClientId) {
       this.userPoolId = props.existingUserPoolId;
       this.userPoolClientId = props.existingClientId;
+      const imported = cognito.UserPool.fromUserPoolId(this, "ImportedPool", props.existingUserPoolId);
+      this.userPoolArn = imported.userPoolArn;
       return;
     }
 
@@ -49,6 +52,7 @@ export class Auth extends Construct {
 
     this.userPoolId = userPool.userPoolId;
     this.userPoolClientId = client.userPoolClientId;
+    this.userPoolArn = userPool.userPoolArn;
 
     new cdk.CfnOutput(this, "UserPoolId", { value: userPool.userPoolId });
     new cdk.CfnOutput(this, "UserPoolClientId", { value: client.userPoolClientId });

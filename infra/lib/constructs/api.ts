@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
+import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as path from "path";
@@ -11,6 +12,7 @@ export interface ApiProps {
   config: AgentStudioConfig;
   cognitoUserPoolId: string;
   cognitoClientId: string;
+  cognitoUserPoolArn: string;
   metaAgentArn: string;
   workspacesTable: dynamodb.Table;
   agentsTable: dynamodb.ITable;
@@ -123,7 +125,13 @@ export class Api extends Construct {
       resources: ["*"],
     }));
 
-    // REST API
+    // REST API with Cognito authorizer
+    const userPool = cognito.UserPool.fromUserPoolArn(this, "UserPool", props.cognitoUserPoolArn);
+    const authorizer = new apigateway.CognitoUserPoolsAuthorizer(this, "CognitoAuthorizer", {
+      cognitoUserPools: [userPool],
+      authorizerName: "agent-studio-cognito",
+    });
+
     this.restApi = new apigateway.RestApi(this, "RestApi", {
       restApiName: "agent-studio-api",
       deployOptions: { stageName: "prod" },
@@ -133,6 +141,10 @@ export class Api extends Construct {
     apiResource.addProxy({
       defaultIntegration: new apigateway.LambdaIntegration(this.crudLambda),
       anyMethod: true,
+      defaultMethodOptions: {
+        authorizationType: apigateway.AuthorizationType.COGNITO,
+        authorizer,
+      },
     });
   }
 }

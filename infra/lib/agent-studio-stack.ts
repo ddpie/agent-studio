@@ -54,6 +54,7 @@ export class AgentStudioStack extends cdk.Stack {
       config,
       cognitoUserPoolId: auth.userPoolId,
       cognitoClientId: auth.userPoolClientId,
+      cognitoUserPoolArn: auth.userPoolArn,
       metaAgentArn: metaAgent.agentRuntimeArn,
       workspacesTable: database.workspacesTable,
       agentsTable: database.agentsTable,

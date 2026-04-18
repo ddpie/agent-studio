@@ -534,6 +534,25 @@ def copy_skill_files_from(wsId: str, agentId: str, skillId: str):
         if id_err:
             return bad_request(id_err)
 
+    # Destination agent must belong to the caller's workspace
+    _, dst_err = _check_agent_ownership(agentId, ws_id)
+    if dst_err:
+        return dst_err
+
+    # Source agent's workspace: caller must be at least viewer in it
+    table = _get_table()
+    src_agent = table.get_item(Key={"agentId": source_agent_id}, ConsistentRead=True).get("Item")
+    if not src_agent:
+        return forbidden()
+    src_ws_id = src_agent.get("workspace_id")
+    if not src_ws_id:
+        return forbidden()
+    if src_ws_id != ws_id:
+        src_member = get_membership(src_ws_id, user_id)
+        if not check_permission(src_member, "viewer"):
+            logger.warning("copy_skill denied: user=%s src_ws=%s role=%s", user_id, src_ws_id, src_member.get("role") if src_member else None)
+            return forbidden()
+
     s3 = _get_s3()
     src_prefix = f"agents/{source_agent_id}/skills/{source_skill_id}/"
     dst_prefix = f"agents/{agentId}/skills/{skillId}/"
