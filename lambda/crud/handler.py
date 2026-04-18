@@ -11,6 +11,7 @@ from crud.tools import router as tools_router
 from crud.uploads import router as uploads_router
 from crud.secrets import router as secrets_router
 from crud.mcp import router as mcp_router
+from crud.runtime import router as runtime_router
 
 logger = Logger(service="agent-studio-crud")
 
@@ -28,6 +29,7 @@ app.include_router(tools_router)
 app.include_router(uploads_router)
 app.include_router(secrets_router)
 app.include_router(mcp_router)
+app.include_router(runtime_router)
 
 
 @app.get("/api/health")
