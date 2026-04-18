@@ -1,4 +1,5 @@
 """Tests for crud/runtime.py — AgentCore Control Plane passthrough."""
+import datetime as dt
 import json
 from unittest.mock import MagicMock, patch
 
@@ -38,12 +39,19 @@ def test_get_runtime_returns_filtered_fields(mock_jwt, user_id, workspace_id, aw
             "status": "active",
         }
         control = MagicMock()
+        # Use real datetimes — boto3 returns naive datetime objects, not
+        # strings. If _strip_sensitive / response helpers don't coerce,
+        # json.dumps blows up with "Object of type datetime is not JSON
+        # serializable" and the /runtime endpoint 500s in production. (Hit
+        # live on 2026-04-18.)
+        last_updated = dt.datetime(2026, 4, 18, 0, 0, 0)
         control.get_agent_runtime.return_value = {
             "agentRuntimeArn": "arn:aws:bedrock-agentcore:us-east-1:123:runtime/agt-test",
             "agentRuntimeId": "agt-test",
             "agentRuntimeName": "TestAgent",
             "status": "READY",
-            "lastUpdatedAt": "2026-04-18T00:00:00Z",
+            "lastUpdatedAt": last_updated,
+            "createdAt": last_updated,
             "description": "desc",
             "executionRoleArn": "arn:aws:iam::123:role/secret",
             "agentRuntimeArtifact": {"code": {"s3": {"bucket": "b", "prefix": "p"}}},
@@ -58,6 +66,9 @@ def test_get_runtime_returns_filtered_fields(mock_jwt, user_id, workspace_id, aw
     data = json.loads(resp["body"])
     assert data["status"] == "READY"
     assert data["agentRuntimeVersion"] == "4"
+    # datetime fields must be ISO strings, not unserialisable objects.
+    assert data["lastUpdatedAt"] == "2026-04-18T00:00:00"
+    assert data["createdAt"] == "2026-04-18T00:00:00"
     assert "agentRuntimeArn" not in data
     assert "executionRoleArn" not in data
     assert "agentRuntimeArtifact" not in data

@@ -125,6 +125,25 @@ export class Api extends Construct {
       resources: ["*"],
     }));
 
+    // Sprint 1 D1-D3: runtime observability passthrough endpoints
+    // (crud/runtime.py). Read-only against sub-agent runtimes; endpoint
+    // mutations for blue/green UI.
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        "bedrock-agentcore:GetAgentRuntime",
+        "bedrock-agentcore:ListAgentRuntimes",
+        "bedrock-agentcore:ListAgentRuntimeVersions",
+        "bedrock-agentcore:ListAgentRuntimeEndpoints",
+        "bedrock-agentcore:CreateAgentRuntimeEndpoint",
+        "bedrock-agentcore:UpdateAgentRuntimeEndpoint",
+        "bedrock-agentcore:DeleteAgentRuntimeEndpoint",
+      ],
+      resources: [
+        `arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:runtime/*`,
+        `arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:runtime/*/runtime-endpoint/*`,
+      ],
+    }));
+
     // REST API with Cognito authorizer
     const userPool = cognito.UserPool.fromUserPoolArn(this, "UserPool", props.cognitoUserPoolArn);
     const authorizer = new apigateway.CognitoUserPoolsAuthorizer(this, "CognitoAuthorizer", {

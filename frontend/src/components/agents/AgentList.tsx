@@ -12,7 +12,7 @@ import { useRuntimeStatus } from "../../hooks/useRuntimeStatus";
 
 function AgentRowBadge({ agentId, onClick }: { agentId: string; onClick: () => void }) {
   const { data } = useRuntimeStatus(agentId);
-  return <StatusBadge status={data?.status ?? null} onClick={onClick} />;
+  return <StatusBadge status={data?.status ?? null} onClick={onClick} compact />;
 }
 
 export default function AgentList({ collapsed = false }: { collapsed?: boolean }) {

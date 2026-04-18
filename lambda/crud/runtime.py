@@ -53,8 +53,30 @@ _SENSITIVE_RUNTIME_FIELDS = {
 }
 
 
+def _to_json_safe(value):
+    """Recursively convert datetime/bytes to JSON-serialisable primitives."""
+    import datetime as _dt
+    if isinstance(value, _dt.datetime):
+        return value.isoformat()
+    if isinstance(value, _dt.date):
+        return value.isoformat()
+    if isinstance(value, (bytes, bytearray)):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, dict):
+        return {k: _to_json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_to_json_safe(v) for v in value]
+    if isinstance(value, tuple):
+        return [_to_json_safe(v) for v in value]
+    return value
+
+
 def _strip_sensitive(d: dict) -> dict:
-    return {k: v for k, v in d.items() if k not in _SENSITIVE_RUNTIME_FIELDS}
+    return {
+        k: _to_json_safe(v)
+        for k, v in d.items()
+        if k not in _SENSITIVE_RUNTIME_FIELDS
+    }
 
 
 @router.get("/api/workspaces/<wsId>/agents/<agentId>/runtime")
