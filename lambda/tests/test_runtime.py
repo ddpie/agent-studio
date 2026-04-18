@@ -126,3 +126,67 @@ def test_list_versions_returns_sorted(mock_jwt, user_id, workspace_id, aws_event
     versions = data.get("versions") if isinstance(data, dict) else data
     assert [v["agentRuntimeVersion"] for v in versions] == ["3", "2", "1"]
     assert "executionRoleArn" not in versions[0]
+
+
+def test_list_endpoints(mock_jwt, user_id, workspace_id, aws_event_factory):
+    from crud.handler import app
+    with patch("crud.runtime._get_control") as f, \
+         patch("crud.runtime._get_agent_item") as ga, \
+         patch("crud.runtime.auth_check") as auth:
+        auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
+        ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
+        control = MagicMock()
+        control.list_agent_runtime_endpoints.return_value = {
+            "runtimeEndpoints": [
+                {"name": "DEFAULT", "liveVersion": "4", "status": "READY",
+                 "createdAt": "2026-04-01", "lastUpdatedAt": "2026-04-18"},
+                {"name": "staging", "liveVersion": "3", "targetVersion": None, "status": "READY",
+                 "createdAt": "2026-04-10", "lastUpdatedAt": "2026-04-10"},
+            ]
+        }
+        f.return_value = control
+        event = aws_event_factory(f"/api/workspaces/{workspace_id}/agents/agt-test/endpoints")
+        resp = app.resolve(event, MagicMock())
+    assert resp["statusCode"] == 200
+    data = json.loads(resp["body"])
+    ep = data.get("endpoints", data)
+    names = [e["name"] for e in ep]
+    assert "DEFAULT" in names and "staging" in names
+
+
+def test_create_endpoint_requires_editor(mock_jwt, user_id, workspace_id, aws_event_factory):
+    from crud.handler import app
+    from shared.response import forbidden
+    with patch("crud.runtime.auth_check") as auth:
+        auth.return_value = (None, None, None, forbidden())
+        event = aws_event_factory(
+            f"/api/workspaces/{workspace_id}/agents/agt-test/endpoints",
+            method="POST",
+            body={"name": "staging", "version": "3"},
+        )
+        resp = app.resolve(event, MagicMock())
+    assert resp["statusCode"] == 403
+
+
+def test_update_endpoint_not_found_version(mock_jwt, user_id, workspace_id, aws_event_factory):
+    from crud.handler import app
+    from botocore.exceptions import ClientError
+    with patch("crud.runtime._get_control") as f, \
+         patch("crud.runtime._get_agent_item") as ga, \
+         patch("crud.runtime.auth_check") as auth:
+        auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
+        ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
+        control = MagicMock()
+        control.update_agent_runtime_endpoint.side_effect = ClientError(
+            {"Error": {"Code": "ResourceNotFoundException", "Message": "Agent version 99 does not exist"}},
+            "UpdateAgentRuntimeEndpoint",
+        )
+        f.return_value = control
+        event = aws_event_factory(
+            f"/api/workspaces/{workspace_id}/agents/agt-test/endpoints/staging",
+            method="PUT",
+            path_params={"wsId": workspace_id, "agentId": "agt-test", "endpointName": "staging"},
+            body={"version": "99"},
+        )
+        resp = app.resolve(event, MagicMock())
+    assert resp["statusCode"] == 404

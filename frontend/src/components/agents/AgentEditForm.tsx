@@ -14,6 +14,7 @@ import ReviewChangesModal from "./ReviewChangesModal";
 import AgentFormSections from "./AgentFormSections";
 import SkillEditorView from "./SkillEditorView";
 import DeploymentsTab from "./DeploymentsTab";
+import EndpointsTab from "./EndpointsTab";
 import { useAgentDeploy } from "../../hooks/useAgentDeploy";
 
 export default function AgentEditForm() {
@@ -301,6 +302,7 @@ export default function AgentEditForm() {
           }}
         />
         {agentId && !isCreateMode && <DeploymentsTab agentId={agentId} />}
+        {agentId && !isCreateMode && <EndpointsTab agentId={agentId} />}
       </div>
       </>
       )}

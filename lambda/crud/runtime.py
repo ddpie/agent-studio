@@ -119,3 +119,117 @@ def list_versions(wsId: str, agentId: str):
 
     cleaned.sort(key=_key, reverse=True)
     return success({"versions": cleaned})
+
+
+@router.get("/api/workspaces/<wsId>/agents/<agentId>/endpoints")
+def list_endpoints(wsId: str, agentId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
+    if err:
+        return err
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+    item = _get_agent_item(agentId)
+    if not item or item.get("workspace_id") != ws_id:
+        return forbidden()
+    try:
+        resp = _get_control().list_agent_runtime_endpoints(agentRuntimeId=agentId)
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code")
+        if code == "ResourceNotFoundException":
+            return not_found()
+        logger.exception("list_agent_runtime_endpoints failed", extra={"agentId": agentId})
+        return internal_error()
+    return success({"endpoints": [_strip_sensitive(e) for e in resp.get("runtimeEndpoints", [])]})
+
+
+@router.post("/api/workspaces/<wsId>/agents/<agentId>/endpoints")
+def create_endpoint(wsId: str, agentId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
+    if err:
+        return err
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+    item = _get_agent_item(agentId)
+    if not item or item.get("workspace_id") != ws_id:
+        return forbidden()
+    body = router.current_event.json_body or {}
+    name = (body.get("name") or "").strip()
+    version = (body.get("version") or "").strip()
+    if not name or not version:
+        return bad_request("name and version are required")
+    if name.upper() == "DEFAULT":
+        return bad_request("DEFAULT endpoint is managed automatically")
+    try:
+        resp = _get_control().create_agent_runtime_endpoint(
+            agentRuntimeId=agentId,
+            name=name,
+            description=f"Created from Agent Studio by {user_id}",
+            agentRuntimeVersion=version,
+        )
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code")
+        if code in ("ValidationException", "ConflictException"):
+            return bad_request(e.response.get("Error", {}).get("Message", code))
+        if code == "ResourceNotFoundException":
+            return not_found()
+        logger.exception("create_agent_runtime_endpoint failed", extra={"agentId": agentId, "name": name})
+        return internal_error()
+    return success(_strip_sensitive(resp), status_code=202)
+
+
+@router.put("/api/workspaces/<wsId>/agents/<agentId>/endpoints/<endpointName>")
+def update_endpoint(wsId: str, agentId: str, endpointName: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
+    if err:
+        return err
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+    item = _get_agent_item(agentId)
+    if not item or item.get("workspace_id") != ws_id:
+        return forbidden()
+    body = router.current_event.json_body or {}
+    version = (body.get("version") or "").strip()
+    if not version:
+        return bad_request("version is required")
+    try:
+        resp = _get_control().update_agent_runtime_endpoint(
+            agentRuntimeId=agentId,
+            endpointName=endpointName,
+            agentRuntimeVersion=version,
+        )
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code")
+        if code == "ResourceNotFoundException":
+            return not_found()
+        if code in ("ValidationException", "ConflictException"):
+            return bad_request(e.response.get("Error", {}).get("Message", code))
+        logger.exception("update_agent_runtime_endpoint failed", extra={"agentId": agentId, "endpointName": endpointName})
+        return internal_error()
+    return success(_strip_sensitive(resp), status_code=202)
+
+
+@router.delete("/api/workspaces/<wsId>/agents/<agentId>/endpoints/<endpointName>")
+def delete_endpoint(wsId: str, agentId: str, endpointName: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
+    if err:
+        return err
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+    if endpointName.upper() == "DEFAULT":
+        return bad_request("DEFAULT endpoint cannot be deleted")
+    item = _get_agent_item(agentId)
+    if not item or item.get("workspace_id") != ws_id:
+        return forbidden()
+    try:
+        _get_control().delete_agent_runtime_endpoint(agentRuntimeId=agentId, endpointName=endpointName)
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code")
+        if code == "ResourceNotFoundException":
+            return not_found()
+        logger.exception("delete_agent_runtime_endpoint failed", extra={"agentId": agentId, "endpointName": endpointName})
+        return internal_error()
+    return success({"deleted": endpointName})

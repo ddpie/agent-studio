@@ -212,6 +212,38 @@ export async function listAgentVersions(agentId: string): Promise<AgentRuntimeVe
   return resp.versions ?? [];
 }
 
+export interface AgentEndpoint {
+  name: string;
+  liveVersion?: string;
+  targetVersion?: string;
+  status: string;
+  createdAt?: string;
+  lastUpdatedAt?: string;
+  description?: string;
+}
+
+export async function listAgentEndpoints(agentId: string): Promise<AgentEndpoint[]> {
+  const resp = await apiGet<{ endpoints?: AgentEndpoint[] }>(
+    `/agents/${encodeURIComponent(agentId)}/endpoints`
+  );
+  return resp.endpoints ?? [];
+}
+
+export async function createAgentEndpoint(agentId: string, body: { name: string; version: string }) {
+  return apiPost(`/agents/${encodeURIComponent(agentId)}/endpoints`, body);
+}
+
+export async function updateAgentEndpoint(agentId: string, endpointName: string, version: string) {
+  return apiPut(
+    `/agents/${encodeURIComponent(agentId)}/endpoints/${encodeURIComponent(endpointName)}`,
+    { version }
+  );
+}
+
+export async function deleteAgentEndpoint(agentId: string, endpointName: string) {
+  return apiDelete(`/agents/${encodeURIComponent(agentId)}/endpoints/${encodeURIComponent(endpointName)}`);
+}
+
 export async function fetchAgentFile(agentId: string, filePath: string): Promise<string> {
   try {
     const data = await apiGet<{ content?: string }>(

@@ -52,6 +52,24 @@
     "empty": "暂无部署。点击 Deploy 创建第一个版本。",
     "loadError": "无法加载部署记录"
   },
+  "endpoints": {
+    "tab": "端点",
+    "default": "默认",
+    "liveVersion": "当前",
+    "targetVersion": "目标",
+    "create": "创建端点",
+    "switch": "切换版本",
+    "delete": "删除",
+    "confirmDelete": "删除端点 '{{name}}' 吗？",
+    "namePlaceholder": "如 staging",
+    "versionLabel": "版本",
+    "createdAt": "创建时间",
+    "empty": "暂无端点。",
+    "created": "端点 '{{name}}' 创建中",
+    "switched": "端点 '{{name}}' 已切换到 v{{version}}",
+    "deleted": "端点 '{{name}}' 已删除",
+    "actionFailed": "操作失败"
+  },
   "runtime": {
     "status": {
       "active": "就绪",

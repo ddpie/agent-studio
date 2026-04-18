@@ -52,6 +52,24 @@
     "empty": "No deployments yet. Click Deploy to create the first version.",
     "loadError": "Could not load deployments"
   },
+  "endpoints": {
+    "tab": "Endpoints",
+    "default": "Default",
+    "liveVersion": "Live",
+    "targetVersion": "Target",
+    "create": "Create endpoint",
+    "switch": "Switch version",
+    "delete": "Delete",
+    "confirmDelete": "Delete endpoint '{{name}}'?",
+    "namePlaceholder": "e.g. staging",
+    "versionLabel": "Version",
+    "createdAt": "Created",
+    "empty": "No endpoints yet.",
+    "created": "Endpoint '{{name}}' is being created",
+    "switched": "Endpoint '{{name}}' switched to v{{version}}",
+    "deleted": "Endpoint '{{name}}' deleted",
+    "actionFailed": "Action failed"
+  },
   "runtime": {
     "status": {
       "active": "Ready",
