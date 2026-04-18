@@ -576,66 +576,66 @@ def load_skill(name: str, file: str = "") -> str:
 
 @_tool
 def run_command(command: str, language: str = "python") -> str:
-    """Execute Python code or shell commands. Use for data processing, calculations, or running scripts.
+    """Execute Python/JS/TS code or shell commands in a managed AgentCore sandbox.
 
     Args:
-        command: The code or command to execute.
-        language: "python" to run Python code, "shell" to run a shell command. Default: python.
+        command: The code or shell command to execute.
+        language: "python" | "javascript" | "typescript" | "shell". Default: python.
 
     Returns:
-        The stdout output, or an error message if execution failed.
+        stdout on success, or JSON { "error": ..., "output": ... } on failure.
     """
-    import subprocess as _sp
+    import boto3 as _boto3
 
-    timeout = 30
-    # Use persistent workspace if available, fallback to /tmp
-    cwd = "/mnt/workspace" if _os.path.isdir("/mnt/workspace") else "/tmp"
+    ci_id = _os.environ.get("AGENT_STUDIO_CODE_INTERPRETER_ID")
+    if not ci_id:
+        return _json.dumps({"error": "AGENT_STUDIO_CODE_INTERPRETER_ID not configured"})
 
-    if language == "python":
+    region = _os.environ.get("AGENT_STUDIO_REGION", _REGION)
+    client = _boto3.client("bedrock-agentcore", region_name=region)
+
+    session_id = getattr(run_command, "_session_id", None)
+    if not session_id:
         try:
-            result = _sp.run(
-                ["python3", "-c", command],
-                capture_output=True, text=True, timeout=timeout, cwd="/tmp",
-            )
-            output = result.stdout
-            if result.returncode != 0:
-                output += ("\\n" + result.stderr) if result.stderr else ""
-                return _json.dumps({"error": f"Exit code {result.returncode}", "output": output.strip()})
-            return output.strip() if output.strip() else "(no output)"
-        except _sp.TimeoutExpired:
-            return _json.dumps({"error": f"Execution timed out after {timeout}s"})
+            session_id = client.start_code_interpreter_session(
+                codeInterpreterIdentifier=ci_id,
+                name="agentstudio-subagent",
+                sessionTimeoutSeconds=3600,
+            )["sessionId"]
+            run_command._session_id = session_id
         except Exception as e:
-            return _json.dumps({"error": str(e)})
+            return _json.dumps({"error": f"Failed to start code interpreter session: {e}"})
 
-    elif language == "shell":
-        import shlex as _shlex
-        _ALLOWED_CMDS = {"python3", "python", "pip", "pip3", "ls", "cat", "head", "tail", "grep", "find", "wc", "sort", "uniq", "jq", "curl", "wget", "echo", "mkdir", "cp", "mv", "touch", "date", "env", "pwd", "cd", "tree"}
-        try:
-            _parts = _shlex.split(command)
-        except ValueError as e:
-            return _json.dumps({"error": f"Invalid shell command: {e}"})
-        if not _parts:
-            return _json.dumps({"error": "Empty command"})
-        _base = _os.path.basename(_parts[0])
-        if _base not in _ALLOWED_CMDS:
-            return _json.dumps({"error": f"Command not allowed: {_base}. Allowed: {', '.join(sorted(_ALLOWED_CMDS))}"})
-        try:
-            result = _sp.run(
-                _parts, shell=False,
-                capture_output=True, text=True, timeout=timeout, cwd="/tmp",
-            )
-            output = result.stdout
-            if result.returncode != 0:
-                output += ("\\n" + result.stderr) if result.stderr else ""
-                return _json.dumps({"error": f"Exit code {result.returncode}", "output": output.strip()})
-            return output.strip() if output.strip() else "(no output)"
-        except _sp.TimeoutExpired:
-            return _json.dumps({"error": f"Execution timed out after {timeout}s"})
-        except Exception as e:
-            return _json.dumps({"error": str(e)})
+    op = "executeCode"
+    args = {"code": command, "language": language if language != "shell" else "python"}
+    if language == "shell":
+        op = "executeCommand"
+        args = {"command": command}
 
-    else:
-        return _json.dumps({"error": f"Unsupported language: {language}. Use 'python' or 'shell'."})
+    try:
+        resp = client.invoke_code_interpreter(
+            codeInterpreterIdentifier=ci_id,
+            sessionId=session_id,
+            name=op,
+            arguments=args,
+        )
+    except Exception as e:
+        return _json.dumps({"error": f"invoke_code_interpreter failed: {e}"})
+
+    stdout, stderr, exit_code = "", "", 0
+    for event in resp.get("stream", []):
+        if "result" not in event:
+            continue
+        r = event["result"]
+        sc = r.get("structuredContent") or {}
+        stdout += sc.get("stdout", "")
+        stderr += sc.get("stderr", "")
+        exit_code = sc.get("exitCode", exit_code)
+
+    if exit_code and exit_code != 0:
+        combined = (stdout + "\\n" + stderr).strip()
+        return _json.dumps({"error": f"Exit code {exit_code}", "output": combined})
+    return stdout.strip() if stdout.strip() else "(no output)"
 
 
 @_tool
