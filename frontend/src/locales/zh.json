@@ -31,6 +31,8 @@
     "copy": "复制",
     "reset": "恢复默认",
     "autoFix": "自动修复",
+    "offline": "网络已断开，正在重连...",
+    "backOnline": "已恢复在线",
     "errorBoundary": {
       "rootTitle": "出现错误",
       "rootMessage": "Agent Studio 遇到意外错误，请刷新页面。",

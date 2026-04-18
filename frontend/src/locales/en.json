@@ -31,6 +31,8 @@
     "copy": "Copy",
     "reset": "Reset to default",
     "autoFix": "Auto-fix",
+    "offline": "You're offline. Reconnecting...",
+    "backOnline": "Back online",
     "errorBoundary": {
       "rootTitle": "Something went wrong",
       "rootMessage": "Agent Studio ran into an unexpected error. Please reload the page.",

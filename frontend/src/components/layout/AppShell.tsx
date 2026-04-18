@@ -1,6 +1,7 @@
 import { Outlet } from "react-router";
 import { useTranslation } from "react-i18next";
 import IconNav from "./IconNav";
+import OfflineBanner from "../common/OfflineBanner";
 
 interface AppShellProps {
   signOut?: () => void;
@@ -11,6 +12,7 @@ export default function AppShell({ signOut, user }: AppShellProps) {
   const { t } = useTranslation();
   return (
     <div className="h-screen flex flex-col bg-white dark:bg-gray-950">
+      <OfflineBanner />
       <header className="flex items-center justify-between px-4 py-2 bg-gray-900 text-white">
         <div className="flex items-center gap-2">
           <img src="/logo.svg" alt="Agent Studio" className="w-5 h-5" />

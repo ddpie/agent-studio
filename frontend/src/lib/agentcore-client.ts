@@ -7,6 +7,19 @@ const MAX_INIT_RETRIES = 3;
 const INIT_RETRY_DELAY_MS = 5000;
 const API_BASE = agentConfig.apiUrl;
 
+async function waitForOnlineOrTimeout(ms = 30_000): Promise<boolean> {
+  if (navigator.onLine) return true;
+  return new Promise((resolve) => {
+    const cleanup = () => {
+      window.removeEventListener("online", onOnline);
+      clearTimeout(timer);
+    };
+    const onOnline = () => { cleanup(); resolve(true); };
+    const timer = setTimeout(() => { cleanup(); resolve(false); }, ms);
+    window.addEventListener("online", onOnline, { once: true });
+  });
+}
+
 async function getCallerId(): Promise<string> {
   try {
     const { username } = await getCurrentUser();
@@ -84,16 +97,30 @@ async function* invokeAgent(
     // CloudFront OAC requires x-amz-content-sha256 for POST to Lambda Function URL
     const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(bodyStr));
     const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Auth-Token": token,
-        "x-amz-content-sha256": hashHex,
-        Accept: "text/event-stream",
-      },
-      body: bodyStr,
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Auth-Token": token,
+          "x-amz-content-sha256": hashHex,
+          Accept: "text/event-stream",
+        },
+        body: bodyStr,
+      });
+    } catch (netErr) {
+      if (attempt === 0 && !navigator.onLine) {
+        onStatus?.("Waiting for network...");
+        const back = await waitForOnlineOrTimeout(30_000);
+        if (back) {
+          onStatus?.("Back online. Retrying...");
+          continue;
+        }
+      }
+      lastError = netErr as Error;
+      break;
+    }
 
     if (response.ok) {
       onStatus?.(null);
@@ -129,22 +156,26 @@ async function* parseSSEStream(response: Response): AsyncGenerator<string> {
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
 
-    for (const line of lines) {
-      if (line.startsWith("data: ")) {
-        let content = line.slice(6).trim();
-        if (content.startsWith('"') && content.endsWith('"')) {
-          content = JSON.parse(content);
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          let content = line.slice(6).trim();
+          if (content.startsWith('"') && content.endsWith('"')) {
+            content = JSON.parse(content);
+          }
+          if (content) yield content;
         }
-        if (content) yield content;
       }
     }
+  } catch (streamErr) {
+    yield `\n\n[${(streamErr as Error).message || "stream interrupted"}]\n`;
   }
 }
