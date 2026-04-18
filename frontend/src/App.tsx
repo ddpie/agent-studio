@@ -5,6 +5,7 @@ import { RouterProvider } from "react-router";
 import { createRouter } from "./router";
 import { ensureWorkspaceId } from "./lib/api-client";
 import { useTranslation } from "react-i18next";
+import Toaster from "./components/common/Toaster";
 
 export default function App() {
   return (
@@ -76,5 +77,10 @@ function AuthenticatedApp({ signOut, user }: { signOut?: () => void; user?: { si
     );
   }
 
-  return <RouterProvider router={router} />;
+  return (
+    <>
+      <RouterProvider router={router} />
+      <Toaster />
+    </>
+  );
 }
