@@ -129,6 +129,15 @@ def build_deployment_package_v2(
                     continue  # Will be replaced below
                 if item.startswith(("mcp_client/", "model/")):
                     continue  # Skip old template-specific modules
+                # Defensive: base zip occasionally gets polluted with
+                # meta-agent's own tools/ package (historical deploy-all.sh
+                # drift). That would shadow the sub-agent's top-level
+                # tools.py via Python's package-over-module import rule —
+                # every @tool in tools.py becomes "not found". Drop any
+                # top-level tools/ tree; the sub-agent only needs its own
+                # tools.py (added below).
+                if item == "tools/" or item.startswith("tools/"):
+                    continue
                 new_zip.writestr(item, base_zip.read(item))
 
             # Write agent-specific files

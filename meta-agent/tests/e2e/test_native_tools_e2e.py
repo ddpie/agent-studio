@@ -9,10 +9,18 @@ path. It proves:
   3. Our runtime IAM (the caller's role — ops / CI) can list/create/stop
      sessions on these resources.
 
-What it does NOT cover: sub-agent-process tool wiring. Sub-agent end-to-
-end exercise requires deploying a minimal sub-agent through meta-agent,
-which is expensive and flaky. That remains a manual smoke step in the
-deploy runbook.
+It also runs two sub-agent-process tests against an existing deployed
+sub-agent (default: `claudewatch-kGlipG6kpy`, override via
+AGENT_STUDIO_E2E_SUBAGENT_ID). These are the tests that actually prove
+`run_command` / `fetch_webpage` route through the shared sandbox: we
+invoke the sub-agent with a prompt, wait for the reply, then check
+that a fresh CI / Browser session appeared on the shared resource
+within the last 10 minutes.
+
+Prerequisite: the sub-agent must be deployed against the current
+base/deployment.zip — i.e. post-2026-04-18 (tools/ shadow fix). Older
+deployments will still use the subprocess-based run_command and won't
+produce CI sessions.
 
 Gated on AGENT_STUDIO_E2E=1 so `pytest tests/` stays fast + offline.
 """
@@ -37,6 +45,7 @@ if os.environ.get("AGENT_STUDIO_E2E", "0") != "1":
 REGION = os.environ.get("AGENT_STUDIO_REGION", "us-east-1")
 CI_ID = os.environ["AGENT_STUDIO_CODE_INTERPRETER_ID"]
 BR_ID = os.environ["AGENT_STUDIO_BROWSER_ID"]
+SUBAGENT_ID = os.environ.get("AGENT_STUDIO_E2E_SUBAGENT_ID", "claudewatch-kGlipG6kpy")
 
 
 @pytest.fixture(scope="module")
@@ -125,6 +134,98 @@ def test_shared_browser_opens_cdp_stream(agentcore):
             )
         except Exception:
             pass
+
+
+def _invoke_subagent(agent_id: str, prompt: str, max_attempts: int = 3) -> str:
+    """Invoke sub-agent runtime; retry on cold-start timeout."""
+    client = boto3.client("bedrock-agentcore", region_name=REGION)
+    acct = boto3.client("sts", region_name=REGION).get_caller_identity()["Account"]
+    last_err = None
+    for attempt in range(max_attempts):
+        try:
+            resp = client.invoke_agent_runtime(
+                agentRuntimeArn=f"arn:aws:bedrock-agentcore:{REGION}:{acct}:runtime/{agent_id}",
+                qualifier="DEFAULT",
+                runtimeSessionId=f"e2e-{uuid.uuid4()}".ljust(33, "x")[:64],
+                payload=json.dumps({"prompt": prompt, "caller_id": "e2e-smoke"}).encode(),
+            )
+            return "".join(
+                e.decode("utf-8", errors="ignore") for e in resp["response"] if isinstance(e, bytes)
+            )
+        except client.exceptions.RuntimeClientError as e:
+            last_err = e
+            time.sleep(15)
+    raise AssertionError(f"sub-agent {agent_id} cold-start never recovered: {last_err}")
+
+
+def test_subagent_fetch_webpage_routes_through_browser(agentcore):
+    """Invoke a deployed sub-agent with a fetch_webpage prompt and confirm
+    a Browser session was created on the shared resource.
+
+    Prerequisite: the chosen sub-agent's tools.py must use the
+    tools_library/fetch_webpage.py variant (Browser-backed), not a
+    user-authored custom fetch_webpage (urllib-backed). Skips if the
+    current deployment has a custom version — we detect by sniffing the
+    deployed tools.py for the Browser call pattern.
+    """
+    import io, zipfile
+    s3 = boto3.client("s3", region_name=REGION)
+    bucket = os.environ["AGENT_STUDIO_S3_BUCKET"]
+    zip_bytes = s3.get_object(Bucket=bucket, Key=f"agents/{SUBAGENT_ID}/deployment.zip")["Body"].read()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
+        tools_py = z.read("tools.py").decode("utf-8", errors="ignore")
+    if "start_browser_session" not in tools_py:
+        pytest.skip(
+            f"sub-agent {SUBAGENT_ID} tools.py does not use Browser-backed "
+            "fetch_webpage (looks like a user-authored custom variant); "
+            "set AGENT_STUDIO_E2E_SUBAGENT_ID to an agent whose tools.py "
+            "includes 'start_browser_session'"
+        )
+
+    baseline_before = agentcore.list_browser_sessions(browserIdentifier=BR_ID).get("items", [])
+    recent_before = {s["sessionId"] for s in baseline_before if _find_recent([s], age_s=60)}
+
+    reply = _invoke_subagent(
+        SUBAGENT_ID,
+        "Use fetch_webpage to fetch https://example.com and report the first 100 chars of the page text verbatim.",
+    )
+    assert "Example Domain" in reply, (
+        f"sub-agent did not successfully fetch example.com; "
+        f"tail of reply: {reply[-400:]}"
+    )
+
+    listed = agentcore.list_browser_sessions(browserIdentifier=BR_ID).get("items", [])
+    new_recent = [
+        s for s in listed
+        if s["sessionId"] not in recent_before and _find_recent([s], age_s=120)
+    ]
+    assert new_recent, (
+        f"expected a new Browser session in the last 2 min on {BR_ID}, "
+        f"got {len(listed)} total sessions; baseline_recent={len(recent_before)}"
+    )
+
+
+def test_subagent_run_command_routes_through_code_interpreter(agentcore):
+    """Invoke a deployed sub-agent with a run_command prompt and confirm
+    a Code Interpreter session was created on the shared resource."""
+    baseline = agentcore.list_code_interpreter_sessions(codeInterpreterIdentifier=CI_ID).get("items", [])
+    recent_before = {s["sessionId"] for s in baseline if _find_recent([s], age_s=60)}
+
+    reply = _invoke_subagent(
+        SUBAGENT_ID,
+        "Use run_command with language='python' and code 'print(6*7)'. Return only the numeric stdout.",
+    )
+    assert "42" in reply, f"expected 42 in reply tail: {reply[-400:]}"
+
+    listed = agentcore.list_code_interpreter_sessions(codeInterpreterIdentifier=CI_ID).get("items", [])
+    new_recent = [
+        s for s in listed
+        if s["sessionId"] not in recent_before and _find_recent([s], age_s=120)
+    ]
+    assert new_recent, (
+        f"expected a new Code Interpreter session in the last 2 min on {CI_ID}, "
+        f"got {len(listed)} total sessions; baseline_recent={len(recent_before)}"
+    )
 
 
 def test_shared_resources_are_cfn_managed():

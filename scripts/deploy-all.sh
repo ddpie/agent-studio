@@ -218,7 +218,18 @@ if [[ "$SKIP_INFRA" == false ]]; then
   if ! aws s3api head-object --bucket "$S3_BUCKET" --key "base/deployment.zip" --region "$REGION" 2>/dev/null; then
     echo "  Building base/deployment.zip..."
     TMPDIR=$(mktemp -d)
-    pip install -q -t "$TMPDIR" strands-agents bedrock-agentcore boto3 requests httpx beautifulsoup4 markdownify pyyaml python-dateutil pydantic tabulate websocket-client
+    # AgentCore runtime is x86_64 / Python 3.10. Pin platform + version so
+    # native wheels (pydantic-core, lxml, etc.) are downloaded for the
+    # target, not the dev host's arch. --no-compile skips .pyc generation
+    # which the runtime also rejects as cross-arch.
+    pip install -q --no-compile \
+      --platform manylinux2014_aarch64 --only-binary=:all: \
+      --python-version 3.10 \
+      -t "$TMPDIR" \
+      strands-agents bedrock-agentcore boto3 requests httpx beautifulsoup4 \
+      markdownify pyyaml python-dateutil pydantic tabulate websocket-client \
+      exceptiongroup anyio
+    find "$TMPDIR" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
     (cd "$TMPDIR" && zip -qr /tmp/agent-studio-base.zip .)
     aws s3 cp /tmp/agent-studio-base.zip "s3://$S3_BUCKET/base/deployment.zip" --region "$REGION"
     rm -rf "$TMPDIR" /tmp/agent-studio-base.zip
