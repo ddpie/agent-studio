@@ -465,47 +465,27 @@ def transfer_ownership(wsId: str):
 
     now = datetime.utcnow().isoformat() + "Z"
 
-    table.meta.client.transact_write_items(
-        TransactItems=[
-            {
-                "Update": {
-                    "TableName": table.name,
-                    "Key": {
-                        "workspaceId": {"S": ws_id},
-                        "sk": {"S": f"MEMBER#{new_owner_id}"},
-                    },
-                    "UpdateExpression": "SET #r = :role",
-                    "ExpressionAttributeNames": {"#r": "role"},
-                    "ExpressionAttributeValues": {":role": {"S": "owner"}},
-                }
-            },
-            {
-                "Update": {
-                    "TableName": table.name,
-                    "Key": {
-                        "workspaceId": {"S": ws_id},
-                        "sk": {"S": f"MEMBER#{user_id}"},
-                    },
-                    "UpdateExpression": "SET #r = :role",
-                    "ExpressionAttributeNames": {"#r": "role"},
-                    "ExpressionAttributeValues": {":role": {"S": "admin"}},
-                }
-            },
-            {
-                "Update": {
-                    "TableName": table.name,
-                    "Key": {
-                        "workspaceId": {"S": ws_id},
-                        "sk": {"S": "META"},
-                    },
-                    "UpdateExpression": "SET owner_id = :oid, updated_at = :now",
-                    "ExpressionAttributeValues": {
-                        ":oid": {"S": new_owner_id},
-                        ":now": {"S": now},
-                    },
-                }
-            },
-        ]
+    # Three independent updates instead of transact_write_items (see
+    # accept_invitation / create_workspace for the reserialization issue).
+    # Order matters: promote new owner first, then demote self, then update
+    # META. If we crash mid-sequence the workspace ends up with two owners
+    # temporarily — still admin-recoverable and preferable to zero owners.
+    table.update_item(
+        Key={"workspaceId": ws_id, "sk": f"MEMBER#{new_owner_id}"},
+        UpdateExpression="SET #r = :role",
+        ExpressionAttributeNames={"#r": "role"},
+        ExpressionAttributeValues={":role": "owner"},
+    )
+    table.update_item(
+        Key={"workspaceId": ws_id, "sk": f"MEMBER#{user_id}"},
+        UpdateExpression="SET #r = :role",
+        ExpressionAttributeNames={"#r": "role"},
+        ExpressionAttributeValues={":role": "admin"},
+    )
+    table.update_item(
+        Key={"workspaceId": ws_id, "sk": "META"},
+        UpdateExpression="SET owner_id = :oid, updated_at = :now",
+        ExpressionAttributeValues={":oid": new_owner_id, ":now": now},
     )
 
     return success({"newOwnerId": new_owner_id, "previousOwnerId": user_id})
@@ -614,31 +594,19 @@ def accept_invitation(token: str):
     if existing:
         return bad_request("Already a member of this workspace")
 
-    table.meta.client.transact_write_items(
-        TransactItems=[
-            {
-                "Put": {
-                    "TableName": table.name,
-                    "Item": {
-                        "workspaceId": {"S": ws_id},
-                        "sk": {"S": f"MEMBER#{user_id}"},
-                        "userId": {"S": user_id},
-                        "role": {"S": role},
-                        "joined_at": {"S": now},
-                    },
-                }
-            },
-            {
-                "Delete": {
-                    "TableName": table.name,
-                    "Key": {
-                        "workspaceId": {"S": ws_id},
-                        "sk": {"S": f"INVITE#{token}"},
-                    },
-                }
-            },
-        ]
-    )
+    # Two writes instead of transact_write_items: botocore re-serializes
+    # typed AttributeValue dicts through the resource-layer client, producing
+    # nested {"M": {"S": ...}} and a ValidationError. Use native Python values
+    # via table.put_item / delete_item. If we crash between the two the user
+    # can re-accept — idempotent because of the member-exists check above.
+    table.put_item(Item={
+        "workspaceId": ws_id,
+        "sk": f"MEMBER#{user_id}",
+        "userId": user_id,
+        "role": role,
+        "joined_at": now,
+    })
+    table.delete_item(Key={"workspaceId": ws_id, "sk": f"INVITE#{token}"})
 
     return success({
         "workspaceId": ws_id,
