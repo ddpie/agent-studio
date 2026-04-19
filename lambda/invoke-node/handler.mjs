@@ -206,9 +206,11 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
     images: body.images,
     model_id: body.model_id,
   };
+  // workspace_id is required by both meta-agent (for workspace-scoped tool calls)
+  // and sub-agents (for read_document's caller-workspace allowlist).
+  payload.workspace_id = route.wsId;
   if (route.type === "meta-agent") {
     payload.caller_id = auth.userId;
-    payload.workspace_id = route.wsId;
   }
 
   const commandInput = {
