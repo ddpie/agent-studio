@@ -139,7 +139,12 @@ else:
     mode = "create"
 
 env_vars = {"AGENT_STUDIO_REGION": region}
-for _k in ("AGENT_STUDIO_CODE_INTERPRETER_ID", "AGENT_STUDIO_BROWSER_ID"):
+for _k in (
+    "AGENT_STUDIO_CODE_INTERPRETER_ID",
+    "AGENT_STUDIO_BROWSER_ID",
+    "AGENT_STUDIO_CLOUDFRONT_DOMAIN",
+    "AGENT_STUDIO_A2A_INVOKE_URL",
+):
     _v = os.environ.get(_k, "")
     if _v:
         env_vars[_k] = _v
