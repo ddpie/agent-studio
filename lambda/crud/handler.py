@@ -24,7 +24,7 @@ logger = Logger(service="agent-studio-crud")
 
 cors_config = CORSConfig(
     allow_origin="*",
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "x-workspace-id"],
     max_age=3600,
 )
 app = APIGatewayRestResolver(cors=cors_config)

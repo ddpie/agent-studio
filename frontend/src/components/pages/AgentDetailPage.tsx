@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Pencil, Loader2 } from "lucide-react";
-import { fetchAgent } from "../../lib/api-client";
+import { fetchAgent, publishAgent, unpublishAgent } from "../../lib/api-client";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import DeploymentsTab from "../agents/DeploymentsTab";
 import EndpointsTab from "../agents/EndpointsTab";
@@ -10,6 +10,7 @@ import EvaluationsTab from "../agents/EvaluationsTab";
 import TracesTab from "../agents/TracesTab";
 import IntegrationTab from "../agents/IntegrationTab";
 import SchedulesTab from "../agents/SchedulesTab";
+import PublishToggle from "../shared/PublishToggle";
 
 export default function AgentDetailPage() {
   const { agentId } = useParams();
@@ -51,10 +52,12 @@ export default function AgentDetailPage() {
 
   const role = currentWorkspace?.role || "viewer";
   const canEdit = role === "editor" || role === "admin" || role === "owner";
+  const canPublish = role === "admin" || role === "owner";
   const agentName =
     String(agent.display_name ?? "") ||
     String(agent.name ?? "") ||
     String(agentId ?? "");
+  const visibility = String(agent.visibility ?? "private");
 
   return (
     <div className="flex flex-col h-full">
@@ -73,17 +76,30 @@ export default function AgentDetailPage() {
             {t("agentDetail.subtitle")}
           </p>
         </div>
-        {canEdit && (
-          <button
-            type="button"
-            onClick={() => navigate(`/agents/edit/${agentId}`)}
-            data-testid="edit-agent-btn"
-            className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-            {t("agentDetail.editAgent")}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {agentId && (
+            <PublishToggle
+              visibility={visibility}
+              canPublish={canPublish}
+              onPublish={async () => { await publishAgent(agentId); }}
+              onUnpublish={async () => { await unpublishAgent(agentId); }}
+              onChange={(v) => setAgent((prev) => (prev ? { ...prev, visibility: v } : prev))}
+              testId="agent-publish-toggle"
+              size="md"
+            />
+          )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => navigate(`/agents/edit/${agentId}`)}
+              data-testid="edit-agent-btn"
+              className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              {t("agentDetail.editAgent")}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6" data-testid="agent-detail-content">

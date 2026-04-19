@@ -7,14 +7,17 @@ import type * as MonacoNS from "monaco-editor";
 import { useToolLibraryStore, type ToolTemplate } from "../../stores/tool-library-store";
 import { useToolAssistantStore } from "../../stores/tool-assistant-store";
 import { useUISettings } from "../../stores/ui-settings-store";
+import { useWorkspaceStore } from "../../stores/workspace-store";
 import { preloadPyodide, isPyodideReady, checkPythonSyntax } from "../../lib/pyodide-checker";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
+import { publishTool, unpublishTool } from "../../lib/api-client";
 import { getCurrentUser } from "aws-amplify/auth";
 import ToolAssistant from "../tools/ToolAssistant";
 import useIsDark from "../../hooks/useIsDark";
 import type { ValidationResult } from "../../lib/types/validation";
 import { validatePython } from "../../lib/validators/python-validator";
 import ConfirmDialog from "../ui/ConfirmDialog";
+import PublishToggle from "../shared/PublishToggle";
 import ToolToolbar from "./ToolToolbar";
 import ToolEditorPane from "./ToolEditorPane";
 
@@ -66,6 +69,8 @@ export default function ToolDetail() {
   const [fetchAttempted, setFetchAttempted] = useState(false);
   const [currentUser, setCurrentUser] = useState("");
   const [toolOwner, setToolOwner] = useState("");
+  const [visibility, setVisibility] = useState<string>("private");
+  const { currentWorkspace } = useWorkspaceStore();
 
   const editorRef = useRef<MonacoNS.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<typeof MonacoNS | null>(null);
@@ -89,14 +94,14 @@ export default function ToolDetail() {
       const existing = tools.find((t) => t.id === toolId);
       if (existing) { navigate(`/tools/${toolId}`, { replace: true }); return; }
       setName(paramName); setDescription(paramDesc); setOriginalName(paramName); setOriginalDescription(paramDesc);
-      setCode(TOOL_TEMPLATE); setOriginalCode(""); setToolOwner(""); setLoaded(true);
+      setCode(TOOL_TEMPLATE); setOriginalCode(""); setToolOwner(""); setVisibility("private"); setLoaded(true);
       if (toolId) openPanel(toolId);
       return;
     }
     const tool = tools.find((t) => t.id === toolId);
     if (!tool) { setNotFound(true); setLoaded(true); return; }
     setName(tool.name); setDescription(tool.description); setOriginalName(tool.name); setOriginalDescription(tool.description);
-    setCode(tool.code); setOriginalCode(tool.code); setToolOwner(tool.owner); setLoaded(true);
+    setCode(tool.code); setOriginalCode(tool.code); setToolOwner(tool.owner); setVisibility(tool.visibility || "private"); setLoaded(true);
     if (toolId) openPanel(toolId);
   }, [tools, toolId, isNew, paramName, paramDesc, fetchTools]);
 
@@ -241,6 +246,16 @@ export default function ToolDetail() {
         onShowDiff={() => setShowDiff(true)}
         onDelete={() => setConfirmDelete(true)}
         onToggleAssistant={() => { if (toolId) { if (panelOpen) useToolAssistantStore.getState().closePanel(); else openPanel(toolId); } }}
+        extraSlot={!isNew && toolId && !hasChanges && toolOwner !== "__builtin__" ? (
+          <PublishToggle
+            visibility={visibility}
+            canPublish={(currentWorkspace?.role === "admin" || currentWorkspace?.role === "owner")}
+            onPublish={async () => { await publishTool(toolId); }}
+            onUnpublish={async () => { await unpublishTool(toolId); }}
+            onChange={(v) => setVisibility(v)}
+            testId="tool-publish-toggle"
+          />
+        ) : null}
       />
 
       {/* Validation results */}

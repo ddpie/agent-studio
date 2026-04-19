@@ -36,6 +36,9 @@ export interface SkillIndexEntry {
   files?: string[];        // not stored in DDB — recompute after reading files
   deleted?: boolean;
   deletedAt?: number;
+  visibility?: string;
+  type?: string;
+  approved?: boolean;
 }
 
 function mapSkillItem(item: Record<string, any>): SkillIndexEntry {
@@ -47,6 +50,9 @@ function mapSkillItem(item: Record<string, any>): SkillIndexEntry {
     files: [],
     deleted: item.deleted || false,
     deletedAt: item.deleted_at ? new Date(item.deleted_at).getTime() : undefined,
+    visibility: item.visibility || "private",
+    type: item.type || "prompt",
+    approved: item.approved || false,
   };
 }
 

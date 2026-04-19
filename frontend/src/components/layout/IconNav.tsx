@@ -1,13 +1,14 @@
 // src/components/layout/IconNav.tsx
 import { NavLink } from "react-router";
 import { useTranslation } from "react-i18next";
-import { Bot, Package, Wrench, Plug, Settings } from "lucide-react";
+import { Bot, Package, Wrench, Plug, Store, Settings } from "lucide-react";
 
 const navItems = [
   { to: "/agents", icon: Bot, labelKey: "nav.agents" },
   { to: "/skills", icon: Package, labelKey: "nav.skills" },
   { to: "/tools", icon: Wrench, labelKey: "nav.tools" },
   { to: "/mcp", icon: Plug, labelKey: "nav.mcp" },
+  { to: "/marketplace", icon: Store, labelKey: "nav.marketplace" },
 ] as const;
 
 export default function IconNav() {

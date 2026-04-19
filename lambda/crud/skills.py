@@ -415,6 +415,65 @@ def import_skill(wsId: str):
     return success(_skill_response(item), status_code=201)
 
 
+@router.post("/api/workspaces/<wsId>/skills/<skillId>/publish")
+def publish_skill(wsId: str, skillId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
+    if err:
+        return err
+
+    id_err = validate_id(skillId, "skillId")
+    if id_err:
+        return bad_request(id_err)
+
+    table = _get_table()
+    existing = table.get_item(Key={"skillId": skillId}, ConsistentRead=True).get("Item")
+    if not existing or existing.get("workspace_id") != ws_id:
+        return forbidden()
+    if existing.get("deleted"):
+        return forbidden()
+    # Script skills must be approved before publishing
+    if existing.get("type") == "script" and not existing.get("approved"):
+        return bad_request("Script skills must be approved before publishing")
+
+    now = datetime.utcnow().isoformat() + "Z"
+    try:
+        table.update_item(
+            Key={"skillId": skillId},
+            UpdateExpression="SET visibility = :pub, updated_at = :now, published_at = :now",
+            ExpressionAttributeValues={":pub": "public", ":now": now, ":ws": ws_id, ":f": False},
+            ConditionExpression="attribute_exists(skillId) AND workspace_id = :ws AND (attribute_not_exists(deleted) OR deleted = :f)",
+        )
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        return forbidden()
+
+    return success({"skillId": skillId, "visibility": "public", "published_at": now})
+
+
+@router.post("/api/workspaces/<wsId>/skills/<skillId>/unpublish")
+def unpublish_skill(wsId: str, skillId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
+    if err:
+        return err
+
+    id_err = validate_id(skillId, "skillId")
+    if id_err:
+        return bad_request(id_err)
+
+    table = _get_table()
+    now = datetime.utcnow().isoformat() + "Z"
+    try:
+        table.update_item(
+            Key={"skillId": skillId},
+            UpdateExpression="SET visibility = :priv, updated_at = :now",
+            ExpressionAttributeValues={":priv": "private", ":now": now, ":ws": ws_id, ":f": False},
+            ConditionExpression="attribute_exists(skillId) AND workspace_id = :ws AND (attribute_not_exists(deleted) OR deleted = :f)",
+        )
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        return forbidden()
+
+    return success({"skillId": skillId, "visibility": "private"})
+
+
 @router.post("/api/workspaces/<wsId>/skills/<skillId>/approve")
 def approve_skill(wsId: str, skillId: str):
     user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)

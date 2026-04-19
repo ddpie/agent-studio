@@ -7,10 +7,13 @@ import { useFileEditor } from "../../hooks/useFileEditor";
 import type * as MonacoNS from "monaco-editor";
 import { useUISettings } from "../../stores/ui-settings-store";
 import { useSkillAssistantStore } from "../../stores/skill-assistant-store";
+import { useWorkspaceStore } from "../../stores/workspace-store";
+import { publishSkill, unpublishSkill } from "../../lib/api-client";
 import SkillAssistant from "../skills/SkillAssistant";
 import ValidationBanner from "../shared/ValidationBanner";
 import DiffModal from "../shared/DiffModal";
 import ConfirmDialog from "../ui/ConfirmDialog";
+import PublishToggle from "../shared/PublishToggle";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
 import { preloadPyodide } from "../../lib/pyodide-checker";
 import type { ValidationResult } from "../../lib/types/validation";
@@ -253,6 +256,16 @@ export default function SkillDetail() {
         onShowDiff={() => setShowDiff(true)}
         onDelete={() => setShowDeleteConfirm(true)}
         onToggleAssistant={toggleAssistant}
+        extraSlot={skill && skillId && !storage.isAgentMode && !hasPendingOps ? (
+          <PublishToggle
+            visibility={skill.visibility}
+            canPublish={useWorkspaceStore.getState().currentWorkspace?.role === "admin" || useWorkspaceStore.getState().currentWorkspace?.role === "owner"}
+            onPublish={async () => { await publishSkill(skillId); }}
+            onUnpublish={async () => { await unpublishSkill(skillId); }}
+            onChange={(v) => setSkill((prev) => (prev ? { ...prev, visibility: v } : prev))}
+            testId="skill-publish-toggle"
+          />
+        ) : null}
       />
 
       <ValidationBanner

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, Trash2, Loader2, Save, GitCompare, ShieldCheck, Sparkles } from "lucide-react";
 import useIsDark from "../../hooks/useIsDark";
@@ -16,11 +17,13 @@ interface ToolToolbarProps {
   onShowDiff: () => void;
   onDelete: () => void;
   onToggleAssistant: () => void;
+  extraSlot?: ReactNode;
 }
 
 export default function ToolToolbar({
   toolName, description, hasChanges, saving, validating, assistantOpen,
   onBack, onSave, onDiscard, onValidate, onShowDiff, onDelete, onToggleAssistant,
+  extraSlot,
 }: ToolToolbarProps) {
   const { t } = useTranslation();
   const isDark = useIsDark();
@@ -34,6 +37,7 @@ export default function ToolToolbar({
         <h2 className={`text-base font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{toolName}</h2>
         {description && <p className="text-xs text-gray-400 truncate">{description}</p>}
       </div>
+      {extraSlot}
       <button onClick={onValidate} disabled={validating}
         className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors disabled:opacity-50 ${isDark ? "text-gray-400 hover:text-green-400 hover:bg-green-900/30" : "text-gray-500 hover:text-green-600 hover:bg-green-50"}`}>
         {validating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}

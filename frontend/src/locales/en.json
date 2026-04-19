@@ -547,7 +547,37 @@
     "skills": "Skills",
     "tools": "Tools",
     "mcp": "MCP",
+    "marketplace": "Marketplace",
     "settings": "Settings"
+  },
+  "marketplace": {
+    "title": "Marketplace",
+    "subtitle": "Browse and clone published agents, skills, and tools shared by other users of this deployment.",
+    "searchPlaceholder": "Search the marketplace...",
+    "tab": {
+      "agents": "Agents",
+      "skills": "Skills",
+      "tools": "Tools"
+    },
+    "cloneAgent": "Clone to my workspace",
+    "cloneSkill": "Clone this skill",
+    "cloneTool": "Clone this tool",
+    "cloneSuccess": "Cloned \"{{name}}\" to your workspace",
+    "emptyAgents": "No published agents yet",
+    "emptySkills": "No published skills yet",
+    "emptyTools": "No published tools yet",
+    "noMatching": "No matching results",
+    "loadMore": "Load more"
+  },
+  "publish": {
+    "publish": "Publish",
+    "unpublish": "Unpublish",
+    "statusPublic": "Public",
+    "statusPrivate": "Private",
+    "confirmPublishTitle": "Publish to Marketplace?",
+    "confirmPublishMessage": "This resource will be visible to all logged-in users of this deployment. They will be able to clone it into their own workspace. Only metadata is exposed in listings — source code is revealed only after cloning.",
+    "confirmUnpublishTitle": "Unpublish from Marketplace?",
+    "confirmUnpublishMessage": "This resource will stop appearing in the marketplace. Copies already cloned by other users are unaffected."
   },
   "appShell": {
     "title": "Agent Studio",

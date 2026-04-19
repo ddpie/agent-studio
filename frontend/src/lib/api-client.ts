@@ -567,12 +567,120 @@ export async function fetchDeletedTools(): Promise<ToolItem[]> {
   }
 }
 
-// ── 公开资源 ──
+// ── 公开资源 / Marketplace ──
+
+export interface PublicAgentItem {
+  agentId: string;
+  name: string;
+  description?: string;
+  model_id?: string;
+  supports_images?: boolean;
+  welcome_message?: string;
+  created_at?: string;
+}
+
+export interface PublicSkillItem {
+  skillId: string;
+  name: string;
+  description?: string;
+  type?: string;
+  tags?: string[];
+  created_at?: string;
+}
+
+export interface PublicToolItem {
+  toolId: string;
+  name: string;
+  description?: string;
+  category?: string;
+  created_at?: string;
+}
 
 export async function fetchPublicAgents(cursor?: string, limit = 20) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) params.set("cursor", cursor);
-  return apiGetRaw<PaginatedResponse<AgentListItem>>(`/api/public/agents?${params}`);
+  return apiGetRaw<PaginatedResponse<PublicAgentItem>>(`/api/public/agents?${params}`);
+}
+
+export async function fetchPublicSkills(cursor?: string, limit = 20) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  return apiGetRaw<PaginatedResponse<PublicSkillItem>>(`/api/public/skills?${params}`);
+}
+
+export async function fetchPublicTools(cursor?: string, limit = 20) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
+  return apiGetRaw<PaginatedResponse<PublicToolItem>>(`/api/public/tools?${params}`);
+}
+
+/**
+ * Clone helpers — copy a published resource into the caller's current workspace.
+ * Target workspace is pulled from localStorage and sent via `x-workspace-id` header.
+ */
+export async function clonePublicAgent(agentId: string, name?: string) {
+  const wsId = getWorkspaceId();
+  return apiPostRaw<{ agentId: string; name: string; workspace_id: string }>(
+    `/api/public/agents/${encodeURIComponent(agentId)}/clone`,
+    name ? { name } : {},
+    { "x-workspace-id": wsId },
+  );
+}
+
+export async function clonePublicSkill(skillId: string) {
+  const wsId = getWorkspaceId();
+  return apiPostRaw<{ skillId: string; workspace_id: string }>(
+    `/api/public/skills/${encodeURIComponent(skillId)}/clone`,
+    {},
+    { "x-workspace-id": wsId },
+  );
+}
+
+export async function clonePublicTool(toolId: string) {
+  const wsId = getWorkspaceId();
+  return apiPostRaw<{ toolId: string; workspace_id: string }>(
+    `/api/public/tools/${encodeURIComponent(toolId)}/clone`,
+    {},
+    { "x-workspace-id": wsId },
+  );
+}
+
+// ── Publish / Unpublish (workspace-scoped) ──
+
+export async function publishAgent(agentId: string) {
+  return apiPost<{ agentId: string; visibility: string }>(
+    `/agents/${encodeURIComponent(agentId)}/publish`,
+  );
+}
+
+export async function unpublishAgent(agentId: string) {
+  return apiPost<{ agentId: string; visibility: string }>(
+    `/agents/${encodeURIComponent(agentId)}/unpublish`,
+  );
+}
+
+export async function publishSkill(skillId: string) {
+  return apiPost<{ skillId: string; visibility: string }>(
+    `/skills/${encodeURIComponent(skillId)}/publish`,
+  );
+}
+
+export async function unpublishSkill(skillId: string) {
+  return apiPost<{ skillId: string; visibility: string }>(
+    `/skills/${encodeURIComponent(skillId)}/unpublish`,
+  );
+}
+
+export async function publishTool(toolId: string) {
+  return apiPost<{ toolId: string; visibility: string }>(
+    `/tools/${encodeURIComponent(toolId)}/publish`,
+  );
+}
+
+export async function unpublishTool(toolId: string) {
+  return apiPost<{ toolId: string; visibility: string }>(
+    `/tools/${encodeURIComponent(toolId)}/unpublish`,
+  );
 }
 
 // ── 技能文件 ──

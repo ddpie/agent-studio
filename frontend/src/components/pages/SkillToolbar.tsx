@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, Trash2, Loader2, Save, GitCompare, ShieldCheck, Sparkles } from "lucide-react";
 import type { SkillIndexEntry } from "../../lib/skill-storage";
@@ -18,11 +19,13 @@ interface SkillToolbarProps {
   onShowDiff: () => void;
   onDelete: () => void;
   onToggleAssistant: () => void;
+  extraSlot?: ReactNode;
 }
 
 export default function SkillToolbar({
   skill, isAgentMode, hasPendingOps, pendingCount, saving, validating, assistantOpen,
   onBack, onSave, onDiscard, onValidate, onShowDiff, onDelete, onToggleAssistant,
+  extraSlot,
 }: SkillToolbarProps) {
   const { t } = useTranslation();
   const isDark = useIsDark();
@@ -41,6 +44,7 @@ export default function SkillToolbar({
         </div>
         {skill?.description && <p className="text-xs text-gray-400 truncate">{skill.description}</p>}
       </div>
+      {extraSlot}
       <button onClick={onValidate} disabled={validating}
         className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors disabled:opacity-50 ${isDark ? "text-gray-400 hover:text-green-400 hover:bg-green-900/30" : "text-gray-500 hover:text-green-600 hover:bg-green-50"}`}>
         {validating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
