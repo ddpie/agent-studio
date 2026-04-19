@@ -53,6 +53,31 @@
     "empty": "No deployments yet. Click Deploy to create the first version.",
     "loadError": "Could not load deployments"
   },
+  "logs": {
+    "sectionTitle": "Runtime logs",
+    "since": "Time range",
+    "level": "Level",
+    "sinceOpts": {
+      "15m": "Last 15 minutes",
+      "1h": "Last 1 hour",
+      "6h": "Last 6 hours",
+      "24h": "Last 24 hours"
+    },
+    "levelOpts": {
+      "ALL": "All levels",
+      "ERROR": "Error",
+      "WARN": "Warning",
+      "INFO": "Info"
+    },
+    "searchPlaceholder": "Search…",
+    "follow": "Follow",
+    "followRangeHint": "Follow is only available for 15m or 1h windows",
+    "openInCloudWatch": "Open in CloudWatch",
+    "empty": "No log events in this time range.",
+    "loadError": "Could not load logs",
+    "loadMore": "Load more",
+    "loading": "Loading…"
+  },
   "endpoints": {
     "tab": "Endpoints",
     "default": "Default",

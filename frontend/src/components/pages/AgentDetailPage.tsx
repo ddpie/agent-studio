@@ -5,6 +5,7 @@ import { Pencil, Loader2 } from "lucide-react";
 import { fetchAgent, publishAgent, unpublishAgent } from "../../lib/api-client";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import DeploymentsTab from "../agents/DeploymentsTab";
+import LogsTab from "../agents/LogsTab";
 import EndpointsTab from "../agents/EndpointsTab";
 import SecretsTab from "../agents/SecretsTab";
 import EvaluationsTab from "../agents/EvaluationsTab";
@@ -108,6 +109,18 @@ export default function AgentDetailPage() {
         {agentId && (
           <section className="mb-8" data-testid="deployments-section">
             <DeploymentsTab agentId={agentId} />
+          </section>
+        )}
+        {agentId && (
+          <section className="mb-8" data-testid="logs-section">
+            <details className="border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900/30">
+              <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                {t("logs.sectionTitle")}
+              </summary>
+              <div className="border-t border-gray-200 dark:border-gray-700">
+                <LogsTab agentId={agentId} />
+              </div>
+            </details>
           </section>
         )}
         {agentId && (

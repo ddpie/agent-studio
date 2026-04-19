@@ -464,6 +464,44 @@ export async function getSessionTrace(agentId: string, sessionId: string): Promi
   return resp.root ?? null;
 }
 
+// ── Agent logs (Sprint 3: inline CloudWatch viewer) ──
+
+export type LogLevel = "ALL" | "ERROR" | "WARN" | "INFO";
+export type LogSince = "15m" | "1h" | "6h" | "24h";
+
+export interface LogEvent {
+  timestamp: number;
+  message: string;
+  level: string; // "" | "ERROR" | "WARN" | "INFO" | "DEBUG"
+  logStream: string;
+}
+
+export interface LogEventsPage {
+  events: LogEvent[];
+  nextCursor?: string;
+}
+
+export interface FetchAgentLogsParams {
+  since?: LogSince;
+  level?: LogLevel;
+  search?: string;
+  cursor?: string;
+}
+
+export async function fetchAgentLogs(
+  agentId: string,
+  params: FetchAgentLogsParams = {}
+): Promise<LogEventsPage> {
+  const qs = new URLSearchParams();
+  qs.set("since", params.since || "1h");
+  qs.set("level", params.level || "ALL");
+  if (params.search) qs.set("search", params.search);
+  if (params.cursor) qs.set("cursor", params.cursor);
+  return apiGet<LogEventsPage>(
+    `/agents/${encodeURIComponent(agentId)}/logs?${qs.toString()}`
+  );
+}
+
 // ── Meta-Agent AgentCard (Sprint 2 F1c) ──
 
 export interface AgentCardSkill {
