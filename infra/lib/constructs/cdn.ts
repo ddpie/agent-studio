@@ -13,6 +13,8 @@ export interface CdnProps {
   restApi: apigateway.RestApi;
   functionUrl: lambda.FunctionUrl;
   invokeLambda: lambda.Function;
+  a2aProxyFunctionUrl: lambda.FunctionUrl;
+  a2aProxyLambda: lambda.Function;
   originVerifyHeaderName: string;
   originVerifyHeaderValue: string;
   webAclArn: string;
@@ -77,6 +79,48 @@ export class Cdn extends Construct {
       cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
     });
 
+    // A2A proxy (Function URL with IAM auth behind OAC).
+    const a2aOrigin = origins.FunctionUrlOrigin.withOriginAccessControl(props.a2aProxyFunctionUrl, {
+      readTimeout: cdk.Duration.seconds(60),
+    });
+    props.a2aProxyLambda.addPermission("CloudFrontInvokeA2aProxy", {
+      principal: new cdk.aws_iam.ServicePrincipal("cloudfront.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: `arn:aws:cloudfront::${props.config.accountId}:distribution/*`,
+    });
+
+    // A2A clients send `Authorization: Bearer <key>` per the A2A spec's
+    // HTTPAuthSecurityScheme. CloudFront OAC would sign its own
+    // Authorization header for SigV4, conflicting with the client's.
+    // A viewer-request CloudFront Function renames the incoming
+    // Authorization header to X-A2A-Authorization; the a2a-proxy Lambda
+    // accepts either name, so the external contract stays A2A-compliant.
+    const a2aRewriteFn = new cloudfront.Function(this, "A2aAuthRewriteFn", {
+      functionName: "agent-studio-a2a-auth-rewrite",
+      comment: "Rename Authorization → X-A2A-Authorization for OAC compatibility",
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+      code: cloudfront.FunctionCode.fromInline(`
+        function handler(event) {
+          var req = event.request;
+          var hdrs = req.headers;
+          if (hdrs.authorization && hdrs.authorization.value) {
+            hdrs['x-a2a-authorization'] = { value: hdrs.authorization.value };
+            delete hdrs.authorization;
+          }
+          return req;
+        }
+      `),
+    });
+
+    const a2aOriginRequestPolicy = new cloudfront.OriginRequestPolicy(this, "A2aOriginRequestPolicy", {
+      originRequestPolicyName: "agent-studio-a2a-orp",
+      headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
+        "Content-Type", "Accept", "X-A2A-Authorization"
+      ),
+      queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.all(),
+      cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
+    });
+
     // CloudFront distribution
     this.distribution = new cloudfront.Distribution(this, "Distribution", {
       defaultBehavior: {
@@ -100,6 +144,19 @@ export class Cdn extends Construct {
           cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
           originRequestPolicy: invokeOriginRequestPolicy,
           compress: false, // 禁用压缩，否则 gzip 会缓冲 SSE
+        },
+        "/a2a/*": {
+          origin: a2aOrigin,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: a2aOriginRequestPolicy,
+          responseHeadersPolicy: corsPolicy,
+          functionAssociations: [{
+            function: a2aRewriteFn,
+            eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
+          }],
+          compress: false,
         },
       },
       defaultRootObject: "index.html",

@@ -9,6 +9,7 @@ import { Api } from "./constructs/api";
 import { Invoke } from "./constructs/invoke";
 import { Cdn } from "./constructs/cdn";
 import { AgentCoreShared } from "./constructs/agentcore-shared";
+import { A2aProxy } from "./constructs/a2a-proxy";
 
 export interface AgentStudioStackProps extends cdk.StackProps {
   config: AgentStudioConfig;
@@ -83,11 +84,24 @@ export class AgentStudioStack extends cdk.Stack {
     const originVerifyValue = process.env.ORIGIN_VERIFY_SECRET;
     if (!originVerifyValue) throw new Error("Missing ORIGIN_VERIFY_SECRET env var — generate with: openssl rand -hex 32");
 
+    const a2aProxy = new A2aProxy(this, "A2aProxy", {
+      config,
+      metaAgentArn: metaAgent.agentRuntimeArn,
+      agentsTable: database.agentsTable,
+      a2aKeysTable: database.a2aKeysTable,
+      // The CloudFront domain is stable after first deploy. Read from env
+      // so AgentCards advertise the public URL (OAC rewrites Host to the
+      // underlying Function URL host, which would otherwise leak).
+      publicHost: process.env.AGENT_STUDIO_CLOUDFRONT_DOMAIN || "",
+    });
+
     new Cdn(this, "Cdn", {
       config,
       restApi: api.restApi,
       functionUrl: invoke.functionUrl,
       invokeLambda: invoke.invokeLambda,
+      a2aProxyFunctionUrl: a2aProxy.functionUrl,
+      a2aProxyLambda: a2aProxy.lambda,
       originVerifyHeaderName: "x-origin-verify",
       originVerifyHeaderValue: originVerifyValue,
       webAclArn: props.webAclArn,
