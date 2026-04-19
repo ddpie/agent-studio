@@ -99,20 +99,26 @@ function _sanitizeForPersist(state: ChatState): Partial<ChatState> {
   };
 }
 
+// Default values for every persisted/volatile field in ChatState. Used both
+// when constructing the store and when resetting it on workspace switch.
+const _chatInitialState = {
+  currentAgentId: null,
+  currentAgentName: null,
+  messages: [] as Message[],
+  isStreaming: false,
+  statusText: null,
+  activeTool: null,
+  sessionId: undefined,
+  activeSessionId: null,
+  selectedModelId: null,
+  sessions: [] as ChatSession[],
+  lastActiveSessionByAgent: {} as Record<string, string>,
+};
+
 export const useChatStore = create<ChatState>()(
   persist(
     (set, get) => ({
-      currentAgentId: null,
-      currentAgentName: null,
-      messages: [],
-      isStreaming: false,
-      statusText: null,
-      activeTool: null,
-      sessionId: undefined,
-      activeSessionId: null,
-      selectedModelId: null,
-      sessions: [],
-      lastActiveSessionByAgent: {} as Record<string, string>,
+      ..._chatInitialState,
 
       getAgentSessions: () => {
         const { currentAgentId, sessions } = get();
@@ -440,6 +446,33 @@ export const useChatStore = create<ChatState>()(
     }
   )
 );
+
+/**
+ * Reset chat state on workspace switch.
+ *
+ * Persisted sessions/currentAgentId/lastActiveSessionByAgent reference agent
+ * IDs scoped to a single workspace — after switching workspaces those IDs are
+ * stale and would render as broken links. Clear both the in-memory store and
+ * the persisted localStorage copy.
+ *
+ * Intentionally does NOT touch `agent-studio-ui` (workspace-agnostic) or
+ * `agent-studio-workspace-id` (identifies the workspace itself).
+ */
+export function resetChatForWorkspaceSwitch(): void {
+  // Abort any in-flight stream before wiping state.
+  if (_abortController) {
+    try { _abortController.abort(); } catch { /* ignore */ }
+    _abortController = null;
+  }
+  // Partial merge — keep action methods (switchAgent, sendMessage, etc.)
+  // intact while resetting data fields.
+  useChatStore.setState(_chatInitialState);
+  try {
+    useChatStore.persist.clearStorage();
+  } catch {
+    // clearStorage can throw if storage is unavailable — safe to ignore.
+  }
+}
 
 /** Save current messages as a session (if non-empty). */
 function _saveCurrentSession(

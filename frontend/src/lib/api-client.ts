@@ -9,7 +9,20 @@ export function getWorkspaceId(): string {
 }
 
 export function setWorkspaceId(wsId: string): void {
+  const prev = localStorage.getItem(WS_KEY);
   localStorage.setItem(WS_KEY, wsId);
+  // Workspace changed — clear workspace-scoped persisted state (chat sessions,
+  // currentAgentId, lastActiveSessionByAgent) so stale agent IDs don't leak
+  // across workspaces. UI prefs (`agent-studio-ui`) and the workspace pointer
+  // itself (`agent-studio-workspace-id`) are intentionally preserved.
+  if (prev && prev !== wsId) {
+    // Dynamic import to avoid a static cycle (chat-store -> agentcore-client
+    // -> api-client). Fire-and-forget: the reset is best-effort and any error
+    // is swallowed — worst case persisted state survives until next reload.
+    import("../stores/chat-store")
+      .then((mod) => mod.resetChatForWorkspaceSwitch())
+      .catch(() => { /* ignore */ });
+  }
 }
 
 /**
