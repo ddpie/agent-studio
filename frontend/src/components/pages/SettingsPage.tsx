@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useUISettings } from "../../stores/ui-settings-store";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import WorkspaceMembersTab from "./WorkspaceMembersTab";
+import WorkspaceSettingsTab from "./WorkspaceSettingsTab";
 import AccountSettingsTab from "./AccountSettingsTab";
 
 type TabId = "general" | "account" | "workspace";
@@ -61,7 +62,12 @@ export default function SettingsPage() {
 
       {tab === "account" && <AccountSettingsTab />}
 
-      {tab === "workspace" && <WorkspaceMembersTab />}
+      {tab === "workspace" && (
+        <div className="space-y-6">
+          <WorkspaceSettingsTab />
+          <WorkspaceMembersTab />
+        </div>
+      )}
 
       {tab === "general" && (
         <div className="space-y-4">
@@ -145,7 +151,6 @@ export default function SettingsPage() {
               ))}
             </div>
           </section>
-
 
           {/* Infrastructure Info */}
           <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">

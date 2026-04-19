@@ -900,6 +900,35 @@ export async function fetchWorkspaceDetail(wsId: string): Promise<WorkspaceDetai
   return apiGetRaw<WorkspaceDetail>(`/api/workspaces/${encodeURIComponent(wsId)}`);
 }
 
+/**
+ * Update workspace name/description. Backend requires admin+ role and an
+ * `expected_updated_at` for optimistic concurrency control.
+ */
+export async function updateWorkspace(
+  wsId: string,
+  body: { name: string; description?: string; expected_updated_at: string }
+) {
+  return apiPutRaw<{
+    workspaceId: string;
+    name: string;
+    description?: string;
+    updated_at: string;
+  }>(`/api/workspaces/${encodeURIComponent(wsId)}`, body);
+}
+
+/** Delete the workspace. Owner-only on the backend; wipes all rows (members, invites, etc.). */
+export async function deleteWorkspace(wsId: string) {
+  return apiDeleteRaw<{ deleted: boolean }>(`/api/workspaces/${encodeURIComponent(wsId)}`);
+}
+
+/** Transfer ownership to another current member. Owner-only. */
+export async function transferWorkspaceOwnership(wsId: string, targetUserId: string) {
+  return apiPostRaw<{ newOwnerId: string; previousOwnerId: string }>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/transfer-ownership`,
+    { targetUserId }
+  );
+}
+
 export async function inviteWorkspaceMember(
   wsId: string,
   email: string,
