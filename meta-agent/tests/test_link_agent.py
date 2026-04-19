@@ -122,6 +122,208 @@ def test_public_base_url_prefers_explicit_override(monkeypatch):
     assert mod._public_base_url() == ""
 
 
+def test_has_min_role_gate():
+    from tools.link_agent import _has_min_role
+
+    assert _has_min_role(None, "editor") is False
+    assert _has_min_role({}, "editor") is False
+    assert _has_min_role({"role": "viewer"}, "editor") is False
+    assert _has_min_role({"role": "editor"}, "editor") is True
+    assert _has_min_role({"role": "admin"}, "editor") is True
+    assert _has_min_role({"role": "owner"}, "editor") is True
+    # Unknown role does not satisfy any min threshold
+    assert _has_min_role({"role": "guest"}, "editor") is False
+
+
+class _FakeWorkspaceTable:
+    """Fake DDB table that returns per-user membership records."""
+
+    def __init__(self, members_by_key):
+        # members_by_key: {(workspace_id, user_id): role_or_None}
+        self._members = members_by_key
+        self.put_items = []
+        self.updates = []
+
+    def get_item(self, Key, ConsistentRead=False):
+        ws = Key.get("workspaceId")
+        sk = Key.get("sk", "")
+        if sk.startswith("MEMBER#"):
+            user = sk[len("MEMBER#"):]
+            role = self._members.get((ws, user))
+            if role is None:
+                return {}
+            return {"Item": {"workspaceId": ws, "sk": sk, "role": role}}
+        # Agent lookup in AGENTS_TABLE comes through a different table via our
+        # monkeypatched boto3.resource — this class is only used for the
+        # workspaces table.
+        return {}
+
+    def put_item(self, Item):
+        self.put_items.append(Item)
+
+    def update_item(self, **kwargs):
+        self.updates.append(kwargs)
+
+
+class _FakeAgentsTable:
+    def __init__(self, agents_by_id):
+        self._agents = agents_by_id
+        self.updates = []
+
+    def get_item(self, Key, ConsistentRead=False):
+        agent_id = Key.get("agentId")
+        item = self._agents.get(agent_id)
+        return {"Item": item} if item else {}
+
+    def update_item(self, **kwargs):
+        self.updates.append(kwargs)
+
+
+def _install_link_agent_ddb(monkeypatch, *, members, agents):
+    """Route DDB table lookups to in-memory fakes inside tools.link_agent."""
+    ws_table = _FakeWorkspaceTable(members)
+    agents_table = _FakeAgentsTable(agents)
+
+    class _FakeResource:
+        def Table(self, name):
+            if name == "agent-studio-workspaces":
+                return ws_table
+            if name == "agent-studio-agents":
+                return agents_table
+            # Unused tables (a2a keys) — return a black-hole stub.
+            return _FakeWorkspaceTable({})
+
+    import boto3 as _real_boto3
+
+    def _fake_resource(name, region_name=None):
+        assert name == "dynamodb"
+        return _FakeResource()
+
+    monkeypatch.setattr(_real_boto3, "resource", _fake_resource)
+    return ws_table, agents_table
+
+
+def _prime_caller(monkeypatch, caller_id):
+    """Set the module-level _caller_id that link_agent reads via tools.create_agent."""
+    import tools.create_agent as _ca
+
+    monkeypatch.setattr(_ca, "_caller_id", caller_id, raising=False)
+
+
+def _agents_fixture():
+    return {
+        "src-1": {"agentId": "src-1", "workspace_id": "ws-1", "name": "Source"},
+        "tgt-1": {"agentId": "tgt-1", "workspace_id": "ws-1", "name": "Target"},
+    }
+
+
+def test_link_agent_rejects_non_member(monkeypatch):
+    from tools import link_agent as mod
+
+    _prime_caller(monkeypatch, "user-nomember")
+    _install_link_agent_ddb(monkeypatch, members={}, agents=_agents_fixture())
+    monkeypatch.setenv("AGENT_STUDIO_CLOUDFRONT_DOMAIN", "d123.cloudfront.net")
+
+    result = json.loads(mod.link_agent("src-1", "tgt-1"))
+    assert "Permission denied" in result.get("error", "")
+    assert result.get("caller_role") == "none"
+
+
+def test_link_agent_rejects_viewer(monkeypatch):
+    from tools import link_agent as mod
+
+    _prime_caller(monkeypatch, "user-viewer")
+    _install_link_agent_ddb(
+        monkeypatch,
+        members={("ws-1", "user-viewer"): "viewer"},
+        agents=_agents_fixture(),
+    )
+    monkeypatch.setenv("AGENT_STUDIO_CLOUDFRONT_DOMAIN", "d123.cloudfront.net")
+
+    result = json.loads(mod.link_agent("src-1", "tgt-1"))
+    assert "Permission denied" in result.get("error", "")
+    assert result.get("caller_role") == "viewer"
+
+
+def _stub_link_side_effects(monkeypatch):
+    """Short-circuit everything after the permission gate."""
+    from tools import link_agent as mod
+
+    monkeypatch.setattr(mod, "_mint_a2a_key", lambda **kw: ("key-id-1", "as_fakeplaintext"))
+    monkeypatch.setattr(
+        mod,
+        "_update_linked_keys_secret",
+        lambda *a, **kw: ('{"tgt-1": "as_fakeplaintext"}', {"tgt-1": "as_fakeplaintext"}),
+    )
+    monkeypatch.setattr(mod, "_load_metadata", lambda _agent_id: {"system_prompt": ""})
+    monkeypatch.setattr(mod, "_save_metadata", lambda *a, **kw: None)
+    monkeypatch.setattr(mod, "_redeploy_source", lambda *a, **kw: "READY")
+    # _get_builtin_code may be hit when refreshing tool_definitions
+    monkeypatch.setattr(mod, "_get_builtin_code", lambda name: "")
+
+
+def test_link_agent_accepts_editor(monkeypatch):
+    from tools import link_agent as mod
+
+    _prime_caller(monkeypatch, "user-editor")
+    _install_link_agent_ddb(
+        monkeypatch,
+        members={("ws-1", "user-editor"): "editor"},
+        agents=_agents_fixture(),
+    )
+    monkeypatch.setenv("AGENT_STUDIO_CLOUDFRONT_DOMAIN", "d123.cloudfront.net")
+    _stub_link_side_effects(monkeypatch)
+
+    result = json.loads(mod.link_agent("src-1", "tgt-1"))
+    assert "error" not in result, result
+    assert result.get("status") == "READY"
+    assert result.get("source_agent_id") == "src-1"
+    assert result.get("target_agent_id") == "tgt-1"
+    assert result.get("key_id") == "key-id-1"
+
+
+def test_link_agent_accepts_admin(monkeypatch):
+    from tools import link_agent as mod
+
+    _prime_caller(monkeypatch, "user-admin")
+    _install_link_agent_ddb(
+        monkeypatch,
+        members={("ws-1", "user-admin"): "admin"},
+        agents=_agents_fixture(),
+    )
+    monkeypatch.setenv("AGENT_STUDIO_CLOUDFRONT_DOMAIN", "d123.cloudfront.net")
+    _stub_link_side_effects(monkeypatch)
+
+    result = json.loads(mod.link_agent("src-1", "tgt-1"))
+    assert "error" not in result, result
+    assert result.get("status") == "READY"
+
+
+def test_unlink_agent_rejects_viewer(monkeypatch):
+    from tools import link_agent as mod
+
+    _prime_caller(monkeypatch, "user-viewer")
+    _install_link_agent_ddb(
+        monkeypatch,
+        members={("ws-1", "user-viewer"): "viewer"},
+        agents=_agents_fixture(),
+    )
+
+    result = json.loads(mod.unlink_agent("src-1", "tgt-1"))
+    assert "Permission denied" in result.get("error", "")
+    assert result.get("caller_role") == "viewer"
+
+
+def test_unlink_agent_rejects_non_member(monkeypatch):
+    from tools import link_agent as mod
+
+    _prime_caller(monkeypatch, "user-outsider")
+    _install_link_agent_ddb(monkeypatch, members={}, agents=_agents_fixture())
+
+    result = json.loads(mod.unlink_agent("src-1", "tgt-1"))
+    assert "Permission denied" in result.get("error", "")
+
+
 def test_mint_and_revoke_key_shape(monkeypatch):
     """Ensure the DDB item has the same shape as lambda/crud/a2a_keys.py::create_key."""
     captured = {}

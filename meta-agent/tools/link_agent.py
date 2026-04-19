@@ -4,7 +4,10 @@ Linking a sub-agent A to peer B does the following, atomically from the
 caller's perspective:
 
   1. Validates both agents exist in the same workspace and the caller has
-     at least editor-level access to the source (same bar as update_agent).
+     at least editor-level membership in that workspace (same bar as
+     update_agent in the CRUD Lambda). Membership is looked up in the
+     `agent-studio-workspaces` table at `{workspaceId, sk=MEMBER#<user>}`,
+     matching the shape used by `lambda/shared/auth.py`.
   2. Mints a fresh A2A API key for `(caller_id, target_id)`. Hashing and
      DDB shape mirror `lambda/crud/a2a_keys.py::create_key` 1:1 so the
      deployed a2a-proxy Lambda validates it without any code change there.
@@ -52,6 +55,32 @@ _A2A_INVOKE_URL_ENV_KEY = "A2A_INVOKE_URL"
 _A2A_KEYS_ENV_KEY = "AGENTS_TOOL_KEYS_JSON"
 _LINK_MARKER_START = "<!-- linked-agents:start -->"
 _LINK_MARKER_END = "<!-- linked-agents:end -->"
+
+# Mirrors lambda/shared/auth.py::ROLE_LEVEL — inlined because the lambda/shared
+# package is not importable from the meta-agent runtime.
+_WORKSPACES_TABLE = os.getenv("AGENT_STUDIO_WORKSPACES_TABLE", "agent-studio-workspaces")
+_ROLE_LEVEL = {"viewer": 0, "editor": 1, "admin": 2, "owner": 3}
+
+
+def _get_workspace_membership(workspace_id: str, user_id: str) -> dict | None:
+    """Fetch a workspace membership record. Shape matches lambda/shared/auth.py."""
+    if not workspace_id or not user_id:
+        return None
+    try:
+        ddb = boto3.resource("dynamodb", region_name=REGION)
+        resp = ddb.Table(_WORKSPACES_TABLE).get_item(
+            Key={"workspaceId": workspace_id, "sk": f"MEMBER#{user_id}"},
+            ConsistentRead=True,
+        )
+        return resp.get("Item")
+    except Exception:
+        return None
+
+
+def _has_min_role(member: dict | None, min_role: str) -> bool:
+    if not member:
+        return False
+    return _ROLE_LEVEL.get(member.get("role", ""), -1) >= _ROLE_LEVEL.get(min_role, 99)
 
 
 def _public_base_url() -> str:
@@ -316,6 +345,9 @@ def link_agent(source_agent_id: str, target_agent_id: str) -> str:
     After linking, the source agent gains a `call_agent(agent_id, prompt)` tool
     and its system prompt learns that the target exists. Both agents must live
     in the same workspace; cross-workspace linking is rejected in this iteration.
+    The caller must have at least `editor` role in that workspace — viewers and
+    non-members are rejected because linking mutates secrets and redeploys the
+    source runtime.
 
     The source agent is redeployed in place — runtime id/ARN stay the same.
 
@@ -346,6 +378,15 @@ def link_agent(source_agent_id: str, target_agent_id: str) -> str:
             "error": "Cross-workspace linking is not allowed",
             "source_workspace": src_ws,
             "target_workspace": tgt_ws,
+        })
+
+    # Editor+ role required: linking mutates secrets and redeploys source.
+    member = _get_workspace_membership(src_ws, caller)
+    if not _has_min_role(member, "editor"):
+        return json.dumps({
+            "error": "Permission denied: editor role or higher required to link agents",
+            "workspace_id": src_ws,
+            "caller_role": (member or {}).get("role", "none"),
         })
 
     invoke_base = _public_base_url()
@@ -437,6 +478,9 @@ def unlink_agent(source_agent_id: str, target_agent_id: str) -> str:
     """Reverse link_agent: revoke the key, drop the prompt fragment + secret entry, redeploy source.
 
     The `call_agent` tool is removed from the source only when no linked peers remain.
+    The caller must have at least `editor` role in the source agent's workspace;
+    viewers and non-members are rejected because unlinking mutates secrets and
+    redeploys the source runtime.
 
     Args:
         source_agent_id: The agent that currently has the link.
@@ -445,9 +489,22 @@ def unlink_agent(source_agent_id: str, target_agent_id: str) -> str:
     Returns:
         JSON with remaining linked agents or an error.
     """
+    caller = _caller_from_module()
     src = _get_agent(source_agent_id)
     if not src:
         return json.dumps({"error": f"Source agent {source_agent_id} not found"})
+
+    src_ws = src.get("workspace_id", "")
+    if not src_ws:
+        return json.dumps({"error": "Source agent has no workspace"})
+
+    member = _get_workspace_membership(src_ws, caller)
+    if not _has_min_role(member, "editor"):
+        return json.dumps({
+            "error": "Permission denied: editor role or higher required to unlink agents",
+            "workspace_id": src_ws,
+            "caller_role": (member or {}).get("role", "none"),
+        })
 
     meta = _load_metadata(source_agent_id)
     linked = [l for l in (meta.get("linked_agents") or []) if l.get("agent_id") == target_agent_id]
