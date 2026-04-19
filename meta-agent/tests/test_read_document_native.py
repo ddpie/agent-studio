@@ -140,6 +140,53 @@ def test_read_document_rejects_cross_workspace_key():
     assert not s3.get_object.called
 
 
+def test_read_document_accepts_chat_attachment_key():
+    """Chat attachments live at uploads/attachments/<session>/<file> and must be readable."""
+    csv_bytes = b"name,qty\napple,3\npear,7\n"
+    s3 = _make_s3_get_mock(csv_bytes)
+    ns = _exec_builtin(s3)
+    ns["_workspace_id"] = "ws-alpha"
+    out = ns["read_document"]("uploads/attachments/sess-abc-123/data.csv")
+    assert "apple" in out and "pear" in out
+    assert s3.get_object.called
+
+
+def test_read_document_still_accepts_workspace_storage_key():
+    """Existing workspace-storage path must keep working alongside the new attachment prefix."""
+    csv_bytes = b"name,qty\napple,3\npear,7\n"
+    s3 = _make_s3_get_mock(csv_bytes)
+    ns = _exec_builtin(s3)
+    ns["_workspace_id"] = "ws-alpha"
+    out = ns["read_document"]("workspaces/ws-alpha/storage/uploads/u/data.csv")
+    assert "apple" in out and "pear" in out
+    assert s3.get_object.called
+
+
+def test_read_document_rejects_unknown_prefix():
+    """Anything that is neither workspaces/<ws>/storage/ nor uploads/attachments/<sess>/ is rejected."""
+    s3 = _make_s3_get_mock(b"")
+    ns = _exec_builtin(s3)
+    ns["_workspace_id"] = "ws-alpha"
+    result = ns["read_document"]("random/prefix/file.pdf")
+    assert "Error" in result
+    assert not s3.get_object.called
+
+
+def test_read_document_rejects_attachments_without_session():
+    """uploads/attachments/ by itself (no session segment) must not leak."""
+    s3 = _make_s3_get_mock(b"")
+    ns = _exec_builtin(s3)
+    ns["_workspace_id"] = "ws-alpha"
+    # Missing session segment
+    result = ns["read_document"]("uploads/attachments/foo.pdf")
+    assert "Error" in result
+    assert not s3.get_object.called
+    # Session segment but no trailing filename
+    result2 = ns["read_document"]("uploads/attachments/sess-only/")
+    assert "Error" in result2
+    assert not s3.get_object.called
+
+
 def test_read_document_rejects_missing_workspace_context():
     s3 = _make_s3_get_mock(b"")
     ns = _exec_builtin(s3)

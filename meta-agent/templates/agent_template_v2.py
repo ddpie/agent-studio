@@ -47,6 +47,7 @@ async def invoke(payload, context):
             + "\\n\\nUse load_skill(name) to load a skill\\'s full instructions when needed."
         )
     prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), save them to /mnt/workspace/ (persistent across sessions) instead of /tmp/ (ephemeral). ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files. After uploading, the download button appears automatically — do NOT create markdown links like [filename](url) for downloads."
+    prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
     agent = Agent(
         model=BedrockModel(model_id=model_id),
         system_prompt=prompt,
@@ -188,6 +189,7 @@ async def invoke(payload, context):
             + "\\n\\nUse load_skill(name) to load a skill\\'s full instructions when needed."
         )
     prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), save them to /mnt/workspace/ (persistent across sessions) instead of /tmp/ (ephemeral). ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files. After uploading, the download button appears automatically — do NOT create markdown links like [filename](url) for downloads."
+    prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
     with contextlib.ExitStack() as stack:
         mcp_tools = []
         for client in _mcp_clients:
@@ -713,15 +715,21 @@ def _doc_truncate(text: str) -> str:
 
 @_tool
 def read_document(file_key: str) -> str:
-    """Read an uploaded document (PDF, xlsx, csv, tsv) from the workspace and return its text content.
+    """Read an uploaded document (PDF, xlsx, csv, tsv) from S3 and return its text content.
 
     Prefer this over generic file readers when the user uploads a PDF, Excel workbook, or
-    tabular text file. Accepts an S3 key under the current workspace only — cross-workspace
-    access is rejected.
+    tabular text file. Two key shapes are accepted:
+
+    * ``workspaces/<caller_ws>/storage/...`` — files stored in the caller's workspace.
+    * ``uploads/attachments/<sessionId>/...`` — chat attachments uploaded from the UI
+      (the session ID is an unguessable identifier produced client-side).
+
+    Any other prefix (including other workspaces) is rejected.
 
     Args:
-        file_key: Relative S3 key under ``workspaces/<caller_ws>/storage/`` (e.g.
-            ``workspaces/ws-abc/storage/uploads/u-xyz/report.pdf``).
+        file_key: Relative S3 key. Examples:
+            ``workspaces/ws-abc/storage/uploads/u-xyz/report.pdf`` or
+            ``uploads/attachments/sess-123/report.pdf``.
 
     Returns:
         Plain text extracted from the document, or a short diagnostic string on error.
@@ -735,15 +743,27 @@ def read_document(file_key: str) -> str:
         return "Error: file_key must be an S3 key, not a URL."
     key = file_key.lstrip("/")
 
-    # Workspace scoping — read_document refuses anything outside the caller's workspace
+    # Access scoping — allow either the caller's workspace storage, or chat-attachment
+    # uploads (session IDs are unguessable UUIDs minted client-side).
     ws = _workspace_id or ""
     if not ws:
         return "Error: workspace context is not available; cannot validate file access."
-    required_prefix = f"workspaces/{ws}/storage/"
-    if not key.startswith(required_prefix):
+    workspace_prefix = f"workspaces/{ws}/storage/"
+    attachment_prefix = "uploads/attachments/"
+    allowed = False
+    if key.startswith(workspace_prefix):
+        allowed = True
+    elif key.startswith(attachment_prefix):
+        # Require a non-empty session segment: uploads/attachments/<session>/<filename>
+        remainder = key[len(attachment_prefix):]
+        session_seg, _, rest = remainder.partition("/")
+        if session_seg and rest:
+            allowed = True
+    if not allowed:
         return (
             "Error: file_key must start with "
-            f"'workspaces/{ws}/storage/'. Cross-workspace reads are not allowed."
+            f"'workspaces/{ws}/storage/' or 'uploads/attachments/<session>/'. "
+            "Cross-workspace reads are not allowed."
         )
 
     # Resolve extension — case-insensitive
