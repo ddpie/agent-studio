@@ -34,5 +34,5 @@ test("Detail page linear sections all render", async ({ page }) => {
   await expect(page.getByTestId("traces-tab")).toBeVisible({ timeout: 15_000 });
 
   await page.getByTestId("integration-section").scrollIntoViewIfNeeded();
-  await expect(page.getByTestId("integration-placeholder")).toBeVisible();
+  await expect(page.getByTestId("integration-tab")).toBeVisible();
 });

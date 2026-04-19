@@ -308,3 +308,61 @@ def test_meta_agent_runtime_reachable():
         f"Meta-Agent protocol changed to {proto!r}; the synthetic AgentCard "
         "endpoint was designed for the HTTP fallback"
     )
+
+
+# ---------------------------------------------------------------------------
+# Sprint 3 — A2A proxy live guards
+# ---------------------------------------------------------------------------
+
+
+def test_sprint3_a2a_public_card_reachable():
+    """Every healthy agent should serve a spec-compliant public card."""
+    import urllib.request
+    cf = os.environ.get("AGENT_STUDIO_CLOUDFRONT_DOMAIN", "")
+    assert cf, "AGENT_STUDIO_CLOUDFRONT_DOMAIN required"
+    url = f"https://{cf}/a2a/agents/{SUBAGENT_ID}/.well-known/agent-card.json"
+    with urllib.request.urlopen(url, timeout=10) as resp:
+        assert resp.status == 200
+        card = json.load(resp)
+    assert card["name"], card
+    assert card["protocolVersion"] == "0.3.0", card
+    assert card["securitySchemes"]["bearerAuth"]["scheme"] == "bearer", card
+    assert card["url"].endswith(f"/a2a/agents/{SUBAGENT_ID}"), card
+
+
+def test_sprint3_meta_agent_card_reachable():
+    """Meta-Agent serves its card at /a2a/meta-agent/.well-known/..."""
+    import urllib.request
+    cf = os.environ["AGENT_STUDIO_CLOUDFRONT_DOMAIN"]
+    with urllib.request.urlopen(
+        f"https://{cf}/a2a/meta-agent/.well-known/agent-card.json", timeout=10
+    ) as resp:
+        card = json.load(resp)
+    assert card["name"], card
+    assert card["url"].endswith("/a2a/meta-agent"), card
+
+
+def test_sprint3_extended_card_requires_bearer():
+    """Without a Bearer token, extended card returns 401 + WWW-Authenticate."""
+    import urllib.error
+    import urllib.request
+    cf = os.environ["AGENT_STUDIO_CLOUDFRONT_DOMAIN"]
+    url = f"https://{cf}/a2a/agents/{SUBAGENT_ID}/authenticatedExtendedCard"
+    try:
+        urllib.request.urlopen(url, timeout=10)
+        raise AssertionError("Expected 401")
+    except urllib.error.HTTPError as e:
+        assert e.code == 401
+        # CloudFront may rewrite the header name; accept either form.
+        hdrs = {k.lower(): v for k, v in e.headers.items()}
+        auth_hdr = hdrs.get("www-authenticate") or hdrs.get("x-amzn-remapped-www-authenticate", "")
+        assert "Bearer" in auth_hdr, dict(e.headers)
+
+
+def test_sprint3_a2a_keys_table_exists():
+    """DDB table for API keys must be ACTIVE with the user-agent-index GSI."""
+    ddb = boto3.client("dynamodb", region_name=REGION)
+    info = ddb.describe_table(TableName="agent-studio-a2a-keys")
+    assert info["Table"]["TableStatus"] == "ACTIVE"
+    gsis = {g["IndexName"] for g in info["Table"].get("GlobalSecondaryIndexes", [])}
+    assert "user-agent-index" in gsis, gsis

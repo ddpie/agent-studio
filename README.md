@@ -248,12 +248,36 @@ from OTEL span attributes (`attributes.session.id`,
 
 ## A2A interoperability
 
-The Meta-Agent exposes an A2A-shape AgentCard at
-`/api/workspaces/{ws}/meta-agent/agent-card`. The Meta-Agent runtime
-itself remains on `serverProtocol=HTTP` (to preserve the existing chat
-streaming UX); the card is synthesized from `GetAgentRuntime` metadata
-plus hard-coded capability descriptors. The chat page surfaces a
-copy-ready endpoint URL and runtime ARN for external A2A clients.
+**Standards-compliant A2A proxy** sits in front of the HTTP AgentCore
+runtimes. Each sub-agent and the Meta-Agent expose three spec-aligned
+endpoints:
+
+- `GET /a2a/agents/{id}/.well-known/agent-card.json` — RFC 8615 canonical discovery (public)
+- `GET /a2a/agents/{id}/authenticatedExtendedCard` — Bearer-auth'd extended card (A2A spec §3.1.11)
+- `POST /a2a/agents/{id}` — JSON-RPC 2.0 (`message/send`, `message/stream`)
+
+Meta-Agent uses `/a2a/meta-agent/*` with the same structure.
+
+Authentication: `HTTPAuthSecurityScheme` with `scheme="bearer"` and
+`bearerFormat="Agent Studio API Key"`. Keys are per-user-per-agent,
+stored as SHA-256 hashes in `agent-studio-a2a-keys`. Users generate and
+revoke keys from the Integration section on the agent detail page (or
+the A2A modal on Meta-Agent chat). The Meta-Agent runtime itself stays
+on `serverProtocol=HTTP`; the proxy lambda translates between the A2A
+JSON-RPC envelope and the HTTP payload, reverse-translating `__tool`
+markers into A2A `TaskStatusUpdateEvent`s.
+
+External A2A clients (Google ADK, CrewAI, LangGraph, etc.) discover
+agents by fetching the well-known card, obtain an API key from the
+Agent Studio UI, and invoke via standard JSON-RPC.
+
+## Agent detail page
+
+Every agent has a read-only detail page at `/agents/:id` that stacks
+Deployments, Endpoints, Evaluations, Traces, and Integration sections
+linearly (same visual pattern as the existing tab components, no new
+UI primitives). Viewers get the page; only editor+ sees the "Edit"
+button that opens the write-mode edit form.
 
 ## Sub-agent sandbox
 
