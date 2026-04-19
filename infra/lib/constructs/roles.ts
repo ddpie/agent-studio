@@ -177,16 +177,23 @@ export class AgentCoreRoles extends Construct {
         "logs:StartQuery",
         "logs:GetQueryResults",
         "logs:StopQuery",
-        "logs:DescribeLogGroups",
         "logs:FilterLogEvents",
         "logs:CreateLogGroup",
         "logs:CreateLogStream",
         "logs:PutLogEvents",
       ],
       resources: [
+        `arn:aws:logs:${props.region}:${props.accountId}:log-group:aws/spans`,
         `arn:aws:logs:${props.region}:${props.accountId}:log-group:aws/spans:*`,
+        `arn:aws:logs:${props.region}:${props.accountId}:log-group:/aws/bedrock-agentcore/evaluations/*`,
         `arn:aws:logs:${props.region}:${props.accountId}:log-group:/aws/vendedlogs/bedrock-agentcore/evaluation/*`,
       ],
+    }));
+    // DescribeLogGroups only supports "*" resource — service uses it to
+    // validate the input log groups before accepting the eval config.
+    evaluatorRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["logs:DescribeLogGroups"],
+      resources: ["*"],
     }));
     evaluatorRole.addToPolicy(new iam.PolicyStatement({
       actions: [

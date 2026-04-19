@@ -107,6 +107,16 @@ def create_workspace():
         ]
     )
 
+    # Fire-and-forget: provision online evaluator for this workspace.
+    # Failure here must NOT fail workspace creation; users can still use
+    # the workspace, they just won't see scores until the next retry.
+    try:
+        from crud.evaluations import create_eval_config_for_workspace
+        create_eval_config_for_workspace(workspace_id=ws_id)
+    except Exception as e:
+        logger.warning("eval config provisioning failed (workspace still created)",
+                       extra={"workspace_id": ws_id, "error": str(e)})
+
     return success({
         "workspaceId": ws_id,
         "name": name,
@@ -180,6 +190,13 @@ def onboarding():
                 "onboarding": False,
             })
         return bad_request("User already has a workspace")
+
+    try:
+        from crud.evaluations import create_eval_config_for_workspace
+        create_eval_config_for_workspace(workspace_id=ws_id)
+    except Exception as e:
+        logger.warning("eval config provisioning failed (workspace still created)",
+                       extra={"workspace_id": ws_id, "error": str(e)})
 
     return success({
         "workspaceId": ws_id,
