@@ -13,7 +13,11 @@
 - **预构建工具库** — Web 搜索、S3 读写、图表生成、网页抓取等开箱即用
 - **MCP 工具市场** — 36 个预部署 MCP 工具服务器，覆盖 14 个 AWS 服务类别，Agent 直连 Runtime，支持分类浏览和搜索
 - **多模型切换** — Claude 4.6 / 4.5 / 4 / 3.x，运行时随时切换，不需要重新部署
-- **多模态输入** — 支持图片上传，Agent 可以看图理解、分析数据截图
+- **多模态输入** — 图片 + PDF / Excel / CSV 上传，Agent 用 `read_document` 直接读文档内容
+- **定时触发** — Agent detail → Schedules 标签，EventBridge Scheduler cron 表达式触发 Agent
+- **Agent 互调** — 一个 Agent 把另一个 Agent 挂为 tool，走标准 A2A 协议 + 自动配密钥
+- **Marketplace** — workspace 内 publish Agent / Skill / Tool，同部署下登录用户可跨 workspace clone
+- **多 Workspace + 角色** — workspace 切换器、邀请成员、角色管理（viewer / editor / admin / owner）
 
 ## 架构
 
@@ -50,8 +54,8 @@ graph LR
 ```
 
 - **Frontend** — React 19 + Vite + Tailwind + Zustand，Cognito 认证
-- **Meta-Agent** — 跑在 AgentCore Runtime 上的编排 Agent，25 个工具管理 Sub-Agent 全生命周期
-- **Sub-Agent** — 每个 Agent 独立部署，独立运行，互不影响
+- **Meta-Agent** — 跑在 AgentCore Runtime 上的编排 Agent，28 个工具管理 Sub-Agent 全生命周期
+- **Sub-Agent** — 每个 Agent 独立部署，独立运行，互不影响，可互相调用
 
 ## 快速开始
 
@@ -100,6 +104,33 @@ cd frontend && npm run dev    # 本地前端，自动 proxy 到已部署的后�
 - **WAF**: AWS Managed Rules + IP 限速，CloudFront 级别防护
 - **数据隔离**: Workspace 级别隔离，Agent 归属校验，Secret 按 Agent 独立存储
 - **最小权限**: S3 IAM policy 按路径前缀 scope down，Lambda 不添加 broad resource-based policy
+- **Red lines（synth + pre-commit 双重守卫）**: 禁止 Lambda `AuthType=NONE` / `Principal:"*"` / broad resource-based policy，所有新 Lambda 通过 APIGW + Cognito authorizer 或 OAC 暴露
+
+## Workspace + RBAC
+
+顶部栏 workspace switcher 下拉切换。Settings → Workspace 管理成员：邀请（带分享链接）、角色变更、移除。四级角色：viewer（只读）、editor（改配置 + 部署）、admin（管成员）、owner（唯一，可转让）。切换 workspace 自动清空 chat 历史，避免跨 workspace 幻影。
+
+## 定时触发
+
+Agent detail → Schedules 标签。cron(0 9 * * ? *) 或 rate(1 hour) 表达式，目标是 Agent 的 AgentCore Runtime。专用 `AgentStudioSchedulerTargetRole` 执行 `InvokeAgentRuntime`（trust 带 `SourceAccount` + `SourceArn`，仅限本账号 `schedule/default/agent-studio-*`）。
+
+## Agent-as-Tool
+
+在 Agent 编辑页 Linked Agents 小节选择同 workspace 下另一个 Agent。Meta-Agent 执行 `link_agent` 时：
+1. 为 caller 生成一把 A2A 密钥（SHA-256 存 DDB）
+2. 把密钥写进源 Agent 的 Secrets Manager 条目
+3. 把 `agent_caller` tool + `A2A_INVOKE_URL` env 注入源 Agent
+4. 重新 deploy 源 Agent
+
+之后源 Agent 运行时可以调 `call_agent(agent_id, prompt)`，走 CloudFront → A2A Proxy Lambda → 目标 Runtime，全程 Bearer 认证。
+
+## Marketplace
+
+Agent / Skill / Tool 详情页带 publish 开关（admin+）。发布后进入 `/marketplace`，同部署下所有登录用户可见（元数据，不含 prompt / 源码）。点击 Clone 拷贝到当前 workspace（editor+）作为 private 资源，Agent clone 不自动部署。
+
+## 文档读取
+
+Sub-Agent 内置 `read_document(file_key)` 工具，自动识别：PDF（pypdf）、xlsx/xlsm（openpyxl）、csv/tsv（pandas）。工作区隔离：key 必须以 `workspaces/{wsId}/storage/` 或 `uploads/attachments/{sessionId}/` 开头，拒绝跨 workspace 读取。10 MB / 50k 字符上限。
 
 ## 项目结构
 
@@ -142,7 +173,11 @@ Built on AWS Bedrock AgentCore. From zero-code to full-code, from idea to produc
 - **Built-in tool library** — Web search, S3 read/write, chart generation, web scraping — ready to use out of the box.
 - **MCP Tool Marketplace** — 36 pre-deployed MCP tool servers across 14 AWS service categories. Agents connect directly to Runtimes with category browsing and search.
 - **Multi-model switching** — Claude 4.6 / 4.5 / 4 / 3.x, switch at runtime without redeployment.
-- **Multimodal input** — Image upload support. Agents can understand screenshots and analyze visual data.
+- **Multimodal input** — Images + PDF / Excel / CSV uploads. Agents parse document contents via the `read_document` builtin.
+- **Scheduled triggers** — Agent detail → Schedules tab. EventBridge Scheduler cron expressions invoke agents on a timer.
+- **Agent-as-tool** — Link one sub-agent as a callable tool of another over the standard A2A protocol. API keys auto-provisioned.
+- **Marketplace** — Publish agents / skills / tools from a workspace. Logged-in users across the deployment can browse and clone.
+- **Multi-workspace + RBAC** — Workspace switcher, member invitations, role management (viewer / editor / admin / owner).
 
 ## Architecture
 
@@ -179,8 +214,8 @@ graph LR
 ```
 
 - **Frontend** — React 19 + Vite + Tailwind + Zustand, Cognito auth
-- **Meta-Agent** — Orchestration agent on AgentCore Runtime, 25 tools for full sub-agent lifecycle management
-- **Sub-Agent** — Each agent deployed independently, isolated runtime
+- **Meta-Agent** — Orchestration agent on AgentCore Runtime, 28 tools for full sub-agent lifecycle management
+- **Sub-Agent** — Each agent deployed independently, isolated runtime, composable via A2A
 
 ## Quick Start
 
@@ -220,6 +255,33 @@ If you already have Cognito or a Meta-Agent Runtime, the script auto-detects exi
 - **WAF**: AWS Managed Rules + IP rate limiting, CloudFront-level protection
 - **Data isolation**: Workspace-level isolation, agent ownership verification, per-agent secret storage
 - **Least privilege**: S3 IAM policies scoped by path prefix, no broad Lambda resource-based policies
+- **Red lines (synth + pre-commit guards)**: Lambda `AuthType=NONE`, `Principal:"*"`, and broad resource-based policies are forbidden. All new Lambdas sit behind API Gateway + Cognito authorizer or OAC.
+
+## Workspace + RBAC
+
+Workspace switcher in the top bar. Settings → Workspace for member management: invite (with shareable link), role changes, remove. Four roles — viewer (read-only), editor (config + deploy), admin (manage members), owner (single, transferable). Switching workspaces clears chat history to avoid cross-workspace phantom state.
+
+## Scheduled triggers
+
+Agent detail → Schedules tab. `cron(0 9 * * ? *)` or `rate(1 hour)` expressions target the agent's AgentCore Runtime via a dedicated `AgentStudioSchedulerTargetRole` (trust conditions on `SourceAccount` + `SourceArn`, scoped to `schedule/default/agent-studio-*` in this account).
+
+## Agent-as-tool
+
+In the Agent edit page's Linked Agents section, pick another agent in the same workspace. When the Meta-Agent runs `link_agent`:
+1. Mint an A2A API key for the caller (SHA-256 hash in DDB)
+2. Inject it into the source agent's Secrets Manager entry
+3. Register the `agent_caller` tool + `A2A_INVOKE_URL` env on the source agent
+4. Redeploy the source agent
+
+At runtime, the source agent can call `call_agent(agent_id, prompt)`, which goes CloudFront → A2A Proxy Lambda → target runtime, Bearer-authenticated end to end.
+
+## Marketplace
+
+Agent / Skill / Tool detail pages have a publish toggle (admin+). Published resources appear at `/marketplace`, visible to all logged-in users of this deployment (metadata only — no prompts or source). Clone copies the resource into the caller's current workspace (editor+) as a private resource. Cloned agents are not auto-deployed.
+
+## Document reading
+
+Sub-agents have a built-in `read_document(file_key)` tool with auto-detection: PDF (pypdf), xlsx/xlsm (openpyxl), csv/tsv (pandas). Workspace-scoped: keys must start with `workspaces/{wsId}/storage/` or `uploads/attachments/{sessionId}/` — cross-workspace reads are rejected. 10 MB / 50k-char caps.
 
 ## Runtime observability
 
