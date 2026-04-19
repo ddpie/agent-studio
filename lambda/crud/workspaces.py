@@ -76,36 +76,30 @@ def create_workspace():
     now = datetime.utcnow().isoformat() + "Z"
     table = _get_table()
 
-    table.meta.client.transact_write_items(
-        TransactItems=[
-            {
-                "Put": {
-                    "TableName": table.name,
-                    "Item": {
-                        "workspaceId": {"S": ws_id},
-                        "sk": {"S": "META"},
-                        "name": {"S": name},
-                        "description": {"S": body.get("description", "")},
-                        "owner_id": {"S": user_id},
-                        "created_at": {"S": now},
-                        "updated_at": {"S": now},
-                    },
-                }
-            },
-            {
-                "Put": {
-                    "TableName": table.name,
-                    "Item": {
-                        "workspaceId": {"S": ws_id},
-                        "sk": {"S": f"MEMBER#{user_id}"},
-                        "userId": {"S": user_id},
-                        "role": {"S": "owner"},
-                        "joined_at": {"S": now},
-                    },
-                }
-            },
-        ]
-    )
+    meta_item = {
+        "workspaceId": ws_id,
+        "sk": "META",
+        "name": name,
+        "owner_id": user_id,
+        "created_at": now,
+        "updated_at": now,
+    }
+    desc = (body.get("description") or "").strip()
+    if desc:
+        meta_item["description"] = desc
+    # Two separate put_item calls instead of transact_write_items:
+    # boto3 table.put_item accepts native Python types (auto-serialized),
+    # whereas transact_write_items on the low-level client requires typed
+    # AttributeValue dicts. Using the Table resource keeps the code path
+    # consistent with the rest of this module.
+    table.put_item(Item=meta_item)
+    table.put_item(Item={
+        "workspaceId": ws_id,
+        "sk": f"MEMBER#{user_id}",
+        "userId": user_id,
+        "role": "owner",
+        "joined_at": now,
+    })
 
     # Fire-and-forget: provision online evaluator for this workspace.
     # Failure here must NOT fail workspace creation; users can still use
