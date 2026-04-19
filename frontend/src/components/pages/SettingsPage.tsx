@@ -1,11 +1,12 @@
-import { Settings, User, Download, Trash2, Database, Shield, Sun, Moon, Monitor, Languages, Users } from "lucide-react";
+import { Settings, Download, Trash2, Database, Shield, Sun, Moon, Monitor, Languages, Users, UserCog } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useUISettings } from "../../stores/ui-settings-store";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import WorkspaceMembersTab from "./WorkspaceMembersTab";
+import AccountSettingsTab from "./AccountSettingsTab";
 
-type TabId = "general" | "workspace";
+type TabId = "general" | "account" | "workspace";
 
 export default function SettingsPage() {
   const { t } = useTranslation();
@@ -41,6 +42,7 @@ export default function SettingsPage() {
       <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 mb-4">
         {([
           { id: "general" as const, icon: Settings, label: t("settings.tabGeneral") },
+          { id: "account" as const, icon: UserCog, label: t("settings.tabAccount") },
           { id: "workspace" as const, icon: Users, label: t("settings.tabWorkspace") },
         ]).map(({ id, icon: Icon, label }) => (
           <button
@@ -56,6 +58,8 @@ export default function SettingsPage() {
           </button>
         ))}
       </div>
+
+      {tab === "account" && <AccountSettingsTab />}
 
       {tab === "workspace" && <WorkspaceMembersTab />}
 
@@ -142,13 +146,6 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* Profile */}
-          <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-            <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5" /> {t("settings.account")}
-            </h3>
-            <p className="text-xs text-gray-500">{t("settings.accountDesc")}</p>
-          </section>
 
           {/* Infrastructure Info */}
           <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
