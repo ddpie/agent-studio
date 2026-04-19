@@ -201,7 +201,7 @@ async def invoke(payload, context):
         agent = Agent(
             model=BedrockModel(model_id=model_id),
             system_prompt=prompt,
-            tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill, _builtin.run_command, _builtin.read_document],
+            tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document],
         )
         async for chunk in _stream_with_tools(agent, _build_input(payload)):
             yield chunk
