@@ -150,6 +150,12 @@ fields @timestamp, attributes.session.id as sessionId, traceId, attributes.aws.a
 
 @router.get("/api/workspaces/<wsId>/agents/<agentId>/traces/<sessionId>")
 def get_session_trace(wsId: str, agentId: str, sessionId: str):
+    # Powertools matches routes in registration order; this path would
+    # swallow `/traces/stats` otherwise. Short-circuit and dispatch to
+    # the stats handler when the literal collides with a reserved word.
+    if sessionId == "stats":
+        return get_trace_stats(wsId, agentId)
+
     user_id, ws_id, _, err = auth_check(router.current_event, ws_id=wsId)
     if err:
         return err
