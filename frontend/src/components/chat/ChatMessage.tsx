@@ -9,7 +9,7 @@ import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeKatex from "rehype-katex";
 import { useChatStore, type Message } from "../../stores/chat-store";
 import { generateDownloadUrl } from "../../lib/s3-storage";
-import { fetchSignedS3 } from "../../lib/s3-utils";
+import { fetchSignedS3, buildAttachmentHint } from "../../lib/s3-utils";
 import { agentConfig } from "../../config";
 import ImageLightbox from "../ui/ImageLightbox";
 import CopyButtons from "./CopyButtons";
@@ -49,7 +49,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
       if (message.attachments?.length) {
         const bucket = agentConfig.s3Bucket;
         for (const f of message.attachments) {
-          finalText += `\n\n[Attached file: ${f.name} (${(f.size / 1024).toFixed(1)}KB) — use s3_read(bucket="${bucket}", key="${f.s3Key}") to read this file]`;
+          finalText += `\n\n[Attached file: ${f.name} (${(f.size / 1024).toFixed(1)}KB) — ${buildAttachmentHint(f, bucket)}]`;
         }
       }
       editAndResend(message.id, finalText);

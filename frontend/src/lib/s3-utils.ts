@@ -26,6 +26,30 @@ export async function uploadFileToS3(
 
   return { key: presigned.s3Key, url: "" };
 }
+/**
+ * Build the tool-usage hint injected into chat messages for an attached file.
+ *
+ * For PDF / spreadsheet / tabular files, the sub-agent has a purpose-built
+ * `read_document` builtin that handles extraction. For other file types the
+ * generic `s3_read(bucket=..., key=...)` fallback is still advertised.
+ */
+export function buildAttachmentHint(
+  file: { name: string; s3Key: string },
+  bucket: string,
+): string {
+  const lower = file.name.toLowerCase();
+  const isDocument =
+    lower.endsWith(".pdf") ||
+    lower.endsWith(".xlsx") ||
+    lower.endsWith(".xlsm") ||
+    lower.endsWith(".csv") ||
+    lower.endsWith(".tsv");
+  if (isDocument) {
+    return `call read_document(file_key="${file.s3Key}") to read this file (fallback: s3_read(bucket="${bucket}", key="${file.s3Key}"))`;
+  }
+  return `use s3_read(bucket="${bucket}", key="${file.s3Key}") to read this file`;
+}
+
 export async function fetchSignedS3(s3Url: string): Promise<string> {
   // If it's already a data URL, return as-is
   if (s3Url.startsWith("data:")) return s3Url;

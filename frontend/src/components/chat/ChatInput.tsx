@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useImperativeHandle, forwardRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Send, Loader2, X, Square, Paperclip, FileText } from "lucide-react";
-import { uploadImageToS3, uploadFileToS3 } from "../../lib/s3-utils";
+import { uploadImageToS3, uploadFileToS3, buildAttachmentHint } from "../../lib/s3-utils";
 import { agentConfig } from "../../config";
 
 interface ChatInputProps {
@@ -131,7 +131,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
     if (fileAttachments.length > 0) {
       const bucket = agentConfig.s3Bucket;
       for (const f of fileAttachments) {
-        messageText += `\n\n[Attached file: ${f.name} (${(f.size / 1024).toFixed(1)}KB) — use s3_read(bucket="${bucket}", key="${f.s3Key}") to read this file]`;
+        messageText += `\n\n[Attached file: ${f.name} (${(f.size / 1024).toFixed(1)}KB) — ${buildAttachmentHint(f, bucket)}]`;
       }
     }
 
