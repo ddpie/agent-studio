@@ -147,6 +147,28 @@ export class Api extends Construct {
       ],
     }));
 
+    // Sprint 2 F5: create eval config from workspaces.create + read eval
+    // results from CloudWatch Logs Insights.
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        "logs:StartQuery",
+        "logs:GetQueryResults",
+        "logs:StopQuery",
+        "logs:DescribeLogGroups",
+        "bedrock-agentcore:CreateOnlineEvaluationConfig",
+        "bedrock-agentcore:ListOnlineEvaluationConfigs",
+        "bedrock-agentcore:GetOnlineEvaluationConfig",
+      ],
+      resources: ["*"],
+    }));
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["iam:PassRole"],
+      resources: [props.evaluatorRoleArn],
+      conditions: {
+        StringEquals: { "iam:PassedToService": "bedrock-agentcore.amazonaws.com" },
+      },
+    }));
+
     // REST API with Cognito authorizer
     const userPool = cognito.UserPool.fromUserPoolArn(this, "UserPool", props.cognitoUserPoolArn);
     const authorizer = new apigateway.CognitoUserPoolsAuthorizer(this, "CognitoAuthorizer", {
