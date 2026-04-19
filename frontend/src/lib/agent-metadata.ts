@@ -32,6 +32,13 @@ export interface AgentMetadata {
   deployedSkillHashes?: Record<string, string>;
   mcp_targets?: string[];
   gateway_url?: string;
+  linked_agents?: LinkedAgentEntry[];
+}
+
+export interface LinkedAgentEntry {
+  agent_id: string;
+  display_name?: string;
+  description?: string;
 }
 
 /**
@@ -66,6 +73,7 @@ export async function fetchAgentMetadataLight(agentId: string): Promise<AgentMet
       deployedSkillHashes: item.deployedSkillHashes,
       mcp_targets: item.mcp_targets || [],
       gateway_url: item.gateway_url,
+      linked_agents: item.linked_agents || [],
     } as AgentMetadata;
   } catch (err) {
     console.error("fetchAgentMetadataLight error:", err);
@@ -111,6 +119,7 @@ export async function fetchAgentMetadata(agentId: string): Promise<AgentMetadata
       deployedSkillHashes: item.deployedSkillHashes,
       mcp_targets: item.mcp_targets || [],
       gateway_url: item.gateway_url,
+      linked_agents: item.linked_agents || [],
     } as AgentMetadata;
   } catch (err) {
     console.error("fetchAgentMetadata error:", err);

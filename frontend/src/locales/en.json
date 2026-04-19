@@ -553,6 +553,21 @@
     "title": "Agent Studio",
     "signOut": "Sign out"
   },
+  "linkedAgents": {
+    "title": "Linked Agents",
+    "description": "Let this agent call other workspace peers via the A2A protocol. Linking mints an API key, adds the call_agent tool to this agent, and redeploys in place (~60s).",
+    "empty": "No linked agents yet. Pick a peer below to link.",
+    "selectAgent": "Select an agent…",
+    "noCandidates": "No other agents available in this workspace.",
+    "link": "Link",
+    "unlink": "Unlink",
+    "linking": "Linking… the source agent is redeploying.",
+    "linked": "Agent linked.",
+    "unlinking": "Unlinking…",
+    "unlinked": "Agent unlinked.",
+    "linkFailed": "Failed to link agent. Check Meta-Agent logs for details.",
+    "unlinkFailed": "Failed to unlink agent. Check Meta-Agent logs for details."
+  },
   "secrets": {
     "title": "Secrets",
     "description": "API keys stored in AWS Secrets Manager. Values are never shown after saving.",

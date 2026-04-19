@@ -553,6 +553,21 @@
     "title": "Agent Studio",
     "signOut": "退出登录"
   },
+  "linkedAgents": {
+    "title": "关联 Agent",
+    "description": "让当前 Agent 通过 A2A 协议调用工作区中的其他 Agent。关联会生成一个 API Key、向当前 Agent 添加 call_agent 工具并原地重新部署（约 60 秒）。",
+    "empty": "尚未关联任何 Agent。请从下方选择要关联的 Agent。",
+    "selectAgent": "选择一个 Agent…",
+    "noCandidates": "此工作区内没有可关联的其他 Agent。",
+    "link": "关联",
+    "unlink": "取消关联",
+    "linking": "关联中…源 Agent 正在重新部署。",
+    "linked": "已关联。",
+    "unlinking": "取消关联中…",
+    "unlinked": "已取消关联。",
+    "linkFailed": "关联失败。请查看 Meta-Agent 日志。",
+    "unlinkFailed": "取消关联失败。请查看 Meta-Agent 日志。"
+  },
   "secrets": {
     "title": "密钥",
     "description": "API 密钥存储在 AWS Secrets Manager 中。保存后不会再显示值。",

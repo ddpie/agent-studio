@@ -9,6 +9,7 @@ import SkillsSection from "./SkillsSection";
 import ToolsEditor from "./ToolsEditor";
 import SecretsSection from "./SecretsSection";
 import McpTargetSelector from "./McpTargetSelector";
+import LinkedAgentsSection from "./LinkedAgentsSection";
 
 export const TEMPLATE_OPTIONS = [
   { id: "", label: "None" },
@@ -198,6 +199,15 @@ export default function AgentFormSections({
           hasLegacyConfig={!!formData.gateway_url && !formData.mcp_targets?.length}
         />
       </Section>
+
+      {/* Linked Agents — let this agent call other workspace peers via A2A */}
+      {!isCreateMode && (
+        <LinkedAgentsSection
+          agentId={agentId}
+          linkedAgents={formData.linked_agents || []}
+          onChange={(next) => updateField("linked_agents", next)}
+        />
+      )}
 
       {/* Secrets */}
       {!isCreateMode && (
