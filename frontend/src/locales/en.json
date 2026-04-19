@@ -563,6 +563,7 @@
     "cloneSkill": "Clone this skill",
     "cloneTool": "Clone this tool",
     "cloneSuccess": "Cloned \"{{name}}\" to your workspace",
+    "cloneDisabledTooltip": "Cloning requires Editor, Admin, or Owner role on the current workspace.",
     "emptyAgents": "No published agents yet",
     "emptySkills": "No published skills yet",
     "emptyTools": "No published tools yet",

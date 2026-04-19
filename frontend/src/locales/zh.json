@@ -563,6 +563,7 @@
     "cloneSkill": "克隆该技能",
     "cloneTool": "克隆该工具",
     "cloneSuccess": "已将 \"{{name}}\" 克隆到你的工作区",
+    "cloneDisabledTooltip": "克隆需要当前工作区的编辑者、管理员或所有者权限。",
     "emptyAgents": "还没有已发布的 Agent",
     "emptySkills": "还没有已发布的技能",
     "emptyTools": "还没有已发布的工具",

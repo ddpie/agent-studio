@@ -14,6 +14,7 @@ import {
   type PublicToolItem,
 } from "../../lib/api-client";
 import { toast } from "../../lib/toast";
+import { useWorkspaceStore } from "../../stores/workspace-store";
 
 type Tab = "agents" | "skills" | "tools";
 
@@ -22,6 +23,10 @@ const PAGE_SIZE = 24;
 export default function MarketplacePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { currentWorkspace } = useWorkspaceStore();
+  const role = currentWorkspace?.role || "viewer";
+  const canClone = role === "editor" || role === "admin" || role === "owner";
+  const disabledTooltip = canClone ? undefined : t("marketplace.cloneDisabledTooltip");
   const [tab, setTab] = useState<Tab>("agents");
   const [search, setSearch] = useState("");
 
@@ -193,6 +198,8 @@ export default function MarketplacePage() {
                     meta={a.model_id}
                     actionLabel={t("marketplace.cloneAgent")}
                     actionLoading={cloning === `agent-${a.agentId}`}
+                    actionDisabled={!canClone}
+                    actionTitle={disabledTooltip}
                     onAction={() => handleCloneAgent(a.agentId, a.name)}
                   />
                 ))}
@@ -213,6 +220,8 @@ export default function MarketplacePage() {
                     tags={s.tags}
                     actionLabel={t("marketplace.cloneSkill")}
                     actionLoading={cloning === `skill-${s.skillId}`}
+                    actionDisabled={!canClone}
+                    actionTitle={disabledTooltip}
                     onAction={() => handleCloneSkill(s.skillId, s.name)}
                   />
                 ))}
@@ -232,6 +241,8 @@ export default function MarketplacePage() {
                     meta={tool.category}
                     actionLabel={t("marketplace.cloneTool")}
                     actionLoading={cloning === `tool-${tool.toolId}`}
+                    actionDisabled={!canClone}
+                    actionTitle={disabledTooltip}
                     onAction={() => handleCloneTool(tool.toolId, tool.name)}
                   />
                 ))}
@@ -284,6 +295,8 @@ function MarketCard({
   tags,
   actionLabel,
   actionLoading,
+  actionDisabled,
+  actionTitle,
   onAction,
 }: {
   icon: React.ReactNode;
@@ -293,8 +306,11 @@ function MarketCard({
   tags?: string[];
   actionLabel: string;
   actionLoading: boolean;
+  actionDisabled?: boolean;
+  actionTitle?: string;
   onAction: () => void;
 }) {
+  const disabled = actionLoading || !!actionDisabled;
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 flex flex-col gap-2 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm transition-all">
       <div className="flex items-center gap-2">
@@ -315,8 +331,10 @@ function MarketCard({
       </div>
       <button
         onClick={onAction}
-        disabled={actionLoading}
-        className="mt-1 flex items-center justify-center gap-1 px-2.5 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
+        disabled={disabled}
+        title={actionTitle}
+        aria-disabled={disabled}
+        className="mt-1 flex items-center justify-center gap-1 px-2.5 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {actionLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
         {actionLabel}
