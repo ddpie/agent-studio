@@ -70,6 +70,18 @@
     "deleted": "端点 '{{name}}' 已删除",
     "actionFailed": "操作失败"
   },
+  "evaluations": {
+    "tab": "评估",
+    "subtitle": "最近会话的 LLM-as-Judge 自动评分",
+    "emptyTitle": "暂无评估结果",
+    "emptyHint": "Sub-agent 应答用户后几分钟内会出现分数。请确认 workspace 的评估配置状态为 ACTIVE。",
+    "evaluator": "评估器",
+    "latestScore": "最新分数",
+    "mean": "7 天均值",
+    "sessions": "已评分会话",
+    "viewInCloudWatch": "查看原始评估日志",
+    "loadError": "无法加载评估结果"
+  },
   "runtime": {
     "status": {
       "ready": "就绪",

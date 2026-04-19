@@ -70,6 +70,18 @@
     "deleted": "Endpoint '{{name}}' deleted",
     "actionFailed": "Action failed"
   },
+  "evaluations": {
+    "tab": "Evaluations",
+    "subtitle": "Automatic LLM-as-Judge scores for recent sessions",
+    "emptyTitle": "No evaluations yet",
+    "emptyHint": "Scores appear a few minutes after your sub-agent answers a user. Ensure the workspace's evaluation config is ACTIVE.",
+    "evaluator": "Evaluator",
+    "latestScore": "Latest score",
+    "mean": "7-day mean",
+    "sessions": "Scored sessions",
+    "viewInCloudWatch": "View raw eval logs",
+    "loadError": "Could not load evaluation results"
+  },
   "runtime": {
     "status": {
       "ready": "Ready",

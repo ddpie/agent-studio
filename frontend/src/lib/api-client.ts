@@ -244,6 +244,24 @@ export async function deleteAgentEndpoint(agentId: string, endpointName: string)
   return apiDelete(`/agents/${encodeURIComponent(agentId)}/endpoints/${encodeURIComponent(endpointName)}`);
 }
 
+// ── Agent evaluations (Sprint 2 F5) ──
+
+export interface AgentEvaluation {
+  timestamp: string;
+  evaluator: string;
+  score: number;
+  sessionId?: string;
+  traceId?: string;
+  reason?: string;
+}
+
+export async function listAgentEvaluations(agentId: string): Promise<AgentEvaluation[]> {
+  const resp = await apiGet<{ evaluations?: AgentEvaluation[] }>(
+    `/agents/${encodeURIComponent(agentId)}/evaluations`
+  );
+  return resp.evaluations ?? [];
+}
+
 export async function fetchAgentFile(agentId: string, filePath: string): Promise<string> {
   try {
     const data = await apiGet<{ content?: string }>(
