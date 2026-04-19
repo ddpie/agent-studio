@@ -305,6 +305,53 @@ export async function deleteAgentSchedule(agentId: string, name: string): Promis
   );
 }
 
+export interface ScheduleExecution {
+  sessionId: string;
+  scheduledTime: string;
+  startMs?: number | null;
+  durationMs: number;
+  status: "success" | "failure" | "running";
+  statusCode?: string | null;
+  errorMessage?: string;
+  firstOutputSnippet?: string;
+}
+
+export async function listScheduleExecutions(
+  agentId: string,
+  scheduleName: string
+): Promise<ScheduleExecution[]> {
+  const resp = await apiGet<{ executions?: ScheduleExecution[] }>(
+    `/agents/${encodeURIComponent(agentId)}/schedules/${encodeURIComponent(scheduleName)}/executions`
+  );
+  return resp.executions ?? [];
+}
+
+// ── Agent Secrets (AWS Secrets Manager) ──
+// The backend only returns key names — values are never readable after write.
+
+export interface AgentSecretItem {
+  key: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function listAgentSecrets(agentId: string): Promise<AgentSecretItem[]> {
+  const resp = await apiGet<{ items?: AgentSecretItem[] }>(
+    `/agents/${encodeURIComponent(agentId)}/secrets`
+  );
+  return resp.items ?? [];
+}
+
+export async function putAgentSecret(agentId: string, key: string, value: string): Promise<void> {
+  await apiPost(`/agents/${encodeURIComponent(agentId)}/secrets`, { key, value });
+}
+
+export async function deleteAgentSecret(agentId: string, key: string): Promise<void> {
+  await apiDelete(
+    `/agents/${encodeURIComponent(agentId)}/secrets/${encodeURIComponent(key)}`
+  );
+}
+
 // ── Agent runtime (AgentCore Control Plane passthrough) ──
 
 export interface AgentRuntimeInfo {

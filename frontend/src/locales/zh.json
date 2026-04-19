@@ -711,6 +711,33 @@
     "loadingTools": "加载工具中...",
     "noToolsAvailable": "暂无可用工具"
   },
+  "secrets": {
+    "title": "密钥",
+    "description": "运行时注入到该 Agent 的环境密钥，存储于 AWS Secrets Manager。",
+    "create": "添加密钥",
+    "delete": "删除",
+    "empty": "暂无密钥。",
+    "key": "键",
+    "createdAt": "创建时间",
+    "updatedAt": "更新时间",
+    "modalTitle": "添加密钥",
+    "keyLabel": "键",
+    "keyHint": "仅支持大写字母、数字和下划线，最长 64 个字符。",
+    "valueLabel": "值",
+    "valueHint": "{{count}} / {{max}} 字符。",
+    "warning": "密钥保存后不可再次读取，请在其他位置妥善保存值。",
+    "overwrite": "覆盖",
+    "overwriteWarning": "名为 {{name}} 的密钥已存在，保存将覆盖其值。",
+    "showValue": "显示值",
+    "hideValue": "隐藏值",
+    "confirmDelete": "确认删除密钥 {{name}}？此操作不可恢复。",
+    "created": "已保存密钥 {{name}}",
+    "deleted": "已删除密钥 {{name}}",
+    "errors": {
+      "keyFormat": "键只能包含大写字母、数字和下划线，长度 1-64。",
+      "valueLength": "值不能超过 4096 个字符。"
+    }
+  },
   "schedules": {
     "title": "定时调度",
     "description": "按 cron 或 rate 表达式周期性触发此 Agent。",

@@ -711,6 +711,33 @@
     "loadingTools": "Loading tools...",
     "noToolsAvailable": "No tools available"
   },
+  "secrets": {
+    "title": "Secrets",
+    "description": "Environment secrets injected into this agent at runtime. Stored in AWS Secrets Manager.",
+    "create": "Add secret",
+    "delete": "Delete",
+    "empty": "No secrets yet.",
+    "key": "Key",
+    "createdAt": "Created",
+    "updatedAt": "Updated",
+    "modalTitle": "Add secret",
+    "keyLabel": "Key",
+    "keyHint": "Uppercase letters, digits and underscores only. Max 64 chars.",
+    "valueLabel": "Value",
+    "valueHint": "{{count}} / {{max}} characters.",
+    "warning": "Secrets cannot be read back after saving. Record the value elsewhere if you need it again.",
+    "overwrite": "Overwrite",
+    "overwriteWarning": "A secret named {{name}} already exists — saving will overwrite its value.",
+    "showValue": "Show value",
+    "hideValue": "Hide value",
+    "confirmDelete": "Delete secret {{name}}? This cannot be undone.",
+    "created": "Secret {{name}} saved",
+    "deleted": "Secret {{name}} deleted",
+    "errors": {
+      "keyFormat": "Key must match [A-Z0-9_] and be 1-64 characters.",
+      "valueLength": "Value must be 4096 characters or less."
+    }
+  },
   "schedules": {
     "title": "Schedules",
     "description": "Run this agent on a recurring cron or rate schedule.",
@@ -734,6 +761,22 @@
       "nameFormat": "Name must contain only letters, digits, '_' or '-'.",
       "cronFormat": "Expression must be cron(...) or rate(N minute|hour|day).",
       "promptLength": "Prompt must be 4000 characters or less."
+    },
+    "runs": {
+      "title": "Recent runs",
+      "refresh": "Refresh",
+      "time": "Scheduled time",
+      "status": "Status",
+      "duration": "Duration",
+      "session": "Session",
+      "empty": "No runs yet.",
+      "loading": "Loading runs…",
+      "loadError": "Failed to load runs.",
+      "statusSuccess": "Success",
+      "statusFailure": "Failure",
+      "statusRunning": "Running",
+      "show": "Show recent runs",
+      "hide": "Hide recent runs"
     }
   }
 }

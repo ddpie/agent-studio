@@ -6,6 +6,7 @@ import { fetchAgent, publishAgent, unpublishAgent } from "../../lib/api-client";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import DeploymentsTab from "../agents/DeploymentsTab";
 import EndpointsTab from "../agents/EndpointsTab";
+import SecretsTab from "../agents/SecretsTab";
 import EvaluationsTab from "../agents/EvaluationsTab";
 import TracesTab from "../agents/TracesTab";
 import IntegrationTab from "../agents/IntegrationTab";
@@ -111,6 +112,11 @@ export default function AgentDetailPage() {
         {agentId && (
           <section className="mb-8" data-testid="endpoints-section">
             <EndpointsTab agentId={agentId} />
+          </section>
+        )}
+        {agentId && (
+          <section className="mb-8" data-testid="secrets-section">
+            <SecretsTab agentId={agentId} />
           </section>
         )}
         {agentId && (
