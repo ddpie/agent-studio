@@ -34,6 +34,8 @@ const META_AGENT_ARN = process.env.META_AGENT_ARN || "";
 const AGENTS_TABLE = process.env.AGENTS_TABLE || "";
 const A2A_KEYS_TABLE = process.env.A2A_KEYS_TABLE || "";
 const PUBLIC_HOST = process.env.PUBLIC_HOST || "";
+const ORIGIN_VERIFY_HEADER_NAME = (process.env.ORIGIN_VERIFY_HEADER_NAME || "").toLowerCase();
+const ORIGIN_VERIFY_HEADER_VALUE = process.env.ORIGIN_VERIFY_HEADER_VALUE || "";
 
 const agentcore = new BedrockAgentCoreClient({ region: REGION });
 const control = new BedrockAgentCoreControlClient({ region: REGION });
@@ -49,14 +51,21 @@ function getHeader(headers, name) {
 }
 
 function extractToken(headers) {
-  // Standard A2A clients send Authorization. CloudFront viewer-request
-  // function copies it to X-A2A-Authorization (renamed to avoid SigV4
-  // conflict with OAC on Function URL IAM auth). Accept either.
-  const a2a = getHeader(headers, "x-a2a-authorization");
-  if (a2a) return extractBearerToken(a2a);
+  // Standard A2A clients send `Authorization: Bearer <key>` per the
+  // HTTPAuthSecurityScheme on the AgentCard.
   const auth = getHeader(headers, "authorization");
   return extractBearerToken(auth);
 }
+
+function verifyOrigin(headers) {
+  // Function URL is AuthType=NONE so standard A2A clients can POST
+  // bodies without SigV4. Defense-in-depth: only accept requests with
+  // our CloudFront-injected origin-verify header.
+  if (!ORIGIN_VERIFY_HEADER_NAME) return true;
+  const v = getHeader(headers, ORIGIN_VERIFY_HEADER_NAME);
+  return v === ORIGIN_VERIFY_HEADER_VALUE;
+}
+
 
 function deriveA2aHost(event) {
   // PUBLIC_HOST is the CloudFront domain injected by CDK. Prefer it so
@@ -225,20 +234,32 @@ async function collectStreamText(agentResp) {
  */
 function parseInternalChunk(line) {
   if (!line) return null;
+  // AgentCore emits three kinds of SSE payloads:
+  //   1. Plain text tokens (already unquoted)
+  //   2. JSON-quoted strings like `"hello"` — decode and treat as text
+  //   3. Tool markers like `{"__tool":"start","name":"..."}`
   if (line.startsWith("{")) {
     try {
       const obj = JSON.parse(line);
-      if (obj.__tool === "start") {
-        return { kind: "tool", phase: "start", name: obj.name || "" };
+      if (obj && typeof obj === "object") {
+        if (obj.__tool === "start") {
+          return { kind: "tool", phase: "start", name: obj.name || "" };
+        }
+        if (obj.__tool === "end" || obj.__tool === "result") {
+          return { kind: "tool", phase: "end", name: obj.name || "" };
+        }
       }
-      if (obj.__tool === "end" || obj.__tool === "result") {
-        return { kind: "tool", phase: "end", name: obj.name || "" };
-      }
-      // Unknown JSON structure — emit as text so the client still sees
-      // something rather than silently dropping it.
       return { kind: "text", text: line };
     } catch {
       return { kind: "text", text: line };
+    }
+  }
+  if (line.startsWith("\"") && line.endsWith("\"")) {
+    try {
+      const decoded = JSON.parse(line);
+      if (typeof decoded === "string") return { kind: "text", text: decoded };
+    } catch {
+      /* fall through */
     }
   }
   return { kind: "text", text: line };
@@ -295,6 +316,7 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
   };
 
   if (!route) return send(404, { error: "Not found" });
+  if (!verifyOrigin(event.headers)) return send(403, { error: "Forbidden" });
   if (route.type === "health") return send(200, { status: "ok" });
 
   try {

@@ -89,10 +89,9 @@ export class AgentStudioStack extends cdk.Stack {
       metaAgentArn: metaAgent.agentRuntimeArn,
       agentsTable: database.agentsTable,
       a2aKeysTable: database.a2aKeysTable,
-      // The CloudFront domain is stable after first deploy. Read from env
-      // so AgentCards advertise the public URL (OAC rewrites Host to the
-      // underlying Function URL host, which would otherwise leak).
       publicHost: process.env.AGENT_STUDIO_CLOUDFRONT_DOMAIN || "",
+      originVerifyHeaderName: "x-origin-verify",
+      originVerifyHeaderValue: originVerifyValue,
     });
 
     new Cdn(this, "Cdn", {

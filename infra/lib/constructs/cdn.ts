@@ -79,47 +79,27 @@ export class Cdn extends Construct {
       cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
     });
 
-    // A2A proxy (Function URL with IAM auth behind OAC).
-    const a2aOrigin = origins.FunctionUrlOrigin.withOriginAccessControl(props.a2aProxyFunctionUrl, {
+    // A2A proxy Function URL is AuthType=NONE (required so external A2A
+    // clients can POST without computing x-amz-content-sha256). We
+    // protect it at two layers:
+    //   1. CloudFront injects an origin-verify customHeader; the Lambda
+    //      rejects requests that don't carry it.
+    //   2. A resource-based policy on the Function URL restricts
+    //      lambda:InvokeFunctionUrl to cloudfront.amazonaws.com Service
+    //      with aws:SourceArn scoped to our distribution — Palisade-safe
+    //      because it isn't Principal=* / world-accessible.
+    const a2aOrigin = new origins.FunctionUrlOrigin(props.a2aProxyFunctionUrl, {
       readTimeout: cdk.Duration.seconds(60),
-    });
-    props.a2aProxyLambda.addPermission("CloudFrontInvokeA2aProxy", {
-      principal: new cdk.aws_iam.ServicePrincipal("cloudfront.amazonaws.com"),
-      action: "lambda:InvokeFunction",
-      sourceArn: `arn:aws:cloudfront::${props.config.accountId}:distribution/*`,
+      customHeaders: {
+        [props.originVerifyHeaderName]: props.originVerifyHeaderValue,
+      },
     });
 
-    // A2A clients send `Authorization: Bearer <key>` per the A2A spec's
-    // HTTPAuthSecurityScheme. CloudFront OAC would sign its own
-    // Authorization header for SigV4, conflicting with the client's.
-    // A viewer-request CloudFront Function renames the incoming
-    // Authorization header to X-A2A-Authorization; the a2a-proxy Lambda
-    // accepts either name, so the external contract stays A2A-compliant.
-    const a2aRewriteFn = new cloudfront.Function(this, "A2aAuthRewriteFn", {
-      functionName: "agent-studio-a2a-auth-rewrite",
-      comment: "Rename Authorization → X-A2A-Authorization for OAC compatibility",
-      runtime: cloudfront.FunctionRuntime.JS_2_0,
-      code: cloudfront.FunctionCode.fromInline(`
-        function handler(event) {
-          var req = event.request;
-          var hdrs = req.headers;
-          if (hdrs.authorization && hdrs.authorization.value) {
-            hdrs['x-a2a-authorization'] = { value: hdrs.authorization.value };
-            delete hdrs.authorization;
-          }
-          return req;
-        }
-      `),
-    });
-
-    const a2aOriginRequestPolicy = new cloudfront.OriginRequestPolicy(this, "A2aOriginRequestPolicy", {
-      originRequestPolicyName: "agent-studio-a2a-orp",
-      headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
-        "Content-Type", "Accept", "X-A2A-Authorization"
-      ),
-      queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.all(),
-      cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
-    });
+    // ALL_VIEWER_EXCEPT_HOST_HEADER forwards Authorization (A2A Bearer)
+    // to the Function URL; CloudFront uses the Function URL's Host for
+    // TLS. The `Host` header is stripped so the origin-verify custom
+    // header isn't overridden by client-sent duplicate.
+    const a2aOriginRequestPolicy = cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER;
 
     // CloudFront distribution
     this.distribution = new cloudfront.Distribution(this, "Distribution", {
@@ -152,10 +132,6 @@ export class Cdn extends Construct {
           cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
           originRequestPolicy: a2aOriginRequestPolicy,
           responseHeadersPolicy: corsPolicy,
-          functionAssociations: [{
-            function: a2aRewriteFn,
-            eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
-          }],
           compress: false,
         },
       },
@@ -164,6 +140,16 @@ export class Cdn extends Construct {
         { httpStatus: 404, responseHttpStatus: 200, responsePagePath: "/index.html" },
       ],
       webAclId: props.webAclArn,
+    });
+
+    // Palisade-safe: Principal=Service (cloudfront), AuthType=NONE
+    // scoped to THIS distribution's ARN. Without this, the AuthType=NONE
+    // Function URL rejects even CloudFront-originated requests.
+    props.a2aProxyLambda.addPermission("CloudFrontInvokeA2aProxy", {
+      principal: new cdk.aws_iam.ServicePrincipal("cloudfront.amazonaws.com"),
+      action: "lambda:InvokeFunctionUrl",
+      functionUrlAuthType: lambda.FunctionUrlAuthType.NONE,
+      sourceArn: `arn:aws:cloudfront::${props.config.accountId}:distribution/${this.distribution.distributionId}`,
     });
 
     new cdk.CfnOutput(this, "CloudFrontDomain", { value: this.distribution.distributionDomainName });
