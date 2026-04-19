@@ -156,6 +156,20 @@
   "workspace": {
     "unnamed": "Untitled workspace",
     "switcherTitle": "Switch workspace",
+    "create": {
+      "button": "Create workspace",
+      "dialogTitle": "Create a new workspace",
+      "dialogSubtitle": "You become the owner. Members can be invited after creation.",
+      "nameLabel": "Name",
+      "namePlaceholder": "e.g. Marketing Agents",
+      "descriptionLabel": "Description (optional)",
+      "cancel": "Cancel",
+      "submit": "Create",
+      "creating": "Creating…",
+      "success": "Workspace created",
+      "failed": "Failed to create workspace",
+      "nameRequired": "Name is required"
+    },
     "role": {
       "viewer": "Viewer",
       "editor": "Editor",

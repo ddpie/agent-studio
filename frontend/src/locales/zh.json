@@ -156,6 +156,20 @@
   "workspace": {
     "unnamed": "未命名工作区",
     "switcherTitle": "切换工作区",
+    "create": {
+      "button": "创建工作区",
+      "dialogTitle": "创建新工作区",
+      "dialogSubtitle": "你将成为所有者。创建完成后可邀请成员。",
+      "nameLabel": "名称",
+      "namePlaceholder": "例如：营销 Agent",
+      "descriptionLabel": "描述（可选）",
+      "cancel": "取消",
+      "submit": "创建",
+      "creating": "创建中…",
+      "success": "工作区已创建",
+      "failed": "创建工作区失败",
+      "nameRequired": "名称必填"
+    },
     "role": {
       "viewer": "只读",
       "editor": "编辑者",

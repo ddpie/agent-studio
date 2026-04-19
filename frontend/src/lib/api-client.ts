@@ -833,6 +833,16 @@ export async function fetchWorkspaces() {
   }>("/api/workspaces");
 }
 
+export async function createWorkspace(name: string, description?: string) {
+  return apiPostRaw<{
+    workspaceId: string;
+    name: string;
+    description?: string;
+    role: string;
+    created_at: string;
+  }>("/api/workspaces", { name, ...(description ? { description } : {}) });
+}
+
 export async function fetchWorkspaceDetail(wsId: string): Promise<WorkspaceDetail> {
   return apiGetRaw<WorkspaceDetail>(`/api/workspaces/${encodeURIComponent(wsId)}`);
 }
