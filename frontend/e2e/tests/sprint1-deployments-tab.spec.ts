@@ -4,14 +4,12 @@ test("deployments tab lists versions", async ({ page }) => {
   await page.goto("/");
   await page.waitForURL(/agents/);
 
-  // Wait for at least one agent to load, then click the "Edit" icon button
-  // in its row. AgentList uses an icon button with title=common.edit; there
-  // is no anchor tag.
+  // Wait for at least one agent to load, then click its "View" icon button
+  // to reach the agent detail page where the deployments section lives.
   await expect(page.getByTestId("status-badge").first()).toBeVisible({ timeout: 15_000 });
-  const editBtn = page.getByRole("button", { name: /^(Edit|编辑)$/ }).first();
-  await editBtn.click();
+  await page.locator("[data-testid^='view-agent-']").first().click();
 
-  // Deployments section renders inside AgentEditForm; wait for its heading.
+  // Deployments section renders inside AgentDetailPage; wait for its heading.
   await expect(page.getByTestId("deployments-tab")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("deployments-table")).toBeVisible({ timeout: 15_000 });
 

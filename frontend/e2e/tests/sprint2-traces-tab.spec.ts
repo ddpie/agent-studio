@@ -4,7 +4,8 @@ test("traces tab renders session list or empty state", async ({ page }) => {
   await page.goto("/");
   await page.waitForURL(/agents/);
   await expect(page.getByTestId("status-badge").first()).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: /^(Edit|编辑)$/ }).first().click();
+  await page.locator("[data-testid^='view-agent-']").first().click();
+  await page.getByTestId("traces-tab").scrollIntoViewIfNeeded();
   await expect(page.getByTestId("traces-tab")).toBeVisible({ timeout: 15_000 });
 
   const sessions = page.getByTestId("sessions-list");
@@ -16,7 +17,8 @@ test("clicking a session shows span tree", async ({ page }) => {
   await page.goto("/");
   await page.waitForURL(/agents/);
   await expect(page.getByTestId("status-badge").first()).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: /^(Edit|编辑)$/ }).first().click();
+  await page.locator("[data-testid^='view-agent-']").first().click();
+  await page.getByTestId("traces-tab").scrollIntoViewIfNeeded();
   await expect(page.getByTestId("traces-tab")).toBeVisible({ timeout: 15_000 });
 
   const firstSession = page.locator("[data-testid^='session-row-']").first();

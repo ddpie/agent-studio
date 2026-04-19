@@ -5,8 +5,8 @@ test("endpoints: list loads and DEFAULT appears", async ({ page }) => {
   await page.waitForURL(/agents/);
 
   await expect(page.getByTestId("status-badge").first()).toBeVisible({ timeout: 15_000 });
-  const editBtn = page.getByRole("button", { name: /^(Edit|编辑)$/ }).first();
-  await editBtn.click();
+  await page.locator("[data-testid^='view-agent-']").first().click();
+  await page.getByTestId("endpoints-tab").scrollIntoViewIfNeeded();
 
   await expect(page.getByTestId("endpoints-tab")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("endpoints-table")).toBeVisible({ timeout: 15_000 });

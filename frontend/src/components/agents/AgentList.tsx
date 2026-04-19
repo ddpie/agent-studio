@@ -3,7 +3,8 @@ import { useNavigate, useParams, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { useAgentEditStore } from "../../stores/agent-edit-store";
-import { Bot, RefreshCw, Loader2, MessageSquare, Settings2, Archive, ChevronDown, RotateCcw, Trash2 } from "lucide-react";
+import { Bot, RefreshCw, Loader2, MessageSquare, Settings2, Archive, ChevronDown, RotateCcw, Trash2, Eye } from "lucide-react";
+import { useWorkspaceStore } from "../../stores/workspace-store";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
 import StatusBadge from "../common/StatusBadge";
@@ -27,6 +28,9 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
   const [actionLoading, setActionLoading] = useState<{ id: string; action: string } | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ agentId: string; agentName: string; type: "archive" | "restore" | "purge" } | null>(null);
   const [runtimeDrawerAgentId, setRuntimeDrawerAgentId] = useState<string | null>(null);
+  const { currentWorkspace } = useWorkspaceStore();
+  const role = currentWorkspace?.role || "viewer";
+  const canEdit = role === "editor" || role === "admin" || role === "owner";
 
   const executeAgentAction = useCallback(async (agentId: string, type: "archive" | "restore" | "purge") => {
     setActionLoading({ id: agentId, action: type });
@@ -191,12 +195,23 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
               </button>
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button
-                  onClick={(e) => { e.stopPropagation(); navigate(`/agents/edit/${agent.id}`); }}
+                  onClick={(e) => { e.stopPropagation(); navigate(`/agents/${agent.id}`); }}
                   className="p-1 text-gray-300 hover:text-blue-600 rounded transition-colors"
-                  title={t("common.edit")}
+                  title={t("common.view")}
+                  data-testid={`view-agent-${agent.id}`}
                 >
-                  <Settings2 className="w-3.5 h-3.5" />
+                  <Eye className="w-3.5 h-3.5" />
                 </button>
+                {canEdit && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); navigate(`/agents/edit/${agent.id}`); }}
+                    className="p-1 text-gray-300 hover:text-blue-600 rounded transition-colors"
+                    title={t("common.edit")}
+                    data-testid={`edit-agent-${agent.id}`}
+                  >
+                    <Settings2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); setConfirmAction({ agentId: agent.id, agentName: agent.displayName, type: "archive" }); }}
                   className="p-1 text-gray-300 hover:text-orange-500 rounded transition-colors"

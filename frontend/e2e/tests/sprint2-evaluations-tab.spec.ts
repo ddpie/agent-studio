@@ -5,7 +5,8 @@ test("evaluations tab renders (empty state or scores)", async ({ page }) => {
   await page.waitForURL(/agents/);
 
   await expect(page.getByTestId("status-badge").first()).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: /^(Edit|编辑)$/ }).first().click();
+  await page.locator("[data-testid^='view-agent-']").first().click();
+  await page.getByTestId("evaluations-tab").scrollIntoViewIfNeeded();
 
   await expect(page.getByTestId("evaluations-tab")).toBeVisible({ timeout: 15_000 });
 
@@ -20,7 +21,8 @@ test("evaluator rows display numeric latest score when present", async ({ page }
   await page.goto("/");
   await page.waitForURL(/agents/);
   await expect(page.getByTestId("status-badge").first()).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: /^(Edit|编辑)$/ }).first().click();
+  await page.locator("[data-testid^='view-agent-']").first().click();
+  await page.getByTestId("evaluations-tab").scrollIntoViewIfNeeded();
   await expect(page.getByTestId("evaluations-tab")).toBeVisible({ timeout: 15_000 });
 
   const table = page.getByTestId("evaluations-table");

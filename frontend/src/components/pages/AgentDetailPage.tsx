@@ -49,7 +49,10 @@ export default function AgentDetailPage() {
 
   const role = currentWorkspace?.role || "viewer";
   const canEdit = role === "editor" || role === "admin" || role === "owner";
-  const agentName = String(agent.name ?? agentId ?? "");
+  const agentName =
+    String(agent.display_name ?? "") ||
+    String(agent.name ?? "") ||
+    String(agentId ?? "");
 
   return (
     <div className="flex flex-col h-full">
