@@ -295,6 +295,38 @@ export async function getSessionTrace(agentId: string, sessionId: string): Promi
   return resp.root ?? null;
 }
 
+// ── Meta-Agent AgentCard (Sprint 2 F1c) ──
+
+export interface AgentCardSkill {
+  id: string;
+  name?: string;
+  description?: string;
+  tags?: string[];
+}
+
+export interface AgentCard {
+  name?: string;
+  description?: string;
+  url?: string;
+  version?: string;
+  protocolVersion?: string;
+  preferredTransport?: string;
+  defaultInputModes?: string[];
+  defaultOutputModes?: string[];
+  capabilities?: Record<string, unknown>;
+  skills?: AgentCardSkill[];
+  runtimeArn?: string;
+  runtimeStatus?: string;
+}
+
+export async function getMetaAgentCard(): Promise<AgentCard | null> {
+  try {
+    return await apiGet<AgentCard>(`/meta-agent/agent-card`);
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchAgentFile(agentId: string, filePath: string): Promise<string> {
   try {
     const data = await apiGet<{ content?: string }>(

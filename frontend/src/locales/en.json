@@ -95,6 +95,15 @@
     "durationMs": "Duration",
     "loadError": "Could not load traces"
   },
+  "a2a": {
+    "title": "A2A-ready",
+    "subtitle": "External clients can discover Meta-Agent via the A2A AgentCard.",
+    "copyEndpoint": "Copy endpoint URL",
+    "copyArn": "Copy runtime ARN",
+    "copyCard": "Copy AgentCard JSON",
+    "copied": "Copied",
+    "viewCard": "View AgentCard"
+  },
   "runtime": {
     "status": {
       "ready": "Ready",

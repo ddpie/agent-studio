@@ -95,6 +95,15 @@
     "durationMs": "耗时",
     "loadError": "无法加载追踪数据"
   },
+  "a2a": {
+    "title": "支持 A2A",
+    "subtitle": "外部客户端可通过 A2A AgentCard 发现 Meta-Agent。",
+    "copyEndpoint": "复制 endpoint URL",
+    "copyArn": "复制 runtime ARN",
+    "copyCard": "复制 AgentCard JSON",
+    "copied": "已复制",
+    "viewCard": "查看 AgentCard"
+  },
   "runtime": {
     "status": {
       "ready": "就绪",
