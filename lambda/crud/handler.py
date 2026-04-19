@@ -19,6 +19,7 @@ from crud.traces import router as traces_router
 from crud.meta_agent import router as meta_agent_router
 from crud.a2a_keys import router as a2a_keys_router
 from crud.schedules import router as schedules_router
+from crud.costs import router as costs_router
 
 logger = Logger(service="agent-studio-crud")
 
@@ -42,6 +43,7 @@ app.include_router(traces_router)
 app.include_router(meta_agent_router)
 app.include_router(a2a_keys_router)
 app.include_router(schedules_router)
+app.include_router(costs_router)
 
 
 @app.get("/api/health")
