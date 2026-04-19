@@ -58,4 +58,17 @@ describe("AgentDetailPage", () => {
     await screen.findByTestId("agent-detail-title");
     expect(screen.queryByTestId("edit-agent-btn")).not.toBeInTheDocument();
   });
+
+  it("renders Deployments section", async () => {
+    renderPage();
+    await screen.findByTestId("agent-detail-title");
+    expect(await screen.findByTestId("deployments-tab")).toBeInTheDocument();
+  });
+
+  it("renders Endpoints section simultaneously (linear stack)", async () => {
+    renderPage();
+    await screen.findByTestId("agent-detail-title");
+    expect(await screen.findByTestId("deployments-tab")).toBeInTheDocument();
+    expect(await screen.findByTestId("endpoints-tab")).toBeInTheDocument();
+  });
 });

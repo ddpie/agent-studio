@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { Pencil, Loader2 } from "lucide-react";
 import { fetchAgent } from "../../lib/api-client";
 import { useWorkspaceStore } from "../../stores/workspace-store";
+import DeploymentsTab from "../agents/DeploymentsTab";
+import EndpointsTab from "../agents/EndpointsTab";
 
 export default function AgentDetailPage() {
   const { agentId } = useParams();
@@ -78,6 +80,16 @@ export default function AgentDetailPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6" data-testid="agent-detail-content">
+        {agentId && (
+          <section className="mb-8" data-testid="deployments-section">
+            <DeploymentsTab agentId={agentId} />
+          </section>
+        )}
+        {agentId && (
+          <section className="mb-8" data-testid="endpoints-section">
+            <EndpointsTab agentId={agentId} />
+          </section>
+        )}
         <section className="mb-8" data-testid="integration-section">
           <div
             className="text-sm text-gray-500"

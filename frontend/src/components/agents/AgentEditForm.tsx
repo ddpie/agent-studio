@@ -13,8 +13,6 @@ import type { AgentSkillEntry } from "../../lib/agent-metadata";
 import ReviewChangesModal from "./ReviewChangesModal";
 import AgentFormSections from "./AgentFormSections";
 import SkillEditorView from "./SkillEditorView";
-import DeploymentsTab from "./DeploymentsTab";
-import EndpointsTab from "./EndpointsTab";
 import EvaluationsTab from "./EvaluationsTab";
 import TracesTab from "./TracesTab";
 import { useAgentDeploy } from "../../hooks/useAgentDeploy";
@@ -303,8 +301,6 @@ export default function AgentEditForm() {
             navigate(`/agents/edit/${agentId}/skills/${skill.id}`)
           }}
         />
-        {agentId && !isCreateMode && <DeploymentsTab agentId={agentId} />}
-        {agentId && !isCreateMode && <EndpointsTab agentId={agentId} />}
         {agentId && !isCreateMode && <EvaluationsTab agentId={agentId} />}
         {agentId && !isCreateMode && <TracesTab agentId={agentId} />}
       </div>
