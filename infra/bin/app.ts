@@ -6,6 +6,7 @@ import * as path from "path";
 import { AgentStudioStack } from "../lib/agent-studio-stack";
 import { WafStack } from "../lib/waf-stack";
 import { getConfig } from "../lib/config";
+import { PublicAccessGuard } from "../lib/aspects/public-access-guard";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 const config = getConfig();
@@ -30,3 +31,6 @@ new AgentStudioStack(app, "AgentStudioStack", {
   env: { account: config.accountId, region: config.region },
   crossRegionReferences: true,
 });
+
+// Fail synth if anyone reintroduces AuthType=NONE or Principal:"*" on Lambda.
+cdk.Aspects.of(app).add(new PublicAccessGuard());
