@@ -82,6 +82,19 @@
     "viewInCloudWatch": "查看原始评估日志",
     "loadError": "无法加载评估结果"
   },
+  "traces": {
+    "tab": "追踪",
+    "subtitle": "查看最近调用的执行轨迹",
+    "emptyTitle": "暂无追踪记录",
+    "emptyHint": "调用后几秒即可出现。若连续调用后仍无记录，请确认账号启用了 OpenTelemetry（aws xray update-trace-segment-destination）。",
+    "sessionId": "会话",
+    "spanCount": "Span 数",
+    "firstEvent": "时间",
+    "selectSessionHint": "在左侧选一个会话查看其 span 树",
+    "status": "状态",
+    "durationMs": "耗时",
+    "loadError": "无法加载追踪数据"
+  },
   "runtime": {
     "status": {
       "ready": "就绪",

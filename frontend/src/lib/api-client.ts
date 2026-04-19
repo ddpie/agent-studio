@@ -262,6 +262,39 @@ export async function listAgentEvaluations(agentId: string): Promise<AgentEvalua
   return resp.evaluations ?? [];
 }
 
+// ── Traces (Sprint 2 F4) ──
+
+export interface TraceSummary {
+  sessionId: string;
+  traceId?: string;
+  firstEvent?: string;
+  spanCount: number;
+}
+
+export interface TraceSpan {
+  spanId: string;
+  parentSpanId: string | null;
+  name: string;
+  startMs: number;
+  durationMs: number;
+  status: string;
+  children: TraceSpan[];
+}
+
+export async function listTraces(agentId: string): Promise<TraceSummary[]> {
+  const resp = await apiGet<{ sessions?: TraceSummary[] }>(
+    `/agents/${encodeURIComponent(agentId)}/traces`
+  );
+  return resp.sessions ?? [];
+}
+
+export async function getSessionTrace(agentId: string, sessionId: string): Promise<TraceSpan | null> {
+  const resp = await apiGet<{ root?: TraceSpan }>(
+    `/agents/${encodeURIComponent(agentId)}/traces/${encodeURIComponent(sessionId)}`
+  );
+  return resp.root ?? null;
+}
+
 export async function fetchAgentFile(agentId: string, filePath: string): Promise<string> {
   try {
     const data = await apiGet<{ content?: string }>(
