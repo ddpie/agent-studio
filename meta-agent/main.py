@@ -40,6 +40,7 @@ from tools.analyze_trace import analyze_trace
 from tools.create_schedule import create_schedule
 from tools.validate_agent import validate_agent
 from tools.preview_code import preview_assembled_code
+from tools.link_agent import link_agent, unlink_agent
 
 app = BedrockAgentCoreApp()
 
@@ -86,6 +87,12 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     - set_agent_secrets / list_agent_secrets / delete_agent_secret: Use when the user needs to manage API keys for an agent.
     - analyze_trace: Use when the user wants to understand what an agent did during an invocation.
     - create_schedule: Use when the user wants to set up recurring agent invocations.
+    - link_agent / unlink_agent: Use when the user wants one sub-agent to be able to call another sub-agent as a tool.
+      link_agent(source_agent_id, target_agent_id) mints an A2A API key for the target, stores it in the source's
+      Secrets Manager entry, adds the `call_agent` tool to the source, appends a prompt fragment describing the
+      target, and redeploys the source runtime in place. Both agents must live in the same workspace. Always
+      confirm with the user before calling. After linking, invoking the source agent can trigger calls to the
+      linked target via `call_agent(agent_id, prompt)` — describe this to the user.
 
     Skills use the AgentSkills.io SKILL.md format (YAML frontmatter + Markdown body).
     Sub-agents automatically discover skills at runtime and can load them on demand via load_skill(name).
@@ -393,6 +400,8 @@ ALL_TOOLS = [
     set_agent_secrets,
     list_agent_secrets,
     delete_agent_secret,
+    link_agent,
+    unlink_agent,
 ]
 
 

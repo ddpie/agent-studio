@@ -3,7 +3,7 @@
 import json
 from strands import tool
 
-from tools_library import web_search, fetch_webpage, s3_read, sql_readonly, translate, chart_generator
+from tools_library import web_search, fetch_webpage, s3_read, sql_readonly, translate, chart_generator, agent_caller
 
 _ALL_TOOLS = [
     web_search,
@@ -12,6 +12,7 @@ _ALL_TOOLS = [
     sql_readonly,
     translate,
     chart_generator,
+    agent_caller,
 ]
 
 

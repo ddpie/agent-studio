@@ -11,8 +11,14 @@ import zipfile
 from config import REGION, ACCOUNT_ID, S3_BUCKET, AGENT_ROLE_ARN, BASE_DEPLOYMENT_KEY
 
 
-def _shared_env_vars() -> dict:
-    """Environment variables forwarded to every sub-agent runtime."""
+def _shared_env_vars(agent_id: str = "") -> dict:
+    """Environment variables forwarded to every sub-agent runtime.
+
+    When agent_id is provided, also merges any per-agent `extra_env_vars`
+    stored in the agent's metadata.json (written by link_agent / unlink_agent).
+    This lets redeploys via update_agent preserve linked-agent env config
+    without needing CDK or meta-agent state.
+    """
     env = {
         "AGENT_STUDIO_REGION": REGION,
     }
@@ -22,6 +28,19 @@ def _shared_env_vars() -> dict:
         env["AGENT_STUDIO_CODE_INTERPRETER_ID"] = ci
     if br:
         env["AGENT_STUDIO_BROWSER_ID"] = br
+
+    if agent_id:
+        try:
+            s3 = boto3.client("s3", region_name=REGION)
+            obj = s3.get_object(Bucket=S3_BUCKET, Key=f"agents/{agent_id}/metadata.json")
+            meta = json.loads(obj["Body"].read().decode("utf-8"))
+            extra = meta.get("extra_env_vars") or {}
+            if isinstance(extra, dict):
+                for k, v in extra.items():
+                    if isinstance(k, str) and isinstance(v, str):
+                        env[k] = v
+        except Exception:
+            pass
     return env
 
 # Always inject the latest stream_utils.py into deployment packages

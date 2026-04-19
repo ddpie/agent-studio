@@ -305,7 +305,7 @@ def update_agent(
                     "mountPath": "/mnt/workspace"
                 }
             }],
-            environmentVariables=_shared_env_vars(),
+            environmentVariables=_shared_env_vars(agent_id=agent_id),
         )
 
         status = wait_for_ready(agent_id)
@@ -338,6 +338,9 @@ def update_agent(
         "skills": skills_config,
         "deployedSkillHashes": deployed_skill_hashes,
         "mcp_targets": mcp_targets_list,
+        # Preserve fields managed by companion tools (link_agent etc.)
+        "extra_env_vars": existing_metadata.get("extra_env_vars", {}),
+        "linked_agents": existing_metadata.get("linked_agents", []),
         "created_at": existing_metadata.get("created_at", datetime.now(timezone.utc).isoformat()),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
