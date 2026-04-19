@@ -71,4 +71,16 @@ describe("AgentDetailPage", () => {
     expect(await screen.findByTestId("deployments-tab")).toBeInTheDocument();
     expect(await screen.findByTestId("endpoints-tab")).toBeInTheDocument();
   });
+
+  it("renders Evaluations section", async () => {
+    renderPage();
+    await screen.findByTestId("agent-detail-title");
+    expect(await screen.findByTestId("evaluations-tab")).toBeInTheDocument();
+  });
+
+  it("renders Traces section", async () => {
+    renderPage();
+    await screen.findByTestId("agent-detail-title");
+    expect(await screen.findByTestId("traces-tab")).toBeInTheDocument();
+  });
 });

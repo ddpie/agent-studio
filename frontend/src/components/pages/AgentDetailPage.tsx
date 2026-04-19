@@ -6,6 +6,8 @@ import { fetchAgent } from "../../lib/api-client";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import DeploymentsTab from "../agents/DeploymentsTab";
 import EndpointsTab from "../agents/EndpointsTab";
+import EvaluationsTab from "../agents/EvaluationsTab";
+import TracesTab from "../agents/TracesTab";
 
 export default function AgentDetailPage() {
   const { agentId } = useParams();
@@ -88,6 +90,16 @@ export default function AgentDetailPage() {
         {agentId && (
           <section className="mb-8" data-testid="endpoints-section">
             <EndpointsTab agentId={agentId} />
+          </section>
+        )}
+        {agentId && (
+          <section className="mb-8" data-testid="evaluations-section">
+            <EvaluationsTab agentId={agentId} />
+          </section>
+        )}
+        {agentId && (
+          <section className="mb-8" data-testid="traces-section">
+            <TracesTab agentId={agentId} />
           </section>
         )}
         <section className="mb-8" data-testid="integration-section">
