@@ -605,7 +605,37 @@
     "tools": "Tools",
     "mcp": "MCP",
     "marketplace": "Marketplace",
+    "costs": "Usage",
     "settings": "Settings"
+  },
+  "costs": {
+    "title": "Cost & Usage",
+    "subtitle": "Invocation, token, and estimated spend across this workspace's agents.",
+    "agentSectionTitle": "Usage",
+    "agentSectionSubtitle": "Calls, tokens, and estimated spend for this agent.",
+    "disclaimer": "Estimated based on published prices; does not include Bedrock KB, compute, or infra costs. Token totals are zero when GenAI telemetry is not enabled on the account.",
+    "totalCost": "Estimated cost",
+    "totalCalls": "Invocations",
+    "totalTokens": "Tokens",
+    "stackedTitle": "Cost share by agent",
+    "trendTitle": "Spend over time",
+    "perAgent": "Per-agent breakdown",
+    "empty": "No usage in this range.",
+    "loadError": "Could not load usage",
+    "callsShort": "calls",
+    "range": {
+      "24h": "24h",
+      "7d": "7d",
+      "30d": "30d"
+    },
+    "col": {
+      "agent": "Agent",
+      "model": "Model",
+      "calls": "Calls",
+      "inputTokens": "Input tokens",
+      "outputTokens": "Output tokens",
+      "cost": "Estimated cost"
+    }
   },
   "marketplace": {
     "title": "Marketplace",

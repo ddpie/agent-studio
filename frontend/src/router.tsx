@@ -12,6 +12,7 @@ import ToolDetail from "./components/pages/ToolDetail";
 import McpPage from "./components/pages/McpPage";
 import McpPolicyPage from "./components/pages/McpPolicyPage";
 import MarketplacePage from "./components/pages/MarketplacePage";
+import CostsPage from "./components/pages/CostsPage";
 import SettingsPage from "./components/pages/SettingsPage";
 import PageErrorBoundary from "./components/common/PageErrorBoundary";
 
@@ -47,6 +48,7 @@ export function createRouter(
         { path: "mcp", element: withBoundary(<McpPage />) },
         { path: "mcp-policy", element: withBoundary(<McpPolicyPage />) },
         { path: "marketplace", element: withBoundary(<MarketplacePage />) },
+        { path: "costs", element: withBoundary(<CostsPage />) },
         { path: "settings", element: withBoundary(<SettingsPage />) },
       ],
     },

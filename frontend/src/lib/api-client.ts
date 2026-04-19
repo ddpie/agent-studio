@@ -1146,3 +1146,59 @@ export async function deleteAgentSkillFiles(agentId: string, skillId: string, pa
     return false;
   }
 }
+
+// ── Costs / usage ──
+
+export type CostRange = "24h" | "7d" | "30d";
+
+export interface CostAgentRow {
+  agentId: string;
+  name: string;
+  modelId: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+export interface CostTimeseriesPoint {
+  bucket: string;
+  calls: number;
+  costUsd: number;
+}
+
+export interface WorkspaceCostsResponse {
+  agents: CostAgentRow[];
+  workspace: {
+    totalCalls: number;
+    totalCostUsd: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    timeseries: CostTimeseriesPoint[];
+    rangeStart: number;
+    rangeEnd: number;
+    bucket: string;
+  };
+}
+
+export interface AgentCostsResponse {
+  agentId: string;
+  name: string;
+  modelId: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  rangeStart: number;
+  rangeEnd: number;
+}
+
+export async function fetchWorkspaceCosts(range: CostRange = "7d") {
+  return apiGet<WorkspaceCostsResponse>(`/costs?range=${encodeURIComponent(range)}`);
+}
+
+export async function fetchAgentCosts(agentId: string, range: CostRange = "7d") {
+  return apiGet<AgentCostsResponse>(
+    `/agents/${encodeURIComponent(agentId)}/costs?range=${encodeURIComponent(range)}`,
+  );
+}

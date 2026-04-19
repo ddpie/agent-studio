@@ -605,7 +605,37 @@
     "tools": "工具",
     "mcp": "MCP",
     "marketplace": "市场",
+    "costs": "用量",
     "settings": "设置"
+  },
+  "costs": {
+    "title": "成本与用量",
+    "subtitle": "当前工作区下各 Agent 的调用次数、token 消耗和预估花费。",
+    "agentSectionTitle": "使用情况",
+    "agentSectionSubtitle": "该 Agent 的调用次数、token 与预估花费。",
+    "disclaimer": "根据公开价格估算，不包含 Bedrock 知识库、计算或基础设施成本。若账户未开启 GenAI 遥测，token 总数会显示为 0。",
+    "totalCost": "预估花费",
+    "totalCalls": "调用次数",
+    "totalTokens": "Token 总数",
+    "stackedTitle": "各 Agent 花费占比",
+    "trendTitle": "花费趋势",
+    "perAgent": "按 Agent 明细",
+    "empty": "该时间段暂无使用记录。",
+    "loadError": "无法加载用量数据",
+    "callsShort": "次",
+    "range": {
+      "24h": "24 小时",
+      "7d": "7 天",
+      "30d": "30 天"
+    },
+    "col": {
+      "agent": "Agent",
+      "model": "模型",
+      "calls": "调用次数",
+      "inputTokens": "输入 Token",
+      "outputTokens": "输出 Token",
+      "cost": "预估花费"
+    }
   },
   "marketplace": {
     "title": "市场",

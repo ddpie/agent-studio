@@ -9,6 +9,7 @@ import EndpointsTab from "../agents/EndpointsTab";
 import SecretsTab from "../agents/SecretsTab";
 import EvaluationsTab from "../agents/EvaluationsTab";
 import TracesTab from "../agents/TracesTab";
+import AgentCostsSection from "../agents/AgentCostsSection";
 import IntegrationTab from "../agents/IntegrationTab";
 import SchedulesTab from "../agents/SchedulesTab";
 import PublishToggle from "../shared/PublishToggle";
@@ -127,6 +128,13 @@ export default function AgentDetailPage() {
         {agentId && (
           <section className="mb-8" data-testid="traces-section">
             <TracesTab agentId={agentId} />
+          </section>
+        )}
+        {agentId && (
+          <section className="mb-8" data-testid="costs-section">
+            <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900/30">
+              <AgentCostsSection agentId={agentId} />
+            </div>
           </section>
         )}
         {agentId && (
