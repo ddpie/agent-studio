@@ -174,6 +174,20 @@ export class Api extends Construct {
       ],
       resources: ["*"],
     }));
+
+    // Sprint 3: inline agent log viewer (crud/logs.py). FilterLogEvents
+    // on the sub-agent runtime log groups. The action requires BOTH the
+    // log-group ARN and the log-stream (`:*`) ARN to be allowed — AWS
+    // rejects the call with AccessDenied otherwise. Scoped to agentcore
+    // runtimes so this role can't read unrelated log groups.
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["logs:FilterLogEvents"],
+      resources: [
+        `arn:aws:logs:${props.config.region}:${props.config.accountId}:log-group:/aws/bedrock-agentcore/runtimes/*:*`,
+        `arn:aws:logs:${props.config.region}:${props.config.accountId}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*`,
+      ],
+    }));
+
     this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: ["iam:PassRole"],
       resources: [props.evaluatorRoleArn],
