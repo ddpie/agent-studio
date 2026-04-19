@@ -221,14 +221,16 @@ export class AgentCoreRoles extends Construct {
     // schedules in the default group whose name starts with
     // "agent-studio-" — matches the name prefix enforced by the CRUD
     // Lambda in lambda/crud/schedules.py.
+    // Trust conditioned on aws:SourceAccount only. SourceArn cannot be
+    // used here: EventBridge Scheduler validates the role via sts:AssumeRole
+    // during create-schedule, before the schedule exists, so the SourceArn
+    // context key is unset and ArnLike always fails. SourceAccount alone is
+    // sufficient to prevent cross-account confused-deputy.
     const schedulerTargetRole = new iam.Role(this, "SchedulerTargetRole", {
       roleName: `AgentStudioSchedulerTargetRole-${props.region}`,
       assumedBy: new iam.ServicePrincipal("scheduler.amazonaws.com", {
         conditions: {
           StringEquals: { "aws:SourceAccount": props.accountId },
-          ArnLike: {
-            "aws:SourceArn": `arn:aws:scheduler:${props.region}:${props.accountId}:schedule/default/agent-studio-*`,
-          },
         },
       }),
     });

@@ -211,6 +211,9 @@ def create_schedule(wsId: str, agentId: str):
 
     full_name = _build_full_name(agentId, suffix)
     scheduler = _get_scheduler()
+    universal_target_arn = "arn:aws:scheduler:::aws-sdk:bedrockagentcore:invokeAgentRuntime"
+    runtime_arn = _agent_arn(agentId)
+    payload = {"AgentRuntimeArn": runtime_arn, "Payload": json.dumps({"prompt": prompt})}
     try:
         resp = scheduler.create_schedule(
             Name=full_name,
@@ -218,9 +221,9 @@ def create_schedule(wsId: str, agentId: str):
             ScheduleExpression=cron,
             FlexibleTimeWindow={"Mode": "OFF"},
             Target={
-                "Arn": _agent_arn(agentId),
+                "Arn": universal_target_arn,
                 "RoleArn": _SCHEDULER_TARGET_ROLE_ARN,
-                "Input": json.dumps({"prompt": prompt}),
+                "Input": json.dumps(payload),
             },
             Description=f"Agent Studio schedule for {agentId} (by {user_id})",
         )
