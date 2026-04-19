@@ -62,6 +62,14 @@ export class Api extends Construct {
         MCP_GATEWAY_URL: props.config.mcpGatewayUrl || '',
         A2A_KEYS_TABLE: props.a2aKeysTable.tableName,
         ORIGIN_VERIFY_VALUE: props.originVerifyValue,
+        AGENT_STUDIO_ACCOUNT_ID: props.config.accountId,
+        AGENTCORE_REGION: props.config.region,
+        // Scheduler assumes this role to invoke bedrock-agentcore runtimes.
+        // Reuses the sub-agent readonly role to avoid adding a new IAM
+        // resource (consistent with meta-agent/tools/create_schedule.py).
+        // The role must trust scheduler.amazonaws.com — if it doesn't,
+        // Scheduler will reject CreateSchedule at API time.
+        SCHEDULER_TARGET_ROLE_ARN: `arn:aws:iam::${props.config.accountId}:role/AgentStudioSubAgentRole-${props.config.region}`,
       },
     });
 
@@ -171,6 +179,38 @@ export class Api extends Construct {
       resources: [props.evaluatorRoleArn],
       conditions: {
         StringEquals: { "iam:PassedToService": "bedrock-agentcore.amazonaws.com" },
+      },
+    }));
+
+    // EventBridge Scheduler — per-agent cron triggers (crud/schedules.py).
+    // Resource is scoped to the default group + agent-studio-* name
+    // prefix so this role can't touch unrelated schedules.
+    const schedulerTargetRoleArn =
+      `arn:aws:iam::${props.config.accountId}:role/AgentStudioSubAgentRole-${props.config.region}`;
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        "scheduler:ListSchedules",
+        "scheduler:CreateSchedule",
+        "scheduler:DeleteSchedule",
+        "scheduler:GetSchedule",
+      ],
+      resources: [
+        `arn:aws:scheduler:${props.config.region}:${props.config.accountId}:schedule/default/agent-studio-*`,
+      ],
+    }));
+    // ListSchedules at the account level does not support resource-level
+    // filtering in IAM; the SDK call itself uses NamePrefix to limit
+    // results. Without this, ListSchedules returns AccessDenied.
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["scheduler:ListSchedules"],
+      resources: ["*"],
+    }));
+    // Scheduler invokes the agent runtime via this role.
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["iam:PassRole"],
+      resources: [schedulerTargetRoleArn],
+      conditions: {
+        StringEquals: { "iam:PassedToService": "scheduler.amazonaws.com" },
       },
     }));
 
