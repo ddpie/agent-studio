@@ -597,7 +597,8 @@
     "unlinking": "Unlinking…",
     "unlinked": "Agent unlinked.",
     "linkFailed": "Failed to link agent. Check Meta-Agent logs for details.",
-    "unlinkFailed": "Failed to unlink agent. Check Meta-Agent logs for details."
+    "unlinkFailed": "Failed to unlink agent. Check Meta-Agent logs for details.",
+    "editorRequired": "Linking agents requires Editor, Admin, or Owner role on the current workspace."
   },
   "secrets": {
     "title": "Secrets",

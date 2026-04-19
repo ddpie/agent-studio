@@ -597,7 +597,8 @@
     "unlinking": "取消关联中…",
     "unlinked": "已取消关联。",
     "linkFailed": "关联失败。请查看 Meta-Agent 日志。",
-    "unlinkFailed": "取消关联失败。请查看 Meta-Agent 日志。"
+    "unlinkFailed": "取消关联失败。请查看 Meta-Agent 日志。",
+    "editorRequired": "关联 Agent 需要当前工作区的编辑者、管理员或所有者权限。"
   },
   "secrets": {
     "title": "密钥",
