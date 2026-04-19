@@ -1,11 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, Trash2, Loader2, AlertTriangle } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Loader2,
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  RefreshCw,
+  CheckCircle2,
+  XCircle,
+  Clock,
+} from "lucide-react";
 import {
   listAgentSchedules,
   createAgentSchedule,
   deleteAgentSchedule,
+  listScheduleExecutions,
   type AgentSchedule,
+  type ScheduleExecution,
 } from "../../lib/api-client";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import { toast } from "../../lib/toast";
@@ -25,6 +38,13 @@ function isValidCron(expr: string): boolean {
   return CRON_RE.test(expr) || RATE_RE.test(expr);
 }
 
+function formatDuration(ms: number): string {
+  if (!ms || ms < 0) return "-";
+  if (ms < 1000) return `${ms} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
+  return `${(ms / 60_000).toFixed(1)} min`;
+}
+
 export default function SchedulesTab({ agentId }: Props) {
   const { t } = useTranslation();
   const { currentWorkspace } = useWorkspaceStore();
@@ -35,6 +55,7 @@ export default function SchedulesTab({ agentId }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -62,6 +83,10 @@ export default function SchedulesTab({ agentId }: Props) {
     } catch (err) {
       toast.error(err as Error);
     }
+  }
+
+  function toggleExpand(name: string) {
+    setExpanded((prev) => ({ ...prev, [name]: !prev[name] }));
   }
 
   return (
@@ -105,6 +130,7 @@ export default function SchedulesTab({ agentId }: Props) {
         <table className="w-full text-sm" data-testid="schedules-table">
           <thead className="text-xs text-gray-500 uppercase">
             <tr>
+              <th className="text-left py-2 w-6"></th>
               <th className="text-left py-2">{t("schedules.name")}</th>
               <th className="text-left py-2">{t("schedules.cron")}</th>
               <th className="text-left py-2">{t("schedules.state")}</th>
@@ -114,29 +140,15 @@ export default function SchedulesTab({ agentId }: Props) {
           </thead>
           <tbody>
             {schedules.map((s) => (
-              <tr
+              <RenderRow
                 key={s.name}
-                className="border-t border-gray-200 dark:border-gray-800"
-                data-testid={`schedule-row-${s.name}`}
-              >
-                <td className="py-2 font-mono text-xs">{s.suffix || s.name}</td>
-                <td className="py-2 font-mono text-xs">{s.cron}</td>
-                <td className="py-2 text-xs">{s.state || "-"}</td>
-                <td className="py-2 text-xs">{s.createdAt || "-"}</td>
-                <td className="py-2 text-right">
-                  {canEdit && (
-                    <button
-                      type="button"
-                      onClick={() => onDelete(s.name, s.suffix)}
-                      data-testid={`delete-schedule-${s.name}`}
-                      className="p-1 text-red-500 hover:text-red-700"
-                      aria-label={t("schedules.delete")}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </td>
-              </tr>
+                schedule={s}
+                agentId={agentId}
+                isExpanded={!!expanded[s.name]}
+                onToggle={() => toggleExpand(s.name)}
+                canEdit={canEdit}
+                onDelete={() => onDelete(s.name, s.suffix)}
+              />
             ))}
           </tbody>
         </table>
@@ -153,6 +165,207 @@ export default function SchedulesTab({ agentId }: Props) {
         />
       )}
     </div>
+  );
+}
+
+function RenderRow({
+  schedule,
+  agentId,
+  isExpanded,
+  onToggle,
+  canEdit,
+  onDelete,
+}: {
+  schedule: AgentSchedule;
+  agentId: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+  canEdit: boolean;
+  onDelete: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <tr
+        className="border-t border-gray-200 dark:border-gray-800"
+        data-testid={`schedule-row-${schedule.name}`}
+      >
+        <td className="py-2">
+          <button
+            type="button"
+            onClick={onToggle}
+            className="p-0.5 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+            data-testid={`expand-schedule-${schedule.name}`}
+            aria-label={isExpanded ? t("schedules.runs.hide") : t("schedules.runs.show")}
+          >
+            {isExpanded ? (
+              <ChevronDown className="w-4 h-4" />
+            ) : (
+              <ChevronRight className="w-4 h-4" />
+            )}
+          </button>
+        </td>
+        <td className="py-2 font-mono text-xs">{schedule.suffix || schedule.name}</td>
+        <td className="py-2 font-mono text-xs">{schedule.cron}</td>
+        <td className="py-2 text-xs">{schedule.state || "-"}</td>
+        <td className="py-2 text-xs">{schedule.createdAt || "-"}</td>
+        <td className="py-2 text-right">
+          {canEdit && (
+            <button
+              type="button"
+              onClick={onDelete}
+              data-testid={`delete-schedule-${schedule.name}`}
+              className="p-1 text-red-500 hover:text-red-700"
+              aria-label={t("schedules.delete")}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </td>
+      </tr>
+      {isExpanded && (
+        <tr
+          className="bg-gray-50 dark:bg-gray-900/50"
+          data-testid={`schedule-runs-${schedule.name}`}
+        >
+          <td></td>
+          <td colSpan={5} className="py-3 pr-4">
+            <RecentRuns agentId={agentId} scheduleName={schedule.name} />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function RecentRuns({
+  agentId,
+  scheduleName,
+}: {
+  agentId: string;
+  scheduleName: string;
+}) {
+  const { t } = useTranslation();
+  const [runs, setRuns] = useState<ScheduleExecution[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const items = await listScheduleExecutions(agentId, scheduleName);
+      setRuns(items);
+    } catch (err) {
+      setError(err as Error);
+    } finally {
+      setLoading(false);
+    }
+  }, [agentId, scheduleName]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+          {t("schedules.runs.title")}
+        </div>
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-50"
+          data-testid={`refresh-runs-${scheduleName}`}
+        >
+          <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
+          {t("schedules.runs.refresh")}
+        </button>
+      </div>
+
+      {loading && !runs && (
+        <div className="space-y-1">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="h-6 rounded bg-gray-200/60 dark:bg-gray-800/60 animate-pulse"
+            />
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-center gap-1 text-xs text-red-600">
+          <AlertTriangle className="w-3 h-3" />
+          {t("schedules.runs.loadError")}: {error.message}
+        </div>
+      )}
+
+      {runs && runs.length === 0 && !loading && !error && (
+        <div className="text-xs text-gray-500" data-testid={`runs-empty-${scheduleName}`}>
+          {t("schedules.runs.empty")}
+        </div>
+      )}
+
+      {runs && runs.length > 0 && (
+        <table className="w-full text-xs" data-testid={`runs-table-${scheduleName}`}>
+          <thead className="text-[10px] text-gray-500 uppercase">
+            <tr>
+              <th className="text-left py-1">{t("schedules.runs.time")}</th>
+              <th className="text-left py-1">{t("schedules.runs.status")}</th>
+              <th className="text-left py-1">{t("schedules.runs.duration")}</th>
+              <th className="text-left py-1">{t("schedules.runs.session")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {runs.map((r) => (
+              <tr
+                key={r.sessionId}
+                className="border-t border-gray-200 dark:border-gray-800"
+                data-testid={`run-row-${r.sessionId}`}
+              >
+                <td className="py-1 font-mono">{r.scheduledTime || "-"}</td>
+                <td className="py-1">
+                  <StatusBadge status={r.status} />
+                </td>
+                <td className="py-1">{formatDuration(r.durationMs)}</td>
+                <td className="py-1 font-mono text-[10px] text-gray-500 break-all">
+                  {r.sessionId}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: ScheduleExecution["status"] }) {
+  const { t } = useTranslation();
+  if (status === "failure") {
+    return (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300">
+        <XCircle className="w-3 h-3" />
+        {t("schedules.runs.statusFailure")}
+      </span>
+    );
+  }
+  if (status === "running") {
+    return (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300">
+        <Clock className="w-3 h-3" />
+        {t("schedules.runs.statusRunning")}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300">
+      <CheckCircle2 className="w-3 h-3" />
+      {t("schedules.runs.statusSuccess")}
+    </span>
   );
 }
 

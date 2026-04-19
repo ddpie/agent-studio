@@ -761,6 +761,22 @@
       "nameFormat": "名称只能包含字母、数字、下划线或连字符。",
       "cronFormat": "表达式必须为 cron(...) 或 rate(N minute|hour|day)。",
       "promptLength": "Prompt 不能超过 4000 个字符。"
+    },
+    "runs": {
+      "title": "最近执行",
+      "refresh": "刷新",
+      "time": "计划时间",
+      "status": "状态",
+      "duration": "耗时",
+      "session": "会话",
+      "empty": "暂无执行记录。",
+      "loading": "正在加载执行记录…",
+      "loadError": "加载执行记录失败。",
+      "statusSuccess": "成功",
+      "statusFailure": "失败",
+      "statusRunning": "运行中",
+      "show": "查看最近执行",
+      "hide": "收起最近执行"
     }
   }
 }
