@@ -92,10 +92,15 @@ async function request<T = unknown>(method: string, path: string, body?: unknown
 }
 
 /** 不带 workspace 前缀的请求（如 /api/public/*） */
-async function requestRaw<T = unknown>(method: string, fullPath: string, body?: unknown): Promise<T> {
+async function requestRaw<T = unknown>(
+  method: string,
+  fullPath: string,
+  body?: unknown,
+  extraHeaders?: Record<string, string>,
+): Promise<T> {
   if (!fullPath.startsWith("/api")) throw new Error("requestRaw only supports /api paths");
   const token = await getIdToken();
-  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}`, ...(extraHeaders || {}) };
   const init: RequestInit = { method, headers };
 
   if (body !== undefined) {
@@ -124,6 +129,10 @@ export const apiPost = <T = unknown>(path: string, body?: unknown) => request<T>
 export const apiPut = <T = unknown>(path: string, body?: unknown) => request<T>("PUT", path, body);
 export const apiDelete = <T = unknown>(path: string) => request<T>("DELETE", path);
 export const apiGetRaw = <T = unknown>(path: string) => requestRaw<T>("GET", path);
+export const apiPostRaw = <T = unknown>(path: string, body?: unknown, headers?: Record<string, string>) =>
+  requestRaw<T>("POST", path, body, headers);
+export const apiPutRaw = <T = unknown>(path: string, body?: unknown) => requestRaw<T>("PUT", path, body);
+export const apiDeleteRaw = <T = unknown>(path: string) => requestRaw<T>("DELETE", path);
 
 // ── 类型定义 ──
 
@@ -622,6 +631,105 @@ export async function deleteSkillApi(skillId: string): Promise<boolean> {
     console.error("deleteSkillApi failed:", err);
     return false;
   }
+}
+
+// ── Workspace members & invitations ──
+
+export interface WorkspaceMember {
+  userId: string;
+  role: "viewer" | "editor" | "admin" | "owner";
+  joined_at: string;
+  display_name?: string;
+}
+
+export interface WorkspaceDetail {
+  workspaceId: string;
+  name: string;
+  description?: string;
+  owner_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  members: WorkspaceMember[];
+}
+
+export interface WorkspaceInvitation {
+  token: string;
+  email: string;
+  role: "viewer" | "editor" | "admin";
+  invited_by?: string;
+  created_at?: string;
+}
+
+export async function fetchWorkspaces() {
+  return apiGetRaw<{
+    items: Array<{
+      workspaceId: string;
+      name?: string;
+      description?: string;
+      role?: string;
+      created_at?: string;
+    }>;
+  }>("/api/workspaces");
+}
+
+export async function fetchWorkspaceDetail(wsId: string): Promise<WorkspaceDetail> {
+  return apiGetRaw<WorkspaceDetail>(`/api/workspaces/${encodeURIComponent(wsId)}`);
+}
+
+export async function inviteWorkspaceMember(
+  wsId: string,
+  email: string,
+  role: "viewer" | "editor" | "admin"
+) {
+  return apiPostRaw<{ token: string; email: string; role: string; created_at: string }>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/members`,
+    { email, role }
+  );
+}
+
+export async function updateWorkspaceMemberRole(
+  wsId: string,
+  memberId: string,
+  role: "viewer" | "editor" | "admin"
+) {
+  return apiPutRaw<{ userId: string; role: string }>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/members/${encodeURIComponent(memberId)}`,
+    { role }
+  );
+}
+
+export async function removeWorkspaceMember(wsId: string, memberId: string) {
+  return apiDeleteRaw<{ removed: boolean }>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/members/${encodeURIComponent(memberId)}`
+  );
+}
+
+export async function leaveWorkspace(wsId: string) {
+  return apiPostRaw<{ left: boolean }>(`/api/workspaces/${encodeURIComponent(wsId)}/leave`);
+}
+
+export async function listWorkspaceInvitations(wsId: string) {
+  return apiGetRaw<{ items: WorkspaceInvitation[] }>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/invitations`
+  );
+}
+
+export async function revokeWorkspaceInvitation(wsId: string, token: string) {
+  return apiDeleteRaw<{ revoked: boolean }>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/invitations/${encodeURIComponent(token)}`
+  );
+}
+
+export async function verifyInvitation(token: string) {
+  return apiGetRaw<{ workspaceName: string }>(
+    `/api/invitations/${encodeURIComponent(token)}`
+  );
+}
+
+export async function acceptInvitation(token: string) {
+  return apiPostRaw<{ workspaceId: string; role: string; joined_at: string }>(
+    `/api/invitations/${encodeURIComponent(token)}/accept`
+  );
 }
 
 // ── Agent history（领域端点）──
