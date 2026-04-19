@@ -12,6 +12,7 @@ export class AgentCoreRoles extends Construct {
   public readonly basicRoleArn: string;
   public readonly readonlyRoleArn: string;
   public readonly dataAccessRoleArn: string;
+  public readonly evaluatorRoleArn: string;
 
   constructor(scope: Construct, id: string, props: AgentCoreRolesProps) {
     super(scope, id);
@@ -159,5 +160,48 @@ export class AgentCoreRoles extends Construct {
     new cdk.CfnOutput(this, "BasicRoleArn", { value: basicRole.roleArn });
     new cdk.CfnOutput(this, "ReadonlyRoleArn", { value: readonlyRole.roleArn });
     new cdk.CfnOutput(this, "DataAccessRoleArn", { value: dataAccessRole.roleArn });
+
+    // Evaluator execution role — Online Evaluation Config assumes this to
+    // read span logs + call Bedrock for LLM-as-Judge + write eval output
+    // to CloudWatch Logs. Shared across all workspace eval configs.
+    const evaluatorRole = new iam.Role(this, "EvaluatorExecutionRole", {
+      roleName: `AgentStudioEvaluatorExecution-${props.region}`,
+      assumedBy: new iam.ServicePrincipal("bedrock-agentcore.amazonaws.com", {
+        conditions: {
+          StringEquals: { "aws:SourceAccount": props.accountId },
+        },
+      }),
+    });
+    evaluatorRole.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        "logs:StartQuery",
+        "logs:GetQueryResults",
+        "logs:StopQuery",
+        "logs:DescribeLogGroups",
+        "logs:FilterLogEvents",
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+      ],
+      resources: [
+        `arn:aws:logs:${props.region}:${props.accountId}:log-group:aws/spans:*`,
+        `arn:aws:logs:${props.region}:${props.accountId}:log-group:/aws/vendedlogs/bedrock-agentcore/evaluation/*`,
+      ],
+    }));
+    evaluatorRole.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream",
+        "bedrock:Converse",
+        "bedrock:ConverseStream",
+      ],
+      resources: [`arn:aws:bedrock:${props.region}::foundation-model/*`],
+    }));
+    this.evaluatorRoleArn = evaluatorRole.roleArn;
+
+    new cdk.CfnOutput(this, "EvaluatorRoleArn", {
+      value: evaluatorRole.roleArn,
+      exportName: "AgentStudio-EvaluatorRoleArn",
+    });
   }
 }

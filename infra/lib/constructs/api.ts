@@ -14,6 +14,7 @@ export interface ApiProps {
   cognitoClientId: string;
   cognitoUserPoolArn: string;
   metaAgentArn: string;
+  evaluatorRoleArn: string;
   workspacesTable: dynamodb.Table;
   agentsTable: dynamodb.ITable;
   skillsTable: dynamodb.Table;
@@ -54,6 +55,8 @@ export class Api extends Construct {
         COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
         COGNITO_CLIENT_ID: props.cognitoClientId,
         META_AGENT_ARN: props.metaAgentArn,
+        EVALUATOR_ROLE_ARN: props.evaluatorRoleArn,
+        SPANS_LOG_GROUP: "aws/spans",
         MCP_GATEWAY_URL: props.config.mcpGatewayUrl || '',
       },
     });

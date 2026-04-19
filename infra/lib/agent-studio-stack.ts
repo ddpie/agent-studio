@@ -63,6 +63,7 @@ export class AgentStudioStack extends cdk.Stack {
       cognitoClientId: auth.userPoolClientId,
       cognitoUserPoolArn: auth.userPoolArn,
       metaAgentArn: metaAgent.agentRuntimeArn,
+      evaluatorRoleArn: roles.evaluatorRoleArn,
       workspacesTable: database.workspacesTable,
       agentsTable: database.agentsTable,
       skillsTable: database.skillsTable,
