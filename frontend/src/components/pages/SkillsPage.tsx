@@ -6,10 +6,13 @@ import {
 } from "lucide-react";
 import { listSkills, listDeletedSkills, importSkill, restoreSkill, permanentlyDeleteSkill, type SkillIndexEntry } from "../../lib/skill-storage";
 import { importSkillFromUrl } from "../../lib/skill-url-import";
+import { useWorkspaceStore } from "../../stores/workspace-store";
 
 export default function SkillsPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const role = useWorkspaceStore((s) => s.currentWorkspace?.role) || "viewer";
+  const canEdit = role === "editor" || role === "admin" || role === "owner";
   const [skills, setSkills] = useState<SkillIndexEntry[]>([]);
   const [trashedSkills, setTrashedSkills] = useState<SkillIndexEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -159,7 +162,7 @@ ${desc || "TODO: Add skill instructions here."}
             className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           </button>
-          {!showTrash && (
+          {!showTrash && canEdit && (
             <>
               <input ref={fileInputRef} type="file" accept=".md,.txt,.cursorrules" className="hidden" onChange={handleFileImport} />
               <button onClick={() => fileInputRef.current?.click()} disabled={importing}
@@ -207,7 +210,7 @@ ${desc || "TODO: Add skill instructions here."}
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-blue-500 flex-shrink-0" />
                   <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 flex-1 truncate">{skill.name}</h3>
-                  {showTrash && (
+                  {showTrash && canEdit && (
                     <div className="flex items-center gap-1">
                       <button onClick={() => handleRestore(skill.id)}
                         className="p-1 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
