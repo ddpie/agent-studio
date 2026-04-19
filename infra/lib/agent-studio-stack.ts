@@ -58,6 +58,9 @@ export class AgentStudioStack extends cdk.Stack {
       existingToolsTableName: "agent-studio-tools",
     });
 
+    const originVerifyValue = process.env.ORIGIN_VERIFY_SECRET;
+    if (!originVerifyValue) throw new Error("Missing ORIGIN_VERIFY_SECRET env var — generate with: openssl rand -hex 32");
+
     const api = new Api(this, "Api", {
       config,
       cognitoUserPoolId: auth.userPoolId,
@@ -70,6 +73,7 @@ export class AgentStudioStack extends cdk.Stack {
       skillsTable: database.skillsTable,
       toolsTable: database.toolsTable,
       a2aKeysTable: database.a2aKeysTable,
+      originVerifyValue,
     });
 
     const invoke = new Invoke(this, "Invoke", {
@@ -81,17 +85,12 @@ export class AgentStudioStack extends cdk.Stack {
       agentsTable: database.agentsTable,
     });
 
-    const originVerifyValue = process.env.ORIGIN_VERIFY_SECRET;
-    if (!originVerifyValue) throw new Error("Missing ORIGIN_VERIFY_SECRET env var — generate with: openssl rand -hex 32");
-
     const a2aProxy = new A2aProxy(this, "A2aProxy", {
       config,
       metaAgentArn: metaAgent.agentRuntimeArn,
       agentsTable: database.agentsTable,
       a2aKeysTable: database.a2aKeysTable,
       publicHost: process.env.AGENT_STUDIO_CLOUDFRONT_DOMAIN || "",
-      originVerifyHeaderName: "x-origin-verify",
-      originVerifyHeaderValue: originVerifyValue,
     });
 
     new Cdn(this, "Cdn", {

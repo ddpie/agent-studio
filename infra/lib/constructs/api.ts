@@ -20,6 +20,7 @@ export interface ApiProps {
   skillsTable: dynamodb.Table;
   toolsTable: dynamodb.ITable;
   a2aKeysTable: dynamodb.Table;
+  originVerifyValue: string;
 }
 
 export class Api extends Construct {
@@ -60,6 +61,7 @@ export class Api extends Construct {
         SPANS_LOG_GROUP: "aws/spans",
         MCP_GATEWAY_URL: props.config.mcpGatewayUrl || '',
         A2A_KEYS_TABLE: props.a2aKeysTable.tableName,
+        ORIGIN_VERIFY_VALUE: props.originVerifyValue,
       },
     });
 
@@ -179,6 +181,11 @@ export class Api extends Construct {
       authorizerName: "agent-studio-cognito",
     });
 
+    // Direct APIGW URL hits (bypassing CloudFront) are rejected in the
+    // Lambda by the origin-verify header check (lambda/crud/handler.py).
+    // APIGW resource policies don't support aws:RequestHeader conditions,
+    // so the gateway itself can't enforce this — but the Lambda always runs
+    // after the Cognito authorizer, and the check happens before routing.
     this.restApi = new apigateway.RestApi(this, "RestApi", {
       restApiName: "agent-studio-api",
       deployOptions: { stageName: "prod" },

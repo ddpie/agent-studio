@@ -34,8 +34,6 @@ const META_AGENT_ARN = process.env.META_AGENT_ARN || "";
 const AGENTS_TABLE = process.env.AGENTS_TABLE || "";
 const A2A_KEYS_TABLE = process.env.A2A_KEYS_TABLE || "";
 const PUBLIC_HOST = process.env.PUBLIC_HOST || "";
-const ORIGIN_VERIFY_HEADER_NAME = (process.env.ORIGIN_VERIFY_HEADER_NAME || "").toLowerCase();
-const ORIGIN_VERIFY_HEADER_VALUE = process.env.ORIGIN_VERIFY_HEADER_VALUE || "";
 
 const agentcore = new BedrockAgentCoreClient({ region: REGION });
 const control = new BedrockAgentCoreControlClient({ region: REGION });
@@ -51,19 +49,14 @@ function getHeader(headers, name) {
 }
 
 function extractToken(headers) {
-  // Standard A2A clients send `Authorization: Bearer <key>` per the
-  // HTTPAuthSecurityScheme on the AgentCard.
-  const auth = getHeader(headers, "authorization");
-  return extractBearerToken(auth);
-}
-
-function verifyOrigin(headers) {
-  // Function URL is AuthType=NONE so standard A2A clients can POST
-  // bodies without SigV4. Defense-in-depth: only accept requests with
-  // our CloudFront-injected origin-verify header.
-  if (!ORIGIN_VERIFY_HEADER_NAME) return true;
-  const v = getHeader(headers, ORIGIN_VERIFY_HEADER_NAME);
-  return v === ORIGIN_VERIFY_HEADER_VALUE;
+  // Function URL is AuthType=AWS_IAM; CloudFront OAC signs requests with
+  // SigV4 in the Authorization header. To preserve the A2A client's
+  // `Authorization: Bearer <key>`, a CloudFront viewer-request Function
+  // renames it to `x-a2a-authorization` before OAC signs. Read that
+  // first; fall back to Authorization for local-test / non-CDN paths.
+  const renamed = getHeader(headers, "x-a2a-authorization");
+  if (renamed) return extractBearerToken(renamed);
+  return extractBearerToken(getHeader(headers, "authorization"));
 }
 
 
@@ -316,7 +309,6 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
   };
 
   if (!route) return send(404, { error: "Not found" });
-  if (!verifyOrigin(event.headers)) return send(403, { error: "Forbidden" });
   if (route.type === "health") return send(200, { status: "ok" });
 
   try {

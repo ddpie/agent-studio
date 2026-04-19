@@ -12,8 +12,6 @@ export interface A2aProxyProps {
   agentsTable: dynamodb.ITable;
   a2aKeysTable: dynamodb.Table;
   publicHost?: string;
-  originVerifyHeaderName: string;
-  originVerifyHeaderValue: string;
 }
 
 export class A2aProxy extends Construct {
@@ -47,8 +45,6 @@ export class A2aProxy extends Construct {
         AGENTS_TABLE: props.agentsTable.tableName,
         A2A_KEYS_TABLE: props.a2aKeysTable.tableName,
         PUBLIC_HOST: props.publicHost || "",
-        ORIGIN_VERIFY_HEADER_NAME: props.originVerifyHeaderName,
-        ORIGIN_VERIFY_HEADER_VALUE: props.originVerifyHeaderValue,
       },
     });
 
@@ -79,15 +75,14 @@ export class A2aProxy extends Construct {
       ],
     }));
 
-    // Function URL AuthType=NONE. OAC+IAM would hash POST bodies and
-    // reject external A2A clients that don't send x-amz-content-sha256.
-    // Palisade auto-scopes broad public policies; CDK's generated
-    // AuthType=NONE policy is restricted below with an explicit
-    // aws:SourceArn=cloudfront condition so the Function URL is only
-    // reachable via our distribution. Bearer-token auth inside the
-    // Lambda is the actual authorisation check.
+    // Function URL AuthType=AWS_IAM. CloudFront OAC signs with SigV4 in
+    // the Authorization header; a CloudFront viewer-request Function
+    // first renames the A2A client's `Authorization: Bearer <key>` to
+    // `x-a2a-authorization` so OAC can own Authorization for signing.
+    // No Principal=* anywhere — Function URL refuses anything that
+    // isn't SigV4-signed by the CloudFront OAC role.
     this.functionUrl = this.lambda.addFunctionUrl({
-      authType: lambda.FunctionUrlAuthType.NONE,
+      authType: lambda.FunctionUrlAuthType.AWS_IAM,
       invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
     });
 

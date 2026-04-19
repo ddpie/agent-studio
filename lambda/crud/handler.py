@@ -1,6 +1,8 @@
 """CRUD Lambda handler — main entry point."""
+import os
+
 from aws_lambda_powertools import Logger
-from aws_lambda_powertools.event_handler import APIGatewayRestResolver
+from aws_lambda_powertools.event_handler import APIGatewayRestResolver, Response
 from aws_lambda_powertools.event_handler.api_gateway import CORSConfig
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
@@ -56,5 +58,34 @@ def handle_unhandled(ex: Exception):
     )
 
 
+ORIGIN_VERIFY_HEADER = "x-origin-verify"
+ORIGIN_VERIFY_VALUE = os.environ.get("ORIGIN_VERIFY_VALUE", "")
+
+
+def _origin_verify_ok(event: dict) -> bool:
+    """Reject requests that didn't come through CloudFront.
+
+    CloudFront injects `x-origin-verify: <secret>` on the /api/* origin.
+    Direct APIGW URL callers don't have the secret; this closes the
+    WAF-bypass path where a valid Cognito JWT is otherwise sufficient.
+    """
+    if not ORIGIN_VERIFY_VALUE:
+        return True
+    headers = event.get("headers") or {}
+    received = None
+    for k, v in headers.items():
+        if k.lower() == ORIGIN_VERIFY_HEADER:
+            received = v
+            break
+    return received == ORIGIN_VERIFY_VALUE
+
+
 def lambda_handler(event: dict, context: LambdaContext) -> dict:
+    if not _origin_verify_ok(event):
+        logger.warning("origin-verify missing/invalid — rejecting direct APIGW hit")
+        return {
+            "statusCode": 403,
+            "headers": {"content-type": "application/json"},
+            "body": '{"error":"Forbidden"}',
+        }
     return app.resolve(event, context)
