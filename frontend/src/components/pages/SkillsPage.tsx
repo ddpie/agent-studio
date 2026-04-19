@@ -7,6 +7,7 @@ import {
 import { listSkills, listDeletedSkills, importSkill, restoreSkill, permanentlyDeleteSkill, type SkillIndexEntry } from "../../lib/skill-storage";
 import { importSkillFromUrl } from "../../lib/skill-url-import";
 import { useWorkspaceStore } from "../../stores/workspace-store";
+import ApprovalPill from "../shared/ApprovalPill";
 
 export default function SkillsPage() {
   const navigate = useNavigate();
@@ -210,6 +211,7 @@ ${desc || "TODO: Add skill instructions here."}
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-blue-500 flex-shrink-0" />
                   <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 flex-1 truncate">{skill.name}</h3>
+                  {!showTrash && <ApprovalPill type={skill.type} approved={skill.approved} />}
                   {showTrash && canEdit && (
                     <div className="flex items-center gap-1">
                       <button onClick={() => handleRestore(skill.id)}

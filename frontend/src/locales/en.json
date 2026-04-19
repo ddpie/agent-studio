@@ -284,7 +284,15 @@
     "urlFetchingBackend": "Rate limited, using backend...",
     "urlWriting": "Writing {{count}} files to storage...",
     "urlWritingProgress": "Writing {{current}}/{{total}} files...",
-    "deleted": "Deleted {{date}}"
+    "deleted": "Deleted {{date}}",
+    "approve": {
+      "action": "Approve",
+      "approved": "Approved",
+      "pending": "Pending approval",
+      "success": "Skill approved",
+      "failed": "Failed to approve skill",
+      "publishBlocked": "Skill must be approved before publishing"
+    }
   },
   "skillEditor": {
     "skillNotFound": "Skill not found",

@@ -17,6 +17,8 @@ interface PublishToggleProps {
   size?: "sm" | "md";
   /** data-testid prefix. */
   testId?: string;
+  /** When set, disables the publish action and shows the reason as a tooltip. */
+  disabledReason?: string;
 }
 
 /**
@@ -33,6 +35,7 @@ export default function PublishToggle({
   onChange,
   size = "sm",
   testId = "publish-toggle",
+  disabledReason,
 }: PublishToggleProps) {
   const { t } = useTranslation();
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -74,6 +77,8 @@ export default function PublishToggle({
 
   const px = size === "md" ? "px-3 py-1.5" : "px-2.5 py-1";
   const text = size === "md" ? "text-xs" : "text-[11px]";
+  // Only block the "go public" direction — unpublishing should always remain possible.
+  const blocked = !isPublic && !!disabledReason;
 
   return (
     <>
@@ -81,12 +86,13 @@ export default function PublishToggle({
         type="button"
         data-testid={testId}
         onClick={() => setConfirmOpen(true)}
-        disabled={busy}
+        disabled={busy || blocked}
+        title={blocked ? disabledReason : undefined}
         className={`inline-flex items-center gap-1 ${px} ${text} rounded-lg transition-colors border ${
           isPublic
             ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-900 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50"
             : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-        } disabled:opacity-50`}
+        } disabled:opacity-50 disabled:cursor-not-allowed`}
       >
         {busy ? (
           <Loader2 className="w-3 h-3 animate-spin" />

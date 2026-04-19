@@ -731,6 +731,12 @@ export async function unpublishSkill(skillId: string) {
   );
 }
 
+export async function approveSkill(skillId: string) {
+  return apiPost<{ skillId: string; approved: boolean; approved_by: string; approved_at: string }>(
+    `/skills/${encodeURIComponent(skillId)}/approve`,
+  );
+}
+
 export async function publishTool(toolId: string) {
   return apiPost<{ toolId: string; visibility: string }>(
     `/tools/${encodeURIComponent(toolId)}/publish`,

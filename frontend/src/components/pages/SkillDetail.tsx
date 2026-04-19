@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
+import { Loader2, ShieldCheck } from "lucide-react";
 import { deleteSkill, listSkills, type SkillIndexEntry } from "../../lib/skill-storage";
 import { useSkillStorage } from "../../hooks/useSkillStorage";
 import { useFileEditor } from "../../hooks/useFileEditor";
@@ -8,12 +9,14 @@ import type * as MonacoNS from "monaco-editor";
 import { useUISettings } from "../../stores/ui-settings-store";
 import { useSkillAssistantStore } from "../../stores/skill-assistant-store";
 import { useWorkspaceStore } from "../../stores/workspace-store";
-import { publishSkill, unpublishSkill } from "../../lib/api-client";
+import { approveSkill, publishSkill, unpublishSkill } from "../../lib/api-client";
 import SkillAssistant from "../skills/SkillAssistant";
 import ValidationBanner from "../shared/ValidationBanner";
 import DiffModal from "../shared/DiffModal";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import PublishToggle from "../shared/PublishToggle";
+import ApprovalPill from "../shared/ApprovalPill";
+import { toast } from "../../lib/toast";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
 import { preloadPyodide } from "../../lib/pyodide-checker";
 import type { ValidationResult } from "../../lib/types/validation";
@@ -235,6 +238,24 @@ export default function SkillDetail() {
     else store.openPanel(skillId);
   };
 
+  const wsRole = useWorkspaceStore((s) => s.currentWorkspace?.role);
+  const canApprove = wsRole === "admin" || wsRole === "owner";
+  const [approving, setApproving] = useState(false);
+  const handleApprove = async () => {
+    if (!skillId) return;
+    setApproving(true);
+    try {
+      await approveSkill(skillId);
+      toast.success(t("skills.approve.success"));
+      const fresh = await listSkills();
+      setSkill(fresh.find((s) => s.id === skillId) || null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("skills.approve.failed"));
+    } finally {
+      setApproving(false);
+    }
+  };
+
   if (!skill && !editor.loadingContent) {
     return <div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-500">{t("skills.notFound", "Skill not found")}</div>;
   }
@@ -257,14 +278,30 @@ export default function SkillDetail() {
         onDelete={() => setShowDeleteConfirm(true)}
         onToggleAssistant={toggleAssistant}
         extraSlot={skill && skillId && !storage.isAgentMode && !hasPendingOps ? (
-          <PublishToggle
-            visibility={skill.visibility}
-            canPublish={useWorkspaceStore.getState().currentWorkspace?.role === "admin" || useWorkspaceStore.getState().currentWorkspace?.role === "owner"}
-            onPublish={async () => { await publishSkill(skillId); }}
-            onUnpublish={async () => { await unpublishSkill(skillId); }}
-            onChange={(v) => setSkill((prev) => (prev ? { ...prev, visibility: v } : prev))}
-            testId="skill-publish-toggle"
-          />
+          <div className="flex items-center gap-2">
+            <ApprovalPill type={skill.type} approved={skill.approved} />
+            {skill.type === "script" && !skill.approved && canApprove && (
+              <button
+                type="button"
+                onClick={handleApprove}
+                disabled={approving}
+                data-testid="skill-approve-btn"
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-900 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 disabled:opacity-50"
+              >
+                {approving ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
+                {t("skills.approve.action")}
+              </button>
+            )}
+            <PublishToggle
+              visibility={skill.visibility}
+              canPublish={canApprove}
+              onPublish={async () => { await publishSkill(skillId); }}
+              onUnpublish={async () => { await unpublishSkill(skillId); }}
+              onChange={(v) => setSkill((prev) => (prev ? { ...prev, visibility: v } : prev))}
+              disabledReason={skill.type === "script" && !skill.approved ? t("skills.approve.publishBlocked") : undefined}
+              testId="skill-publish-toggle"
+            />
+          </div>
         ) : null}
       />
 

@@ -284,7 +284,15 @@
     "urlFetchingBackend": "已限流，使用后端导入...",
     "urlWriting": "正在写入 {{count}} 个文件...",
     "urlWritingProgress": "正在写入 {{current}}/{{total}} 个文件...",
-    "deleted": "删除于 {{date}}"
+    "deleted": "删除于 {{date}}",
+    "approve": {
+      "action": "审核通过",
+      "approved": "已审核",
+      "pending": "待审核",
+      "success": "技能已审核通过",
+      "failed": "审核失败",
+      "publishBlocked": "发布前必须先通过审核"
+    }
   },
   "skillEditor": {
     "skillNotFound": "技能未找到",
