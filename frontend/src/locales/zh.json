@@ -664,5 +664,30 @@
     "tools": "个工具",
     "loadingTools": "加载工具中...",
     "noToolsAvailable": "暂无可用工具"
+  },
+  "schedules": {
+    "title": "定时调度",
+    "description": "按 cron 或 rate 表达式周期性触发此 Agent。",
+    "create": "新建调度",
+    "delete": "删除",
+    "empty": "暂无调度。",
+    "name": "名称",
+    "cron": "表达式",
+    "state": "状态",
+    "createdAt": "创建时间",
+    "modalTitle": "创建调度",
+    "nameLabel": "名称",
+    "nameHint": "完整名称为 {{prefix}}<后缀>。仅支持字母、数字、下划线和连字符。",
+    "cronLabel": "调度表达式",
+    "cronHint": "使用 cron(分 时 日 月 周 年) 或 rate(N minute|hour|day)。",
+    "promptLabel": "Prompt",
+    "confirmDelete": "确认删除调度 {{name}}？此操作不可恢复。",
+    "created": "已创建调度 {{name}}",
+    "deleted": "已删除调度 {{name}}",
+    "errors": {
+      "nameFormat": "名称只能包含字母、数字、下划线或连字符。",
+      "cronFormat": "表达式必须为 cron(...) 或 rate(N minute|hour|day)。",
+      "promptLength": "Prompt 不能超过 4000 个字符。"
+    }
   }
 }

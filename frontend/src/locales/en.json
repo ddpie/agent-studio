@@ -664,5 +664,30 @@
     "tools": "tools",
     "loadingTools": "Loading tools...",
     "noToolsAvailable": "No tools available"
+  },
+  "schedules": {
+    "title": "Schedules",
+    "description": "Run this agent on a recurring cron or rate schedule.",
+    "create": "New schedule",
+    "delete": "Delete",
+    "empty": "No schedules yet.",
+    "name": "Name",
+    "cron": "Expression",
+    "state": "State",
+    "createdAt": "Created",
+    "modalTitle": "Create schedule",
+    "nameLabel": "Name",
+    "nameHint": "Full name will be {{prefix}}<suffix>. Letters, digits, _ and - only.",
+    "cronLabel": "Schedule expression",
+    "cronHint": "Use cron(m h dom mon dow year) or rate(N minute|hour|day).",
+    "promptLabel": "Prompt",
+    "confirmDelete": "Delete schedule {{name}}? This cannot be undone.",
+    "created": "Schedule {{name}} created",
+    "deleted": "Schedule {{name}} deleted",
+    "errors": {
+      "nameFormat": "Name must contain only letters, digits, '_' or '-'.",
+      "cronFormat": "Expression must be cron(...) or rate(N minute|hour|day).",
+      "promptLength": "Prompt must be 4000 characters or less."
+    }
   }
 }

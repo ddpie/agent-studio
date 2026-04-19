@@ -252,6 +252,46 @@ export function getMetaA2aEndpointUrl(): string {
   return `${window.location.origin}/a2a/meta-agent`;
 }
 
+// ── Schedules (EventBridge Scheduler) ──
+
+export interface AgentSchedule {
+  name: string;
+  suffix: string;
+  cron: string;
+  state?: string;
+  arn?: string;
+  groupName?: string;
+  createdAt?: string;
+  lastModifiedAt?: string;
+}
+
+export interface AgentScheduleCreated extends AgentSchedule {
+  arn: string;
+}
+
+export async function listAgentSchedules(agentId: string): Promise<AgentSchedule[]> {
+  const resp = await apiGet<{ schedules?: AgentSchedule[] }>(
+    `/agents/${encodeURIComponent(agentId)}/schedules`
+  );
+  return resp.schedules ?? [];
+}
+
+export async function createAgentSchedule(
+  agentId: string,
+  body: { name: string; cron: string; prompt: string }
+): Promise<AgentScheduleCreated> {
+  return apiPost<AgentScheduleCreated>(
+    `/agents/${encodeURIComponent(agentId)}/schedules`,
+    body
+  );
+}
+
+export async function deleteAgentSchedule(agentId: string, name: string): Promise<void> {
+  await apiDelete(
+    `/agents/${encodeURIComponent(agentId)}/schedules/${encodeURIComponent(name)}`
+  );
+}
+
 // ── Agent runtime (AgentCore Control Plane passthrough) ──
 
 export interface AgentRuntimeInfo {
