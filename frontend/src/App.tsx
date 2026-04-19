@@ -4,6 +4,7 @@ import "@aws-amplify/ui-react/styles.css";
 import { RouterProvider } from "react-router";
 import { createRouter } from "./router";
 import { ensureWorkspaceId } from "./lib/api-client";
+import { useWorkspaceStore } from "./stores/workspace-store";
 import { useTranslation } from "react-i18next";
 import Toaster from "./components/common/Toaster";
 import RootErrorBoundary from "./components/common/RootErrorBoundary";
@@ -65,7 +66,9 @@ function AuthenticatedApp({ signOut, user }: { signOut?: () => void; user?: { si
   const { t } = useTranslation();
 
   useEffect(() => {
-    ensureWorkspaceId().then(() => setReady(true));
+    ensureWorkspaceId()
+      .then(() => useWorkspaceStore.getState().loadCurrentWorkspace())
+      .finally(() => setReady(true));
   }, []);
 
   const router = useMemo(() => createRouter(signOut, user), [signOut, user]);

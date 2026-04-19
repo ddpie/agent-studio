@@ -104,6 +104,15 @@
     "copied": "Copied",
     "viewCard": "View AgentCard"
   },
+  "agentDetail": {
+    "title": "{{name}}",
+    "subtitle": "Read-only overview — deployments, endpoints, scores, traces, integration.",
+    "editAgent": "Edit",
+    "runtimeArn": "Runtime ARN",
+    "integrationPlaceholder": "A2A integration is being set up — coming in Phase 2.",
+    "notFound": "Agent not found",
+    "loadError": "Could not load agent"
+  },
   "runtime": {
     "status": {
       "ready": "Ready",

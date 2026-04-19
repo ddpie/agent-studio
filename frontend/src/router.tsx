@@ -4,6 +4,7 @@ import AppShell from "./components/layout/AppShell";
 import AgentsLayout from "./components/layout/AgentsLayout";
 import ChatPanel from "./components/chat/ChatPanel";
 import AgentEditForm from "./components/agents/AgentEditForm";
+import AgentDetailPage from "./components/pages/AgentDetailPage";
 import SkillsPage from "./components/pages/SkillsPage";
 import SkillDetail from "./components/pages/SkillDetail";
 import ToolLibraryPage from "./components/pages/ToolLibraryPage";
@@ -35,6 +36,7 @@ export function createRouter(
             { path: "chat/:agentId", element: withBoundary(<ChatPanel />) },
             { path: "edit/:agentId", element: withBoundary(<AgentEditForm />) },
             { path: "edit/:agentId/skills/:skillId", element: withBoundary(<AgentEditForm />) },
+            { path: ":agentId", element: withBoundary(<AgentDetailPage />) },
           ],
         },
         { path: "skills", element: withBoundary(<SkillsPage />) },

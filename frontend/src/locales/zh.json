@@ -104,6 +104,15 @@
     "copied": "已复制",
     "viewCard": "查看 AgentCard"
   },
+  "agentDetail": {
+    "title": "{{name}}",
+    "subtitle": "只读概览 — 部署、端点、评分、追踪、集成。",
+    "editAgent": "编辑",
+    "runtimeArn": "Runtime ARN",
+    "integrationPlaceholder": "A2A 集成正在配置中 — Phase 2 交付。",
+    "notFound": "未找到 Agent",
+    "loadError": "无法加载 Agent 数据"
+  },
   "runtime": {
     "status": {
       "ready": "就绪",
