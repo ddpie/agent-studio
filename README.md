@@ -223,11 +223,37 @@ If you already have Cognito or a Meta-Agent Runtime, the script auto-detects exi
 
 ## Runtime observability
 
-Each agent row shows a live AgentCore status badge (ACTIVE / CREATING /
+Each agent row shows a live AgentCore status badge (READY / CREATING /
 UPDATING / FAILED) backed by a passthrough over `get_agent_runtime`.
 Per-agent tabs surface version history (`list_agent_runtime_versions`)
 and blue/green endpoints (`create/update/delete_agent_runtime_endpoint`).
 No DDB mirror — AgentCore is the source of truth.
+
+## Automatic evaluation
+
+Every workspace provisions an `OnlineEvaluationConfig` on creation.
+Three built-in evaluators (`Builtin.Correctness`, `Builtin.Helpfulness`,
+`Builtin.GoalSuccessRate`) score every sub-agent session at the TRACE
+level. The agent edit page's Evaluations tab renders the latest score
+and 7-day mean per evaluator, backed by a CloudWatch Logs Insights
+query against `/aws/bedrock-agentcore/evaluations/results/*`.
+
+## In-app trace viewer
+
+Agent edit → Traces tab shows recent sessions and a span tree rendered
+from the account's OpenTelemetry data in the `aws/spans` log group —
+no AWS Console access required. Session id and agent runtime id come
+from OTEL span attributes (`attributes.session.id`,
+`attributes.aws.agent.id`).
+
+## A2A interoperability
+
+The Meta-Agent exposes an A2A-shape AgentCard at
+`/api/workspaces/{ws}/meta-agent/agent-card`. The Meta-Agent runtime
+itself remains on `serverProtocol=HTTP` (to preserve the existing chat
+streaming UX); the card is synthesized from `GetAgentRuntime` metadata
+plus hard-coded capability descriptors. The chat page surfaces a
+copy-ready endpoint URL and runtime ARN for external A2A clients.
 
 ## Sub-agent sandbox
 

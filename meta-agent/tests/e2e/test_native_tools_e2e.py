@@ -245,3 +245,66 @@ def test_shared_resources_are_cfn_managed():
         f"BROWSER_ID {BR_ID} is not a CFN output of AgentStudioStack "
         f"(outputs: {br_keys})"
     )
+
+
+# ---------------------------------------------------------------------------
+# Sprint 2 live-AWS guards
+# ---------------------------------------------------------------------------
+
+
+def test_workspace_has_eval_config():
+    """After Sprint 2 Task 2, at least one workspace-scoped online eval
+    config must exist. Guard against silently losing provisioning."""
+    c = boto3.client("bedrock-agentcore-control", region_name=REGION)
+    configs = c.list_online_evaluation_configs().get("onlineEvaluationConfigs", [])
+    ours = [cfg for cfg in configs if cfg.get("onlineEvaluationConfigName", "").startswith("agentstudio_ws_")]
+    assert ours, (
+        "no agentstudio_ws_* OnlineEvaluationConfig found — create a workspace "
+        "through the frontend to trigger provisioning, then re-run this test"
+    )
+    assert any(cfg.get("status") in ("ACTIVE", "CREATING", "UPDATING") for cfg in ours), (
+        f"eval configs exist but none are healthy: {[(cfg.get('onlineEvaluationConfigName'), cfg.get('status')) for cfg in ours]}"
+    )
+
+
+def test_eval_execution_role_is_assumable_by_agentcore():
+    """The evaluator role must trust bedrock-agentcore.amazonaws.com,
+    scoped to this account. A trust-policy regression here kills all
+    future eval config creations."""
+    iam = boto3.client("iam", region_name=REGION)
+    role = iam.get_role(RoleName=f"AgentStudioEvaluatorExecution-{REGION}")["Role"]
+    doc = role["AssumeRolePolicyDocument"]
+    # IAM returns either a dict or URL-encoded JSON depending on client
+    if isinstance(doc, str):
+        import urllib.parse
+        doc = json.loads(urllib.parse.unquote(doc))
+    principals = [s["Principal"]["Service"] for s in doc["Statement"] if s.get("Principal", {}).get("Service")]
+    assert "bedrock-agentcore.amazonaws.com" in principals, f"unexpected trust policy: {doc}"
+
+
+def test_spans_log_group_exists():
+    """Sprint 2 F4 requires the aws/spans log group (OTEL destination)."""
+    c = boto3.client("logs", region_name=REGION)
+    groups = c.describe_log_groups(logGroupNamePrefix="aws/spans").get("logGroups", [])
+    assert any(g["logGroupName"] == "aws/spans" for g in groups), (
+        "aws/spans log group missing — run: aws xray update-trace-segment-destination --destination CloudWatchLogs"
+    )
+
+
+def test_meta_agent_runtime_reachable():
+    """Meta-Agent must be live (the synthetic AgentCard endpoint reads
+    its metadata via GetAgentRuntime). Plan's Task 7 A2A migration was
+    downgraded to a fallback — we keep it on HTTP to preserve chat."""
+    meta_id = os.environ.get("AGENT_STUDIO_META_AGENT_ID") or os.environ.get("AGENT_STUDIO_EXISTING_META_AGENT_ID")
+    assert meta_id, "AGENT_STUDIO_META_AGENT_ID env required"
+    c = boto3.client("bedrock-agentcore-control", region_name=REGION)
+    info = c.get_agent_runtime(agentRuntimeId=meta_id)
+    assert info.get("status") == "READY", f"Meta-Agent not READY: status={info.get('status')}"
+    # Fallback stamp: we are deliberately on HTTP (not A2A). If someone
+    # migrates later, this assertion and the synthetic-card path in
+    # lambda/crud/meta_agent.py both need updating.
+    proto = (info.get("protocolConfiguration") or {}).get("serverProtocol")
+    assert proto in (None, "HTTP"), (
+        f"Meta-Agent protocol changed to {proto!r}; the synthetic AgentCard "
+        "endpoint was designed for the HTTP fallback"
+    )
