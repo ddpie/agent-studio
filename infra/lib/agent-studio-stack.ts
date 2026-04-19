@@ -68,6 +68,7 @@ export class AgentStudioStack extends cdk.Stack {
       agentsTable: database.agentsTable,
       skillsTable: database.skillsTable,
       toolsTable: database.toolsTable,
+      a2aKeysTable: database.a2aKeysTable,
     });
 
     const invoke = new Invoke(this, "Invoke", {

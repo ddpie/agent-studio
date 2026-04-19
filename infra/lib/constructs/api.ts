@@ -19,6 +19,7 @@ export interface ApiProps {
   agentsTable: dynamodb.ITable;
   skillsTable: dynamodb.Table;
   toolsTable: dynamodb.ITable;
+  a2aKeysTable: dynamodb.Table;
 }
 
 export class Api extends Construct {
@@ -58,12 +59,14 @@ export class Api extends Construct {
         EVALUATOR_ROLE_ARN: props.evaluatorRoleArn,
         SPANS_LOG_GROUP: "aws/spans",
         MCP_GATEWAY_URL: props.config.mcpGatewayUrl || '',
+        A2A_KEYS_TABLE: props.a2aKeysTable.tableName,
       },
     });
 
     // CDK-managed tables: use grant
     props.workspacesTable.grantReadWriteData(this.crudLambda);
     props.skillsTable.grantReadWriteData(this.crudLambda);
+    props.a2aKeysTable.grantReadWriteData(this.crudLambda);
 
     // Imported tables: explicit IAM policy (grant on ITable misses GSI ARN)
     this.crudLambda.addToRolePolicy(new iam.PolicyStatement({

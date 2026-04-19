@@ -7,6 +7,7 @@ export class Database extends Construct {
   public readonly skillsTable: dynamodb.Table;
   public readonly agentsTable: dynamodb.ITable;
   public readonly toolsTable: dynamodb.ITable;
+  public readonly a2aKeysTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props: {
     existingAgentsTableName: string;
@@ -47,5 +48,22 @@ export class Database extends Construct {
 
     this.agentsTable = dynamodb.Table.fromTableName(this, "Agents", props.existingAgentsTableName);
     this.toolsTable = dynamodb.Table.fromTableName(this, "Tools", props.existingToolsTableName);
+
+    // A2A API keys — SHA-256 hash is the PK so a bearer token resolves in O(1).
+    // GSI user-agent-index lets users list their keys per agent (userId#agentId)
+    // + createdAt as sort key for newest-first.
+    this.a2aKeysTable = new dynamodb.Table(this, "A2aKeys", {
+      tableName: "agent-studio-a2a-keys",
+      partitionKey: { name: "apiKeyHash", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecovery: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+    this.a2aKeysTable.addGlobalSecondaryIndex({
+      indexName: "user-agent-index",
+      partitionKey: { name: "userAgentKey", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
   }
 }
