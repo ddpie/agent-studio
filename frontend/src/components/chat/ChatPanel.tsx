@@ -10,7 +10,6 @@ import "katex/dist/katex.min.css";
 import ChatHeader from "./ChatHeader";
 import MessageList from "./MessageList";
 import ChatInput, { type ChatInputHandle } from "./ChatInput";
-import MetaAgentA2ABanner from "./MetaAgentA2ABanner";
 
 export default function ChatPanel() {
   const { t } = useTranslation();
@@ -96,7 +95,6 @@ export default function ChatPanel() {
         onNewSession={newSession}
         messages={messages}
       />
-      {!agentId && <MetaAgentA2ABanner />}
       <MessageList
         messages={messages}
         isStreaming={isStreaming}

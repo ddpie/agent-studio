@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { History, Clock, Trash2, Plus, Download } from "lucide-react";
+import { History, Clock, Trash2, Plus, Download, Code2 } from "lucide-react";
 import { MODEL_GROUPS, findModelLabel } from "../../lib/models";
 import type { ChatSession } from "../../stores/chat-store";
+import IntegrationTab from "../agents/IntegrationTab";
 
 interface ChatHeaderProps {
   agentId?: string;
@@ -24,6 +25,7 @@ export default function ChatHeader({
   const { t } = useTranslation();
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showMetaIntegration, setShowMetaIntegration] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
 
@@ -50,6 +52,18 @@ export default function ChatHeader({
         </p>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Meta-Agent A2A integration */}
+        {!agentId && (
+          <button
+            type="button"
+            onClick={() => setShowMetaIntegration(true)}
+            data-testid="meta-a2a-open"
+            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+            title="A2A"
+          >
+            <Code2 className="w-3 h-3" /> A2A
+          </button>
+        )}
         {/* Model selector */}
         <div className="relative" ref={modelPickerRef}>
           <button
@@ -154,6 +168,21 @@ export default function ChatHeader({
           <Plus className="w-4 h-4" />
         </button>
       </div>
+
+      {showMetaIntegration && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => setShowMetaIntegration(false)}
+          data-testid="meta-integration-modal"
+        >
+          <div
+            className="bg-white dark:bg-gray-900 rounded-lg w-[720px] max-w-full max-h-[85vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <IntegrationTab agentId="meta-agent" kind="meta-agent" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
