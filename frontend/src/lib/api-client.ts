@@ -464,7 +464,7 @@ export async function getSessionTrace(agentId: string, sessionId: string): Promi
   return resp.root ?? null;
 }
 
-// ── Agent logs (Sprint 3: inline CloudWatch viewer) ──
+// ── Agent logs (inline CloudWatch viewer) ──
 
 export type LogLevel = "ALL" | "ERROR" | "WARN" | "INFO";
 export type LogSince = "15m" | "1h" | "6h" | "24h";
@@ -499,6 +499,42 @@ export async function fetchAgentLogs(
   if (params.cursor) qs.set("cursor", params.cursor);
   return apiGet<LogEventsPage>(
     `/agents/${encodeURIComponent(agentId)}/logs?${qs.toString()}`
+  );
+}
+
+// ── Trace stats (aggregate p50/p95/error rate) ──
+
+export type TraceStatsRange = "24h" | "7d";
+
+export interface TraceStatsBucket {
+  bucket: string;
+  count: number;
+  errors: number;
+  p95Ms: number | null;
+}
+
+export interface TraceStats {
+  range: TraceStatsRange;
+  count: number;
+  errorCount: number;
+  errorRate: number;
+  latencyMs: {
+    p50: number | null;
+    p90: number | null;
+    p95: number | null;
+    p99: number | null;
+    avg: number | null;
+  };
+  timeseries: TraceStatsBucket[];
+  bucketSeconds: number;
+}
+
+export async function fetchTraceStats(
+  agentId: string,
+  range: TraceStatsRange = "24h",
+): Promise<TraceStats> {
+  return apiGet<TraceStats>(
+    `/agents/${encodeURIComponent(agentId)}/traces/stats?range=${encodeURIComponent(range)}`
   );
 }
 

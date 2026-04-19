@@ -119,7 +119,18 @@
     "selectSessionHint": "Select a session on the left to view its span tree",
     "status": "Status",
     "durationMs": "Duration",
-    "loadError": "Could not load traces"
+    "loadError": "Could not load traces",
+    "stats": {
+      "title": "Aggregate stats",
+      "rangeLabel": "Time range",
+      "range": { "24h": "24h", "7d": "7d" },
+      "requests": "Requests",
+      "errors": "Errors",
+      "p95": "p95 latency",
+      "avg": "Avg latency",
+      "sparklineLabel": "p95 latency (bars = request count)",
+      "loadError": "Could not load stats"
+    }
   },
   "a2a": {
     "title": "A2A-ready",

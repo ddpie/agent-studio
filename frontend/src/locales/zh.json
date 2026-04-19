@@ -119,7 +119,18 @@
     "selectSessionHint": "在左侧选一个会话查看其 span 树",
     "status": "状态",
     "durationMs": "耗时",
-    "loadError": "无法加载追踪数据"
+    "loadError": "无法加载追踪数据",
+    "stats": {
+      "title": "汇总指标",
+      "rangeLabel": "时间范围",
+      "range": { "24h": "24 小时", "7d": "7 天" },
+      "requests": "请求数",
+      "errors": "错误数",
+      "p95": "p95 延迟",
+      "avg": "平均延迟",
+      "sparklineLabel": "p95 延迟（柱状 = 请求数）",
+      "loadError": "无法加载指标"
+    }
   },
   "a2a": {
     "title": "支持 A2A",

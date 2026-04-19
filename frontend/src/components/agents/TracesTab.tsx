@@ -3,15 +3,20 @@ import { useTranslation } from "react-i18next";
 import { RefreshCw } from "lucide-react";
 import { useTraceSessions, useSessionTrace } from "../../hooks/useTraces";
 import SpanTree from "./SpanTree";
+import TraceStatsStrip from "./TraceStatsStrip";
+import type { TraceStatsRange } from "../../lib/api-client";
 
 export default function TracesTab({ agentId }: { agentId: string }) {
   const { t } = useTranslation();
   const sessions = useTraceSessions(agentId);
   const [selected, setSelected] = useState<string | null>(null);
   const trace = useSessionTrace(agentId, selected);
+  const [range, setRange] = useState<TraceStatsRange>("24h");
 
   return (
-    <div className="p-4 flex gap-4 h-full min-h-[400px]" data-testid="traces-tab">
+    <div className="p-4 h-full min-h-[400px] flex flex-col" data-testid="traces-tab">
+      <TraceStatsStrip agentId={agentId} range={range} onRangeChange={setRange} />
+      <div className="flex gap-4 flex-1 min-h-0">
       <div className="w-72 flex-shrink-0">
         <div className="flex items-center justify-between mb-2">
           <div>
@@ -78,6 +83,7 @@ export default function TracesTab({ agentId }: { agentId: string }) {
           </div>
         )}
         {selected && trace.root && <SpanTree root={trace.root} />}
+      </div>
       </div>
     </div>
   );
