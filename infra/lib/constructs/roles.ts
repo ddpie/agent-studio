@@ -13,6 +13,7 @@ export class AgentCoreRoles extends Construct {
   public readonly readonlyRoleArn: string;
   public readonly dataAccessRoleArn: string;
   public readonly evaluatorRoleArn: string;
+  public readonly schedulerTargetRoleArn: string;
 
   constructor(scope: Construct, id: string, props: AgentCoreRolesProps) {
     super(scope, id);
@@ -209,6 +210,41 @@ export class AgentCoreRoles extends Construct {
     new cdk.CfnOutput(this, "EvaluatorRoleArn", {
       value: evaluatorRole.roleArn,
       exportName: "AgentStudio-EvaluatorRoleArn",
+    });
+
+    // Scheduler target role — assumed by EventBridge Scheduler to invoke
+    // sub-agent runtimes on a cron/rate trigger. Kept separate from the
+    // sub-agent execution roles so the scheduler trust boundary does not
+    // widen those roles' blast radius.
+    //
+    // Trust policy is scoped with aws:SourceAccount + aws:SourceArn to
+    // schedules in the default group whose name starts with
+    // "agent-studio-" — matches the name prefix enforced by the CRUD
+    // Lambda in lambda/crud/schedules.py.
+    const schedulerTargetRole = new iam.Role(this, "SchedulerTargetRole", {
+      roleName: `AgentStudioSchedulerTargetRole-${props.region}`,
+      assumedBy: new iam.ServicePrincipal("scheduler.amazonaws.com", {
+        conditions: {
+          StringEquals: { "aws:SourceAccount": props.accountId },
+          ArnLike: {
+            "aws:SourceArn": `arn:aws:scheduler:${props.region}:${props.accountId}:schedule/default/agent-studio-*`,
+          },
+        },
+      }),
+    });
+    // Scoped to runtimes in this account/region — never "*".
+    schedulerTargetRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["bedrock-agentcore:InvokeAgentRuntime"],
+      resources: [
+        `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*`,
+        `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*/runtime-endpoint/*`,
+      ],
+    }));
+    this.schedulerTargetRoleArn = schedulerTargetRole.roleArn;
+
+    new cdk.CfnOutput(this, "SchedulerTargetRoleArn", {
+      value: schedulerTargetRole.roleArn,
+      exportName: "AgentStudio-SchedulerTargetRoleArn",
     });
   }
 }

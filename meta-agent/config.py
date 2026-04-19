@@ -18,6 +18,13 @@ AGENT_ROLE_ARN = os.getenv(
     "AGENT_STUDIO_ROLE_ARN",
     f"arn:aws:iam::{ACCOUNT_ID}:role/AgentStudioSubAgentRole-{REGION}",
 )
+# Dedicated role assumed by EventBridge Scheduler to invoke agent
+# runtimes. Trust policy MUST allow scheduler.amazonaws.com — the
+# sub-agent role does not, so it can't be reused here.
+SCHEDULER_TARGET_ROLE_ARN = os.getenv(
+    "SCHEDULER_TARGET_ROLE_ARN",
+    f"arn:aws:iam::{ACCOUNT_ID}:role/AgentStudioSchedulerTargetRole-{REGION}",
+)
 BASE_DEPLOYMENT_KEY = "base/deployment.zip"
 MODEL_ID = os.getenv("AGENT_STUDIO_MODEL_ID", "us.anthropic.claude-opus-4-7")
 AGENTS_TABLE = os.getenv("AGENT_STUDIO_AGENTS_TABLE", "agent-studio-agents")

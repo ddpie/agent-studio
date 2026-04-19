@@ -15,6 +15,7 @@ export interface ApiProps {
   cognitoUserPoolArn: string;
   metaAgentArn: string;
   evaluatorRoleArn: string;
+  schedulerTargetRoleArn: string;
   workspacesTable: dynamodb.Table;
   agentsTable: dynamodb.ITable;
   skillsTable: dynamodb.Table;
@@ -64,12 +65,11 @@ export class Api extends Construct {
         ORIGIN_VERIFY_VALUE: props.originVerifyValue,
         AGENT_STUDIO_ACCOUNT_ID: props.config.accountId,
         AGENTCORE_REGION: props.config.region,
-        // Scheduler assumes this role to invoke bedrock-agentcore runtimes.
-        // Reuses the sub-agent readonly role to avoid adding a new IAM
-        // resource (consistent with meta-agent/tools/create_schedule.py).
-        // The role must trust scheduler.amazonaws.com — if it doesn't,
-        // Scheduler will reject CreateSchedule at API time.
-        SCHEDULER_TARGET_ROLE_ARN: `arn:aws:iam::${props.config.accountId}:role/AgentStudioSubAgentRole-${props.config.region}`,
+        // Scheduler assumes this dedicated role (trust:
+        // scheduler.amazonaws.com) to invoke sub-agent runtimes. Kept
+        // separate from the sub-agent execution roles so scheduler
+        // trust doesn't widen those roles' blast radius.
+        SCHEDULER_TARGET_ROLE_ARN: props.schedulerTargetRoleArn,
       },
     });
 
@@ -185,8 +185,6 @@ export class Api extends Construct {
     // EventBridge Scheduler — per-agent cron triggers (crud/schedules.py).
     // Resource is scoped to the default group + agent-studio-* name
     // prefix so this role can't touch unrelated schedules.
-    const schedulerTargetRoleArn =
-      `arn:aws:iam::${props.config.accountId}:role/AgentStudioSubAgentRole-${props.config.region}`;
     this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: [
         "scheduler:ListSchedules",
@@ -205,10 +203,11 @@ export class Api extends Construct {
       actions: ["scheduler:ListSchedules"],
       resources: ["*"],
     }));
-    // Scheduler invokes the agent runtime via this role.
+    // Scheduler invokes the agent runtime via the dedicated scheduler
+    // target role. Scoped PassRole → only this ARN, only for scheduler.
     this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: ["iam:PassRole"],
-      resources: [schedulerTargetRoleArn],
+      resources: [props.schedulerTargetRoleArn],
       conditions: {
         StringEquals: { "iam:PassedToService": "scheduler.amazonaws.com" },
       },

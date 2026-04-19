@@ -5,7 +5,7 @@ import json
 import boto3
 from strands import tool
 
-from config import REGION, ACCOUNT_ID, AGENT_ROLE_ARN
+from config import REGION, ACCOUNT_ID, SCHEDULER_TARGET_ROLE_ARN
 
 
 @tool
@@ -36,7 +36,7 @@ def create_schedule(
         FlexibleTimeWindow={"Mode": "OFF"},
         Target={
             "Arn": agent_arn,
-            "RoleArn": AGENT_ROLE_ARN,
+            "RoleArn": SCHEDULER_TARGET_ROLE_ARN,
             "Input": json.dumps({"prompt": prompt}),
         },
     )
