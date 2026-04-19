@@ -16,6 +16,16 @@ vi.mock("../../../lib/api-client", () => ({
   listAgentVersions: vi.fn().mockResolvedValue([]),
   listAgentEndpoints: vi.fn().mockResolvedValue([]),
   getAgentRuntime: vi.fn().mockResolvedValue({ status: "READY" }),
+  listA2aKeys: vi.fn().mockResolvedValue([]),
+  createA2aKey: vi.fn(),
+  revokeA2aKey: vi.fn(),
+  listMetaA2aKeys: vi.fn().mockResolvedValue([]),
+  createMetaA2aKey: vi.fn(),
+  revokeMetaA2aKey: vi.fn(),
+  getPublicAgentCardUrl: (id: string) => `/a2a/agents/${id}/.well-known/agent-card.json`,
+  getA2aEndpointUrl: (id: string) => `/a2a/agents/${id}`,
+  getMetaA2aCardUrl: () => `/a2a/meta-agent/.well-known/agent-card.json`,
+  getMetaA2aEndpointUrl: () => `/a2a/meta-agent`,
 }));
 
 const mockStore = { currentWorkspace: { workspaceId: "ws-1", role: "viewer" as const } };
@@ -82,5 +92,13 @@ describe("AgentDetailPage", () => {
     renderPage();
     await screen.findByTestId("agent-detail-title");
     expect(await screen.findByTestId("traces-tab")).toBeInTheDocument();
+  });
+
+  it("renders Integration section with card/endpoint URLs", async () => {
+    renderPage();
+    await screen.findByTestId("agent-detail-title");
+    expect(await screen.findByTestId("integration-tab")).toBeInTheDocument();
+    expect(await screen.findByTestId("card-url-value")).toHaveTextContent(/well-known\/agent-card\.json/);
+    expect(await screen.findByTestId("endpoint-url-value")).toHaveTextContent(/\/a2a\/agents\//);
   });
 });

@@ -8,6 +8,7 @@ import DeploymentsTab from "../agents/DeploymentsTab";
 import EndpointsTab from "../agents/EndpointsTab";
 import EvaluationsTab from "../agents/EvaluationsTab";
 import TracesTab from "../agents/TracesTab";
+import IntegrationTab from "../agents/IntegrationTab";
 
 export default function AgentDetailPage() {
   const { agentId } = useParams();
@@ -105,14 +106,11 @@ export default function AgentDetailPage() {
             <TracesTab agentId={agentId} />
           </section>
         )}
-        <section className="mb-8" data-testid="integration-section">
-          <div
-            className="text-sm text-gray-500"
-            data-testid="integration-placeholder"
-          >
-            {t("agentDetail.integrationPlaceholder")}
-          </div>
-        </section>
+        {agentId && (
+          <section className="mb-8" data-testid="integration-section">
+            <IntegrationTab agentId={agentId} />
+          </section>
+        )}
       </div>
     </div>
   );

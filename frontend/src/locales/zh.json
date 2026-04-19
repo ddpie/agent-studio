@@ -114,6 +114,25 @@
     "notFound": "未找到 Agent",
     "loadError": "无法加载 Agent 数据"
   },
+  "integration": {
+    "title": "A2A 集成",
+    "description": "将此 Agent 暴露给外部 A2A 协议客户端。",
+    "cardUrl": "Agent Card URL",
+    "endpointUrl": "调用 URL",
+    "keysTitle": "你的 API 密钥",
+    "noKeys": "你还没有生成任何密钥。",
+    "generateKey": "生成 API 密钥",
+    "revoke": "吊销",
+    "newKeyTitle": "API 密钥已创建",
+    "newKeyWarning": "立即复制密钥 —— 关闭后将无法再次查看。",
+    "copyKey": "复制密钥",
+    "revokeConfirm": "吊销密钥 {{prefix}}…？此操作不可撤销。",
+    "keyRevoked": "密钥已吊销",
+    "createdAt": "创建时间",
+    "lastUsedAt": "最后使用",
+    "never": "从未",
+    "copied": "已复制"
+  },
   "runtime": {
     "status": {
       "ready": "就绪",

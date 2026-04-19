@@ -183,6 +183,66 @@ export async function deleteAgent(agentId: string) {
   return apiDelete(`/agents/${encodeURIComponent(agentId)}`);
 }
 
+// ── A2A per-user keys ──
+
+export interface A2aKey {
+  keyId: string;
+  keyPrefix: string;
+  createdAt: string;
+  lastUsedAt?: string;
+  revoked: boolean;
+}
+
+export interface A2aKeyCreated extends A2aKey {
+  apiKey: string;
+}
+
+export async function listA2aKeys(agentId: string): Promise<A2aKey[]> {
+  const resp = await apiGet<{ keys?: A2aKey[] }>(
+    `/agents/${encodeURIComponent(agentId)}/a2a-keys`
+  );
+  return resp.keys ?? [];
+}
+
+export async function createA2aKey(agentId: string): Promise<A2aKeyCreated> {
+  return apiPost<A2aKeyCreated>(`/agents/${encodeURIComponent(agentId)}/a2a-keys`, {});
+}
+
+export async function revokeA2aKey(agentId: string, keyId: string): Promise<void> {
+  await apiDelete(
+    `/agents/${encodeURIComponent(agentId)}/a2a-keys/${encodeURIComponent(keyId)}`
+  );
+}
+
+export async function listMetaA2aKeys(): Promise<A2aKey[]> {
+  const resp = await apiGet<{ keys?: A2aKey[] }>(`/meta-agent/a2a-keys`);
+  return resp.keys ?? [];
+}
+
+export async function createMetaA2aKey(): Promise<A2aKeyCreated> {
+  return apiPost<A2aKeyCreated>(`/meta-agent/a2a-keys`, {});
+}
+
+export async function revokeMetaA2aKey(keyId: string): Promise<void> {
+  await apiDelete(`/meta-agent/a2a-keys/${encodeURIComponent(keyId)}`);
+}
+
+export function getPublicAgentCardUrl(agentId: string): string {
+  return `${window.location.origin}/a2a/agents/${encodeURIComponent(agentId)}/.well-known/agent-card.json`;
+}
+
+export function getA2aEndpointUrl(agentId: string): string {
+  return `${window.location.origin}/a2a/agents/${encodeURIComponent(agentId)}`;
+}
+
+export function getMetaA2aCardUrl(): string {
+  return `${window.location.origin}/a2a/meta-agent/.well-known/agent-card.json`;
+}
+
+export function getMetaA2aEndpointUrl(): string {
+  return `${window.location.origin}/a2a/meta-agent`;
+}
+
 // ── Agent runtime (AgentCore Control Plane passthrough) ──
 
 export interface AgentRuntimeInfo {

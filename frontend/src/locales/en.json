@@ -114,6 +114,25 @@
     "notFound": "Agent not found",
     "loadError": "Could not load agent"
   },
+  "integration": {
+    "title": "A2A Integration",
+    "description": "Expose this agent to external A2A-protocol clients.",
+    "cardUrl": "Agent Card URL",
+    "endpointUrl": "Endpoint URL",
+    "keysTitle": "Your API keys",
+    "noKeys": "You haven't created any keys yet.",
+    "generateKey": "Generate API key",
+    "revoke": "Revoke",
+    "newKeyTitle": "API key created",
+    "newKeyWarning": "Copy the key now — it will never be shown again.",
+    "copyKey": "Copy key",
+    "revokeConfirm": "Revoke key {{prefix}}…? This cannot be undone.",
+    "keyRevoked": "Key revoked",
+    "createdAt": "Created",
+    "lastUsedAt": "Last used",
+    "never": "never",
+    "copied": "Copied"
+  },
   "runtime": {
     "status": {
       "ready": "Ready",
