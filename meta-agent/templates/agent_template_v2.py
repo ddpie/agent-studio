@@ -37,6 +37,7 @@ for _name in _config.get("tool_names", []):
 async def invoke(payload, context):
     model_id = payload.get("model_id", MODEL_ID)
     import builtin_tools as _builtin
+    _builtin._workspace_id = payload.get("workspace_id", "")
     skills_listing = _builtin.get_skills_listing()
     prompt = SYSTEM_PROMPT
     if skills_listing:
@@ -49,7 +50,7 @@ async def invoke(payload, context):
     agent = Agent(
         model=BedrockModel(model_id=model_id),
         system_prompt=prompt,
-        tools=_ALL_TOOLS + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3],
+        tools=_ALL_TOOLS + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document],
     )
     async for chunk in _stream_with_tools(agent, _build_input(payload)):
         yield chunk
@@ -177,6 +178,7 @@ for _name in _config.get("tool_names", []):
 async def invoke(payload, context):
     model_id = payload.get("model_id", MODEL_ID)
     import builtin_tools as _builtin
+    _builtin._workspace_id = payload.get("workspace_id", "")
     skills_listing = _builtin.get_skills_listing()
     prompt = SYSTEM_PROMPT
     if skills_listing:
@@ -197,7 +199,7 @@ async def invoke(payload, context):
         agent = Agent(
             model=BedrockModel(model_id=model_id),
             system_prompt=prompt,
-            tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill, _builtin.run_command],
+            tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill, _builtin.run_command, _builtin.read_document],
         )
         async for chunk in _stream_with_tools(agent, _build_input(payload)):
             yield chunk
@@ -376,6 +378,9 @@ _S3_BUCKET = _os.getenv(
     f"bedrock-agentcore-codebuild-sources-{_ACCOUNT_ID}-{_REGION}",
 )
 _s3 = _boto3.client("s3", region_name=_REGION)
+
+# Per-invocation workspace id — main.py sets this before calling agent tools.
+_workspace_id = ""
 
 # Local cache directory — uses managed session storage if available, else /tmp
 _CACHE_ROOT = _Path("/mnt/workspace/skills") if _os.path.isdir("/mnt/workspace") else _Path("/tmp/skills_cache")
@@ -689,4 +694,158 @@ def upload_to_s3(local_path: str, filename: str = "") -> str:
         return f"File uploaded successfully. Include this download link in your response:\\n__S3_DOWNLOAD__:{s3_key}:{fname}"
     except Exception as e:
         return f"Upload failed: {e}"
+
+
+# Per-invocation limits for read_document
+_DOC_MAX_BYTES = 10 * 1024 * 1024   # 10 MB download ceiling
+_DOC_MAX_CHARS = 50_000             # output truncation ceiling
+
+
+def _doc_truncate(text: str) -> str:
+    """Truncate to _DOC_MAX_CHARS with a clear warning suffix."""
+    if len(text) <= _DOC_MAX_CHARS:
+        return text
+    return text[:_DOC_MAX_CHARS] + (
+        f"\\n\\n... [TRUNCATED: document exceeded "
+        f"{_DOC_MAX_CHARS} characters, showing first portion only]"
+    )
+
+
+@_tool
+def read_document(file_key: str) -> str:
+    """Read an uploaded document (PDF, xlsx, csv, tsv) from the workspace and return its text content.
+
+    Prefer this over generic file readers when the user uploads a PDF, Excel workbook, or
+    tabular text file. Accepts an S3 key under the current workspace only — cross-workspace
+    access is rejected.
+
+    Args:
+        file_key: Relative S3 key under ``workspaces/<caller_ws>/storage/`` (e.g.
+            ``workspaces/ws-abc/storage/uploads/u-xyz/report.pdf``).
+
+    Returns:
+        Plain text extracted from the document, or a short diagnostic string on error.
+        Output is capped at 50,000 characters; downloads exceeding 10 MB are rejected.
+    """
+    if not file_key or not isinstance(file_key, str):
+        return "Error: file_key is required."
+
+    # Normalize leading slash; forbid absolute URLs
+    if "://" in file_key:
+        return "Error: file_key must be an S3 key, not a URL."
+    key = file_key.lstrip("/")
+
+    # Workspace scoping — read_document refuses anything outside the caller's workspace
+    ws = _workspace_id or ""
+    if not ws:
+        return "Error: workspace context is not available; cannot validate file access."
+    required_prefix = f"workspaces/{ws}/storage/"
+    if not key.startswith(required_prefix):
+        return (
+            "Error: file_key must start with "
+            f"'workspaces/{ws}/storage/'. Cross-workspace reads are not allowed."
+        )
+
+    # Resolve extension — case-insensitive
+    lower = key.lower()
+    if lower.endswith(".pdf"):
+        kind = "pdf"
+    elif lower.endswith(".xlsx") or lower.endswith(".xlsm"):
+        kind = "xlsx"
+    elif lower.endswith(".csv"):
+        kind = "csv"
+    elif lower.endswith(".tsv"):
+        kind = "tsv"
+    else:
+        return (
+            "Error: unsupported file type. read_document supports .pdf, .xlsx, .xlsm, "
+            ".csv, .tsv. For plain text use a different tool."
+        )
+
+    # Size check via HEAD before download
+    try:
+        head = _s3.head_object(Bucket=_S3_BUCKET, Key=key)
+        size = int(head.get("ContentLength", 0) or 0)
+    except Exception as e:
+        return f"Error: failed to stat s3://{_S3_BUCKET}/{key}: {e}"
+
+    if size > _DOC_MAX_BYTES:
+        return (
+            f"Error: file is {size} bytes, exceeds 10 MB limit. "
+            "Ask the user to provide a smaller file or a specific excerpt."
+        )
+
+    try:
+        obj = _s3.get_object(Bucket=_S3_BUCKET, Key=key)
+        data = obj["Body"].read()
+    except Exception as e:
+        return f"Error: failed to download s3://{_S3_BUCKET}/{key}: {e}"
+
+    if len(data) > _DOC_MAX_BYTES:
+        return (
+            f"Error: downloaded {len(data)} bytes, exceeds 10 MB limit."
+        )
+
+    try:
+        if kind == "pdf":
+            import io as _io
+            try:
+                from pypdf import PdfReader  # type: ignore
+            except ImportError:
+                return "Error: pypdf is not installed in the sub-agent runtime."
+            try:
+                reader = PdfReader(_io.BytesIO(data))
+            except Exception as e:
+                return f"Error: failed to open PDF: {e}"
+            pages = []
+            for i, page in enumerate(reader.pages, start=1):
+                try:
+                    text = page.extract_text() or ""
+                except Exception as e:
+                    text = f"[page extraction failed: {e}]"
+                pages.append(f"\\n\\n=== Page {i} ===\\n\\n" + text)
+            body = "".join(pages).lstrip()
+            if not body.strip():
+                return "(PDF contains no extractable text — it may be scanned or image-only.)"
+            return _doc_truncate(body)
+
+        if kind == "xlsx":
+            import io as _io
+            try:
+                from openpyxl import load_workbook  # type: ignore
+            except ImportError:
+                return "Error: openpyxl is not installed in the sub-agent runtime."
+            try:
+                wb = load_workbook(filename=_io.BytesIO(data), data_only=True, read_only=True)
+            except Exception as e:
+                return f"Error: failed to open workbook: {e}"
+            parts = []
+            for sheet_name in wb.sheetnames:
+                parts.append(f"=== Sheet: {sheet_name} ===")
+                ws_obj = wb[sheet_name]
+                for row in ws_obj.iter_rows(values_only=True):
+                    cells = ["" if v is None else str(v) for v in row]
+                    parts.append("\\t".join(cells))
+                parts.append("")  # blank line between sheets
+            body = "\\n".join(parts).rstrip()
+            return _doc_truncate(body)
+
+        # csv / tsv
+        try:
+            import pandas as _pd  # type: ignore
+        except ImportError:
+            return "Error: pandas is not installed in the sub-agent runtime."
+        import io as _io
+        sep = "\\t" if kind == "tsv" else ","
+        try:
+            df = _pd.read_csv(_io.BytesIO(data), sep=sep)
+        except Exception as e:
+            return f"Error: failed to parse {kind}: {e}"
+        try:
+            body = df.to_string(index=False)
+        except Exception as e:
+            return f"Error: failed to render {kind} as text: {e}"
+        return _doc_truncate(body)
+    except Exception as e:
+        return f"Error: unexpected failure while extracting document text: {e}"
 '''
