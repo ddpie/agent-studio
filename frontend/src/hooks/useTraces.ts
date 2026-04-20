@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import {
   listTraces,
   getSessionTrace,
+  getSessionOutput,
   fetchTraceStats,
   type TraceSummary,
   type TraceSpan,
   type TraceStats,
   type TraceStatsRange,
+  type SessionOutput,
 } from "../lib/api-client";
 
 export function useTraceSessions(agentId: string | null) {
@@ -50,6 +52,7 @@ export function useSessionTrace(agentId: string | null, sessionId: string | null
   const [root, setRoot] = useState<TraceSpan | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
+  const [pending, setPending] = useState(false);
   const mountedRef = useRef(true);
 
   useEffect(() => () => { mountedRef.current = false; }, []);
@@ -57,24 +60,106 @@ export function useSessionTrace(agentId: string | null, sessionId: string | null
   useEffect(() => {
     if (!agentId || !sessionId) return;
     let cancelled = false;
-    setLoading(true);
-    getSessionTrace(agentId, sessionId)
-      .then((r) => {
-        if (!cancelled && mountedRef.current) {
-          setRoot(r);
-          setError(null);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled && mountedRef.current) setError(err as Error);
-      })
-      .finally(() => {
-        if (!cancelled && mountedRef.current) setLoading(false);
-      });
+    let retry = 0;
+    // A schedule-triggered run + OTEL export + CloudWatch ingestion +
+    // Logs Insights indexing can easily take 40-60s before spans are
+    // queryable. 36 × 2.5s = 90s covers the common case.
+    const MAX_RETRIES = 36;
+    const attempt = (): void => {
+      setLoading(true);
+      getSessionTrace(agentId, sessionId)
+        .then((r) => {
+          if (cancelled || !mountedRef.current) return;
+          if (r) {
+            setRoot(r);
+            setError(null);
+            setPending(false);
+            setLoading(false);
+          } else if (retry < MAX_RETRIES) {
+            retry += 1;
+            setPending(true);
+            setTimeout(attempt, 2500);
+          } else {
+            setRoot(null);
+            setPending(true);
+            setLoading(false);
+          }
+        })
+        .catch((err: unknown) => {
+          if (cancelled || !mountedRef.current) return;
+          // Spans haven't landed in CloudWatch yet — the backend returns
+          // 404 until the first span for this session exists. Retry
+          // silently instead of surfacing a scary error. Duck-type on
+          // `status` so we don't depend on ApiError class identity (which
+          // can fragment across bundled chunks).
+          const status = (err as { status?: number })?.status;
+          if (status === 404 && retry < MAX_RETRIES) {
+            retry += 1;
+            setPending(true);
+            setTimeout(attempt, 2500);
+            return;
+          }
+          setError(err as Error);
+          setPending(false);
+          setLoading(false);
+        });
+    };
+    attempt();
     return () => { cancelled = true; };
   }, [agentId, sessionId]);
 
-  return { root, error, loading };
+  return { root, error, loading, pending };
+}
+
+export function useSessionOutput(agentId: string | null, sessionId: string | null) {
+  const [data, setData] = useState<SessionOutput | null>(null);
+  const [error, setError] = useState<Error | null>(null);
+  const [loading, setLoading] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
+  useEffect(() => {
+    if (!agentId || !sessionId) {
+      setData(null);
+      return;
+    }
+    let cancelled = false;
+    let retry = 0;
+    const MAX_RETRIES = 36;
+    const attempt = (): void => {
+      setLoading(true);
+      getSessionOutput(agentId, sessionId)
+        .then((r) => {
+          if (cancelled || !mountedRef.current) return;
+          // Runtime log stream not created yet OR empty — retry; tokens
+          // usually land within 20-60s of a scheduled fire.
+          if (!r.hasOutput && retry < MAX_RETRIES) {
+            retry += 1;
+            setTimeout(attempt, 2500);
+          } else {
+            setData(r);
+            setError(null);
+            setLoading(false);
+          }
+        })
+        .catch((err: unknown) => {
+          if (cancelled || !mountedRef.current) return;
+          const status = (err as { status?: number })?.status;
+          if (status === 404 && retry < MAX_RETRIES) {
+            retry += 1;
+            setTimeout(attempt, 2500);
+            return;
+          }
+          setError(err as Error);
+          setLoading(false);
+        });
+    };
+    attempt();
+    return () => { cancelled = true; };
+  }, [agentId, sessionId]);
+
+  return { data, error, loading };
 }
 
 export function useTraceStats(agentId: string | null, range: TraceStatsRange) {

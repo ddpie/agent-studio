@@ -103,6 +103,21 @@ def _field(row: list, name: str):
     return None
 
 
+def _as_utc_iso(ts: str | None) -> str | None:
+    """CloudWatch Logs Insights emits `@timestamp` as "YYYY-MM-DD HH:MM:SS.fff"
+    in UTC with no tz suffix. Browsers parsing a naive string treat it as
+    local time, so we normalise to `YYYY-MM-DDTHH:MM:SS.fffZ`.
+    """
+    if not ts:
+        return ts
+    s = ts.strip()
+    if not s:
+        return s
+    if s.endswith("Z") or "+" in s[10:] or s.endswith("UTC"):
+        return s
+    return s.replace(" ", "T", 1) + "Z"
+
+
 @router.get("/api/workspaces/<wsId>/agents/<agentId>/traces")
 def list_traces(wsId: str, agentId: str):
     user_id, ws_id, _, err = auth_check(router.current_event, ws_id=wsId)
@@ -115,20 +130,60 @@ def list_traces(wsId: str, agentId: str):
     if not item or item.get("workspace_id") != ws_id:
         return forbidden()
 
-    q = f"""
-fields @timestamp, attributes.session.id as sessionId, traceId, attributes.aws.agent.id as agentRuntimeId
-| filter agentRuntimeId = "{agentId}" and ispresent(sessionId)
+    # Two passes — the stats engine only lets us aggregate one level at a
+    # time. Pass 1: session totals (spans + firstEvent). Pass 2: look up
+    # invoke_agent / POST /invocations per session for latency + tokens +
+    # status. We pass the same 24h window to both.
+    list_q = f"""
+fields @timestamp, attributes.session.id as sessionId, traceId, resource.attributes.service.name as svc
+| filter svc = "{agentId}" and ispresent(sessionId)
 | stats min(@timestamp) as firstEvent, count(*) as spanCount by sessionId, traceId
 | sort firstEvent desc
 | limit 50
 """.strip()
 
+    meta_q = f"""
+fields attributes.session.id as sid, resource.attributes.service.name as svc, name as spanName, status.code as statusCode,
+       attributes.gen_ai.request.model as model,
+       attributes.gen_ai.usage.input_tokens as inputTokens,
+       attributes.gen_ai.usage.output_tokens as outputTokens,
+       attributes.gen_ai.usage.total_tokens as totalTokens,
+       (durationNano / 1000000) as durMs
+| filter svc = "{agentId}" and ispresent(sid) and (spanName = "invoke_agent Strands Agents" or spanName = "POST /invocations")
+| stats max(model) as model,
+        max(inputTokens) as inputTokens,
+        max(outputTokens) as outputTokens,
+        max(totalTokens) as totalTokens,
+        max(durMs) as durMs,
+        max(statusCode) as statusCode by sid
+| limit 100
+""".strip()
+
     try:
-        rows = _run_query(q, hours=24)
+        rows = _run_query(list_q, hours=24)
     except ClientError as e:
         logger.exception("traces query failed",
                          extra={"error_code": e.response.get("Error", {}).get("Code")})
         return internal_error()
+
+    try:
+        meta_rows = _run_query(meta_q, hours=24, timeout_s=_STATS_QUERY_TIMEOUT_S)
+    except ClientError:
+        meta_rows = []
+
+    meta_by_sid: dict[str, dict] = {}
+    for row in meta_rows:
+        sid = _field(row, "sid")
+        if not sid:
+            continue
+        meta_by_sid[sid] = {
+            "model": _field(row, "model"),
+            "inputTokens": _to_int(_field(row, "inputTokens")) or None,
+            "outputTokens": _to_int(_field(row, "outputTokens")) or None,
+            "totalTokens": _to_int(_field(row, "totalTokens")) or None,
+            "durationMs": _round_ms(_field(row, "durMs")),
+            "status": _field(row, "statusCode") or "OK",
+        }
 
     sessions = []
     for row in rows:
@@ -139,11 +194,16 @@ fields @timestamp, attributes.session.id as sessionId, traceId, attributes.aws.a
             count = int(_field(row, "spanCount") or "0")
         except ValueError:
             count = 0
+        meta = meta_by_sid.get(sid, {})
         sessions.append({
             "sessionId": sid,
             "traceId": _field(row, "traceId"),
-            "firstEvent": _field(row, "firstEvent"),
+            "firstEvent": _as_utc_iso(_field(row, "firstEvent")),
             "spanCount": count,
+            "model": meta.get("model"),
+            "totalTokens": meta.get("totalTokens"),
+            "durationMs": meta.get("durationMs"),
+            "status": meta.get("status") or "OK",
         })
     return success({"sessions": sessions})
 
@@ -241,6 +301,141 @@ fields spanId, parentSpanId, name, startTimeUnixNano, endTimeUnixNano, status.co
     return success({"root": root, "totalSpans": len(spans_by_id)})
 
 
+# Filter out framework / OTEL noise from the runtime log stream so what
+# remains is the sub-agent's stdout (= the final user-facing output).
+_OUTPUT_SKIP_PATTERNS = (
+    re.compile(r"^\d{4}-\d{2}-\d{2} .* (INFO|WARNING|ERROR|DEBUG) "),
+    re.compile(r"^WARNING:"),
+    re.compile(r"^INFO:"),
+    re.compile(r"^ERROR:"),
+    re.compile(r"Failed to export logs batch"),
+    re.compile(r'^\{"timestamp":'),
+)
+
+
+def _looks_like_framework_noise(line: str) -> bool:
+    s = line.strip()
+    if not s:
+        return True
+    for pat in _OUTPUT_SKIP_PATTERNS:
+        if pat.search(s):
+            return True
+    return False
+
+
+@router.get("/api/workspaces/<wsId>/agents/<agentId>/traces/<sessionId>/output")
+def get_session_output(wsId: str, agentId: str, sessionId: str):
+    """Return the agent's user-facing output text + per-session metrics.
+
+    We read stdout-like lines from the sub-agent's runtime log stream
+    (`/aws/bedrock-agentcore/runtimes/{agentId}-DEFAULT`) and aggregate
+    usage from the OTEL spans in aws/spans.
+
+    Kept separate from the span-tree endpoint so the heavy runtime-log
+    lookup only runs when the UI needs output.
+    """
+    user_id, ws_id, _, err = auth_check(router.current_event, ws_id=wsId)
+    if err:
+        return err
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+    item = _get_agent_item(agentId)
+    if not item or item.get("workspace_id") != ws_id:
+        return forbidden()
+    if not sessionId or not _SESSION_ID_RE.match(sessionId):
+        return bad_request("invalid sessionId")
+
+    logs = _get_logs()
+
+    # 1) Metrics from aws/spans — invoke_agent gives tokens + model;
+    #    POST /invocations gives wall clock.
+    meta_q = f"""
+fields resource.attributes.service.name as svc, attributes.session.id as sid, name as spanName, status.code as statusCode,
+       attributes.gen_ai.request.model as model,
+       attributes.gen_ai.usage.input_tokens as inputTokens,
+       attributes.gen_ai.usage.output_tokens as outputTokens,
+       attributes.gen_ai.usage.total_tokens as totalTokens,
+       (durationNano / 1000000) as durMs
+| filter svc = "{agentId}" and sid = "{sessionId}" and (spanName = "invoke_agent Strands Agents" or spanName = "POST /invocations")
+| stats max(model) as model,
+        max(inputTokens) as inputTokens,
+        max(outputTokens) as outputTokens,
+        max(totalTokens) as totalTokens,
+        max(durMs) as durMs,
+        max(statusCode) as statusCode
+""".strip()
+    try:
+        meta_rows = _run_query(meta_q, hours=24, timeout_s=_STATS_QUERY_TIMEOUT_S)
+    except ClientError:
+        meta_rows = []
+
+    meta: dict = {"model": None, "inputTokens": None, "outputTokens": None,
+                  "totalTokens": None, "durationMs": None, "status": "OK"}
+    if meta_rows:
+        row = meta_rows[0]
+        meta["model"] = _field(row, "model")
+        meta["inputTokens"] = _to_int(_field(row, "inputTokens")) or None
+        meta["outputTokens"] = _to_int(_field(row, "outputTokens")) or None
+        meta["totalTokens"] = _to_int(_field(row, "totalTokens")) or None
+        meta["durationMs"] = _round_ms(_field(row, "durMs"))
+        meta["status"] = _field(row, "statusCode") or "OK"
+
+    # 2) Free-text output from the runtime log stream. Stream name shape:
+    #    `2026/04/20/[runtime-logs-<sessionId>]<stream-uuid>`
+    runtime_log_group = f"/aws/bedrock-agentcore/runtimes/{agentId}-DEFAULT"
+    stream_prefix_fragment = f"runtime-logs-{sessionId}"
+    output_lines: list[str] = []
+    matched_stream: str | None = None
+    try:
+        streams = logs.describe_log_streams(
+            logGroupName=runtime_log_group,
+            orderBy="LastEventTime",
+            descending=True,
+            limit=50,
+        ).get("logStreams", [])
+        for s in streams:
+            sname = s.get("logStreamName", "")
+            if stream_prefix_fragment in sname:
+                matched_stream = sname
+                break
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        # Runtime log group may not exist yet for a freshly-deployed agent;
+        # surface an empty output with 200 rather than 500 so the UI can
+        # still show the metrics strip.
+        if code == "ResourceNotFoundException":
+            matched_stream = None
+        else:
+            logger.exception("describe_log_streams failed",
+                             extra={"agentId": agentId, "code": code})
+            return internal_error()
+
+    if matched_stream:
+        try:
+            ev_resp = logs.get_log_events(
+                logGroupName=runtime_log_group,
+                logStreamName=matched_stream,
+                startFromHead=True,
+                limit=200,
+            )
+            for e in ev_resp.get("events", []):
+                msg = (e.get("message") or "").rstrip()
+                if not _looks_like_framework_noise(msg):
+                    output_lines.append(msg)
+        except ClientError as e:
+            logger.warning("get_log_events failed",
+                           extra={"agentId": agentId, "stream": matched_stream,
+                                  "code": e.response.get("Error", {}).get("Code", "")})
+
+    return success({
+        "sessionId": sessionId,
+        "output": "\n".join(output_lines).strip(),
+        "hasOutput": bool(output_lines),
+        "metrics": meta,
+    })
+
+
 def _to_float(v) -> float | None:
     if v is None:
         return None
@@ -296,17 +491,22 @@ def get_trace_stats(wsId: str, agentId: str):
     # attributes.latency_ms is ms; we also pull durationNano as a fallback
     # (divided by 1e6) but prefer latency_ms when present.
     # Error count: status.code = "ERROR". Other values (OK/UNSET) count as success.
+    # Identify spans by resource.attributes.service.name (what AgentCore
+    # actually emits — `attributes.aws.agent.id` doesn't exist). Filter
+    # to the top-level request span `POST /invocations` (SERVER kind);
+    # durationNano is always present, latency_ms isn't, so compute ms
+    # from duration.
     summary_q = f"""
-fields attributes.aws.agent.id as agentRuntimeId, name as spanName, status.code as statusCode, attributes.latency_ms as latencyMs
-| filter agentRuntimeId = "{agentId}" and spanName = "AgentCore.Runtime.Invoke"
+fields resource.attributes.service.name as svc, name as spanName, kind, status.code as statusCode, (durationNano / 1000000) as durMs
+| filter svc = "{agentId}" and spanName = "POST /invocations"
 | fields (statusCode = "ERROR") as isError
 | stats count(*) as total,
         sum(isError) as errors,
-        avg(latencyMs) as avgMs,
-        pct(latencyMs, 50) as p50,
-        pct(latencyMs, 90) as p90,
-        pct(latencyMs, 95) as p95,
-        pct(latencyMs, 99) as p99
+        avg(durMs) as avgMs,
+        pct(durMs, 50) as p50,
+        pct(durMs, 90) as p90,
+        pct(durMs, 95) as p95,
+        pct(durMs, 99) as p99
 """.strip()
 
     try:
@@ -335,12 +535,12 @@ fields attributes.aws.agent.id as agentRuntimeId, name as spanName, status.code 
 
     # Time series — bucketed. Use @timestamp for bucketing.
     series_q = f"""
-fields @timestamp, attributes.aws.agent.id as agentRuntimeId, name as spanName, status.code as statusCode, attributes.latency_ms as latencyMs
-| filter agentRuntimeId = "{agentId}" and spanName = "AgentCore.Runtime.Invoke"
+fields @timestamp, resource.attributes.service.name as svc, name as spanName, status.code as statusCode, (durationNano / 1000000) as durMs
+| filter svc = "{agentId}" and spanName = "POST /invocations"
 | fields (statusCode = "ERROR") as isError
 | stats count(*) as c,
         sum(isError) as e,
-        pct(latencyMs, 95) as p95 by bin({cfg['bin']}) as bucket
+        pct(durMs, 95) as p95 by bin({cfg['bin']}) as bucket
 | sort bucket asc
 """.strip()
 
