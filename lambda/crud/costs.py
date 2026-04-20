@@ -63,9 +63,17 @@ PRICING: dict[str, tuple[float, float]] = {
     "claude-opus-4-7":    (15.00, 75.00),
     "claude-sonnet-4-6":  ( 3.00, 15.00),
     "claude-haiku-4-5":   ( 0.80,  4.00),
+    # Claude 4.0 base (sonnet-4-20250514, opus-4-20250514, etc.)
+    "claude-opus-4":      (15.00, 75.00),
+    "claude-sonnet-4":    ( 3.00, 15.00),
+    "claude-haiku-4":     ( 0.80,  4.00),
     # Claude 3.5 family
     "claude-3-5-sonnet":  ( 3.00, 15.00),
     "claude-3-5-haiku":   ( 0.80,  4.00),
+    # Claude 3 family (legacy)
+    "claude-3-opus":      (15.00, 75.00),
+    "claude-3-sonnet":    ( 3.00, 15.00),
+    "claude-3-haiku":     ( 0.25,  1.25),
     # Amazon Nova
     "amazon-nova-pro":    ( 0.80,  3.20),
     "amazon-nova-lite":   ( 0.06,  0.24),
@@ -224,23 +232,29 @@ def _agent_ids_for_workspace(workspace_id: str) -> list[dict]:
 
 
 def _per_agent_totals_query() -> str:
-    """Return an Insights query that produces per-agent call + token totals.
+    """Per-agent call + token totals.
 
-    Call count comes from AgentCore.Runtime.Invoke envelope spans (one per
-    invocation). Token totals come from gen_ai `chat` child spans emitted by
-    Strands / botocore auto-instrumentation — join on resource.service.name
-    which equals the agent id (set by OTEL_RESOURCE_ATTRIBUTES).
+    Token totals come from gen_ai `chat` child spans (carry usage.* attrs).
+    Call count uses a separate pass below since Insights doesn't aggregate
+    boolean expressions reliably across fields.
     """
     return """
 fields resource.attributes.service.name as agentRuntimeId,
        coalesce(attributes.gen_ai.usage.input_tokens, 0) as inTok,
-       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok,
-       (name = "AgentCore.Runtime.Invoke") as isInvoke
-| filter ispresent(agentRuntimeId)
-| stats sum(isInvoke) as calls,
-        sum(inTok) as inputTokens,
+       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok
+| filter ispresent(agentRuntimeId) and ispresent(attributes.gen_ai.usage.input_tokens)
+| stats sum(inTok) as inputTokens,
         sum(outTok) as outputTokens
         by agentRuntimeId
+""".strip()
+
+
+def _per_agent_calls_query() -> str:
+    """Invocation count per agent. Top-level agent span = one user-facing call."""
+    return """
+fields resource.attributes.service.name as agentRuntimeId
+| filter name = "invoke_agent Strands Agents" and ispresent(agentRuntimeId)
+| stats count(*) as calls by agentRuntimeId
 """.strip()
 
 
@@ -248,12 +262,20 @@ def _timeseries_query(bucket: str) -> str:
     return f"""
 fields resource.attributes.service.name as agentRuntimeId,
        coalesce(attributes.gen_ai.usage.input_tokens, 0) as inTok,
-       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok,
-       (name = "AgentCore.Runtime.Invoke") as isInvoke
-| filter ispresent(agentRuntimeId)
-| stats sum(isInvoke) as calls,
-        sum(inTok) as inputTokens,
+       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok
+| filter ispresent(agentRuntimeId) and ispresent(attributes.gen_ai.usage.input_tokens)
+| stats sum(inTok) as inputTokens,
         sum(outTok) as outputTokens
+        by bin({bucket}) as bucket, agentRuntimeId
+| sort bucket asc
+""".strip()
+
+
+def _timeseries_calls_query(bucket: str) -> str:
+    return f"""
+fields resource.attributes.service.name as agentRuntimeId
+| filter name = "invoke_agent Strands Agents" and ispresent(agentRuntimeId)
+| stats count(*) as calls
         by bin({bucket}) as bucket, agentRuntimeId
 | sort bucket asc
 """.strip()
@@ -263,12 +285,18 @@ def _single_agent_query(agent_id: str) -> str:
     # agent_id is validated upstream via validate_id().
     return f"""
 fields coalesce(attributes.gen_ai.usage.input_tokens, 0) as inTok,
-       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok,
-       (name = "AgentCore.Runtime.Invoke") as isInvoke
-| filter resource.attributes.service.name = "{agent_id}"
-| stats sum(isInvoke) as calls,
-        sum(inTok) as inputTokens,
+       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok
+| filter resource.attributes.service.name = "{agent_id}" and ispresent(attributes.gen_ai.usage.input_tokens)
+| stats sum(inTok) as inputTokens,
         sum(outTok) as outputTokens
+""".strip()
+
+
+def _single_agent_calls_query(agent_id: str) -> str:
+    return f"""
+fields @timestamp
+| filter resource.attributes.service.name = "{agent_id}" and name = "invoke_agent Strands Agents"
+| stats count(*) as calls
 """.strip()
 
 
@@ -307,13 +335,29 @@ def workspace_costs(wsId: str):
             },
         })
 
-    # Per-agent rollup
+    # Per-agent rollup: tokens from gen_ai chat spans, calls from top-level
+    # invoke_agent spans. Two independent queries because Insights can't
+    # bucket both token-carrying (chat) and invoke-counting (agent) rows in
+    # one pass without double-counting.
     try:
         rows = _run_query(_per_agent_totals_query(), start, end)
     except ClientError as e:
-        logger.exception("per-agent cost query failed",
+        logger.exception("per-agent token query failed",
                          extra={"error_code": e.response.get("Error", {}).get("Code")})
         rows = []
+
+    try:
+        call_rows = _run_query(_per_agent_calls_query(), start, end)
+    except ClientError as e:
+        logger.exception("per-agent calls query failed",
+                         extra={"error_code": e.response.get("Error", {}).get("Code")})
+        call_rows = []
+
+    calls_by_id: dict[str, int] = {}
+    for row in call_rows:
+        rid = _field(row, "agentRuntimeId")
+        if rid:
+            calls_by_id[rid] = _to_int(_field(row, "calls"))
 
     per_agent: list[dict] = []
     total_calls = 0
@@ -326,9 +370,9 @@ def workspace_costs(wsId: str):
         if not rid or rid not in by_id:
             continue  # skip agents outside this workspace
         info = by_id[rid]
-        calls = _to_int(_field(row, "calls"))
         in_tok = _to_int(_field(row, "inputTokens"))
         out_tok = _to_int(_field(row, "outputTokens"))
+        calls = calls_by_id.get(rid, 0)
         cost = _compute_cost(in_tok, out_tok, info["model_id"])
         per_agent.append({
             "agentId": rid,
@@ -361,11 +405,15 @@ def workspace_costs(wsId: str):
 
     per_agent.sort(key=lambda a: a["costUsd"], reverse=True)
 
-    # Timeseries
+    # Timeseries: tokens + calls in separate queries
     try:
         ts_rows = _run_query(_timeseries_query(bucket), start, end)
     except ClientError:
         ts_rows = []
+    try:
+        ts_call_rows = _run_query(_timeseries_calls_query(bucket), start, end)
+    except ClientError:
+        ts_call_rows = []
 
     # bucket -> {calls, cost}
     buckets: dict[str, dict] = {}
@@ -376,13 +424,22 @@ def workspace_costs(wsId: str):
         bkt = _field(row, "bucket") or ""
         if not bkt:
             continue
-        calls = _to_int(_field(row, "calls"))
         in_tok = _to_int(_field(row, "inputTokens"))
         out_tok = _to_int(_field(row, "outputTokens"))
         cost = _compute_cost(in_tok, out_tok, by_id[rid]["model_id"])
         slot = buckets.setdefault(bkt, {"calls": 0, "cost": 0.0})
-        slot["calls"] += calls
         slot["cost"] += cost
+
+    for row in ts_call_rows:
+        rid = _field(row, "agentRuntimeId")
+        if not rid or rid not in by_id:
+            continue
+        bkt = _field(row, "bucket") or ""
+        if not bkt:
+            continue
+        calls = _to_int(_field(row, "calls"))
+        slot = buckets.setdefault(bkt, {"calls": 0, "cost": 0.0})
+        slot["calls"] += calls
 
     timeseries = [
         {"bucket": b, "calls": v["calls"], "costUsd": round(v["cost"], 6)}
@@ -426,15 +483,21 @@ def agent_costs(wsId: str, agentId: str):
     try:
         rows = _run_query(_single_agent_query(agentId), start, end)
     except ClientError as e:
-        logger.exception("single-agent cost query failed",
+        logger.exception("single-agent token query failed",
                          extra={"error_code": e.response.get("Error", {}).get("Code")})
         rows = []
+    try:
+        call_rows = _run_query(_single_agent_calls_query(agentId), start, end)
+    except ClientError:
+        call_rows = []
 
-    calls = in_tok = out_tok = 0
+    in_tok = out_tok = 0
     for row in rows:
-        calls += _to_int(_field(row, "calls"))
         in_tok += _to_int(_field(row, "inputTokens"))
         out_tok += _to_int(_field(row, "outputTokens"))
+    calls = 0
+    for row in call_rows:
+        calls += _to_int(_field(row, "calls"))
 
     cost = _compute_cost(in_tok, out_tok, model_id)
 
