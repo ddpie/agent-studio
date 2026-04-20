@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { useTraceSessions, useSessionTrace, useSessionOutput } from "../../hooks/useTraces";
@@ -10,6 +11,10 @@ import { formatDateTime } from "../../lib/date-format";
 interface Props {
   agentId: string;
   initialSessionId?: string | null;
+  titleOverride?: string;
+  subtitleOverride?: string;
+  renderBadge?: (sessionId: string) => ReactNode;
+  onSelect?: (sessionId: string) => void;
 }
 
 function Metric({ label, value, mono }: { label: string; value: string | null | undefined; mono?: boolean }) {
@@ -67,10 +72,12 @@ function SessionListItem({
   session,
   selected,
   onSelect,
+  badge,
 }: {
   session: TraceSummary;
   selected: boolean;
   onSelect: () => void;
+  badge?: ReactNode;
 }) {
   const isError = (session.status || "").toUpperCase() === "ERROR";
   const when = formatRelativeTime(session.firstEvent);
@@ -107,12 +114,20 @@ function SessionListItem({
           {session.totalTokens != null && <span>{formatTokens(session.totalTokens)}</span>}
           <span>{session.spanCount} spans</span>
         </div>
+        {badge && (
+          <div
+            className="mt-1 inline-flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400"
+            data-testid={`run-source-${session.sessionId}`}
+          >
+            {badge}
+          </div>
+        )}
       </button>
     </li>
   );
 }
 
-export default function TracesTab({ agentId, initialSessionId }: Props) {
+export default function TracesTab({ agentId, initialSessionId, titleOverride, subtitleOverride, renderBadge, onSelect }: Props) {
   const { t } = useTranslation();
   const sessions = useTraceSessions(agentId);
   const [selected, setSelected] = useState<string | null>(initialSessionId ?? null);
@@ -134,8 +149,8 @@ export default function TracesTab({ agentId, initialSessionId }: Props) {
       <div className="w-72 flex-shrink-0">
         <div className="flex items-center justify-between mb-2">
           <div>
-            <h3 className="text-sm font-semibold">{t("traces.tab")}</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">{t("traces.subtitle")}</p>
+            <h3 className="text-sm font-semibold">{titleOverride ?? t("traces.tab")}</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{subtitleOverride ?? t("traces.subtitle")}</p>
           </div>
           <button
             type="button"
@@ -165,7 +180,11 @@ export default function TracesTab({ agentId, initialSessionId }: Props) {
                 key={s.sessionId}
                 session={s}
                 selected={selected === s.sessionId}
-                onSelect={() => setSelected(s.sessionId)}
+                onSelect={() => {
+                  setSelected(s.sessionId);
+                  onSelect?.(s.sessionId);
+                }}
+                badge={renderBadge?.(s.sessionId)}
               />
             ))}
           </ul>

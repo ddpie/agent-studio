@@ -107,12 +107,13 @@ vi.mock("../../../stores/workspace-store", () => ({
 
 import AgentDetailPage from "../AgentDetailPage";
 
-function renderPage() {
+function renderPage(initialPath: string = "/agents/agt-1") {
   return render(
     <I18nextProvider i18n={i18n}>
-      <MemoryRouter initialEntries={["/agents/agt-1"]}>
+      <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path="/agents/:agentId" element={<AgentDetailPage />} />
+          <Route path="/agents/:agentId/runs/:sessionId" element={<AgentDetailPage />} />
         </Routes>
       </MemoryRouter>
     </I18nextProvider>
@@ -160,10 +161,11 @@ describe("AgentDetailPage", () => {
     expect(await screen.findByTestId("evaluations-tab")).toBeInTheDocument();
   });
 
-  it("renders Traces section", async () => {
+  it("renders Runs section (formerly Traces)", async () => {
     renderPage();
     await screen.findByTestId("agent-detail-title");
-    expect(await screen.findByTestId("traces-tab")).toBeInTheDocument();
+    expect(await screen.findByTestId("runs-section")).toBeInTheDocument();
+    expect(await screen.findByTestId("traces-tab")).toBeInTheDocument(); // inner TracesTab testid preserved
   });
 
   it("renders Integration section with card/endpoint URLs", async () => {
@@ -172,5 +174,22 @@ describe("AgentDetailPage", () => {
     expect(await screen.findByTestId("integration-tab")).toBeInTheDocument();
     expect(await screen.findByTestId("card-url-value")).toHaveTextContent(/well-known\/agent-card\.json/);
     expect(await screen.findByTestId("endpoint-url-value")).toHaveTextContent(/\/a2a\/agents\//);
+  });
+
+  it("renders the Advanced group header and keeps Deployments/Endpoints/Secrets/Logs inside it", async () => {
+    renderPage();
+    await screen.findByTestId("agent-detail-title");
+    expect(await screen.findByTestId("nav-group-advanced")).toBeInTheDocument();
+    expect(await screen.findByTestId("deployments-section")).toBeInTheDocument();
+    expect(await screen.findByTestId("endpoints-section")).toBeInTheDocument();
+    expect(await screen.findByTestId("secrets-section")).toBeInTheDocument();
+    expect(await screen.findByTestId("logs-section")).toBeInTheDocument();
+  });
+
+  it("pre-selects a run when routed to /agents/:id/runs/:sessionId", async () => {
+    renderPage("/agents/agt-1/runs/sched-daily-manual-123");
+    await screen.findByTestId("agent-detail-title");
+    // When a sessionId is pre-selected, the "select a session" placeholder is hidden.
+    expect(screen.queryByText(/select a session/i)).not.toBeInTheDocument();
   });
 });
