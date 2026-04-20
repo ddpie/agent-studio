@@ -134,28 +134,45 @@ def list_traces(wsId: str, agentId: str):
     # time. Pass 1: session totals (spans + firstEvent). Pass 2: look up
     # invoke_agent / POST /invocations per session for latency + tokens +
     # status. We pass the same 24h window to both.
+    # Group by sessionId only — a multi-turn chat shares one session id,
+    # so turns land in the same row (turnCount = count_distinct(traceId)).
+    # The Runs tab shows one row per conversation and expands to individual
+    # turns on click. Scheduled / manual / one-shot runs all have
+    # turnCount=1, which is fine.
     list_q = f"""
 fields @timestamp, attributes.session.id as sessionId, traceId, resource.attributes.service.name as svc
 | filter svc = "{agentId}" and ispresent(sessionId)
-| stats min(@timestamp) as firstEvent, count(*) as spanCount by sessionId, traceId
+| stats min(@timestamp) as firstEvent, max(@timestamp) as lastEvent, count(*) as spanCount, count_distinct(traceId) as turnCount by sessionId
 | sort firstEvent desc
 | limit 50
 """.strip()
 
+    # `chat.title` is only set on the root POST /invocations span in the
+    # session's first turn. Using `max()` picks the earliest recorded
+    # non-null value across the session — good enough when ADOT pushes
+    # them in order.
+    # CWL Logs Insights (Opensearch PPL) rejects reusing an `as`-aliased
+    # field name inside the same query — both the `fields` alias and the
+    # `stats ... as` must be unique. We use *Raw suffixes in `fields` and
+    # drop back to the clean names in `stats`. Without this every meta
+    # query hits MalformedQueryException and the Runs list loses tokens,
+    # latency, model, status AND chat.title.
     meta_q = f"""
-fields attributes.session.id as sid, resource.attributes.service.name as svc, name as spanName, status.code as statusCode,
-       attributes.gen_ai.request.model as model,
-       attributes.gen_ai.usage.input_tokens as inputTokens,
-       attributes.gen_ai.usage.output_tokens as outputTokens,
-       attributes.gen_ai.usage.total_tokens as totalTokens,
-       (durationNano / 1000000) as durMs
+fields attributes.session.id as sid, resource.attributes.service.name as svc, name as spanName, status.code as statusRaw,
+       attributes.gen_ai.request.model as modelRaw,
+       attributes.gen_ai.usage.input_tokens as inputTokensRaw,
+       attributes.gen_ai.usage.output_tokens as outputTokensRaw,
+       attributes.gen_ai.usage.total_tokens as totalTokensRaw,
+       attributes.chat.title as titleRaw,
+       (durationNano / 1000000) as durMsRaw
 | filter svc = "{agentId}" and ispresent(sid) and (spanName = "invoke_agent Strands Agents" or spanName = "POST /invocations")
-| stats max(model) as model,
-        max(inputTokens) as inputTokens,
-        max(outputTokens) as outputTokens,
-        max(totalTokens) as totalTokens,
-        max(durMs) as durMs,
-        max(statusCode) as statusCode by sid
+| stats max(modelRaw) as model,
+        max(inputTokensRaw) as inputTokens,
+        max(outputTokensRaw) as outputTokens,
+        max(totalTokensRaw) as totalTokens,
+        earliest(titleRaw) as chatTitle,
+        max(durMsRaw) as durMs,
+        max(statusRaw) as statusCode by sid
 | limit 100
 """.strip()
 
@@ -181,6 +198,7 @@ fields attributes.session.id as sid, resource.attributes.service.name as svc, na
             "inputTokens": _to_int(_field(row, "inputTokens")) or None,
             "outputTokens": _to_int(_field(row, "outputTokens")) or None,
             "totalTokens": _to_int(_field(row, "totalTokens")) or None,
+            "chatTitle": _field(row, "chatTitle") or None,
             "durationMs": _round_ms(_field(row, "durMs")),
             "status": _field(row, "statusCode") or "OK",
         }
@@ -194,15 +212,21 @@ fields attributes.session.id as sid, resource.attributes.service.name as svc, na
             count = int(_field(row, "spanCount") or "0")
         except ValueError:
             count = 0
+        try:
+            turns = int(_field(row, "turnCount") or "1")
+        except ValueError:
+            turns = 1
         meta = meta_by_sid.get(sid, {})
         sessions.append({
             "sessionId": sid,
-            "traceId": _field(row, "traceId"),
             "firstEvent": _as_utc_iso(_field(row, "firstEvent")),
+            "lastEvent": _as_utc_iso(_field(row, "lastEvent")),
             "spanCount": count,
+            "turnCount": turns,
             "model": meta.get("model"),
             "totalTokens": meta.get("totalTokens"),
             "durationMs": meta.get("durationMs"),
+            "title": meta.get("chatTitle"),
             "status": meta.get("status") or "OK",
         })
     return success({"sessions": sessions})
@@ -231,11 +255,15 @@ def get_session_trace(wsId: str, agentId: str, sessionId: str):
     if not sessionId or not _SESSION_ID_RE.match(sessionId):
         return bad_request("invalid sessionId")
 
+    # Pull traceId + chat.title so we can split a multi-turn conversation
+    # into per-turn span trees (one per traceId). Each trace == one user
+    # turn; its root "POST /invocations" span carries `chat.title` = the
+    # user's prompt for that turn.
     q = f"""
-fields spanId, parentSpanId, name, startTimeUnixNano, endTimeUnixNano, status.code as status, attributes.session.id as sessionId
+fields spanId, parentSpanId, name, startTimeUnixNano, endTimeUnixNano, status.code as status, attributes.session.id as sessionId, traceId, attributes.chat.title as chatTitle
 | filter sessionId = "{sessionId}"
 | sort startTimeUnixNano asc
-| limit 500
+| limit 2000
 """.strip()
 
     try:
@@ -248,9 +276,12 @@ fields spanId, parentSpanId, name, startTimeUnixNano, endTimeUnixNano, status.co
     if not rows:
         return not_found()
 
-    spans_by_id: dict[str, dict] = {}
+    # Bucket spans by traceId (= one turn).
+    spans_by_trace: dict[str, dict[str, dict]] = {}
+    turn_meta: dict[str, dict] = {}
     for row in rows:
         sid = _field(row, "spanId")
+        tid = _field(row, "traceId") or "__no_trace__"
         if not sid:
             continue
         try:
@@ -259,7 +290,7 @@ fields spanId, parentSpanId, name, startTimeUnixNano, endTimeUnixNano, status.co
         except ValueError:
             continue
         parent = _field(row, "parentSpanId") or None
-        spans_by_id[sid] = {
+        span = {
             "spanId": sid,
             "parentSpanId": parent,
             "name": _field(row, "name") or "",
@@ -268,37 +299,69 @@ fields spanId, parentSpanId, name, startTimeUnixNano, endTimeUnixNano, status.co
             "status": _field(row, "status") or "OK",
             "children": [],
         }
+        spans_by_trace.setdefault(tid, {})[sid] = span
 
-    root = None
-    orphans = []
-    for sp in spans_by_id.values():
-        parent = sp["parentSpanId"]
-        if parent and parent in spans_by_id:
-            spans_by_id[parent]["children"].append(sp)
-        else:
-            if root is None:
-                root = sp
+        title = _field(row, "chatTitle")
+        if title:
+            # The first span to carry chat.title wins — templates set it on
+            # the entrypoint span, which starts before any children.
+            turn_meta.setdefault(tid, {})["title"] = title
+
+    def _assemble_tree(spans_map: dict[str, dict], trace_id: str) -> dict:
+        root = None
+        orphans = []
+        for sp in spans_map.values():
+            parent_sid = sp["parentSpanId"]
+            if parent_sid and parent_sid in spans_map:
+                spans_map[parent_sid]["children"].append(sp)
             else:
-                orphans.append(sp)
+                if root is None:
+                    root = sp
+                else:
+                    orphans.append(sp)
+        if root is None:
+            children = sorted(spans_map.values(), key=lambda s: s["startMs"])
+            root = {
+                "spanId": "__synthetic__",
+                "parentSpanId": None,
+                "name": f"trace:{trace_id}",
+                "startMs": children[0]["startMs"] if children else 0,
+                "durationMs": 0,
+                "status": "OK",
+                "children": children,
+            }
+        elif orphans:
+            root["children"].extend(sorted(orphans, key=lambda s: s["startMs"]))
+        return root
 
-    if root is None:
-        # No parent resolution. Return a synthetic root wrapping everything.
-        children = sorted(spans_by_id.values(), key=lambda s: s["startMs"])
-        root = {
-            "spanId": "__synthetic__",
-            "parentSpanId": None,
-            "name": f"session:{sessionId}",
-            "startMs": children[0]["startMs"] if children else 0,
-            "durationMs": 0,
-            "status": "OK",
-            "children": children,
-        }
-    elif orphans:
-        # Attach any orphaned spans that had an unresolved parent at the root
-        # so they're not lost in the UI.
-        root["children"].extend(sorted(orphans, key=lambda s: s["startMs"]))
+    turns = []
+    total_spans = 0
+    for tid, spans_map in spans_by_trace.items():
+        root = _assemble_tree(spans_map, tid)
+        total_spans += len(spans_map)
+        turns.append({
+            "traceId": tid,
+            "title": turn_meta.get(tid, {}).get("title"),
+            "startMs": root.get("startMs", 0),
+            "durationMs": root.get("durationMs", 0),
+            "status": root.get("status", "OK"),
+            "spanCount": len(spans_map),
+            "root": root,
+        })
 
-    return success({"root": root, "totalSpans": len(spans_by_id)})
+    turns.sort(key=lambda t: t["startMs"])
+
+    # Back-compat: keep `root` for older clients (first turn's tree).
+    legacy_root = turns[0]["root"] if turns else None
+
+    return success({
+        "sessionId": sessionId,
+        "turns": turns,
+        "turnCount": len(turns),
+        "totalSpans": total_spans,
+        # Deprecated — prefer `turns[].root`.
+        "root": legacy_root,
+    })
 
 
 # Filter out framework / OTEL noise from the runtime log stream so what

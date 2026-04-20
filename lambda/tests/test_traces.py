@@ -36,15 +36,17 @@ def test_list_traces_returns_session_summaries(mock_jwt, user_id, workspace_id):
         "results": [
             [
                 {"field": "sessionId", "value": "sess-a"},
-                {"field": "traceId", "value": "trace-1"},
                 {"field": "firstEvent", "value": "2026-04-19 00:00:00.000"},
+                {"field": "lastEvent", "value": "2026-04-19 00:00:30.000"},
                 {"field": "spanCount", "value": "12"},
+                {"field": "turnCount", "value": "2"},
             ],
             [
                 {"field": "sessionId", "value": "sess-b"},
-                {"field": "traceId", "value": "trace-2"},
                 {"field": "firstEvent", "value": "2026-04-19 00:02:00.000"},
+                {"field": "lastEvent", "value": "2026-04-19 00:02:10.000"},
                 {"field": "spanCount", "value": "5"},
+                {"field": "turnCount", "value": "1"},
             ],
         ],
     }
@@ -66,8 +68,10 @@ def test_list_traces_returns_session_summaries(mock_jwt, user_id, workspace_id):
     assert len(data["sessions"]) == 2
     assert data["sessions"][0]["sessionId"] == "sess-a"
     assert data["sessions"][0]["spanCount"] == 12
+    assert data["sessions"][0]["turnCount"] == 2
     # firstEvent must carry a tz suffix so JS parses as UTC, not local.
     assert data["sessions"][0]["firstEvent"] == "2026-04-19T00:00:00.000Z"
+    assert data["sessions"][0]["lastEvent"] == "2026-04-19T00:00:30.000Z"
 
 
 def test_get_session_trace_assembles_tree(mock_jwt, user_id, workspace_id):
@@ -83,6 +87,8 @@ def test_get_session_trace_assembles_tree(mock_jwt, user_id, workspace_id):
                 {"field": "startTimeUnixNano", "value": "1776100000000000000"},
                 {"field": "endTimeUnixNano", "value": "1776100001500000000"},
                 {"field": "status", "value": "OK"},
+                {"field": "traceId", "value": "trace-1"},
+                {"field": "chatTitle", "value": "hello"},
             ],
             [
                 {"field": "spanId", "value": "sp-child1"},
@@ -91,6 +97,7 @@ def test_get_session_trace_assembles_tree(mock_jwt, user_id, workspace_id):
                 {"field": "startTimeUnixNano", "value": "1776100000100000000"},
                 {"field": "endTimeUnixNano", "value": "1776100000900000000"},
                 {"field": "status", "value": "OK"},
+                {"field": "traceId", "value": "trace-1"},
             ],
         ],
     }
@@ -109,11 +116,19 @@ def test_get_session_trace_assembles_tree(mock_jwt, user_id, workspace_id):
 
     assert resp["statusCode"] == 200
     data = json.loads(resp["body"])
+    # Multi-turn-capable response: `turns[]` is the new shape, `root`
+    # remains for back-compat (first turn's tree).
+    assert data["turnCount"] == 1
+    turn = data["turns"][0]
+    assert turn["traceId"] == "trace-1"
+    assert turn["title"] == "hello"
+    assert turn["root"]["spanId"] == "sp-root"
+    assert len(turn["root"]["children"]) == 1
+    assert turn["root"]["children"][0]["name"] == "tool:run_command"
+    assert turn["root"]["durationMs"] == 1500
+    assert turn["root"]["children"][0]["durationMs"] == 800
+    # Legacy field still populated.
     assert data["root"]["spanId"] == "sp-root"
-    assert len(data["root"]["children"]) == 1
-    assert data["root"]["children"][0]["name"] == "tool:run_command"
-    assert data["root"]["durationMs"] == 1500
-    assert data["root"]["children"][0]["durationMs"] == 800
 
 
 def test_list_traces_forbidden_when_agent_in_other_workspace(mock_jwt, user_id, workspace_id):
