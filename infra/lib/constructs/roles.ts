@@ -80,6 +80,15 @@ export class AgentCoreRoles extends Construct {
           `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:browser-custom/*`,
         ],
       }),
+      // Runs persistence — all tiers write run status + S3 artifacts
+      new iam.PolicyStatement({
+        actions: ["dynamodb:PutItem", "dynamodb:UpdateItem"],
+        resources: [`arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-runs`],
+      }),
+      new iam.PolicyStatement({
+        actions: ["s3:PutObject"],
+        resources: [`arn:aws:s3:::${props.s3Bucket}/runs/*`],
+      }),
     ];
 
     const s3ReadStatements = [

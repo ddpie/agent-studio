@@ -21,6 +21,7 @@ export interface ApiProps {
   skillsTable: dynamodb.Table;
   toolsTable: dynamodb.ITable;
   a2aKeysTable: dynamodb.Table;
+  runsTable: dynamodb.Table;
   originVerifyValue: string;
 }
 
@@ -62,6 +63,7 @@ export class Api extends Construct {
         SPANS_LOG_GROUP: "aws/spans",
         MCP_GATEWAY_URL: props.config.mcpGatewayUrl || '',
         A2A_KEYS_TABLE: props.a2aKeysTable.tableName,
+        RUNS_TABLE: props.runsTable.tableName,
         ORIGIN_VERIFY_VALUE: props.originVerifyValue,
         AGENT_STUDIO_ACCOUNT_ID: props.config.accountId,
         AGENTCORE_REGION: props.config.region,
@@ -77,6 +79,7 @@ export class Api extends Construct {
     props.workspacesTable.grantReadWriteData(this.crudLambda);
     props.skillsTable.grantReadWriteData(this.crudLambda);
     props.a2aKeysTable.grantReadWriteData(this.crudLambda);
+    props.runsTable.grantReadWriteData(this.crudLambda);
 
     // Imported tables: explicit IAM policy (grant on ITable misses GSI ARN)
     this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
@@ -104,13 +107,14 @@ export class Api extends Construct {
         `arn:aws:s3:::${props.config.s3Bucket}/workspaces/*`,
         `arn:aws:s3:::${props.config.s3Bucket}/mcp/*`,
         `arn:aws:s3:::${props.config.s3Bucket}/mcp-runtime/*`,
+        `arn:aws:s3:::${props.config.s3Bucket}/runs/*`,
       ],
     }));
     this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: ["s3:ListBucket"],
       resources: [`arn:aws:s3:::${props.config.s3Bucket}`],
       conditions: {
-        StringLike: { "s3:prefix": ["agents/*", "skills/*", "uploads/*", "tools/*", "outputs/*", "workspaces/*", "mcp/*", "mcp-runtime/*"] },
+        StringLike: { "s3:prefix": ["agents/*", "skills/*", "uploads/*", "tools/*", "outputs/*", "workspaces/*", "mcp/*", "mcp-runtime/*", "runs/*"] },
       },
     }));
 

@@ -74,6 +74,7 @@ export class AgentStudioStack extends cdk.Stack {
       skillsTable: database.skillsTable,
       toolsTable: database.toolsTable,
       a2aKeysTable: database.a2aKeysTable,
+      runsTable: database.runsTable,
       originVerifyValue,
     });
 
