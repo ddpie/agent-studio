@@ -1,11 +1,25 @@
 """get_agent_detail — Get full configuration details of a deployed agent."""
 
 import json
+from datetime import datetime, timezone
 
 import boto3
 from strands import tool
 
 from config import REGION, S3_BUCKET
+
+
+def _iso_utc(value) -> str:
+    """Serialize a datetime as a UTC ISO-8601 string so downstream
+    consumers parse it as UTC instead of silently treating it as local.
+    """
+    if value is None or value == "":
+        return ""
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.isoformat()
+    return str(value)
 
 
 @tool
@@ -33,8 +47,8 @@ def get_agent_detail(agent_id: str) -> str:
         "name": agent_name,
         "status": runtime["status"],
         "arn": runtime["agentRuntimeArn"],
-        "created_at": str(runtime.get("createdAt", "")),
-        "updated_at": str(runtime.get("lastUpdatedAt", "")),
+        "created_at": _iso_utc(runtime.get("createdAt")),
+        "updated_at": _iso_utc(runtime.get("lastUpdatedAt")),
         "description": runtime.get("description", ""),
     }
 

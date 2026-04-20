@@ -66,9 +66,10 @@ def test_get_runtime_returns_filtered_fields(mock_jwt, user_id, workspace_id, aw
     data = json.loads(resp["body"])
     assert data["status"] == "READY"
     assert data["agentRuntimeVersion"] == "4"
-    # datetime fields must be ISO strings, not unserialisable objects.
-    assert data["lastUpdatedAt"] == "2026-04-18T00:00:00"
-    assert data["createdAt"] == "2026-04-18T00:00:00"
+    # datetime fields must be ISO strings with UTC tz so browsers parse
+    # them as UTC (not local) and render correctly in user's timezone.
+    assert data["lastUpdatedAt"] == "2026-04-18T00:00:00+00:00"
+    assert data["createdAt"] == "2026-04-18T00:00:00+00:00"
     assert "agentRuntimeArn" not in data
     assert "executionRoleArn" not in data
     assert "agentRuntimeArtifact" not in data

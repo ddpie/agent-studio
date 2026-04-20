@@ -66,6 +66,8 @@ def test_list_traces_returns_session_summaries(mock_jwt, user_id, workspace_id):
     assert len(data["sessions"]) == 2
     assert data["sessions"][0]["sessionId"] == "sess-a"
     assert data["sessions"][0]["spanCount"] == 12
+    # firstEvent must carry a tz suffix so JS parses as UTC, not local.
+    assert data["sessions"][0]["firstEvent"] == "2026-04-19T00:00:00.000Z"
 
 
 def test_get_session_trace_assembles_tree(mock_jwt, user_id, workspace_id):

@@ -54,9 +54,16 @@ _SENSITIVE_RUNTIME_FIELDS = {
 
 
 def _to_json_safe(value):
-    """Recursively convert datetime/bytes to JSON-serialisable primitives."""
+    """Recursively convert datetime/bytes to JSON-serialisable primitives.
+
+    Naive datetimes are treated as UTC (AWS APIs return aware UTC, but
+    tests and some call sites pass naive). Emitting a tz suffix ensures
+    JS `new Date()` on the other side interprets as UTC, not local.
+    """
     import datetime as _dt
     if isinstance(value, _dt.datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=_dt.timezone.utc)
         return value.isoformat()
     if isinstance(value, _dt.date):
         return value.isoformat()
