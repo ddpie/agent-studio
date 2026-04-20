@@ -42,11 +42,11 @@ export default function SkillEditorPane({ content, currentPath, onChange, loadin
   };
 
   if (loadingContent) {
-    return <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>;
+    return <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-gray-400 dark:text-gray-500" /></div>;
   }
 
   if (content === null) {
-    return <p className="text-sm text-gray-400 p-6">Failed to load content.</p>;
+    return <p className="text-sm text-gray-400 dark:text-gray-500 p-6">Failed to load content.</p>;
   }
 
   return (

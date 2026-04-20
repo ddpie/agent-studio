@@ -17,9 +17,9 @@ export default function CodeBlock({ language, code }: { language: string; code: 
   return (
     <div className="relative group/code">
       <div className="absolute top-1 right-1 flex items-center gap-1 opacity-0 group-hover/code:opacity-100 transition-opacity z-10">
-        <span className="text-[10px] text-gray-400 bg-white/80 dark:bg-gray-800/80 px-1 rounded">{language}</span>
+        <span className="text-[10px] text-gray-400 dark:text-gray-500 bg-white/80 dark:bg-gray-800/80 px-1 rounded">{language}</span>
         <button onClick={handleCopy} className="p-1 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 rounded border border-gray-200 dark:border-gray-700" title={t("chat.copyCode")}>
-          {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3 text-gray-400" />}
+          {copied ? <Check className="w-3 h-3 text-green-500 dark:text-green-400" /> : <Copy className="w-3 h-3 text-gray-400 dark:text-gray-500" />}
         </button>
       </div>
       <SyntaxHighlighter style={oneLight} language={language} PreTag="div" customStyle={{ margin: 0, borderRadius: "0.375rem", fontSize: "0.8em" }}>

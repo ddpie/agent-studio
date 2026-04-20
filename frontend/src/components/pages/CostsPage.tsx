@@ -185,7 +185,7 @@ export default function CostsPage() {
                 className={`px-3 py-1.5 ${
                   range === r
                     ? "bg-blue-500 text-white"
-                    : "bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
+                    : "bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                 }`}
               >
                 {t(`costs.range.${r}`)}
@@ -196,7 +196,7 @@ export default function CostsPage() {
             type="button"
             onClick={() => setTick((x) => x + 1)}
             disabled={loading}
-            className="rounded p-1.5 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+            className="rounded p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
             aria-label={t("common.refresh")}
             data-testid="costs-refresh"
           >
@@ -223,7 +223,7 @@ export default function CostsPage() {
         )}
 
         {loading && !data && (
-          <div className="flex items-center gap-2 text-sm text-gray-500">
+          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
             <Loader2 className="h-4 w-4 animate-spin" />
             {t("common.loading")}
           </div>
@@ -233,7 +233,7 @@ export default function CostsPage() {
           <>
             <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div
-                className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900/30"
+                className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/30 p-4"
                 data-testid="costs-total-card"
               >
                 <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
@@ -244,40 +244,40 @@ export default function CostsPage() {
                   {formatUsd(ws.totalCostUsd)}
                 </div>
               </div>
-              <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900/30">
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/30 p-4">
                 <div className="text-xs text-gray-500 dark:text-gray-400">{t("costs.totalCalls")}</div>
                 <div className="mt-1 font-mono text-2xl font-semibold text-gray-900 dark:text-gray-100">
                   {formatNumber(ws.totalCalls)}
                 </div>
               </div>
-              <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900/30">
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/30 p-4">
                 <div className="text-xs text-gray-500 dark:text-gray-400">{t("costs.totalTokens")}</div>
                 <div className="mt-1 font-mono text-2xl font-semibold text-gray-900 dark:text-gray-100">
                   {formatNumber(ws.totalInputTokens + ws.totalOutputTokens)}
                 </div>
-                <div className="mt-0.5 text-[11px] text-gray-500">
+                <div className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
                   in {formatNumber(ws.totalInputTokens)} / out {formatNumber(ws.totalOutputTokens)}
                 </div>
               </div>
             </div>
 
-            <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900/30">
+            <section className="mb-6 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/30 p-4">
               <h3 className="mb-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
                 {t("costs.stackedTitle")}
               </h3>
               <AgentCostBar agents={sortedAgents} total={ws.totalCostUsd} />
             </section>
 
-            <section className="mb-6 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900/30">
+            <section className="mb-6 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/30 p-4">
               <h3 className="mb-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
                 {t("costs.trendTitle")}
               </h3>
               {ws.timeseries.length === 0 ? (
-                <div className="text-sm text-gray-500">{t("costs.empty")}</div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">{t("costs.empty")}</div>
               ) : (
                 <>
                   <Sparkline points={ws.timeseries} />
-                  <div className="mt-1 flex justify-between text-[11px] text-gray-500">
+                  <div className="mt-1 flex justify-between text-[11px] text-gray-500 dark:text-gray-400">
                     <span>{ws.timeseries[0]?.bucket}</span>
                     <span>{ws.timeseries[ws.timeseries.length - 1]?.bucket}</span>
                   </div>
@@ -285,12 +285,12 @@ export default function CostsPage() {
               )}
             </section>
 
-            <section className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900/30">
-              <h3 className="border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-800 dark:border-gray-700 dark:text-gray-200">
+            <section className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/30">
+              <h3 className="border-b border-gray-200 dark:border-gray-700 px-4 py-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
                 {t("costs.perAgent")}
               </h3>
               <table className="w-full text-sm" data-testid="costs-table">
-                <thead className="bg-gray-50 text-xs text-gray-500 dark:bg-gray-900/60">
+                <thead className="bg-gray-50 dark:bg-gray-900/60 text-xs text-gray-500 dark:text-gray-400">
                   <tr>
                     <th className="px-4 py-2 text-left font-normal">{t("costs.col.agent")}</th>
                     <th className="px-4 py-2 text-left font-normal">{t("costs.col.model")}</th>
@@ -303,7 +303,7 @@ export default function CostsPage() {
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {sortedAgents.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-6 text-center text-xs text-gray-500">
+                      <td colSpan={6} className="px-4 py-6 text-center text-xs text-gray-500 dark:text-gray-400">
                         {t("costs.empty")}
                       </td>
                     </tr>
@@ -313,7 +313,7 @@ export default function CostsPage() {
                       <td className="max-w-[260px] truncate px-4 py-2 text-gray-900 dark:text-gray-100">
                         {a.name}
                       </td>
-                      <td className="max-w-[200px] truncate px-4 py-2 text-xs text-gray-500">
+                      <td className="max-w-[200px] truncate px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
                         {a.modelId || "—"}
                       </td>
                       <td className="px-4 py-2 text-right font-mono">{formatNumber(a.calls)}</td>

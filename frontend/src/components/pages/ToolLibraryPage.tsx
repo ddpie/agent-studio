@@ -6,6 +6,7 @@ import {
   Wrench, Search, RefreshCw, Loader2, Plus, Code2, User, Trash2, RotateCcw, X, ChevronLeft,
 } from "lucide-react";
 import { useToolLibraryStore, type ToolTemplate } from "../../stores/tool-library-store";
+import { formatDate } from "../../lib/date-format";
 
 function ToolCard({ tool, onClick, currentUser }: { tool: ToolTemplate; onClick: () => void; currentUser: string }) {
   const { t } = useTranslation();
@@ -26,12 +27,12 @@ function ToolCard({ tool, onClick, currentUser }: { tool: ToolTemplate; onClick:
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">{tool.description}</p>
       )}
       <div className="flex items-center gap-2 mt-2">
-        <span className="text-[10px] text-gray-400 font-mono">{tool.id}</span>
+        <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">{tool.id}</span>
         {isSeed && (
           <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">{t("tools.seed")}</span>
         )}
         {!isMine && !isSeed && (
-          <span className="flex items-center gap-0.5 text-[9px] text-gray-400">
+          <span className="flex items-center gap-0.5 text-[9px] text-gray-400 dark:text-gray-500">
             <User className="w-2.5 h-2.5" />{tool.owner}
           </span>
         )}
@@ -83,7 +84,7 @@ export default function ToolLibraryPage() {
         <div className="flex items-center gap-2">
           {showTrash && (
             <button onClick={() => setShowTrash(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("common.back")}>
-              <ChevronLeft className="w-4 h-4 text-gray-500" />
+              <ChevronLeft className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             </button>
           )}
           <div>
@@ -95,19 +96,19 @@ export default function ToolLibraryPage() {
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("tools.searchPlaceholder")}
-              className="pl-7 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg w-48 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+              className="pl-7 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg w-48 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
             />
           </div>
           {!showTrash && (
           <button
             onClick={() => setShowTrash(true)}
-            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
             title={t("skills.trash")}
           >
             <Trash2 className="w-4 h-4" />
@@ -115,7 +116,7 @@ export default function ToolLibraryPage() {
           )}
           <button
             onClick={refresh}
-            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           </button>
@@ -135,10 +136,10 @@ export default function ToolLibraryPage() {
       <div className="flex-1 overflow-y-auto p-6">
         {loading ? (
           <div className="flex items-center justify-center h-full">
-            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            <Loader2 className="w-6 h-6 animate-spin text-gray-400 dark:text-gray-500" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400">
+          <div className="flex flex-col items-center justify-center h-full text-gray-400 dark:text-gray-500">
             <Wrench className="w-10 h-10 mb-3 opacity-30" />
             <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
               {search ? t("tools.noMatching") : showTrash ? t("skills.trashEmpty") : t("tools.noTools")}
@@ -163,8 +164,8 @@ export default function ToolLibraryPage() {
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                {tool.description && <p className="text-xs text-gray-500 mt-2 line-clamp-2">{tool.description}</p>}
-                {tool.deleted_at && <p className="text-[10px] text-gray-400 mt-1">{t("skills.deleted", { date: new Date(tool.deleted_at).toLocaleDateString() })}</p>}
+                {tool.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">{tool.description}</p>}
+                {tool.deleted_at && <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">{t("skills.deleted", { date: formatDate(tool.deleted_at, "") })}</p>}
               </div>
             ) : (
               <ToolCard key={tool.id} tool={tool} currentUser={currentUser} onClick={() => navigate(`/tools/${tool.id}`)} />
@@ -188,7 +189,7 @@ export default function ToolLibraryPage() {
             <p className="text-sm font-medium mb-3 text-gray-800 dark:text-gray-200">{t("tools.createTool")}</p>
             <div className="space-y-3">
               <div>
-                <label className="text-[11px] text-gray-500 mb-1 block">{t("tools.name")}</label>
+                <label className="text-[11px] text-gray-500 dark:text-gray-400 mb-1 block">{t("tools.name")}</label>
                 <input
                   autoFocus
                   value={createName}
@@ -199,7 +200,7 @@ export default function ToolLibraryPage() {
                 />
               </div>
               <div>
-                <label className="text-[11px] text-gray-500 mb-1 block">{t("tools.description")}</label>
+                <label className="text-[11px] text-gray-500 dark:text-gray-400 mb-1 block">{t("tools.description")}</label>
                 <input
                   value={createDesc}
                   onChange={(e) => setCreateDesc(e.target.value)}
@@ -210,7 +211,7 @@ export default function ToolLibraryPage() {
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+              <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
                 {t("common.cancel")}
               </button>
               <button
@@ -230,9 +231,9 @@ export default function ToolLibraryPage() {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setConfirmPermanentDelete(null)}>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-5 max-w-sm mx-4" onClick={e => e.stopPropagation()}>
             <p className="text-sm font-medium mb-1 text-gray-800 dark:text-gray-200">{t("skills.deletePermanently")}?</p>
-            <p className="text-xs text-gray-500 mb-4">{t("skills.permanentDeleteConfirm")}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">{t("skills.permanentDeleteConfirm")}</p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmPermanentDelete(null)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">{t("common.cancel")}</button>
+              <button onClick={() => setConfirmPermanentDelete(null)} className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">{t("common.cancel")}</button>
               <button onClick={() => { deleteTool(confirmPermanentDelete).then(refresh); setConfirmPermanentDelete(null); }} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">{t("skills.deletePermanently")}</button>
             </div>
           </div>

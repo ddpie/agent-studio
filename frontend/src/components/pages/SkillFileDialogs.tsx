@@ -57,7 +57,7 @@ export default function SkillFileDialogs({ activeDialog, availableDirs, onClose,
       <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={onClose}>
         <div className={`${isDark ? "bg-gray-800" : "bg-white"} rounded-xl shadow-2xl p-5 max-w-sm mx-4 w-80`} onClick={e => e.stopPropagation()}>
           <p className={`text-sm font-medium mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("skillEditor.moveFile")}</p>
-          <p className="text-xs text-gray-500 mb-3">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
             {t("skillEditor.moveTo")} <span className={`font-mono font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>{activeDialog.context.path?.split("/").pop()}</span>
           </p>
           <div className="space-y-1 max-h-40 overflow-y-auto mb-3">

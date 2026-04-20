@@ -124,10 +124,10 @@ export default function AgentEditForm() {
           <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
             {isCreateMode ? t("agentEditor.create") : (formData.display_name || agentName)}
           </h2>
-          <p className="text-[11px] text-gray-400">
+          <p className="text-[11px] text-gray-400 dark:text-gray-500">
             {isCreateMode ? t("agentEditor.createDesc", "Configure and deploy a new agent") : (
               <span className="flex items-center gap-1.5">
-                <span className="font-mono text-[10px] text-gray-400 select-all">{agentId}</span>
+                <span className="font-mono text-[10px] text-gray-400 dark:text-gray-500 select-all">{agentId}</span>
               </span>
             )}
           </p>
@@ -135,7 +135,7 @@ export default function AgentEditForm() {
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => openPanel(agentId!)}
-            className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${panelOpen ? "bg-purple-50 text-purple-600" : "text-gray-500 hover:text-purple-600 hover:bg-purple-50"}`}
+            className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${panelOpen ? "bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400" : "text-gray-500 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30"}`}
             title={t("assistant.title")}
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -143,7 +143,7 @@ export default function AgentEditForm() {
           {Object.keys(changedFields).length > 0 && (
             <button
               onClick={() => deploy.setShowReview("view")}
-              className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
               title={t("agentEditor.viewCode")}
             >
               <GitCompare className="w-3.5 h-3.5" />
@@ -153,7 +153,7 @@ export default function AgentEditForm() {
           <button
             onClick={deploy.handleValidateOnly}
             disabled={saving || deploy.validating}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+            className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] text-gray-500 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg transition-colors disabled:opacity-50"
             title={t("common.validate")}
           >
             {deploy.validating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
@@ -198,7 +198,7 @@ export default function AgentEditForm() {
             {deploy.errorDetail && deploy.errorDetail !== "__hidden__" && (
               <details className="px-4 pb-3">
                 <summary className="text-[11px] cursor-pointer opacity-70 hover:opacity-100">{t("agentEditor.showDetails")}</summary>
-                <pre className="mt-2 text-[11px] font-mono whitespace-pre-wrap bg-red-100/50 rounded p-2 max-h-40 overflow-y-auto">{deploy.errorDetail}</pre>
+                <pre className="mt-2 text-[11px] font-mono whitespace-pre-wrap bg-red-100/50 dark:bg-red-900/20 rounded p-2 max-h-40 overflow-y-auto">{deploy.errorDetail}</pre>
               </details>
             )}
           </div>
@@ -206,9 +206,9 @@ export default function AgentEditForm() {
 
         {/* Validation Results */}
         {deploy.validationResult && (deploy.validationResult.errors.length > 0 || deploy.validationResult.warnings.length > 0) && (
-          <div className={`rounded-lg text-sm border ${!deploy.validationResult.valid ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"}`}>
+          <div className={`rounded-lg text-sm border ${!deploy.validationResult.valid ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800" : "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800"}`}>
             <div className="px-4 py-3">
-              <p className={`font-medium ${deploy.validationResult.valid ? "text-amber-700" : "text-red-600"}`}>
+              <p className={`font-medium ${deploy.validationResult.valid ? "text-amber-700 dark:text-amber-300" : "text-red-600 dark:text-red-400"}`}>
                 {!deploy.validationResult.valid
                   ? t("agentEditor.validationFailed")
                   : deploy.validationResult.warnings.length > 0
@@ -218,9 +218,9 @@ export default function AgentEditForm() {
               {deploy.validationResult.errors.length > 0 && (
                 <ul className="mt-2 space-y-1">
                   {deploy.validationResult.errors.map((e, i) => (
-                    <li key={i} className="text-[11px] text-red-600 flex items-start gap-1.5">
-                      <span className="text-red-400 mt-0.5 flex-shrink-0">&#x2716;</span>
-                      <span className="prose prose-xs prose-red max-w-none [&_p]:m-0 [&_code]:text-red-700 [&_strong]:text-red-700"><ReactMarkdown>{e}</ReactMarkdown></span>
+                    <li key={i} className="text-[11px] text-red-600 dark:text-red-400 flex items-start gap-1.5">
+                      <span className="text-red-400 dark:text-red-500 mt-0.5 flex-shrink-0">&#x2716;</span>
+                      <span className="prose prose-xs prose-red max-w-none [&_p]:m-0 [&_code]:text-red-700 dark:[&_code]:text-red-300 [&_strong]:text-red-700 dark:[&_strong]:text-red-300"><ReactMarkdown>{e}</ReactMarkdown></span>
                     </li>
                   ))}
                 </ul>
@@ -228,9 +228,9 @@ export default function AgentEditForm() {
               {deploy.validationResult.warnings.length > 0 && (
                 <ul className="mt-2 space-y-1">
                   {deploy.validationResult.warnings.map((w, i) => (
-                    <li key={i} className="text-[11px] text-amber-700 flex items-start gap-1.5">
-                      <span className="text-amber-500 mt-0.5 flex-shrink-0">&#x26A0;</span>
-                      <span className="prose prose-xs prose-amber max-w-none [&_p]:m-0 [&_code]:text-amber-800 [&_strong]:text-amber-800"><ReactMarkdown>{w}</ReactMarkdown></span>
+                    <li key={i} className="text-[11px] text-amber-700 dark:text-amber-300 flex items-start gap-1.5">
+                      <span className="text-amber-500 dark:text-amber-400 mt-0.5 flex-shrink-0">&#x26A0;</span>
+                      <span className="prose prose-xs prose-amber max-w-none [&_p]:m-0 [&_code]:text-amber-800 dark:[&_code]:text-amber-200 [&_strong]:text-amber-800 dark:[&_strong]:text-amber-200"><ReactMarkdown>{w}</ReactMarkdown></span>
                     </li>
                   ))}
                 </ul>
@@ -240,14 +240,14 @@ export default function AgentEditForm() {
                 <div className="mt-2 flex flex-wrap gap-2">
                   {Object.entries(deploy.validationResult.prompt_scores).map(([dim, score]) => (
                     <span key={dim} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                      score >= 4 ? "bg-green-100 text-green-700" : score >= 3 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"
+                      score >= 4 ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300" : score >= 3 ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
                     }`}>
                       {t(`promptDimensions.${dim}`, dim.replace(/_/g, " "))}: {score}/5
                     </span>
                   ))}
                   {deploy.validationResult.prompt_overall != null && (
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                      deploy.validationResult.prompt_overall >= 4 ? "bg-green-200 text-green-800" : deploy.validationResult.prompt_overall >= 3 ? "bg-yellow-200 text-yellow-800" : "bg-red-200 text-red-800"
+                      deploy.validationResult.prompt_overall >= 4 ? "bg-green-200 dark:bg-green-900/40 text-green-800 dark:text-green-200" : deploy.validationResult.prompt_overall >= 3 ? "bg-yellow-200 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200" : "bg-red-200 dark:bg-red-900/40 text-red-800 dark:text-red-200"
                     }`}>
                       {t("promptDimensions.overall")}: {deploy.validationResult.prompt_overall}/5
                     </span>

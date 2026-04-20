@@ -124,7 +124,7 @@ export default function SkillsSection({ skills, agentId, deployedHashes, onEditS
           </div>
         )}
         {skills.length === 0 ? (
-          <p className="text-xs text-gray-400 text-center py-4">
+          <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-4">
             {t("agentSkills.noSkills")}
           </p>
         ) : (
@@ -170,7 +170,7 @@ export default function SkillsSection({ skills, agentId, deployedHashes, onEditS
                       handleDeleteSkill(skill.id)
                     }}
                     disabled={deleting === skill.id}
-                    className="p-1 text-gray-300 hover:text-red-500 transition-colors"
+                    className="p-1 text-gray-300 dark:text-gray-600 hover:text-red-500 transition-colors"
                     title={t("agentSkills.remove")}
                   >
                     {deleting === skill.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
@@ -215,7 +215,7 @@ export default function SkillsSection({ skills, agentId, deployedHashes, onEditS
             <p className="text-sm font-medium mb-3 text-gray-800 dark:text-gray-200">{t("agentSkills.createNew")}</p>
             <div className="space-y-3">
               <div>
-                <label className="text-[11px] text-gray-500 mb-1 block">{t("skills.name")}</label>
+                <label className="text-[11px] text-gray-500 dark:text-gray-400 mb-1 block">{t("skills.name")}</label>
                 <input
                   autoFocus
                   value={createName}
@@ -226,7 +226,7 @@ export default function SkillsSection({ skills, agentId, deployedHashes, onEditS
                 />
               </div>
               <div>
-                <label className="text-[11px] text-gray-500 mb-1 block">{t("skills.description")}</label>
+                <label className="text-[11px] text-gray-500 dark:text-gray-400 mb-1 block">{t("skills.description")}</label>
                 <input
                   value={createDesc}
                   onChange={e => setCreateDesc(e.target.value)}
@@ -237,7 +237,7 @@ export default function SkillsSection({ skills, agentId, deployedHashes, onEditS
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => { setShowCreateDialog(false); setCreateName(""); setCreateDesc("") }} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">{t("common.cancel")}</button>
+              <button onClick={() => { setShowCreateDialog(false); setCreateName(""); setCreateDesc("") }} className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">{t("common.cancel")}</button>
               <button onClick={handleCreateNewSkill} disabled={!createName.trim()} className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">{t("common.create")}</button>
             </div>
           </div>
@@ -249,9 +249,9 @@ export default function SkillsSection({ skills, agentId, deployedHashes, onEditS
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setConfirmDeleteId(null)}>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-5 max-w-sm mx-4" onClick={e => e.stopPropagation()}>
             <p className="text-sm font-medium mb-1 text-gray-800 dark:text-gray-200">{t("agentSkills.removeSkill")}</p>
-            <p className="text-xs text-gray-500 mb-4">{t("agentSkills.removeConfirm")}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">{t("agentSkills.removeConfirm")}</p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmDeleteId(null)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">{t("common.cancel")}</button>
+              <button onClick={() => setConfirmDeleteId(null)} className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">{t("common.cancel")}</button>
               <button onClick={confirmDeleteSkill} className="px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">{t("common.delete")}</button>
             </div>
           </div>

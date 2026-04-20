@@ -29,7 +29,7 @@ function SpanRow({ span, depth, totalMs, startMs }: SpanRowProps) {
         >
           {span.name}
         </span>
-        <span className="font-mono tabular-nums text-gray-500 w-16 text-right">
+        <span className="font-mono tabular-nums text-gray-500 dark:text-gray-400 w-16 text-right">
           {span.durationMs}ms
         </span>
         <div className="w-48 relative h-3 bg-gray-100 dark:bg-gray-800 rounded">

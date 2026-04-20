@@ -192,7 +192,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                   src={img.previewUrl}
                   className={`w-16 h-16 rounded-lg object-cover border ${
                     img.status === "failed"
-                      ? "border-red-500 opacity-50"
+                      ? "border-red-500 dark:border-red-400 opacity-50"
                       : "border-gray-200 dark:border-gray-700"
                   }`}
                 />
@@ -206,7 +206,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
                     className="absolute inset-0 flex items-center justify-center rounded-lg"
                     title={t("chat.imageUploadFailed", "Upload failed — remove and retry")}
                   >
-                    <span className="text-[10px] font-semibold text-red-600 bg-white/90 px-1 rounded">
+                    <span className="text-[10px] font-semibold text-red-600 dark:text-red-400 bg-white/90 dark:bg-gray-900/90 px-1 rounded">
                       {t("chat.uploadFailedShort", "Failed")}
                     </span>
                   </div>
@@ -222,11 +222,11 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
           <div className="flex gap-2 mb-2 flex-wrap">
             {attachedFiles.map((f, idx) => (
               <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg text-[11px] text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
-                {f.uploading ? <Loader2 className="w-3 h-3 animate-spin text-blue-500" /> : <FileText className="w-3 h-3 text-gray-400" />}
+                {f.uploading ? <Loader2 className="w-3 h-3 animate-spin text-blue-500 dark:text-blue-400" /> : <FileText className="w-3 h-3 text-gray-400 dark:text-gray-500" />}
                 <span className="max-w-32 truncate font-medium">{f.name}</span>
-                <span className="text-gray-400">{(f.size / 1024).toFixed(1)}KB</span>
+                <span className="text-gray-400 dark:text-gray-500">{(f.size / 1024).toFixed(1)}KB</span>
                 {!f.uploading && (
-                  <button onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))} className="text-gray-300 hover:text-red-500 ml-0.5">
+                  <button onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))} className="text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 ml-0.5">
                     <X className="w-3 h-3" />
                   </button>
                 )}
@@ -236,7 +236,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
         )}
         <form onSubmit={handleSubmit} className="flex items-end gap-2">
           <input ref={fileInputRef} type="file" accept=".csv,.tsv,.json,.txt,.md,.py,.yaml,.yml,.xml,.html,.log,.sql" multiple className="hidden" onChange={handleFileSelect} />
-          <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0" title={t("chat.attachFile")}>
+          <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0" title={t("chat.attachFile")}>
             <Paperclip className="w-4 h-4" />
           </button>
           <textarea

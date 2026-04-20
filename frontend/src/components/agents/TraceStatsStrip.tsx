@@ -170,13 +170,13 @@ export default function TraceStatsStrip({
             ))}
           </div>
           {loading && (
-            <RefreshCw className="w-3 h-3 animate-spin text-gray-400" aria-hidden />
+            <RefreshCw className="w-3 h-3 animate-spin text-gray-400 dark:text-gray-500" aria-hidden />
           )}
         </div>
       </div>
 
       {error && (
-        <div className="text-xs text-red-600 mb-2">
+        <div className="text-xs text-red-600 dark:text-red-400 mb-2">
           {t("traces.stats.loadError")}: {error.message}
         </div>
       )}

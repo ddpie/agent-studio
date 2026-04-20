@@ -21,7 +21,7 @@ export const TEMPLATE_OPTIONS = [
 ];
 
 export const inputClass = "w-full px-2 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-[13px] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all dark:bg-gray-800 dark:text-gray-100";
-export const disabledClass = "w-full px-2 py-1.5 border border-gray-100 dark:border-gray-700 rounded-lg text-[13px] bg-gray-50 dark:bg-gray-800 text-gray-400 cursor-not-allowed";
+export const disabledClass = "w-full px-2 py-1.5 border border-gray-100 dark:border-gray-700 rounded-lg text-[13px] bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed";
 
 interface AgentFormSectionsProps {
   formData: Partial<AgentMetadata>;
@@ -121,7 +121,7 @@ export default function AgentFormSections({
                 type="checkbox"
                 checked={formData.supports_images || false}
                 onChange={(e) => updateField("supports_images", e.target.checked)}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
               />
               <span className="text-[13px]">{formData.supports_images ? t("agentEditor.multimodalEnabled") : t("agentEditor.multimodal")}</span>
             </label>
@@ -150,7 +150,7 @@ export default function AgentFormSections({
       <Section title={t("agentEditor.tools")} icon={<Code2 className="w-3.5 h-3.5" />} action={
         <button
           onClick={() => handleOptimizeField("tool_definitions", "Tools")}
-          className="p-0.5 text-gray-300 hover:text-purple-500 transition-colors"
+          className="p-0.5 text-gray-300 dark:text-gray-600 hover:text-purple-500 transition-colors"
           title={t("agentEditor.optimize", { label: "tools" })}
         >
           <Sparkles className="w-3 h-3" />

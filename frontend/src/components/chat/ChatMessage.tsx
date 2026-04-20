@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import remarkMath from "remark-math";
+import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeKatex from "rehype-katex";
 import { useChatStore, type Message } from "../../stores/chat-store";
@@ -70,10 +71,10 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
             }}
             autoFocus
             rows={3}
-            className="w-full px-4 py-3 rounded-2xl border-2 border-blue-400 text-sm focus:outline-none resize-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            className="w-full px-4 py-3 rounded-2xl border-2 border-blue-400 dark:border-blue-500 text-sm focus:outline-none resize-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
           />
           <div className="flex justify-end gap-1.5 mt-1">
-            <button onClick={() => setEditing(false)} className="text-[11px] px-2 py-0.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded">{t("common.cancel")}</button>
+            <button onClick={() => setEditing(false)} className="text-[11px] px-2 py-0.5 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded">{t("common.cancel")}</button>
             <button onClick={submitEdit} className="text-[11px] px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700">{t("common.send")}</button>
           </div>
         </div>
@@ -97,7 +98,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
             className="absolute -bottom-1 -left-1 w-5 h-5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
             title={t("chat.editMessage")}
           >
-            <Pencil className="w-2.5 h-2.5 text-gray-400" />
+            <Pencil className="w-2.5 h-2.5 text-gray-400 dark:text-gray-500" />
           </button>
         )}
         {message.images && message.images.length > 0 && (
@@ -128,7 +129,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
               >
                 <FileText className="w-3.5 h-3.5 flex-shrink-0" />
                 <span className="font-medium max-w-40 truncate">{f.name}</span>
-                <span className={isUser ? "text-white/50" : "text-gray-400"}>{(f.size / 1024).toFixed(1)}KB</span>
+                <span className={isUser ? "text-white/50" : "text-gray-400 dark:text-gray-500"}>{(f.size / 1024).toFixed(1)}KB</span>
                 <Download className="w-3 h-3 flex-shrink-0 opacity-50" />
               </button>
             ))}
@@ -137,7 +138,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
         {message.content ? (
           <>
           <div ref={contentDivRef} className={`prose prose-sm max-w-none ${isUser ? "prose-invert [&_*]:text-white" : "dark:prose-invert"}`}>
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[[rehypeSanitize, sanitizeSchema], rehypeKatex]} components={mdComponents}>{
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeKatex]} components={mdComponents}>{
               (() => {
                 let text = message.content;
                 if (message.attachments?.length) text = text.replace(/\n\n\[Attached file:[^\]]*\]/g, "").trim();
@@ -146,7 +147,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
               })()
             }</ReactMarkdown>
             {showTypingIndicator && (
-              <span className="inline-flex items-center gap-1 text-gray-400 text-xs mt-2">
+              <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500 text-xs mt-2">
                 <Loader2 className="w-3 h-3 animate-spin" /> {t("chat.working")}
               </span>
             )}
@@ -188,7 +189,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
           })()}
           </>
         ) : (
-          <span className="inline-flex items-center gap-1 text-gray-400 text-sm">
+          <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500 text-sm">
             <Loader2 className="w-3 h-3 animate-spin" /> {t("assistant.thinking")}
           </span>
         )}

@@ -3,6 +3,7 @@ import { ExternalLink, RefreshCw } from "lucide-react";
 import { useRuntimeVersions } from "../../hooks/useRuntimeVersions";
 import StatusBadge from "../common/StatusBadge";
 import { agentConfig } from "../../config";
+import { formatDateTime } from "../../lib/date-format";
 
 function cloudWatchLogsUrl(region: string, agentId: string): string {
   const group = `/aws/bedrock-agentcore/runtimes/${agentId}-DEFAULT`;
@@ -27,7 +28,7 @@ export default function DeploymentsTab({ agentId }: DeploymentsTabProps) {
           type="button"
           onClick={refresh}
           disabled={loading}
-          className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
         >
           <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
           {t("common.refresh")}
@@ -39,11 +40,11 @@ export default function DeploymentsTab({ agentId }: DeploymentsTabProps) {
         </div>
       )}
       {data && data.length === 0 && (
-        <div className="text-sm text-gray-500">{t("deployments.empty")}</div>
+        <div className="text-sm text-gray-500 dark:text-gray-400">{t("deployments.empty")}</div>
       )}
       {data && data.length > 0 && (
         <table className="w-full text-sm" data-testid="deployments-table">
-          <thead className="text-xs text-gray-500 uppercase">
+          <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase">
             <tr>
               <th className="text-left py-2">{t("deployments.version")}</th>
               <th className="text-left py-2">{t("deployments.status")}</th>
@@ -57,7 +58,7 @@ export default function DeploymentsTab({ agentId }: DeploymentsTabProps) {
                 <td className="py-2 font-mono">v{v.agentRuntimeVersion}</td>
                 <td className="py-2"><StatusBadge status={v.status} /></td>
                 <td className="py-2 text-gray-600 dark:text-gray-400">
-                  {v.lastUpdatedAt ? new Date(v.lastUpdatedAt).toLocaleString() : "-"}
+                  {formatDateTime(v.lastUpdatedAt, "-")}
                 </td>
                 <td className="py-2 text-right">
                   <a

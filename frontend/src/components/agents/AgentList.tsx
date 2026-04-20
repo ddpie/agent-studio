@@ -69,15 +69,15 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
           onClick={() => handleSwitch("/agents")}
           className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
             !agentId && !isEditing
-              ? "bg-blue-100 text-blue-600"
-              : "text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-600"
+              ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+              : "text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-300"
           }`}
           title={t("agents.metaAgent")}
         >
           <MessageSquare className="w-4 h-4" />
         </button>
 
-        {agents.length > 0 && <div className="w-5 border-t border-gray-300" />}
+        {agents.length > 0 && <div className="w-5 border-t border-gray-300 dark:border-gray-700" />}
 
         {agents.map((agent) => (
           <div key={agent.id} className="relative group flex flex-col items-center">
@@ -86,8 +86,8 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
                 onClick={() => handleSwitch(`/agents/chat/${agent.id}`)}
                 className={`w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold transition-colors ${
                   agentId === agent.id
-                    ? "bg-blue-100 text-blue-600"
-                    : "text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-600"
+                    ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                    : "text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-300"
                 }`}
                 title={agent.displayName}
               >
@@ -95,7 +95,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
               </button>
               <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white dark:border-gray-900 ${agent.status === "active" ? "bg-green-500" : "bg-yellow-500"}`} />
             </div>
-            <span className="text-[9px] text-gray-400 leading-tight text-center w-12 mt-0.5 line-clamp-2 break-all">
+            <span className="text-[9px] text-gray-400 dark:text-gray-500 leading-tight text-center w-12 mt-0.5 line-clamp-2 break-all">
               {agent.displayName}
             </span>
             {/* Edit icon on hover */}
@@ -104,7 +104,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
               className="absolute -top-1 -right-1 w-4 h-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
               title={t("common.edit")}
             >
-              <Settings2 className="w-2.5 h-2.5 text-gray-400" />
+              <Settings2 className="w-2.5 h-2.5 text-gray-400 dark:text-gray-500" />
             </button>
           </div>
         ))}
@@ -113,7 +113,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
         <button
           onClick={fetchAgents}
           disabled={loading}
-          className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+          className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700"
           title={t("common.refresh")}
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
@@ -141,7 +141,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
         <button
           onClick={fetchAgents}
           disabled={loading}
-          className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-400 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+          className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
           title={t("common.refresh")}
         >
           {loading ? (
@@ -172,7 +172,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
         </button>
 
         {agents.length > 0 && (
-          <div className="text-xs text-gray-400 px-1 pt-2">{t("agents.createdAgents")}</div>
+          <div className="text-xs text-gray-400 dark:text-gray-500 px-1 pt-2">{t("agents.createdAgents")}</div>
         )}
 
         {agents.map((agent) => (
@@ -196,7 +196,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button
                   onClick={(e) => { e.stopPropagation(); navigate(`/agents/${agent.id}`); }}
-                  className="p-1 text-gray-300 hover:text-blue-600 rounded transition-colors"
+                  className="p-1 text-gray-300 dark:text-gray-600 hover:text-blue-600 dark:hover:text-blue-400 rounded transition-colors"
                   title={t("common.view")}
                   data-testid={`view-agent-${agent.id}`}
                 >
@@ -205,7 +205,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
                 {canEdit && (
                   <button
                     onClick={(e) => { e.stopPropagation(); navigate(`/agents/edit/${agent.id}`); }}
-                    className="p-1 text-gray-300 hover:text-blue-600 rounded transition-colors"
+                    className="p-1 text-gray-300 dark:text-gray-600 hover:text-blue-600 dark:hover:text-blue-400 rounded transition-colors"
                     title={t("common.edit")}
                     data-testid={`edit-agent-${agent.id}`}
                   >
@@ -214,7 +214,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
                 )}
                 <button
                   onClick={(e) => { e.stopPropagation(); setConfirmAction({ agentId: agent.id, agentName: agent.displayName, type: "archive" }); }}
-                  className="p-1 text-gray-300 hover:text-orange-500 rounded transition-colors"
+                  className="p-1 text-gray-300 dark:text-gray-600 hover:text-orange-500 rounded transition-colors"
                   title={t("agents.archive")}
                   disabled={actionLoading?.id === agent.id}
                 >
@@ -232,7 +232,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
         ))}
 
         {agents.length === 0 && !loading && (
-          <div className="text-center text-gray-400 text-xs mt-4">
+          <div className="text-center text-gray-400 dark:text-gray-500 text-xs mt-4">
             <Bot className="w-6 h-6 mx-auto mb-1 opacity-30" />
             <p>{t("agents.noAgents")}</p>
           </div>
@@ -243,7 +243,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
           <>
             <button
               onClick={() => setShowArchived(!showArchived)}
-              className="flex items-center gap-1 text-xs text-gray-400 px-1 pt-3 hover:text-gray-600 dark:hover:text-gray-300"
+              className="flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500 px-1 pt-3 hover:text-gray-600 dark:hover:text-gray-300"
             >
               <ChevronDown className={`w-3 h-3 transition-transform ${showArchived ? "" : "-rotate-90"}`} />
               <Archive className="w-3 h-3" />
@@ -253,13 +253,13 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
               <div key={agent.id} className="group w-full text-left p-2.5 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <Archive className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                    <Archive className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />
                     <span className="text-xs text-gray-500 dark:text-gray-400 truncate">{agent.displayName}</span>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       onClick={() => setConfirmAction({ agentId: agent.id, agentName: agent.displayName, type: "restore" })}
-                      className="p-1 text-gray-400 hover:text-green-600 rounded transition-colors"
+                      className="p-1 text-gray-400 dark:text-gray-500 hover:text-green-600 dark:hover:text-green-400 rounded transition-colors"
                       title={t("agents.restore")}
                       disabled={actionLoading?.id === agent.id}
                     >
@@ -267,7 +267,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
                     </button>
                     <button
                       onClick={() => setConfirmAction({ agentId: agent.id, agentName: agent.displayName, type: "purge" })}
-                      className="p-1 text-gray-400 hover:text-red-600 rounded transition-colors"
+                      className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 rounded transition-colors"
                       title={t("agents.deleteForever")}
                       disabled={actionLoading?.id === agent.id}
                     >

@@ -143,13 +143,13 @@ export default function MarketplacePage() {
           <p className="text-xs text-gray-500 dark:text-gray-400">{t("marketplace.subtitle")}</p>
         </div>
         <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t("marketplace.searchPlaceholder")}
-            className="pl-7 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg w-56 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+            className="pl-7 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg w-56 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
           />
         </div>
       </div>
@@ -180,7 +180,7 @@ export default function MarketplacePage() {
       <div className="flex-1 overflow-y-auto p-6">
         {loading && !loaded[tab] ? (
           <div className="flex items-center justify-center h-full">
-            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            <Loader2 className="w-6 h-6 animate-spin text-gray-400 dark:text-gray-500" />
           </div>
         ) : (
           <>
@@ -278,7 +278,7 @@ function GridOrEmpty({
 }) {
   if (empty) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-gray-400">
+      <div className="flex flex-col items-center justify-center h-full text-gray-400 dark:text-gray-500">
         <Store className="w-10 h-10 mb-3 opacity-30" />
         <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{emptyLabel}</p>
       </div>
@@ -320,7 +320,7 @@ function MarketCard({
       {description && (
         <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 min-h-[2em]">{description}</p>
       )}
-      <div className="flex items-center gap-2 text-[10px] text-gray-400 min-h-[16px]">
+      <div className="flex items-center gap-2 text-[10px] text-gray-400 dark:text-gray-500 min-h-[16px]">
         {meta && <span className="font-mono truncate">{meta}</span>}
         {tags && tags.length > 0 && (
           <span className="flex items-center gap-0.5">

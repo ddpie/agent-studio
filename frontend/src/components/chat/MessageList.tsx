@@ -57,7 +57,7 @@ export default function MessageList({ messages, isStreaming, statusText, activeT
         <div className="flex justify-start mb-4 -mt-2">
           <button
             onClick={onRegenerate}
-            className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             title={t("chat.regenerate")}
           >
             <RefreshCw className="w-3 h-3" />
@@ -67,7 +67,7 @@ export default function MessageList({ messages, isStreaming, statusText, activeT
       )}
       {statusText && (
         <div className="flex justify-start mb-4">
-          <div className="rounded-2xl px-4 py-3 bg-amber-50 border border-amber-200 text-amber-800">
+          <div className="rounded-2xl px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300">
             <div className="flex items-center gap-2 text-sm">
               <Loader2 className="w-4 h-4 animate-spin" />
               <span>{statusText}</span>
@@ -77,7 +77,7 @@ export default function MessageList({ messages, isStreaming, statusText, activeT
       )}
       {activeTool && !statusText && (
         <div className="flex justify-start mb-4">
-          <div className="rounded-xl px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700">
+          <div className="rounded-xl px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300">
             <div className="flex items-center gap-2 text-xs">
               <Loader2 className="w-3 h-3 animate-spin" />
               <span><Trans i18nKey="chat.calling" values={{ tool: activeTool }} components={[<strong />]} /></span>

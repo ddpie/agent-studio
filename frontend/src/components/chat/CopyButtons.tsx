@@ -87,13 +87,13 @@ export default function CopyButtons({ content, contentRef }: { content: string; 
   return (
     <div className="absolute -top-1 right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700 p-0.5">
       <button onClick={() => copyAs("text")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("chat.copyPlain")}>
-        {copied === "text" ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3 text-gray-400" />}
+        {copied === "text" ? <Check className="w-3 h-3 text-green-500 dark:text-green-400" /> : <Copy className="w-3 h-3 text-gray-400 dark:text-gray-500" />}
       </button>
       <button onClick={() => copyAs("md")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("chat.copyMarkdown")}>
-        {copied === "md" ? <Check className="w-3 h-3 text-green-500" /> : <FileText className="w-3 h-3 text-gray-400" />}
+        {copied === "md" ? <Check className="w-3 h-3 text-green-500 dark:text-green-400" /> : <FileText className="w-3 h-3 text-gray-400 dark:text-gray-500" />}
       </button>
       <button onClick={() => copyAs("rich")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("chat.copyRich")}>
-        {copied === "rich" ? <Check className="w-3 h-3 text-green-500" /> : <ImageIcon className="w-3 h-3 text-gray-400" />}
+        {copied === "rich" ? <Check className="w-3 h-3 text-green-500 dark:text-green-400" /> : <ImageIcon className="w-3 h-3 text-gray-400 dark:text-gray-500" />}
       </button>
     </div>
   );

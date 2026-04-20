@@ -203,7 +203,7 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
   return (
     <div className="space-y-3">
       {blocks.length === 0 && (
-        <p className="text-xs text-gray-400 italic">{t("agentEditor.noTools")}</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 italic">{t("agentEditor.noTools")}</p>
       )}
       {blocks.map((code, idx) => {
         const name = extractFuncName(code);
@@ -314,7 +314,7 @@ function ToolsEditor({ value, onChange, onOptimizeTool }: {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setConfirmDeleteIdx(null)}>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-5 max-w-sm mx-4" onClick={e => e.stopPropagation()}>
             <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">{t("agentEditor.removeTool")}</p>
-            <p className="text-xs text-gray-500 mb-4">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
               {t("agentEditor.deleteToolConfirm")}
             </p>
             <div className="flex justify-end gap-2">

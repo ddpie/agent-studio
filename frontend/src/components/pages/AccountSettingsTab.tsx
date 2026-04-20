@@ -149,7 +149,7 @@ export default function AccountSettingsTab() {
         </h3>
 
         {loadingProfile ? (
-          <div className="flex items-center gap-2 text-xs text-gray-500">
+          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
             <Loader2 className="w-3.5 h-3.5 animate-spin" /> {t("common.loading")}
           </div>
         ) : (
@@ -166,7 +166,7 @@ export default function AccountSettingsTab() {
                 disabled
                 className={`${inputCls} font-mono`}
               />
-              <p className="text-[10px] text-gray-400 mt-1">{t("settings.account.emailReadonly")}</p>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">{t("settings.account.emailReadonly")}</p>
             </div>
 
             {/* Display name */}
@@ -182,7 +182,7 @@ export default function AccountSettingsTab() {
                 maxLength={120}
                 className={inputCls}
               />
-              <p className="text-[10px] text-gray-400 mt-1">{t("settings.account.displayNameHint")}</p>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">{t("settings.account.displayNameHint")}</p>
             </div>
 
             {/* Preferred username */}
@@ -198,7 +198,7 @@ export default function AccountSettingsTab() {
                 maxLength={60}
                 className={inputCls}
               />
-              <p className="text-[10px] text-gray-400 mt-1">
+              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
                 {t("settings.account.preferredUsernameHint")}
               </p>
             </div>
@@ -247,7 +247,7 @@ export default function AccountSettingsTab() {
               autoComplete="new-password"
               className={inputCls}
             />
-            <p className="text-[10px] text-gray-400 mt-1">{t("settings.account.passwordRules")}</p>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">{t("settings.account.passwordRules")}</p>
           </div>
           <div>
             <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 mb-1 block">
@@ -286,7 +286,7 @@ export default function AccountSettingsTab() {
         <button
           onClick={() => setSignOutAllOpen(true)}
           disabled={signingOutAll}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-red-200 dark:border-red-800 rounded-lg text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
         >
           {signingOutAll ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />

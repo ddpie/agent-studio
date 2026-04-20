@@ -60,7 +60,7 @@ export default function ValidationBanner({ result, onDismiss, onAutoFix, autoFix
                 {t("common.autoFix")}
               </button>
             )}
-            <button onClick={onDismiss} className="text-[10px] text-gray-400 hover:text-gray-600">{t("common.dismiss")}</button>
+            <button onClick={onDismiss} className="text-[10px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400">{t("common.dismiss")}</button>
           </div>
         )}
       </div>

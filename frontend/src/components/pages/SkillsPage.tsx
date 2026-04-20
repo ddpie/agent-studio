@@ -8,6 +8,7 @@ import { listSkills, listDeletedSkills, importSkill, restoreSkill, permanentlyDe
 import { importSkillFromUrl } from "../../lib/skill-url-import";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import ApprovalPill from "../shared/ApprovalPill";
+import { formatDate } from "../../lib/date-format";
 
 export default function SkillsPage() {
   const navigate = useNavigate();
@@ -135,7 +136,7 @@ ${desc || "TODO: Add skill instructions here."}
         <div className="flex items-center gap-2">
           {showTrash && (
             <button onClick={() => setShowTrash(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("common.back")}>
-              <ChevronLeft className="w-4 h-4 text-gray-500" />
+              <ChevronLeft className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             </button>
           )}
           <div>
@@ -147,20 +148,20 @@ ${desc || "TODO: Add skill instructions here."}
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
             <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder={t("skills.searchPlaceholder")}
-              className="pl-7 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg w-48 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400" />
+              className="pl-7 pr-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg w-48 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500" />
           </div>
           {!showTrash && (
             <button onClick={() => setShowTrash(true)}
-              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
               title={t("skills.trash")}>
               <Trash2 className="w-4 h-4" />
             </button>
           )}
           <button onClick={refresh}
-            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+            className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           </button>
           {!showTrash && canEdit && (
@@ -188,10 +189,10 @@ ${desc || "TODO: Add skill instructions here."}
       <div className="flex-1 overflow-y-auto p-6">
         {loading ? (
           <div className="flex items-center justify-center h-full">
-            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            <Loader2 className="w-6 h-6 animate-spin text-gray-400 dark:text-gray-500" />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400">
+          <div className="flex flex-col items-center justify-center h-full text-gray-400 dark:text-gray-500">
             <Package className="w-12 h-12 mb-3 opacity-30" />
             <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
               {search ? t("skills.noMatching") : showTrash ? t("skills.trashEmpty") : t("skills.noSkills")}
@@ -231,8 +232,8 @@ ${desc || "TODO: Add skill instructions here."}
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">{skill.description}</p>
                 )}
                 {showTrash && skill.deletedAt && (
-                  <p className="text-[10px] text-gray-400 mt-1">
-                    {t("skills.deleted", { date: new Date(skill.deletedAt).toLocaleDateString() })}
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+                    {t("skills.deleted", { date: formatDate(skill.deletedAt, "") })}
                   </p>
                 )}
               </div>
@@ -246,11 +247,11 @@ ${desc || "TODO: Add skill instructions here."}
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" onClick={() => setConfirmPermanentDelete(null)}>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-5 max-w-sm mx-4" onClick={e => e.stopPropagation()}>
             <p className="text-sm font-medium mb-1 text-gray-800 dark:text-gray-200">{t("skills.deletePermanently")}?</p>
-            <p className="text-xs text-gray-500 mb-4">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
               {t("skills.permanentDeleteConfirm")}
             </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmPermanentDelete(null)} disabled={deleting} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-50">{t("common.cancel")}</button>
+              <button onClick={() => setConfirmPermanentDelete(null)} disabled={deleting} className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-50">{t("common.cancel")}</button>
               <button onClick={() => handlePermanentDelete(confirmPermanentDelete)} disabled={deleting} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50">
                 {deleting && <Loader2 className="w-3 h-3 animate-spin" />}
                 {t("skills.deletePermanently")}
@@ -267,7 +268,7 @@ ${desc || "TODO: Add skill instructions here."}
             <p className="text-sm font-medium mb-3 text-gray-800 dark:text-gray-200">{t("skills.createSkill")}</p>
             <div className="space-y-3">
               <div>
-                <label className="text-[11px] text-gray-500 mb-1 block">{t("skills.name")}</label>
+                <label className="text-[11px] text-gray-500 dark:text-gray-400 mb-1 block">{t("skills.name")}</label>
                 <input
                   autoFocus
                   value={createName}
@@ -278,7 +279,7 @@ ${desc || "TODO: Add skill instructions here."}
                 />
               </div>
               <div>
-                <label className="text-[11px] text-gray-500 mb-1 block">{t("skills.description")}</label>
+                <label className="text-[11px] text-gray-500 dark:text-gray-400 mb-1 block">{t("skills.description")}</label>
                 <input
                   value={createDesc}
                   onChange={e => setCreateDesc(e.target.value)}
@@ -289,7 +290,7 @@ ${desc || "TODO: Add skill instructions here."}
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">{t("common.cancel")}</button>
+              <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">{t("common.cancel")}</button>
               <button onClick={handleCreate} disabled={!createName.trim() || creating}
                 className="px-3 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50">
                 {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t("common.create")}
@@ -327,7 +328,7 @@ ${desc || "TODO: Add skill instructions here."}
               <button
                 onClick={() => { setShowUrlImport(false); setUrlImportError(null); }}
                 disabled={urlImporting}
-                className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-50"
+                className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg disabled:opacity-50"
               >
                 {t("common.cancel")}
               </button>

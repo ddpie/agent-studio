@@ -5,6 +5,13 @@
 body {
   margin: 0;
   font-family: system-ui, -apple-system, sans-serif;
+  background-color: #ffffff;
+  color: #111827;
+}
+
+.dark body {
+  background-color: #030712;
+  color: #f3f4f6;
 }
 
 /* Compact prose for chat messages */

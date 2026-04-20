@@ -26,7 +26,7 @@ export default function EndpointDialog({ mode, fixedName, versions, onCancel, on
         </h3>
         <div className="space-y-3 text-sm">
           <label className="block">
-            <span className="text-xs text-gray-500">Name</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">Name</span>
             <input
               type="text"
               value={name}
@@ -37,7 +37,7 @@ export default function EndpointDialog({ mode, fixedName, versions, onCancel, on
             />
           </label>
           <label className="block">
-            <span className="text-xs text-gray-500">{t("endpoints.versionLabel")}</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">{t("endpoints.versionLabel")}</span>
             <select
               value={version}
               onChange={(e) => setVersion(e.target.value)}

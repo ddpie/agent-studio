@@ -27,18 +27,18 @@ export default function AgentProposalCard({ json }: { json: string }) {
       <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3 my-2 text-xs not-prose">
         {parseError && looksComplete ? (
           <div>
-            <p className="text-red-500 text-[11px] mb-1">{t("chat.parseFailed")}</p>
-            <details className="text-[10px] text-gray-500">
+            <p className="text-red-500 dark:text-red-400 text-[11px] mb-1">{t("chat.parseFailed")}</p>
+            <details className="text-[10px] text-gray-500 dark:text-gray-400">
               <summary className="cursor-pointer">{t("chat.showRawJson")}</summary>
               <pre className="mt-1 whitespace-pre-wrap break-all bg-gray-100 dark:bg-gray-700 p-2 rounded max-h-40 overflow-y-auto">{json}</pre>
             </details>
           </div>
         ) : (
           <div className="animate-pulse">
-            <div className="h-4 bg-gray-200 rounded w-1/3 mb-2" />
-            <div className="h-3 bg-gray-200 rounded w-2/3 mb-2" />
-            <div className="h-3 bg-gray-200 rounded w-1/2 mb-2" />
-            <div className="text-[11px] text-gray-500 flex items-center gap-1">
+            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-2" />
+            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-2/3 mb-2" />
+            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-2" />
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1">
               <Loader2 className="w-3 h-3 animate-spin" /> {t("chat.generatingProposal")}
             </div>
           </div>
@@ -92,7 +92,7 @@ export default function AgentProposalCard({ json }: { json: string }) {
         <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300 rounded">{tier}</span>
       </div>
       {desc && <p className="text-gray-600 dark:text-gray-400 mb-2">{desc}</p>}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-gray-500 mb-2">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400 mb-2">
         {template && <div>{t("chat.proposalTemplate")} <span className="text-gray-700 dark:text-gray-300">{template}</span></div>}
         <div>{t("chat.proposalImages")} <span className="text-gray-700 dark:text-gray-300">{supportsImages ? t("chat.yes") : t("chat.no")}</span></div>
         {toolNames.length > 0 && (
@@ -107,19 +107,19 @@ export default function AgentProposalCard({ json }: { json: string }) {
         )}
       </div>
       {suggestions.length > 0 && (
-        <div className="text-[10px] text-gray-400 mb-2">
+        <div className="text-[10px] text-gray-400 dark:text-gray-500 mb-2">
           {t("chat.proposalSuggestions")} {suggestions.join(" / ")}
         </div>
       )}
       {systemPrompt && (
         <details className="mb-2">
-          <summary className="text-[11px] text-gray-500 cursor-pointer select-none">{t("chat.proposalSystemPrompt")}</summary>
+          <summary className="text-[11px] text-gray-500 dark:text-gray-400 cursor-pointer select-none">{t("chat.proposalSystemPrompt")}</summary>
           <pre className="mt-1 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-[11px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap max-h-48 overflow-y-auto">{systemPrompt}</pre>
         </details>
       )}
       {toolDefs && (
         <details className="mb-2">
-          <summary className="text-[11px] text-gray-500 cursor-pointer select-none">{t("chat.proposalToolDefs")}</summary>
+          <summary className="text-[11px] text-gray-500 dark:text-gray-400 cursor-pointer select-none">{t("chat.proposalToolDefs")}</summary>
           <pre className="mt-1 p-2 bg-gray-900 dark:bg-gray-950 text-green-300 rounded text-[11px] whitespace-pre-wrap max-h-48 overflow-y-auto">{toolDefs}</pre>
         </details>
       )}

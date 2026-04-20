@@ -42,7 +42,7 @@ export default function SkillToolbar({
             <span className="text-[10px] px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">Agent Copy</span>
           )}
         </div>
-        {skill?.description && <p className="text-xs text-gray-400 truncate">{skill.description}</p>}
+        {skill?.description && <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{skill.description}</p>}
       </div>
       {extraSlot}
       <button onClick={onValidate} disabled={validating}

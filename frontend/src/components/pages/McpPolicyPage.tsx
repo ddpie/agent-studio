@@ -123,7 +123,7 @@ export default function McpPolicyPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+        <Loader2 className="w-6 h-6 animate-spin text-gray-400 dark:text-gray-500" />
       </div>
     );
   }
@@ -228,14 +228,14 @@ export default function McpPolicyPage() {
                       >
                         <div className="flex items-center gap-2">
                           {isExpanded ? (
-                            <ChevronDown className="w-4 h-4 text-gray-400" />
+                            <ChevronDown className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                           ) : (
-                            <ChevronRight className="w-4 h-4 text-gray-400" />
+                            <ChevronRight className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                           )}
                           <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
                             {t(`mcpPolicy.category.${category}`)}
                           </span>
-                          <span className="text-xs text-gray-400">({categoryTargets.length})</span>
+                          <span className="text-xs text-gray-400 dark:text-gray-500">({categoryTargets.length})</span>
                         </div>
                       </button>
 

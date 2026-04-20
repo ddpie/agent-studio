@@ -55,7 +55,7 @@ export default function AgentCostsSection({ agentId }: { agentId: string }) {
         </div>
         <div className="flex items-center gap-2">
           <div
-            className="inline-flex overflow-hidden rounded-lg border border-gray-300 text-xs dark:border-gray-600"
+            className="inline-flex overflow-hidden rounded-lg border border-gray-300 dark:border-gray-600 text-xs"
             role="tablist"
           >
             {RANGES.map((r) => (
@@ -80,7 +80,7 @@ export default function AgentCostsSection({ agentId }: { agentId: string }) {
             type="button"
             onClick={() => setTick((x) => x + 1)}
             disabled={loading}
-            className="rounded p-1 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+            className="rounded p-1 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
             aria-label={t("common.refresh")}
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -95,13 +95,13 @@ export default function AgentCostsSection({ agentId }: { agentId: string }) {
       </div>
 
       {error && (
-        <div className="text-sm text-red-600">
+        <div className="text-sm text-red-600 dark:text-red-400">
           {t("costs.loadError")}: {error.message}
         </div>
       )}
 
       {loading && !data && (
-        <div className="flex items-center gap-2 text-sm text-gray-500">
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
           <Loader2 className="h-4 w-4 animate-spin" />
           {t("common.loading")}
         </div>
@@ -111,27 +111,27 @@ export default function AgentCostsSection({ agentId }: { agentId: string }) {
         <table className="w-full text-sm">
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
             <tr>
-              <td className="py-2 text-xs text-gray-500">{t("costs.col.calls")}</td>
+              <td className="py-2 text-xs text-gray-500 dark:text-gray-400">{t("costs.col.calls")}</td>
               <td className="py-2 text-right font-mono" data-testid="agent-costs-calls">
                 {formatNumber(data.calls)}
               </td>
             </tr>
             <tr>
-              <td className="py-2 text-xs text-gray-500">{t("costs.col.inputTokens")}</td>
+              <td className="py-2 text-xs text-gray-500 dark:text-gray-400">{t("costs.col.inputTokens")}</td>
               <td className="py-2 text-right font-mono">{formatNumber(data.inputTokens)}</td>
             </tr>
             <tr>
-              <td className="py-2 text-xs text-gray-500">{t("costs.col.outputTokens")}</td>
+              <td className="py-2 text-xs text-gray-500 dark:text-gray-400">{t("costs.col.outputTokens")}</td>
               <td className="py-2 text-right font-mono">{formatNumber(data.outputTokens)}</td>
             </tr>
             <tr>
-              <td className="py-2 text-xs text-gray-500">{t("costs.col.model")}</td>
+              <td className="py-2 text-xs text-gray-500 dark:text-gray-400">{t("costs.col.model")}</td>
               <td className="py-2 text-right text-xs text-gray-600 dark:text-gray-400">
                 {data.modelId || "—"}
               </td>
             </tr>
             <tr>
-              <td className="py-2 text-xs text-gray-500">{t("costs.col.cost")}</td>
+              <td className="py-2 text-xs text-gray-500 dark:text-gray-400">{t("costs.col.cost")}</td>
               <td className="py-2 text-right font-mono text-base font-semibold">
                 {formatUsd(data.costUsd)}
               </td>

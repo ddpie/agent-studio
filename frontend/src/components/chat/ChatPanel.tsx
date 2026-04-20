@@ -65,7 +65,7 @@ export default function ChatPanel() {
   }, [agentId, agentName]);
 
   const emptyState = (
-    <div className="flex flex-col items-center justify-center h-full text-gray-400">
+    <div className="flex flex-col items-center justify-center h-full text-gray-400 dark:text-gray-500">
       <p className="text-4xl mb-4">{agentId ? "💬" : "🤖"}</p>
       <p className="text-lg font-medium text-gray-600 dark:text-gray-400">
         {metadata?.welcome_message || (agentId ? t("chat.chatWith", { name: agentName }) : t("chat.welcomeMeta"))}

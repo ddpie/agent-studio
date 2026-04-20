@@ -221,9 +221,9 @@ export default function ToolDetail() {
 
   const handleDiscard = () => { setCode(originalCode); setName(originalName); setDescription(originalDescription); setShowDiff(false); };
 
-  if (!loaded) return <div className="flex items-center justify-center h-full"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>;
+  if (!loaded) return <div className="flex items-center justify-center h-full"><Loader2 className="w-6 h-6 animate-spin text-gray-400 dark:text-gray-500" /></div>;
   if (notFound) return (
-    <div className="flex flex-col items-center justify-center h-full text-gray-400">
+    <div className="flex flex-col items-center justify-center h-full text-gray-400 dark:text-gray-500">
       <Code2 className="w-12 h-12 mb-3 opacity-30" />
       <p className="text-sm font-medium">{t("tools.toolNotFound")}</p>
       <button onClick={() => navigate("/tools")} className="mt-3 text-xs text-blue-500 hover:underline">{t("common.back")}</button>
@@ -266,7 +266,7 @@ export default function ToolDetail() {
               <p className={`text-xs font-medium ${!validationResult.valid ? "text-red-500" : validationResult.errors.length === 0 && validationResult.warnings.length === 0 ? isDark ? "text-green-400" : "text-green-600" : "text-amber-600"}`}>
                 {!validationResult.valid ? t("validation.failed") : validationResult.errors.length === 0 && validationResult.warnings.length === 0 ? t("validation.noIssues") : t("validation.passedWithWarnings", { count: validationResult.warnings.length })}
               </p>
-              <button onClick={() => setValidationResult(null)} className="text-gray-400 hover:text-gray-600"><X className="w-3 h-3" /></button>
+              <button onClick={() => setValidationResult(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400"><X className="w-3 h-3" /></button>
             </div>
             {validationResult.errors.map((e, i) => <p key={`e${i}`} className="text-[11px] text-red-500 mt-1">&#x2716; {e}</p>)}
             {validationResult.warnings.map((w, i) => <p key={`w${i}`} className="text-[11px] text-amber-600 mt-1">&#x26A0; {w}</p>)}
@@ -299,7 +299,7 @@ export default function ToolDetail() {
           errorBar={(error || validationError) ? (
             <div className={`px-4 py-2 text-xs flex items-center justify-between ${isDark ? "bg-red-900/20 border-t border-red-800 text-red-400" : "bg-red-50 border-t border-red-200 text-red-600"}`}>
               <span>{validationError || error}</span>
-              <button onClick={() => { setValidationError(null); clearError(); }} className="text-red-400 hover:text-red-600 text-[10px]">{t("common.dismiss")}</button>
+              <button onClick={() => { setValidationError(null); clearError(); }} className="text-red-400 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 text-[10px]">{t("common.dismiss")}</button>
             </div>
           ) : null}
         />

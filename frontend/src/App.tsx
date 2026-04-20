@@ -42,14 +42,14 @@ export default function App() {
                   <div className="absolute bottom-0 left-1/4 w-1 h-1 bg-rose-400 rounded-full shadow-lg shadow-rose-400/50" />
                 </div>
               </div>
-              <h1 className="text-2xl font-bold text-gray-900 animate-[fadeSlideIn_0.6s_ease-out_0.15s_both]">Agent Studio</h1>
-              <p className="text-sm text-gray-500 mt-1 animate-[fadeSlideIn_0.6s_ease-out_0.25s_both]">Build and orchestrate AI agents on AWS</p>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 animate-[fadeSlideIn_0.6s_ease-out_0.15s_both]">Agent Studio</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 animate-[fadeSlideIn_0.6s_ease-out_0.25s_both]">Build and orchestrate AI agents on AWS</p>
             </div>
           );
         },
         Footer() {
           return (
-            <div className="text-center py-4 text-[11px] text-gray-400">
+            <div className="text-center py-4 text-[11px] text-gray-400 dark:text-gray-500">
               Powered by AWS Bedrock AgentCore
             </div>
           );
@@ -75,7 +75,7 @@ function AuthenticatedApp({ signOut, user }: { signOut?: () => void; user?: { si
 
   if (!ready) {
     return (
-      <div className="flex items-center justify-center h-screen text-gray-400">
+      <div className="flex items-center justify-center h-screen text-gray-400 dark:text-gray-500">
         {t("common.loadingWorkspace")}
       </div>
     );
