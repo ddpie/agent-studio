@@ -44,9 +44,30 @@ for _name in _config.get("tool_names", []):
         continue
     _ALL_TOOLS.append(getattr(_tools_module, _name))
 
+def _tag_chat_title(payload):
+    """Stamp chat.title on the current span so the Runs list can show a
+    meaningful row title instead of the raw session UUID. We use the first
+    user message (this invocation's prompt) truncated to 60 chars.
+    Chat runs only — scheduled runs have their own session-id prefix."""
+    try:
+        from opentelemetry import trace as _otel_trace
+        span = _otel_trace.get_current_span()
+        if not span or not getattr(span, "is_recording", lambda: False)():
+            return
+        title = (payload.get("prompt") or "").strip()
+        if not title:
+            return
+        if len(title) > 60:
+            title = title[:60] + "..."
+        span.set_attribute("chat.title", title)
+    except Exception:
+        pass
+
+
 @app.entrypoint
 async def invoke(payload, context):
     model_id = payload.get("model_id", MODEL_ID)
+    _tag_chat_title(payload)
     import builtin_tools as _builtin
     _builtin._workspace_id = payload.get("workspace_id", "")
     skills_listing = _builtin.get_skills_listing()
@@ -64,7 +85,7 @@ async def invoke(payload, context):
         system_prompt=prompt,
         tools=_ALL_TOOLS + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document],
     )
-    async for chunk in _stream_with_tools(agent, _build_input(payload)):
+    async for chunk in _stream_and_record(agent, payload):
         yield chunk
 
 if __name__ == "__main__":
@@ -197,9 +218,30 @@ for _name in _config.get("tool_names", []):
         continue
     _ALL_TOOLS.append(getattr(_tools_module, _name))
 
+def _tag_chat_title(payload):
+    """Stamp chat.title on the current span so the Runs list can show a
+    meaningful row title instead of the raw session UUID. We use the first
+    user message (this invocation's prompt) truncated to 60 chars.
+    Chat runs only — scheduled runs have their own session-id prefix."""
+    try:
+        from opentelemetry import trace as _otel_trace
+        span = _otel_trace.get_current_span()
+        if not span or not getattr(span, "is_recording", lambda: False)():
+            return
+        title = (payload.get("prompt") or "").strip()
+        if not title:
+            return
+        if len(title) > 60:
+            title = title[:60] + "..."
+        span.set_attribute("chat.title", title)
+    except Exception:
+        pass
+
+
 @app.entrypoint
 async def invoke(payload, context):
     model_id = payload.get("model_id", MODEL_ID)
+    _tag_chat_title(payload)
     import builtin_tools as _builtin
     _builtin._workspace_id = payload.get("workspace_id", "")
     skills_listing = _builtin.get_skills_listing()
@@ -225,7 +267,7 @@ async def invoke(payload, context):
             system_prompt=prompt,
             tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document],
         )
-        async for chunk in _stream_with_tools(agent, _build_input(payload)):
+        async for chunk in _stream_and_record(agent, payload):
             yield chunk
 
 if __name__ == "__main__":
@@ -373,6 +415,175 @@ def _build_input(payload):
             except Exception:
                 pass
     return blocks
+
+
+# ── Run recording (scheduled/manual only) ────────────────────────────
+import os as _os
+import re as _re
+import time as _time
+
+_RUNS_TABLE = _os.environ.get("AGENT_STUDIO_RUNS_TABLE", "")
+_S3_BUCKET = _os.environ.get("AGENT_STUDIO_S3_BUCKET", "")
+_REGION = _os.environ.get("AWS_REGION", _os.environ.get("AGENT_STUDIO_REGION", "us-east-1"))
+_AGENT_ID = ""
+# Parse agent id from OTEL_RESOURCE_ATTRIBUTES: "service.name=<id>,..."
+for _kv in _os.environ.get("OTEL_RESOURCE_ATTRIBUTES", "").split(","):
+    if _kv.startswith("service.name="):
+        _AGENT_ID = _kv.split("=", 1)[1]
+        break
+
+_ddb_resource = None
+_s3_client = None
+
+def _get_ddb():
+    global _ddb_resource
+    if _ddb_resource is None:
+        import boto3
+        _ddb_resource = boto3.resource("dynamodb", region_name=_REGION)
+    return _ddb_resource
+
+def _get_s3():
+    global _s3_client
+    if _s3_client is None:
+        import boto3
+        _s3_client = boto3.client("s3", region_name=_REGION)
+    return _s3_client
+
+def _generate_ulid():
+    """Simple ULID: 10-char timestamp (ms hex) + 10-char random."""
+    import uuid as _uuid
+    ts = format(int(_time.time() * 1000), "013x")
+    rand = _uuid.uuid4().hex[:10]
+    return f"{ts}-{rand}"
+
+def _write_run_started(agent_id, run_id, session_id, payload):
+    if not _RUNS_TABLE:
+        return
+    try:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        ttl = int(_time.time()) + 365 * 86400
+        trigger = "manual" if "-manual-" in session_id else "schedule"
+        schedule_name = payload.get("__schedule_name") or None
+        table = _get_ddb().Table(_RUNS_TABLE)
+        table.put_item(Item={
+            "agentId": agent_id,
+            "runId": run_id,
+            "workspaceId": payload.get("workspace_id", ""),
+            "trigger": trigger,
+            "scheduleId": schedule_name,
+            "sessionId": session_id,
+            "status": "running",
+            "input": payload.get("prompt", ""),
+            "startedAt": now,
+            "ttl": ttl,
+        })
+    except Exception as e:
+        import sys
+        print(f"WARNING: failed to write run started: {e}", file=sys.stderr)
+
+def _write_run_completed(agent_id, run_id, chunks, usage=None):
+    if not _RUNS_TABLE:
+        return
+    try:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+        # Separate text and tool calls from chunks
+        text_parts = []
+        tool_calls = []
+        for c in chunks:
+            if c.startswith("{") and '"__tool"' in c:
+                try:
+                    parsed = _json.loads(c)
+                    if parsed.get("__tool") == "result":
+                        inp = ""
+                        out = ""
+                        try:
+                            inp = _b64.b64decode(parsed.get("input", "")).decode("utf-8", errors="replace") if parsed.get("input") else ""
+                        except Exception:
+                            pass
+                        try:
+                            out = _b64.b64decode(parsed.get("output", "")).decode("utf-8", errors="replace") if parsed.get("output") else ""
+                        except Exception:
+                            pass
+                        tool_calls.append({"name": parsed.get("name", ""), "input": inp[:2000], "output": out[:5000]})
+                except Exception:
+                    pass
+            else:
+                text_parts.append(c)
+
+        full_text = "".join(text_parts)
+
+        # Extract artifact refs from __S3_DOWNLOAD__ markers
+        artifact_refs = []
+        for m in _re.finditer(r"__S3_DOWNLOAD__:([^:\\s\\"\\}\\]]+):([^\\s\\"\\}\\]]+)", full_text):
+            artifact_refs.append(m.group(1))
+
+        # Write output.json to S3
+        output_key = f"runs/{agent_id}/{run_id}/output.json"
+        output_data = _json.dumps({"text": full_text, "toolCalls": tool_calls}, ensure_ascii=False)
+        _get_s3().put_object(Bucket=_S3_BUCKET, Key=output_key, Body=output_data.encode("utf-8"), ContentType="application/json")
+
+        # Update DDB
+        table = _get_ddb().Table(_RUNS_TABLE)
+        update_expr = "SET #st = :st, completedAt = :ca, outputRef = :oref, artifactRefs = :arefs"
+        expr_values = {
+            ":st": "completed",
+            ":ca": now,
+            ":oref": output_key,
+            ":arefs": artifact_refs,
+        }
+        table.update_item(
+            Key={"agentId": agent_id, "runId": run_id},
+            UpdateExpression=update_expr,
+            ExpressionAttributeNames={"#st": "status"},
+            ExpressionAttributeValues=expr_values,
+        )
+    except Exception as e:
+        import sys
+        print(f"WARNING: failed to write run completed: {e}", file=sys.stderr)
+
+def _write_run_failed(agent_id, run_id, error):
+    if not _RUNS_TABLE:
+        return
+    try:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        table = _get_ddb().Table(_RUNS_TABLE)
+        table.update_item(
+            Key={"agentId": agent_id, "runId": run_id},
+            UpdateExpression="SET #st = :st, completedAt = :ca, #err = :err",
+            ExpressionAttributeNames={"#st": "status", "#err": "error"},
+            ExpressionAttributeValues={
+                ":st": "failed",
+                ":ca": now,
+                ":err": {"code": type(error).__name__, "message": str(error)[:500]},
+            },
+        )
+    except Exception as e:
+        import sys
+        print(f"WARNING: failed to write run failed: {e}", file=sys.stderr)
+
+async def _stream_and_record(agent, payload):
+    """Wrap _stream_with_tools: for sched- sessions, record to DDB + S3."""
+    session_id = payload.get("session_id", "")
+    if not session_id.startswith("sched-") or not _AGENT_ID:
+        async for chunk in _stream_with_tools(agent, _build_input(payload)):
+            yield chunk
+        return
+
+    run_id = _generate_ulid()
+    _write_run_started(_AGENT_ID, run_id, session_id, payload)
+    chunks = []
+    try:
+        async for chunk in _stream_with_tools(agent, _build_input(payload)):
+            chunks.append(chunk)
+            yield chunk
+        _write_run_completed(_AGENT_ID, run_id, chunks)
+    except Exception as e:
+        _write_run_failed(_AGENT_ID, run_id, e)
+        raise
 '''
 
 # ── tools.py header ─────────────────────────────────────────────────────────
