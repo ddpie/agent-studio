@@ -153,9 +153,11 @@ function handler(event) {
         },
       },
       defaultRootObject: "index.html",
-      errorResponses: [
-        { httpStatus: 404, responseHttpStatus: 200, responsePagePath: "/index.html" },
-      ],
+      // No SPA fallback errorResponse — the app uses createHashRouter so
+      // deep links are `https://…/#/path` which always hit `/index.html`.
+      // A blanket 404→/index.html rewrite applies distribution-wide and
+      // would intercept API-Gateway 404s too (returning HTML as 200, which
+      // breaks JSON parsing on the client).
       webAclId: props.webAclArn,
     });
 

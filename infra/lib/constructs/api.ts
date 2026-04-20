@@ -171,6 +171,8 @@ export class Api extends Construct {
         "bedrock-agentcore:CreateOnlineEvaluationConfig",
         "bedrock-agentcore:ListOnlineEvaluationConfigs",
         "bedrock-agentcore:GetOnlineEvaluationConfig",
+        "bedrock-agentcore:DeleteOnlineEvaluationConfig",
+        "bedrock-agentcore:UpdateOnlineEvaluationConfig",
       ],
       resources: ["*"],
     }));
@@ -181,7 +183,11 @@ export class Api extends Construct {
     // rejects the call with AccessDenied otherwise. Scoped to agentcore
     // runtimes so this role can't read unrelated log groups.
     this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
-      actions: ["logs:FilterLogEvents"],
+      actions: [
+        "logs:FilterLogEvents",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
+      ],
       resources: [
         `arn:aws:logs:${props.config.region}:${props.config.accountId}:log-group:/aws/bedrock-agentcore/runtimes/*:*`,
         `arn:aws:logs:${props.config.region}:${props.config.accountId}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*`,
@@ -196,6 +202,14 @@ export class Api extends Construct {
       },
     }));
 
+    // Hydrate workspace member identities (display_name/email) by calling
+    // AdminGetUser from workspaces.get_workspace. Scoped to the single user
+    // pool — without this the members tab shows raw Cognito sub UUIDs.
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["cognito-idp:AdminGetUser"],
+      resources: [props.cognitoUserPoolArn],
+    }));
+
     // EventBridge Scheduler — per-agent cron triggers (crud/schedules.py).
     // Resource is scoped to the default group + agent-studio-* name
     // prefix so this role can't touch unrelated schedules.
@@ -205,6 +219,7 @@ export class Api extends Construct {
         "scheduler:CreateSchedule",
         "scheduler:DeleteSchedule",
         "scheduler:GetSchedule",
+        "scheduler:UpdateSchedule",
       ],
       resources: [
         `arn:aws:scheduler:${props.config.region}:${props.config.accountId}:schedule/default/agent-studio-*`,

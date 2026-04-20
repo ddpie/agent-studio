@@ -8,6 +8,7 @@ import { BedrockAgentCoreClient, InvokeAgentRuntimeCommand } from "@aws-sdk/clie
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { randomBytes } from "node:crypto";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
 const ACCOUNT_ID = process.env.ACCOUNT_ID || "";
@@ -36,6 +37,15 @@ function jsonResponse(statusCode, body) {
 function validateId(value, name) {
   if (!value || !ID_PATTERN.test(value) || value.length > 128) return `Invalid ${name}`;
   return null;
+}
+
+// 32-hex char trace id + 16-hex span id per W3C trace context spec.
+function genTraceId() {
+  return randomBytes(16).toString("hex");
+}
+
+function genSpanId() {
+  return randomBytes(8).toString("hex");
 }
 
 // ── Auth ──
@@ -228,6 +238,18 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
     }
     commandInput.runtimeSessionId = body.session_id;
   }
+
+  // Force OTEL span sampling by supplying a W3C traceparent with the
+  // `sampled` flag (01). AgentCore seeds its tracer from the inbound
+  // context; without this the sub-agent runs with `trace_sampled=False`
+  // and zero spans land in aws/spans — the Traces tab would look empty
+  // for interactive chats even though the runtime ran fine. EventBridge
+  // Scheduler already injects a sampled trace, which is why scheduled
+  // runs were visible but chats weren't.
+  const rawTrace = genTraceId();
+  const rawSpan = genSpanId();
+  commandInput.traceId = `Root=1-${rawTrace.slice(0, 8)}-${rawTrace.slice(8)};Parent=${rawSpan};Sampled=1`;
+  commandInput.traceParent = `00-${rawTrace}-${rawSpan}-01`;
 
   // Invoke AgentCore
   let agentResp;
