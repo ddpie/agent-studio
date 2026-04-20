@@ -160,6 +160,16 @@
     "copied": "Copied",
     "viewCard": "View AgentCard"
   },
+  "runs": {
+    "tab": "Runs",
+    "subtitle": "Recent invocations, newest first",
+    "source": {
+      "scheduled": "Scheduled",
+      "manual": "Manual",
+      "chat": "Chat"
+    },
+    "openRun": "Open run"
+  },
   "agentDetail": {
     "title": "{{name}}",
     "subtitle": "Read-only overview — deployments, endpoints, scores, traces, integration.",
@@ -167,7 +177,10 @@
     "runtimeArn": "Runtime ARN",
     "integrationPlaceholder": "A2A integration is being set up — coming in Phase 2.",
     "notFound": "Agent not found",
-    "loadError": "Could not load agent"
+    "loadError": "Could not load agent",
+    "sideNav": {
+      "advanced": "Advanced"
+    }
   },
   "integration": {
     "title": "A2A Integration",
