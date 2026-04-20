@@ -113,7 +113,7 @@ graph LR
 - 捆绑内置 tool：`upload_to_s3`、`run_command`（Code Interpreter）、`fetch_webpage`（Browser）、`read_document`、`web_search` 等
 - 可选 MCP gateway tool（走 workspace 的 MCP Gateway）
 
-发出的 span 里 `resource.attributes.service.name` 就是 agent runtime id（如 `CustomerServiceBot-y3res08W8S`），Traces / Evaluations / Costs 页签都按这个 key 过滤。
+发出的 span 里 `resource.attributes.service.name` 就是 agent runtime id（如 `CustomerServiceBot-y3res08W8S`），Runs / Evaluations / Costs 页签都按这个 key 过滤。
 
 ### Evaluator
 AgentCore OnlineEvaluationConfig，每个 agent 一个（AgentCore 限制 `serviceNames` 只能一个元素，无法 per-workspace）。评估器监听 `aws/spans` 按 service.name 过滤，对 100% 完成会话跑 LLM-as-Judge（Correctness / Helpfulness / GoalSuccessRate）。结果写入 `/aws/bedrock-agentcore/evaluations/results/<config-id>`。
@@ -138,12 +138,12 @@ sub-agent 进程
             └── 流名：runtime-logs-<sessionId>-<uuid>
 
 aws/spans
-    ├── Traces 页签消费（列表 / 会话详情 / 统计）
+    ├── Runs 页签消费（会话列表 / 详情 / 统计，每行按 session id 分类为 定时/手动/聊天）
     ├── Evaluations 页签消费（通过 OnlineEvaluationConfig）
     └── Costs 页签消费（token / 调用次数聚合）
 
 runtime log groups
-    └── Logs 页签 + Traces 响应卡片消费
+    └── Logs 页签 + Runs 响应卡片消费
 ```
 
 ## 前端
@@ -154,7 +154,7 @@ runtime log groups
 - 所有代码编辑统一用 Monaco
 - Amplify Auth（Cognito）登录
 
-Agent 详情页采用 sticky 侧栏 + IntersectionObserver lazy-mount（Logs / Traces / Evaluations / Costs 不会在页面加载时全部打后端）。当前 section 按 agentId 持久化到 `sessionStorage`。
+Agent 详情页采用 sticky 侧栏 + IntersectionObserver lazy-mount（Runs / Evaluations / Costs 不会在页面加载时全部打后端）。顶部 5 项：Runs（首位）、Schedules、Evaluations、Costs、Integration；底部 Advanced 折叠组：Deployments、Endpoints、Secrets、Logs。单个运行可通过 `/agents/:id/runs/:sessionId` 直接分享；Run 列表按 session id 前缀 `sched-`/`-manual-`/uuid 分类显示触发来源徽章。当前 section 按 agentId 持久化到 `sessionStorage`。
 
 ## 基础设施（AWS CDK, TypeScript）
 
@@ -288,7 +288,7 @@ Agent with:
 
 `resource.attributes.service.name` on emitted spans is the agent
 runtime id (e.g. `CustomerServiceBot-y3res08W8S`). This is the key the
-Traces / Evaluations / Costs tabs use to filter.
+Runs / Evaluations / Costs tabs use to filter.
 
 ### Evaluator
 AgentCore OnlineEvaluationConfig, one per agent (AgentCore restricts
@@ -325,12 +325,13 @@ sub-agent process
             └── stream name: runtime-logs-<sessionId>-<uuid>
 
 aws/spans
-    ├── consumed by Traces tab (list / session detail / stats)
+    ├── consumed by Runs tab (session list / detail / stats;
+    │   each row classified as scheduled / manual / chat by session id)
     ├── consumed by Evaluations tab (via OnlineEvaluationConfig)
     └── consumed by Costs tab (token / invocation aggregates)
 
 runtime log groups
-    └── consumed by Logs tab + Traces response card
+    └── consumed by Logs tab + Runs response card
 ```
 
 ## Frontend
@@ -343,9 +344,15 @@ runtime log groups
 - Amplify Auth (Cognito) for login
 
 Agent detail page uses a sticky side-nav + IntersectionObserver
-lazy-mount per section (Logs / Traces / Evaluations / Costs don't all
-hit their respective backends on page load). Active section persisted
-per-agent in `sessionStorage`.
+lazy-mount per section (Runs / Evaluations / Costs don't all hit their
+respective backends on page load). Top-level nav: Runs (first) →
+Schedules → Evaluations → Costs → Integration; a collapsed Advanced
+group at the bottom contains Deployments / Endpoints / Secrets / Logs.
+A single run is shareable via `/agents/:id/runs/:sessionId`, and Run
+rows are tagged with a trigger-source badge (scheduled / manual / chat)
+derived from the session-id prefix. Active section persisted per-agent
+in `sessionStorage`; Advanced group open/closed state persisted
+similarly.
 
 ## Infrastructure (AWS CDK, TypeScript)
 

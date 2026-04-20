@@ -20,11 +20,11 @@ function withBoundary(element: ReactNode) {
   return <PageErrorBoundary>{element}</PageErrorBoundary>;
 }
 
-export function createRouter(
+export function createRoutes(
   signOut?: () => void,
   user?: { signInDetails?: { loginId?: string } }
 ) {
-  return createHashRouter([
+  return [
     {
       path: "/",
       element: <AppShell signOut={signOut} user={user} />,
@@ -39,6 +39,7 @@ export function createRouter(
             { path: "edit/:agentId", element: withBoundary(<AgentEditForm />) },
             { path: "edit/:agentId/skills/:skillId", element: withBoundary(<AgentEditForm />) },
             { path: ":agentId", element: withBoundary(<AgentDetailPage />) },
+            { path: ":agentId/runs/:sessionId", element: withBoundary(<AgentDetailPage />) },
           ],
         },
         { path: "skills", element: withBoundary(<SkillsPage />) },
@@ -52,5 +53,12 @@ export function createRouter(
         { path: "settings", element: withBoundary(<SettingsPage />) },
       ],
     },
-  ]);
+  ];
+}
+
+export function createRouter(
+  signOut?: () => void,
+  user?: { signInDetails?: { loginId?: string } }
+) {
+  return createHashRouter(createRoutes(signOut, user));
 }
