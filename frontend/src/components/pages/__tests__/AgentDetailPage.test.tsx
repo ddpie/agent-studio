@@ -5,17 +5,78 @@ import { I18nextProvider } from "react-i18next";
 import i18n from "../../../i18n";
 
 vi.mock("../../../lib/api-client", () => ({
+  // Core
   fetchAgent: vi.fn().mockResolvedValue({
     agentId: "agt-1",
     name: "testAgent",
     workspace_id: "ws-1",
   }),
-  listAgentEvaluations: vi.fn().mockResolvedValue([]),
-  listTraces: vi.fn().mockResolvedValue([]),
-  getSessionTrace: vi.fn().mockResolvedValue(null),
+  publishAgent: vi.fn().mockResolvedValue(undefined),
+  unpublishAgent: vi.fn().mockResolvedValue(undefined),
+
+  // Deployments / endpoints / runtime
   listAgentVersions: vi.fn().mockResolvedValue([]),
   listAgentEndpoints: vi.fn().mockResolvedValue([]),
   getAgentRuntime: vi.fn().mockResolvedValue({ status: "READY" }),
+  createAgentEndpoint: vi.fn().mockResolvedValue(undefined),
+  updateAgentEndpoint: vi.fn().mockResolvedValue(undefined),
+  deleteAgentEndpoint: vi.fn().mockResolvedValue(undefined),
+
+  // Logs
+  fetchAgentLogs: vi.fn().mockResolvedValue({ events: [], nextToken: null }),
+
+  // Traces
+  listTraces: vi.fn().mockResolvedValue([]),
+  getSessionTrace: vi.fn().mockResolvedValue(null),
+  getSessionOutput: vi.fn().mockResolvedValue({
+    sessionId: "s-1",
+    output: "",
+    hasOutput: false,
+    metrics: { model: null, inputTokens: null, outputTokens: null, totalTokens: null, durationMs: null, status: "OK" },
+  }),
+  fetchTraceStats: vi.fn().mockResolvedValue({
+    range: "24h",
+    count: 0,
+    errorCount: 0,
+    errorRate: 0,
+    latencyMs: { p50: null, p90: null, p95: null, p99: null, avg: null },
+    timeseries: [],
+  }),
+
+  // Evaluations
+  listAgentEvaluations: vi.fn().mockResolvedValue([]),
+  enableAgentEvaluations: vi.fn().mockResolvedValue({ configName: "", status: "ALREADY_EXISTS" }),
+  getAgentEvaluationStatus: vi.fn().mockResolvedValue({
+    exists: false,
+    configName: "",
+    status: null,
+    executionStatus: null,
+  }),
+
+  // Costs
+  fetchAgentCosts: vi.fn().mockResolvedValue({
+    range: "24h",
+    totalCost: 0,
+    totalTokens: 0,
+    invocations: 0,
+    byModel: [],
+    timeseries: [],
+  }),
+
+  // Schedules
+  listAgentSchedules: vi.fn().mockResolvedValue([]),
+  createAgentSchedule: vi.fn().mockResolvedValue({ name: "", suffix: "", cron: "" }),
+  updateAgentSchedule: vi.fn().mockResolvedValue(undefined),
+  deleteAgentSchedule: vi.fn().mockResolvedValue(undefined),
+  runAgentScheduleNow: vi.fn().mockResolvedValue({ sessionId: "", invokedAt: 0 }),
+  listScheduleExecutions: vi.fn().mockResolvedValue([]),
+
+  // Secrets
+  listAgentSecrets: vi.fn().mockResolvedValue([]),
+  putAgentSecret: vi.fn().mockResolvedValue(undefined),
+  deleteAgentSecret: vi.fn().mockResolvedValue(undefined),
+
+  // A2A
   listA2aKeys: vi.fn().mockResolvedValue([]),
   createA2aKey: vi.fn(),
   revokeA2aKey: vi.fn(),
@@ -26,6 +87,17 @@ vi.mock("../../../lib/api-client", () => ({
   getA2aEndpointUrl: (id: string) => `/a2a/agents/${id}`,
   getMetaA2aCardUrl: () => `/a2a/meta-agent/.well-known/agent-card.json`,
   getMetaA2aEndpointUrl: () => `/a2a/meta-agent`,
+
+  // Misc used by downstream hooks / guards
+  ApiError: class ApiError extends Error {
+    status: number;
+    body: unknown;
+    constructor(status: number, body: unknown) {
+      super(`${status}`);
+      this.status = status;
+      this.body = body;
+    }
+  },
 }));
 
 const mockStore = { currentWorkspace: { workspaceId: "ws-1", role: "viewer" as const } };

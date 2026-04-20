@@ -1,7 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import { Pencil, Loader2 } from "lucide-react";
+import {
+  Pencil,
+  Loader2,
+  Rocket,
+  ScrollText,
+  Network,
+  KeyRound,
+  ClipboardCheck,
+  Activity,
+  DollarSign,
+  Share2,
+  Clock,
+} from "lucide-react";
 import { fetchAgent, publishAgent, unpublishAgent } from "../../lib/api-client";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import DeploymentsTab from "../agents/DeploymentsTab";
@@ -14,6 +26,9 @@ import AgentCostsSection from "../agents/AgentCostsSection";
 import IntegrationTab from "../agents/IntegrationTab";
 import SchedulesTab from "../agents/SchedulesTab";
 import PublishToggle from "../shared/PublishToggle";
+import DetailSideNav, { type NavItem } from "../agents/DetailSideNav";
+import LazySection from "../agents/LazySection";
+import { useScrollSpy } from "../../hooks/useScrollSpy";
 
 export default function AgentDetailPage() {
   const { agentId } = useParams();
@@ -22,6 +37,52 @@ export default function AgentDetailPage() {
   const { currentWorkspace } = useWorkspaceStore();
   const [agent, setAgent] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const [selectedTraceSessionId, setSelectedTraceSessionId] = useState<string | null>(null);
+  const scrollRootRef = useRef<HTMLDivElement | null>(null);
+
+  const navItems: NavItem[] = useMemo(
+    () => [
+      { id: "deployments-section", label: t("deployments.tab"), icon: <Rocket className="w-3.5 h-3.5" /> },
+      { id: "schedules-section", label: t("schedules.title"), icon: <Clock className="w-3.5 h-3.5" /> },
+      { id: "logs-section", label: t("logs.sectionTitle"), icon: <ScrollText className="w-3.5 h-3.5" /> },
+      { id: "traces-section", label: t("traces.tab"), icon: <Activity className="w-3.5 h-3.5" /> },
+      { id: "evaluations-section", label: t("evaluations.tab"), icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
+      { id: "costs-section", label: t("costs.title"), icon: <DollarSign className="w-3.5 h-3.5" /> },
+      { id: "secrets-section", label: t("secrets.title"), icon: <KeyRound className="w-3.5 h-3.5" /> },
+      { id: "integration-section", label: t("integration.title"), icon: <Share2 className="w-3.5 h-3.5" /> },
+      // Endpoints is an advanced deployment feature (blue/green, rollback
+      // by pointer). Most users never touch it — demoted to the bottom so
+      // it doesn't crowd the "what's happening with my agent" surface.
+      { id: "endpoints-section", label: t("endpoints.tab"), icon: <Network className="w-3.5 h-3.5" /> },
+    ],
+    [t],
+  );
+
+  const { activeId, suppressFor, setActiveId } = useScrollSpy(
+    navItems.map((n) => n.id),
+    scrollRootRef,
+  );
+
+  const handleNavNavigate = (id: string) => {
+    // Lock scroll-spy for ~700ms while the smooth scroll plays out, and
+    // optimistically pin the active highlight to the clicked item so the
+    // nav never strobes through intermediate sections.
+    suppressFor(800);
+    setActiveId(id);
+  };
+
+  function viewTraceSession(sessionId: string) {
+    setSelectedTraceSessionId(sessionId);
+    requestAnimationFrame(() => {
+      const el = document.getElementById("traces-section");
+      const root = scrollRootRef.current;
+      if (el && root) {
+        const topWithin =
+          el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop - 8;
+        root.scrollTo({ top: topWithin, behavior: "smooth" });
+      }
+    });
+  }
 
   useEffect(() => {
     if (!agentId) return;
@@ -34,7 +95,7 @@ export default function AgentDetailPage() {
     return (
       <div className="flex flex-col h-full">
         <div
-          className="flex-1 flex items-center justify-center text-red-600 text-sm"
+          className="flex-1 flex items-center justify-center text-red-600 dark:text-red-400 text-sm"
           data-testid="agent-detail-error"
         >
           {t("agentDetail.loadError")}: {error.message}
@@ -47,7 +108,7 @@ export default function AgentDetailPage() {
     return (
       <div className="flex flex-col h-full">
         <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+          <Loader2 className="w-6 h-6 animate-spin text-gray-400 dark:text-gray-500" />
         </div>
       </div>
     );
@@ -105,61 +166,120 @@ export default function AgentDetailPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6" data-testid="agent-detail-content">
-        {agentId && (
-          <section className="mb-8" data-testid="deployments-section">
-            <DeploymentsTab agentId={agentId} />
-          </section>
-        )}
-        {agentId && (
-          <section className="mb-8" data-testid="logs-section">
-            <details className="border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900/30">
-              <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
-                {t("logs.sectionTitle")}
-              </summary>
-              <div className="border-t border-gray-200 dark:border-gray-700">
-                <LogsTab agentId={agentId} />
-              </div>
-            </details>
-          </section>
-        )}
-        {agentId && (
-          <section className="mb-8" data-testid="endpoints-section">
-            <EndpointsTab agentId={agentId} />
-          </section>
-        )}
-        {agentId && (
-          <section className="mb-8" data-testid="secrets-section">
-            <SecretsTab agentId={agentId} />
-          </section>
-        )}
-        {agentId && (
-          <section className="mb-8" data-testid="evaluations-section">
-            <EvaluationsTab agentId={agentId} />
-          </section>
-        )}
-        {agentId && (
-          <section className="mb-8" data-testid="traces-section">
-            <TracesTab agentId={agentId} />
-          </section>
-        )}
-        {agentId && (
-          <section className="mb-8" data-testid="costs-section">
-            <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900/30">
-              <AgentCostsSection agentId={agentId} />
+      <div className="flex-1 min-h-0 flex">
+        <div
+          ref={scrollRootRef}
+          className="flex-1 overflow-y-auto"
+          data-testid="agent-detail-content"
+        >
+          <div className="flex gap-2 p-6 max-w-[1600px] mx-auto">
+            <DetailSideNav
+              items={navItems}
+              activeId={activeId}
+              scrollRootRef={scrollRootRef}
+              memoryKey={agentId}
+              onNavigate={handleNavNavigate}
+            />
+            <div className="flex-1 min-w-0 space-y-8">
+              {agentId && (
+                <LazySection
+                  id="deployments-section"
+                  testId="deployments-section"
+                  rootRef={scrollRootRef}
+                  eager
+                >
+                  <DeploymentsTab agentId={agentId} />
+                </LazySection>
+              )}
+              {agentId && (
+                <LazySection
+                  id="schedules-section"
+                  testId="schedules-section"
+                  rootRef={scrollRootRef}
+                >
+                  <SchedulesTab agentId={agentId} onViewTrace={viewTraceSession} />
+                </LazySection>
+              )}
+              {agentId && (
+                <LazySection
+                  id="logs-section"
+                  testId="logs-section"
+                  rootRef={scrollRootRef}
+                >
+                  <details className="border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900/30" open>
+                    <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                      {t("logs.sectionTitle")}
+                    </summary>
+                    <div className="border-t border-gray-200 dark:border-gray-700">
+                      <LogsTab agentId={agentId} />
+                    </div>
+                  </details>
+                </LazySection>
+              )}
+              {agentId && (
+                <LazySection
+                  id="traces-section"
+                  testId="traces-section"
+                  rootRef={scrollRootRef}
+                  minHeight={400}
+                  // Eager so "View trace" from Schedules can scroll to
+                  // real content (not a placeholder that hydrates after
+                  // the jump and shifts the scroll target).
+                  eager
+                >
+                  <TracesTab agentId={agentId} initialSessionId={selectedTraceSessionId} />
+                </LazySection>
+              )}
+              {agentId && (
+                <LazySection
+                  id="evaluations-section"
+                  testId="evaluations-section"
+                  rootRef={scrollRootRef}
+                >
+                  <EvaluationsTab agentId={agentId} />
+                </LazySection>
+              )}
+              {agentId && (
+                <LazySection
+                  id="costs-section"
+                  testId="costs-section"
+                  rootRef={scrollRootRef}
+                >
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/30">
+                    <AgentCostsSection agentId={agentId} />
+                  </div>
+                </LazySection>
+              )}
+              {agentId && (
+                <LazySection
+                  id="secrets-section"
+                  testId="secrets-section"
+                  rootRef={scrollRootRef}
+                >
+                  <SecretsTab agentId={agentId} />
+                </LazySection>
+              )}
+              {agentId && (
+                <LazySection
+                  id="integration-section"
+                  testId="integration-section"
+                  rootRef={scrollRootRef}
+                >
+                  <IntegrationTab agentId={agentId} />
+                </LazySection>
+              )}
+              {agentId && (
+                <LazySection
+                  id="endpoints-section"
+                  testId="endpoints-section"
+                  rootRef={scrollRootRef}
+                >
+                  <EndpointsTab agentId={agentId} />
+                </LazySection>
+              )}
             </div>
-          </section>
-        )}
-        {agentId && (
-          <section className="mb-8" data-testid="integration-section">
-            <IntegrationTab agentId={agentId} />
-          </section>
-        )}
-        {agentId && (
-          <section className="mb-8" data-testid="schedules-section">
-            <SchedulesTab agentId={agentId} />
-          </section>
-        )}
+          </div>
+        </div>
       </div>
     </div>
   );
