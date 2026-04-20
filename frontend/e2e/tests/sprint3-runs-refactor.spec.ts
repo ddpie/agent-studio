@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
 
+function escapeForRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function openFirstAgent(page: import("@playwright/test").Page) {
   await page.goto("/");
   await page.waitForURL(/agents/);
@@ -51,7 +55,7 @@ test.describe("Runs-first refactor", () => {
     await firstRow.click();
     // The URL is pushed with encodeURIComponent(sessionId) so colons in ISO timestamps become %3A.
     const encoded = encodeURIComponent(sessionId);
-    await expect(page).toHaveURL(new RegExp(`#/agents/[^/]+/runs/${encoded.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}$`), { timeout: 5_000 });
+    await expect(page).toHaveURL(new RegExp(`#/agents/[^/]+/runs/${escapeForRegex(encoded)}$`), { timeout: 5_000 });
   });
 
   test("Deep-linking /agents/:id/runs/:sessionId pre-selects the run", async ({ page }) => {
