@@ -178,6 +178,15 @@ def create_agent(wsId: str):
     table = _get_table()
     table.put_item(Item=item)
 
+    # Create the agent's dedicated OnlineEvaluationConfig. Fire-and-forget;
+    # agent creation succeeds even if eval provisioning fails.
+    try:
+        from crud.evaluations import create_eval_config_for_agent
+        create_eval_config_for_agent(ws_id, agent_id)
+    except Exception as e:
+        logger.warning("eval config create after create_agent failed",
+                       extra={"workspace_id": ws_id, "agent_id": agent_id, "error": str(e)})
+
     return success(_agent_response(item), status_code=201)
 
 
@@ -263,6 +272,13 @@ def delete_agent(wsId: str, agentId: str):
         )
     except table.meta.client.exceptions.ConditionalCheckFailedException:
         return forbidden()
+
+    try:
+        from crud.evaluations import delete_eval_config_for_agent
+        delete_eval_config_for_agent(ws_id, agentId)
+    except Exception as e:
+        logger.warning("eval config delete after delete_agent failed",
+                       extra={"workspace_id": ws_id, "agent_id": agentId, "error": str(e)})
 
     return success({"deleted": True})
 

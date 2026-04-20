@@ -1,10 +1,17 @@
-"""Evaluator (LLM-as-Judge) — workspace-scoped online config + read endpoints."""
+"""Evaluator (LLM-as-Judge) — per-agent online config + read endpoints.
+
+AgentCore enforces `serviceNames` in the CloudWatch data-source config to
+be a list of exactly 1. Since `service.name` in spans is the agent
+runtime id, one eval config maps to one agent. We key configs by
+`{ws-prefix}_{agent-id}` and keep them in sync with agent CRUD.
+"""
 import re
 import time
 
 import boto3
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler.api_gateway import Router
+from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
 from shared.config import AGENTS_TABLE, EVALUATOR_ROLE_ARN, REGION, SPANS_LOG_GROUP
@@ -21,9 +28,6 @@ _agents_table = None
 
 EVAL_OUTPUT_LOG_GROUP_PREFIX = "/aws/bedrock-agentcore/evaluations/results/"
 
-# Keep small + opinionated for MVP. Users don't pick which evaluators fire;
-# we bake in a reasonable default. Sprint 3 can surface per-workspace
-# customization.
 DEFAULT_EVALUATORS = [
     {"evaluatorId": "Builtin.Correctness"},
     {"evaluatorId": "Builtin.Helpfulness"},
@@ -38,37 +42,76 @@ def _get_control():
     return _control
 
 
-def _config_name_for(workspace_id: str) -> str:
-    """Deterministic per-workspace config name.
+def _get_logs():
+    global _logs
+    if _logs is None:
+        _logs = boto3.client("logs", region_name=REGION)
+    return _logs
 
-    API regex: [a-zA-Z][a-zA-Z0-9_]{0,47}. Must start with a letter,
-    only alphanumeric + underscore, max 48 chars. Workspace UUIDs use
-    hyphens which are invalid — strip them.
+
+def _get_agents_table():
+    global _agents_table
+    if _agents_table is None:
+        _agents_table = boto3.resource("dynamodb", region_name=REGION).Table(AGENTS_TABLE)
+    return _agents_table
+
+
+def _get_agent_item(agent_id: str) -> dict | None:
+    resp = _get_agents_table().get_item(Key={"agentId": agent_id}, ConsistentRead=True)
+    return resp.get("Item")
+
+
+def _eval_config_name_for_agent(workspace_id: str, agent_id: str) -> str:
+    """Deterministic per-agent config name.
+
+    API regex: [a-zA-Z][a-zA-Z0-9_]{0,47}. Strip non-alphanumeric from
+    workspace id + agent id, truncate, concatenate. Agent ids already
+    fit the charset; workspace UUIDs need hyphens stripped.
     """
-    safe = re.sub(r"[^A-Za-z0-9]", "", workspace_id)[:32]
-    return f"agentstudio_ws_{safe}"
+    safe_ws = re.sub(r"[^A-Za-z0-9]", "", workspace_id)[:16]
+    safe_agent = re.sub(r"[^A-Za-z0-9]", "", agent_id)[:24]
+    return f"agentstudio_{safe_ws}_{safe_agent}"[:48]
 
 
-def create_eval_config_for_workspace(workspace_id: str) -> str:
-    """Fire-and-forget: create OnlineEvaluationConfig for a workspace.
+def _find_config_by_name(name: str) -> dict | None:
+    """Return the matching config summary, or None if missing. Paginates."""
+    client = _get_control()
+    next_token: str | None = None
+    while True:
+        kwargs: dict = {"maxResults": 100}
+        if next_token:
+            kwargs["nextToken"] = next_token
+        resp = client.list_online_evaluation_configs(**kwargs)
+        items = (
+            resp.get("onlineEvaluationConfigs")
+            or resp.get("onlineEvaluationConfigSummaries")
+            or resp.get("items")
+            or []
+        )
+        for item in items:
+            item_name = item.get("onlineEvaluationConfigName") or item.get("name")
+            if item_name == name:
+                return item
+        next_token = resp.get("nextToken")
+        if not next_token:
+            return None
 
-    Returns the config name (also the idempotency handle). Safe to call
-    repeatedly — if the config already exists we swallow ConflictException
-    and return the name.
 
-    Synchronous to the API (returns in <1s) but AgentCore creates the
-    resource asynchronously (status=CREATING ~minutes). Caller must not
-    block on READY.
+def create_eval_config_for_agent(workspace_id: str, agent_id: str) -> str:
+    """Idempotently create a per-agent OnlineEvaluationConfig.
+
+    Returns the config name. Swallows ConflictException so callers can
+    invoke from agent-create hooks without extra checks.
     """
     if not EVALUATOR_ROLE_ARN:
         logger.warning("EVALUATOR_ROLE_ARN not configured; skipping eval config creation")
         return ""
 
-    name = _config_name_for(workspace_id)
+    name = _eval_config_name_for_agent(workspace_id, agent_id)
     try:
         _get_control().create_online_evaluation_config(
             onlineEvaluationConfigName=name,
-            description=f"Online evaluation for Agent Studio workspace {workspace_id}",
+            description=f"Online evaluation for agent {agent_id} (workspace {workspace_id})",
             rule={
                 "samplingConfig": {"samplingPercentage": 100.0},
                 "filters": [],
@@ -76,14 +119,18 @@ def create_eval_config_for_workspace(workspace_id: str) -> str:
             dataSourceConfig={
                 "cloudWatchLogs": {
                     "logGroupNames": [SPANS_LOG_GROUP],
-                    "serviceNames": ["bedrock-agentcore"],
+                    # AgentCore accepts exactly 1 service name. Use the agent
+                    # id — that's what `resource.attributes.service.name`
+                    # holds on spans.
+                    "serviceNames": [agent_id],
                 },
             },
             evaluators=DEFAULT_EVALUATORS,
             evaluationExecutionRoleArn=EVALUATOR_ROLE_ARN,
             enableOnCreate=True,
         )
-        logger.info("created online eval config", extra={"config_name": name, "workspace_id": workspace_id})
+        logger.info("created online eval config",
+                    extra={"config_name": name, "agent_id": agent_id, "workspace_id": workspace_id})
     except ClientError as e:
         code = e.response.get("Error", {}).get("Code")
         if code == "ConflictException":
@@ -95,24 +142,58 @@ def create_eval_config_for_workspace(workspace_id: str) -> str:
     return name
 
 
-# ---------------------------------------------------------------------------
-# Read endpoints
-# ---------------------------------------------------------------------------
+def delete_eval_config_for_agent(workspace_id: str, agent_id: str) -> None:
+    """Tear down the agent's eval config. Safe when already missing."""
+    if not EVALUATOR_ROLE_ARN:
+        return
+    name = _eval_config_name_for_agent(workspace_id, agent_id)
+    existing = _find_config_by_name(name)
+    if not existing:
+        return
+    cfg_id = existing.get("onlineEvaluationConfigId") or existing.get("id")
+    try:
+        _get_control().delete_online_evaluation_config(
+            onlineEvaluationConfigId=cfg_id,
+        )
+        logger.info("deleted online eval config",
+                    extra={"config_name": name, "agent_id": agent_id})
+    except ClientError as e:
+        logger.warning("delete_online_evaluation_config failed",
+                       extra={"config_name": name,
+                              "error_code": e.response.get("Error", {}).get("Code")})
 
 
-def _get_logs():
-    global _logs
-    if _logs is None:
-        _logs = boto3.client("logs", region_name=REGION)
-    return _logs
+def sync_eval_config_for_agent(workspace_id: str, agent_id: str) -> None:
+    """Create-if-missing hook for agent create. Kept as a separate
+    function for symmetry with a future update path (e.g. disable on
+    archive)."""
+    create_eval_config_for_agent(workspace_id, agent_id)
 
 
-def _get_agent_item(agent_id: str) -> dict | None:
-    global _agents_table
-    if _agents_table is None:
-        _agents_table = boto3.resource("dynamodb", region_name=REGION).Table(AGENTS_TABLE)
-    resp = _agents_table.get_item(Key={"agentId": agent_id}, ConsistentRead=True)
-    return resp.get("Item")
+# Backward-compat shim — earlier code called per-workspace; new callers
+# should use the per-agent functions above. Fans out to all live agents
+# in the workspace. Safe to call repeatedly.
+def create_eval_config_for_workspace(workspace_id: str) -> str:
+    table = _get_agents_table()
+    try:
+        resp = table.query(
+            IndexName="workspace-index",
+            KeyConditionExpression=Key("workspace_id").eq(workspace_id),
+            ProjectionExpression="agentId,#s",
+            ExpressionAttributeNames={"#s": "status"},
+        )
+    except ClientError as e:
+        logger.warning("workspace agent scan failed",
+                       extra={"workspace_id": workspace_id,
+                              "error_code": e.response.get("Error", {}).get("Code")})
+        return ""
+    names: list[str] = []
+    for item in resp.get("Items", []):
+        aid = item.get("agentId")
+        if not aid or item.get("status") == "archived":
+            continue
+        names.append(create_eval_config_for_agent(workspace_id, aid))
+    return ",".join(n for n in names if n)
 
 
 def _run_logs_query(
@@ -127,7 +208,7 @@ def _run_logs_query(
         return []
     logs = _get_logs()
     query_id = logs.start_query(
-        logGroupNames=log_group_names[:20],  # Insights max 20 groups per query
+        logGroupNames=log_group_names[:20],
         startTime=start_epoch,
         endTime=end_epoch,
         queryString=query,
@@ -172,37 +253,35 @@ def get_agent_evaluations(wsId: str, agentId: str):
     if not item or item.get("workspace_id") != ws_id:
         return forbidden()
 
-    # Discover eval result log groups. AgentCore creates one per
-    # OnlineEvaluationConfig at /aws/bedrock-agentcore/evaluations/results/<id>.
-    logs = _get_logs()
-    try:
-        groups = logs.describe_log_groups(
-            logGroupNamePrefix=EVAL_OUTPUT_LOG_GROUP_PREFIX,
-        )
-    except ClientError as e:
-        logger.exception("describe_log_groups failed",
-                         extra={"error_code": e.response.get("Error", {}).get("Code")})
-        return internal_error()
-
-    group_names = [g["logGroupName"] for g in groups.get("logGroups", [])]
-    if not group_names:
+    # This agent's dedicated eval config output log group.
+    cfg_name = _eval_config_name_for_agent(ws_id, agentId)
+    cfg = _find_config_by_name(cfg_name)
+    if cfg is None:
         return success({"evaluations": []})
+
+    cfg_id = cfg.get("onlineEvaluationConfigId") or cfg.get("id") or ""
+    if not cfg_id:
+        return success({"evaluations": []})
+
+    target_lg = f"{EVAL_OUTPUT_LOG_GROUP_PREFIX}{cfg_id}"
+    try:
+        _get_logs().describe_log_groups(logGroupNamePrefix=target_lg, limit=1)
+    except ClientError as e:
+        logger.warning("describe_log_groups failed for eval output",
+                       extra={"error_code": e.response.get("Error", {}).get("Code")})
 
     now_ms = int(time.time() * 1000)
     start_ms = now_ms - 7 * 24 * 3600 * 1000
 
-    # Logs Insights query. Keep fields flexible — the real message shape
-    # may wrap these under OTEL attributes; fallback handled in parsing.
-    q = f"""
+    q = """
 fields @timestamp, evaluatorId as evaluator, score, sessionId, traceId, reason
-| filter agentRuntimeId = "{agentId}" or contains(@message, "{agentId}")
 | sort @timestamp desc
 | limit 100
 """.strip()
 
     try:
         rows = _run_logs_query(
-            log_group_names=group_names,
+            log_group_names=[target_lg],
             query=q,
             start_epoch=start_ms // 1000,
             end_epoch=now_ms // 1000,
@@ -234,3 +313,147 @@ fields @timestamp, evaluatorId as evaluator, score, sessionId, traceId, reason
         })
 
     return success({"evaluations": out})
+
+
+# ---------------------------------------------------------------------------
+# Per-agent enable + status endpoints (Evaluations tab "Enable" button,
+# plus the richer empty-state on the UI).
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/workspaces/<wsId>/agents/<agentId>/evaluations/enable")
+def enable_agent_evaluations(wsId: str, agentId: str):
+    _user_id, ws_id, _member, err = auth_check(
+        router.current_event, min_role="editor", ws_id=wsId,
+    )
+    if err:
+        return err
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+    item = _get_agent_item(agentId)
+    if not item or item.get("workspace_id") != ws_id:
+        return forbidden()
+
+    if not EVALUATOR_ROLE_ARN:
+        return internal_error("EVALUATOR_ROLE_ARN not configured")
+
+    name = _eval_config_name_for_agent(ws_id, agentId)
+    try:
+        existing = _find_config_by_name(name)
+        if existing is not None:
+            return success({"configName": name, "status": "ALREADY_EXISTS"})
+        create_eval_config_for_agent(ws_id, agentId)
+        return success({"configName": name, "status": "CREATED"})
+    except ClientError as e:
+        logger.exception(
+            "enable_agent_evaluations failed",
+            extra={"workspaceId": wsId, "agentId": agentId,
+                   "error_code": e.response.get("Error", {}).get("Code")},
+        )
+        return internal_error()
+
+
+@router.get("/api/workspaces/<wsId>/agents/<agentId>/evaluations/status")
+def get_agent_evaluations_status(wsId: str, agentId: str):
+    _user_id, ws_id, _member, err = auth_check(
+        router.current_event, min_role="viewer", ws_id=wsId,
+    )
+    if err:
+        return err
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+    item = _get_agent_item(agentId)
+    if not item or item.get("workspace_id") != ws_id:
+        return forbidden()
+
+    name = _eval_config_name_for_agent(ws_id, agentId)
+    try:
+        match = _find_config_by_name(name)
+    except ClientError as e:
+        logger.exception(
+            "get_agent_evaluations_status failed",
+            extra={"workspaceId": wsId, "agentId": agentId,
+                   "error_code": e.response.get("Error", {}).get("Code")},
+        )
+        return internal_error()
+
+    if match is None:
+        return success({
+            "exists": False,
+            "configName": name,
+            "status": None,
+            "executionStatus": None,
+        })
+
+    status_val = match.get("status") or match.get("configStatus")
+    exec_status = match.get("executionStatus") or match.get("evaluationExecutionStatus")
+    return success({
+        "exists": True,
+        "configName": name,
+        "status": status_val,
+        "executionStatus": exec_status,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Legacy workspace-level endpoints — kept so UIs calling /workspaces/:id/
+# evaluations/enable still work. They fan out to all agents in the ws.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/workspaces/<wsId>/evaluations/enable")
+def enable_workspace_evaluations(wsId: str):
+    _user_id, ws_id, _member, err = auth_check(
+        router.current_event, min_role="editor", ws_id=wsId,
+    )
+    if err:
+        return err
+    if not EVALUATOR_ROLE_ARN:
+        return internal_error("EVALUATOR_ROLE_ARN not configured")
+    created = create_eval_config_for_workspace(ws_id)
+    return success({"status": "CREATED" if created else "NOOP"})
+
+
+@router.get("/api/workspaces/<wsId>/evaluations/status")
+def get_workspace_evaluations_status(wsId: str):
+    """Legacy endpoint — returns aggregate status across all agents.
+
+    Frontend should prefer the per-agent endpoint. Kept for backwards
+    compatibility: returns exists=True when at least one agent in the
+    workspace has a config.
+    """
+    _user_id, ws_id, _member, err = auth_check(
+        router.current_event, min_role="viewer", ws_id=wsId,
+    )
+    if err:
+        return err
+    table = _get_agents_table()
+    try:
+        resp = table.query(
+            IndexName="workspace-index",
+            KeyConditionExpression=Key("workspace_id").eq(ws_id),
+            ProjectionExpression="agentId,#s",
+            ExpressionAttributeNames={"#s": "status"},
+        )
+    except ClientError:
+        return success({"exists": False, "configName": "", "status": None, "executionStatus": None})
+    any_active = False
+    any_exists = False
+    for item in resp.get("Items", []):
+        aid = item.get("agentId")
+        if not aid or item.get("status") == "archived":
+            continue
+        name = _eval_config_name_for_agent(ws_id, aid)
+        match = _find_config_by_name(name)
+        if match:
+            any_exists = True
+            if (match.get("status") or "") == "ACTIVE":
+                any_active = True
+    return success({
+        "exists": any_exists,
+        "configName": "",
+        "status": "ACTIVE" if any_active else ("CREATING" if any_exists else None),
+        "executionStatus": "ENABLED" if any_active else None,
+    })
