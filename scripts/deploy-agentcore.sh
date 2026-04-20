@@ -138,7 +138,32 @@ if agent_id:
 else:
     mode = "create"
 
-env_vars = {"AGENT_STUDIO_REGION": region}
+_aid = agent_id or "agentStudioMeta"
+_account = os.environ["AGENT_STUDIO_ACCOUNT_ID"]
+env_vars = {
+    "AGENT_STUDIO_REGION": region,
+    # AgentCore Observability via ADOT — emits gen_ai.* spans to aws/spans.
+    # AgentCore's data plane captures OTLP from the runtime pod using the
+    # x-aws-log-group header; no sidecar collector exists on localhost:4318,
+    # so OTEL_EXPORTER_OTLP_ENDPOINT must remain unset.
+    "AGENT_OBSERVABILITY_ENABLED": "true",
+    "OTEL_PYTHON_DISTRO": "aws_distro",
+    "OTEL_PYTHON_CONFIGURATOR": "aws_configurator",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+    "OTEL_TRACES_EXPORTER": "otlp",
+    "OTEL_LOGS_EXPORTER": "otlp",
+    "OTEL_METRICS_EXPORTER": "awsemf",
+    "OTEL_RESOURCE_ATTRIBUTES": (
+        f"service.name={_aid},"
+        f"aws.log.group.names=/aws/bedrock-agentcore/runtimes/{_aid}-DEFAULT,"
+        f"cloud.resource_id=arn:aws:bedrock-agentcore:{region}:{_account}:runtime/{_aid}"
+    ),
+    "OTEL_EXPORTER_OTLP_LOGS_HEADERS": (
+        f"x-aws-log-group=/aws/bedrock-agentcore/runtimes/{_aid}-DEFAULT,"
+        f"x-aws-log-stream=runtime-logs,"
+        f"x-aws-metric-namespace=bedrock-agentcore"
+    ),
+}
 for _k in (
     "AGENT_STUDIO_CODE_INTERPRETER_ID",
     "AGENT_STUDIO_BROWSER_ID",

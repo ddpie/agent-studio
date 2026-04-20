@@ -229,7 +229,8 @@ if [[ "$SKIP_INFRA" == false ]]; then
       strands-agents bedrock-agentcore boto3 requests httpx beautifulsoup4 \
       markdownify pyyaml python-dateutil pydantic tabulate websocket-client \
       exceptiongroup anyio \
-      "pypdf>=4" "openpyxl>=3.1"
+      "pypdf>=4" "openpyxl>=3.1" \
+      "aws-opentelemetry-distro>=0.10.0"
     find "$TMPDIR" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
     (cd "$TMPDIR" && zip -qr /tmp/agent-studio-base.zip .)
     aws s3 cp /tmp/agent-studio-base.zip "s3://$S3_BUCKET/base/deployment.zip" --region "$REGION"

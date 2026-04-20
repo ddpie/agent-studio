@@ -10,6 +10,17 @@ Instead of assembling everything into a single main.py, we now generate:
 
 # ── main.py template (no MCP) ──────────────────────────────────────────────
 MAIN_PY_TEMPLATE = '''\
+# OTEL bootstrap must run before strands / boto3 imports so that
+# aws-opentelemetry-distro's auto-instrumentation can hook them.
+import os as _os
+if _os.environ.get("AGENT_OBSERVABILITY_ENABLED", "").lower() == "true":
+    try:
+        from opentelemetry.instrumentation.auto_instrumentation import initialize as _otel_init
+        _otel_init()
+    except Exception as _e:
+        import sys as _sys
+        print(f"OTEL auto-instrumentation disabled: {_e}", file=_sys.stderr)
+
 import json
 from pathlib import Path
 from strands import Agent
@@ -62,6 +73,17 @@ if __name__ == "__main__":
 
 # ── main.py template (with MCP) ───────────────────────────────────────────
 MAIN_PY_MCP_TEMPLATE = '''\
+# OTEL bootstrap must run before strands / boto3 imports so that
+# aws-opentelemetry-distro's auto-instrumentation can hook them.
+import os as _os
+if _os.environ.get("AGENT_OBSERVABILITY_ENABLED", "").lower() == "true":
+    try:
+        from opentelemetry.instrumentation.auto_instrumentation import initialize as _otel_init
+        _otel_init()
+    except Exception as _e:
+        import sys as _sys
+        print(f"OTEL auto-instrumentation disabled: {_e}", file=_sys.stderr)
+
 import json
 import contextlib
 import urllib.parse

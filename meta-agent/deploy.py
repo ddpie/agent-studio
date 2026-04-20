@@ -21,6 +21,18 @@ def _shared_env_vars(agent_id: str = "") -> dict:
     """
     env = {
         "AGENT_STUDIO_REGION": REGION,
+        # AgentCore Observability via ADOT — emits gen_ai.* spans to aws/spans.
+        # AgentCore's data plane captures OTLP via the x-aws-log-group header,
+        # so OTEL_EXPORTER_OTLP_ENDPOINT must NOT be set (no sidecar on
+        # localhost:4318). agent_template_v2.py additionally calls
+        # StrandsTelemetry().setup_otlp_exporter() to wire Strands spans.
+        "AGENT_OBSERVABILITY_ENABLED": "true",
+        "OTEL_PYTHON_DISTRO": "aws_distro",
+        "OTEL_PYTHON_CONFIGURATOR": "aws_configurator",
+        "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+        "OTEL_TRACES_EXPORTER": "otlp",
+        "OTEL_LOGS_EXPORTER": "otlp",
+        "OTEL_METRICS_EXPORTER": "awsemf",
     }
     ci = os.environ.get("AGENT_STUDIO_CODE_INTERPRETER_ID", "")
     br = os.environ.get("AGENT_STUDIO_BROWSER_ID", "")
@@ -30,6 +42,20 @@ def _shared_env_vars(agent_id: str = "") -> dict:
         env["AGENT_STUDIO_BROWSER_ID"] = br
 
     if agent_id:
+        # Resource attributes + OTLP-logs headers link spans to the agent's
+        # runtime log group so AgentCore's data plane routes them to aws/spans
+        # via Transaction Search. cloud.resource_id is what CloudWatch uses
+        # to attribute the spans to this specific runtime.
+        env["OTEL_RESOURCE_ATTRIBUTES"] = (
+            f"service.name={agent_id},"
+            f"aws.log.group.names=/aws/bedrock-agentcore/runtimes/{agent_id}-DEFAULT,"
+            f"cloud.resource_id=arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:runtime/{agent_id}"
+        )
+        env["OTEL_EXPORTER_OTLP_LOGS_HEADERS"] = (
+            f"x-aws-log-group=/aws/bedrock-agentcore/runtimes/{agent_id}-DEFAULT,"
+            f"x-aws-log-stream=runtime-logs,"
+            f"x-aws-metric-namespace=bedrock-agentcore"
+        )
         try:
             s3 = boto3.client("s3", region_name=REGION)
             obj = s3.get_object(Bucket=S3_BUCKET, Key=f"agents/{agent_id}/metadata.json")

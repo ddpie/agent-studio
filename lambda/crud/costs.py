@@ -226,16 +226,18 @@ def _agent_ids_for_workspace(workspace_id: str) -> list[dict]:
 def _per_agent_totals_query() -> str:
     """Return an Insights query that produces per-agent call + token totals.
 
-    Token fields may be absent on some accounts — coalesce with 0 so the stats
-    row is produced regardless. Filter to AgentCore.Runtime.Invoke spans so
-    we count invocations (not every trace child).
+    Call count comes from AgentCore.Runtime.Invoke envelope spans (one per
+    invocation). Token totals come from gen_ai `chat` child spans emitted by
+    Strands / botocore auto-instrumentation — join on resource.service.name
+    which equals the agent id (set by OTEL_RESOURCE_ATTRIBUTES).
     """
     return """
-fields attributes.aws.agent.id as agentRuntimeId,
+fields resource.attributes.service.name as agentRuntimeId,
        coalesce(attributes.gen_ai.usage.input_tokens, 0) as inTok,
-       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok
-| filter name = "AgentCore.Runtime.Invoke" and ispresent(agentRuntimeId)
-| stats count(*) as calls,
+       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok,
+       (name = "AgentCore.Runtime.Invoke") as isInvoke
+| filter ispresent(agentRuntimeId)
+| stats sum(isInvoke) as calls,
         sum(inTok) as inputTokens,
         sum(outTok) as outputTokens
         by agentRuntimeId
@@ -244,11 +246,12 @@ fields attributes.aws.agent.id as agentRuntimeId,
 
 def _timeseries_query(bucket: str) -> str:
     return f"""
-fields attributes.aws.agent.id as agentRuntimeId,
+fields resource.attributes.service.name as agentRuntimeId,
        coalesce(attributes.gen_ai.usage.input_tokens, 0) as inTok,
-       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok
-| filter name = "AgentCore.Runtime.Invoke" and ispresent(agentRuntimeId)
-| stats count(*) as calls,
+       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok,
+       (name = "AgentCore.Runtime.Invoke") as isInvoke
+| filter ispresent(agentRuntimeId)
+| stats sum(isInvoke) as calls,
         sum(inTok) as inputTokens,
         sum(outTok) as outputTokens
         by bin({bucket}) as bucket, agentRuntimeId
@@ -260,9 +263,10 @@ def _single_agent_query(agent_id: str) -> str:
     # agent_id is validated upstream via validate_id().
     return f"""
 fields coalesce(attributes.gen_ai.usage.input_tokens, 0) as inTok,
-       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok
-| filter name = "AgentCore.Runtime.Invoke" and attributes.aws.agent.id = "{agent_id}"
-| stats count(*) as calls,
+       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok,
+       (name = "AgentCore.Runtime.Invoke") as isInvoke
+| filter resource.attributes.service.name = "{agent_id}"
+| stats sum(isInvoke) as calls,
         sum(inTok) as inputTokens,
         sum(outTok) as outputTokens
 """.strip()

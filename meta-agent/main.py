@@ -4,6 +4,24 @@ The Meta-Agent is an AI that creates and manages other AI agents.
 It runs on AgentCore Runtime and uses boto3 to orchestrate sub-agents.
 """
 
+# OTEL bootstrap MUST run before strands / boto3 / bedrock_agentcore are
+# imported so that auto-instrumentation can monkey-patch them. When
+# AGENT_OBSERVABILITY_ENABLED=true and aws-opentelemetry-distro is on the
+# PYTHONPATH, this installs the AWS-aware TracerProvider + OTLP exporter
+# configured via OTEL_* env vars (set by scripts/deploy-agentcore.sh).
+# AgentCore Runtime doesn't run `opentelemetry-instrument` as a wrapper
+# for us — entryPoint is a bare .py — so we invoke the distro's
+# initializer programmatically. Best-effort: missing distro degrades to
+# local/no-op spans, agent still runs.
+import os as _os
+if _os.environ.get("AGENT_OBSERVABILITY_ENABLED", "").lower() == "true":
+    try:
+        from opentelemetry.instrumentation.auto_instrumentation import initialize as _otel_init  # type: ignore
+        _otel_init()
+    except Exception as _e:  # noqa: BLE001
+        import sys as _sys
+        print(f"OTEL auto-instrumentation disabled: {_e}", file=_sys.stderr)
+
 import json
 import textwrap
 
