@@ -39,7 +39,7 @@ export function createRoutes(
             { path: "edit/:agentId", element: withBoundary(<AgentEditForm />) },
             { path: "edit/:agentId/skills/:skillId", element: withBoundary(<AgentEditForm />) },
             { path: ":agentId", element: withBoundary(<AgentDetailPage />) },
-            { path: ":agentId/runs/:sessionId", element: withBoundary(<AgentDetailPage />) },
+            { path: ":agentId/runs/:runId", element: withBoundary(<AgentDetailPage />) },
           ],
         },
         { path: "skills", element: withBoundary(<SkillsPage />) },

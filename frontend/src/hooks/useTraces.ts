@@ -2,13 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import {
   listTraces,
   getSessionTrace,
-  getSessionOutput,
   fetchTraceStats,
   type TraceSummary,
   type TraceSpan,
   type TraceStats,
   type TraceStatsRange,
-  type SessionOutput,
 } from "../lib/api-client";
 
 export function useTraceSessions(agentId: string | null) {
@@ -111,56 +109,6 @@ export function useSessionTrace(agentId: string | null, sessionId: string | null
   return { root, error, loading, pending };
 }
 
-export function useSessionOutput(agentId: string | null, sessionId: string | null) {
-  const [data, setData] = useState<SessionOutput | null>(null);
-  const [error, setError] = useState<Error | null>(null);
-  const [loading, setLoading] = useState(false);
-  const mountedRef = useRef(true);
-
-  useEffect(() => () => { mountedRef.current = false; }, []);
-
-  useEffect(() => {
-    if (!agentId || !sessionId) {
-      setData(null);
-      return;
-    }
-    let cancelled = false;
-    let retry = 0;
-    const MAX_RETRIES = 36;
-    const attempt = (): void => {
-      setLoading(true);
-      getSessionOutput(agentId, sessionId)
-        .then((r) => {
-          if (cancelled || !mountedRef.current) return;
-          // Runtime log stream not created yet OR empty — retry; tokens
-          // usually land within 20-60s of a scheduled fire.
-          if (!r.hasOutput && retry < MAX_RETRIES) {
-            retry += 1;
-            setTimeout(attempt, 2500);
-          } else {
-            setData(r);
-            setError(null);
-            setLoading(false);
-          }
-        })
-        .catch((err: unknown) => {
-          if (cancelled || !mountedRef.current) return;
-          const status = (err as { status?: number })?.status;
-          if (status === 404 && retry < MAX_RETRIES) {
-            retry += 1;
-            setTimeout(attempt, 2500);
-            return;
-          }
-          setError(err as Error);
-          setLoading(false);
-        });
-    };
-    attempt();
-    return () => { cancelled = true; };
-  }, [agentId, sessionId]);
-
-  return { data, error, loading };
-}
 
 export function useTraceStats(agentId: string | null, range: TraceStatsRange) {
   const [stats, setStats] = useState<TraceStats | null>(null);

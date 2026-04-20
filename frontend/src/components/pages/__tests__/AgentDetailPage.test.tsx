@@ -113,7 +113,7 @@ function renderPage(initialPath: string = "/agents/agt-1") {
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path="/agents/:agentId" element={<AgentDetailPage />} />
-          <Route path="/agents/:agentId/runs/:sessionId" element={<AgentDetailPage />} />
+          <Route path="/agents/:agentId/runs/:runId" element={<AgentDetailPage />} />
         </Routes>
       </MemoryRouter>
     </I18nextProvider>
@@ -165,7 +165,7 @@ describe("AgentDetailPage", () => {
     renderPage();
     await screen.findByTestId("agent-detail-title");
     expect(await screen.findByTestId("runs-section")).toBeInTheDocument();
-    expect(await screen.findByTestId("traces-tab")).toBeInTheDocument(); // inner TracesTab testid preserved
+    expect(await screen.findByTestId("runs-tab")).toBeInTheDocument();
   });
 
   it("renders Integration section with card/endpoint URLs", async () => {
@@ -186,10 +186,10 @@ describe("AgentDetailPage", () => {
     expect(await screen.findByTestId("logs-section")).toBeInTheDocument();
   });
 
-  it("pre-selects a run when routed to /agents/:id/runs/:sessionId", async () => {
-    renderPage("/agents/agt-1/runs/sched-daily-manual-123");
+  it("pre-selects a run when routed to /agents/:id/runs/:runId", async () => {
+    renderPage("/agents/agt-1/runs/01JWXYZ-test-run");
     await screen.findByTestId("agent-detail-title");
-    // When a sessionId is pre-selected, the "select a session" placeholder is hidden.
-    expect(screen.queryByText(/select a session/i)).not.toBeInTheDocument();
+    // When a runId is pre-selected, the "select a run" placeholder is hidden.
+    expect(screen.queryByText(/select a run/i)).not.toBeInTheDocument();
   });
 });

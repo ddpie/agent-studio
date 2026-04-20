@@ -20,7 +20,7 @@ vi.mock("../components/pages/AgentDetailPage", () => ({
     const params = useParams();
     return (
       <div data-testid="detail-marker">
-        {params.agentId ?? "-"}|{params.sessionId ?? "-"}
+        {params.agentId ?? "-"}|{params.runId ?? "-"}
       </div>
     );
   },
@@ -54,7 +54,7 @@ describe("router: agent detail deep-links", () => {
     expect(screen.getByTestId("detail-marker")).toHaveTextContent("agt-1|-");
   });
 
-  it("resolves /agents/:agentId/runs/:sessionId to AgentDetailPage with both params", () => {
+  it("resolves /agents/:agentId/runs/:runId to AgentDetailPage with both params", () => {
     const router = createMemoryRouter(createRoutes(), {
       initialEntries: ["/agents/agt-1/runs/sched-daily-2026-04-20T08%3A00%3A00Z"],
     });
