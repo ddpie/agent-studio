@@ -9,7 +9,7 @@ from aws_lambda_powertools.event_handler.api_gateway import Router
 from boto3.dynamodb.conditions import Key
 
 from shared.auth import verify_jwt, get_membership, check_permission, ROLE_LEVEL
-from shared.config import WORKSPACES_TABLE, REGION
+from shared.config import WORKSPACES_TABLE, REGION, COGNITO_USER_POOL_ID
 from shared.middleware import auth_check
 from shared.response import success, paginated, forbidden, not_found, bad_request, version_conflict, internal_error
 from shared.validators import validate_id, parse_pagination
@@ -18,6 +18,11 @@ router = Router()
 logger = Logger(child=True)
 
 _table = None
+_cognito = None
+# Per-userId identity cache. Keyed by Cognito sub (== userId) so it can
+# safely span workspaces — the sub->attributes mapping is global to the
+# user pool. Lambda container reuse provides the bulk of the speedup.
+_identity_cache: dict = {}
 
 
 def _get_table():
@@ -25,6 +30,67 @@ def _get_table():
     if _table is None:
         _table = boto3.resource("dynamodb", region_name=REGION).Table(WORKSPACES_TABLE)
     return _table
+
+
+def _get_cognito():
+    global _cognito
+    if _cognito is None:
+        _cognito = boto3.client("cognito-idp", region_name=REGION)
+    return _cognito
+
+
+def _hydrate_member_identities(members: list) -> list:
+    """Fill in display_name/email on member dicts using Cognito AdminGetUser.
+
+    Members whose display_name is already set pass through untouched (the
+    DDB MEMBER item has authoritative data — avoid an extra Cognito call).
+    Per-user lookup failures (UserNotFoundException, AccessDenied, etc.)
+    are logged at warning level and leave the entry unchanged so one bad
+    user doesn't break the whole roster.
+    """
+    if not COGNITO_USER_POOL_ID:
+        return members
+
+    client = _get_cognito()
+    hydrated = []
+    for m in members:
+        if m.get("display_name"):
+            hydrated.append(m)
+            continue
+        user_id = m.get("userId", "")
+        if not user_id:
+            hydrated.append(m)
+            continue
+
+        cached = _identity_cache.get(user_id)
+        if cached is None:
+            try:
+                resp = client.admin_get_user(
+                    UserPoolId=COGNITO_USER_POOL_ID,
+                    Username=user_id,
+                )
+                attrs = {a["Name"]: a["Value"] for a in resp.get("UserAttributes", [])}
+                cached = {
+                    "display_name": attrs.get("name") or attrs.get("preferred_username") or "",
+                    "email": attrs.get("email", ""),
+                }
+                _identity_cache[user_id] = cached
+            except Exception as e:
+                logger.warning(
+                    "cognito admin_get_user failed",
+                    extra={"userId": user_id, "error": str(e)},
+                )
+                hydrated.append(m)
+                continue
+
+        merged = dict(m)
+        if cached.get("display_name") and not merged.get("display_name"):
+            merged["display_name"] = cached["display_name"]
+        if cached.get("email") and not merged.get("email"):
+            merged["email"] = cached["email"]
+        hydrated.append(merged)
+
+    return hydrated
 
 
 # ─── GET /api/workspaces ───
@@ -225,7 +291,9 @@ def get_workspace(wsId: str):
             "role": m.get("role", "viewer"),
             "joined_at": m.get("joined_at", ""),
             "display_name": m.get("display_name", ""),
+            "email": m.get("email", ""),
         })
+    members = _hydrate_member_identities(members)
 
     return success({
         "workspaceId": meta["workspaceId"],

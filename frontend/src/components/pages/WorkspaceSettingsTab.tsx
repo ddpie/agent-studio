@@ -14,6 +14,7 @@ import {
 import { toast } from "../../lib/toast";
 import { useWorkspaceStore, type WorkspaceRole } from "../../stores/workspace-store";
 import ConfirmDialog from "../ui/ConfirmDialog";
+import { formatDateTime } from "../../lib/date-format";
 
 const ROLE_LEVEL: Record<WorkspaceRole, number> = {
   viewer: 1,
@@ -23,12 +24,7 @@ const ROLE_LEVEL: Record<WorkspaceRole, number> = {
 };
 
 function formatDate(iso: string | undefined | null): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
+  return formatDateTime(iso);
 }
 
 export default function WorkspaceSettingsTab() {
@@ -219,7 +215,7 @@ export default function WorkspaceSettingsTab() {
         {loading && (
           <div className="text-xs text-gray-500 dark:text-gray-400 py-3">{t("common.loading")}</div>
         )}
-        {loadErr && !loading && <div className="text-xs text-red-600 py-3">{loadErr}</div>}
+        {loadErr && !loading && <div className="text-xs text-red-600 dark:text-red-400 py-3">{loadErr}</div>}
 
         {!loading && !loadErr && detail && (
           <>
@@ -244,7 +240,7 @@ export default function WorkspaceSettingsTab() {
                   className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500 disabled:opacity-60"
                 />
                 {nameError && canEdit && (
-                  <div className="mt-1 text-[10px] text-red-600">{nameError}</div>
+                  <div className="mt-1 text-[10px] text-red-600 dark:text-red-400">{nameError}</div>
                 )}
               </div>
 

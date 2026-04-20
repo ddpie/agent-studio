@@ -34,7 +34,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto p-6 overflow-y-auto">
+    <div className="max-w-4xl p-6 overflow-y-auto">
       <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2 mb-5">
         <Settings className="w-4 h-4" /> {t("settings.title")}
       </h2>
@@ -78,11 +78,11 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{t("settings.sidebarWidth")}</p>
-                  <p className="text-[10px] text-gray-400">{t("settings.currentValue", { value: sidebarWidth })}</p>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500">{t("settings.currentValue", { value: sidebarWidth })}</p>
                 </div>
                 <button
                   onClick={() => setSidebarWidth(224)}
-                  className="text-[10px] px-2 py-1 border border-gray-200 dark:border-gray-700 rounded text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  className="text-[10px] px-2 py-1 border border-gray-200 dark:border-gray-700 rounded text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
                   {t("common.reset")}
                 </button>
@@ -90,11 +90,11 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-medium text-gray-700 dark:text-gray-300">{t("settings.inputHeight")}</p>
-                  <p className="text-[10px] text-gray-400">{t("settings.currentValue", { value: inputHeight })}</p>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500">{t("settings.currentValue", { value: inputHeight })}</p>
                 </div>
                 <button
                   onClick={() => setInputHeight(44)}
-                  className="text-[10px] px-2 py-1 border border-gray-200 dark:border-gray-700 rounded text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  className="text-[10px] px-2 py-1 border border-gray-200 dark:border-gray-700 rounded text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
                   {t("common.reset")}
                 </button>
@@ -131,7 +131,7 @@ export default function SettingsPage() {
             <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3 flex items-center gap-1.5">
               <Languages className="w-3.5 h-3.5" /> {t("settings.language")}
             </h3>
-            <p className="text-[10px] text-gray-400 mb-2">{t("settings.languageDesc")}</p>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-2">{t("settings.languageDesc")}</p>
             <div className="flex gap-2">
               {([
                 { id: "zh" as const, label: "中文" },
@@ -157,7 +157,7 @@ export default function SettingsPage() {
             <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3 flex items-center gap-1.5">
               <Database className="w-3.5 h-3.5" /> {t("settings.infrastructure")}
             </h3>
-            <div className="space-y-1.5 text-xs text-gray-500">
+            <div className="space-y-1.5 text-xs text-gray-500 dark:text-gray-400">
               <div className="flex justify-between">
                 <span>{t("settings.region")}</span>
                 <span className="font-mono text-gray-700 dark:text-gray-300">{import.meta.env.VITE_AGENTCORE_REGION || "—"}</span>
@@ -187,7 +187,7 @@ export default function SettingsPage() {
               </button>
               <button
                 onClick={() => setShowClearConfirm(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-red-200 rounded-lg text-red-600 hover:bg-red-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-red-200 dark:border-red-900/60 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
               >
                 <Trash2 className="w-3.5 h-3.5" /> {t("settings.clearLocal")}
               </button>

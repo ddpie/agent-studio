@@ -18,6 +18,7 @@ import {
 import { toast } from "../../lib/toast";
 import { useWorkspaceStore, type WorkspaceRole } from "../../stores/workspace-store";
 import ConfirmDialog from "../ui/ConfirmDialog";
+import { formatDate } from "../../lib/date-format";
 
 const ROLE_LEVEL: Record<WorkspaceRole, number> = {
   viewer: 1,
@@ -231,7 +232,7 @@ export default function WorkspaceMembersTab() {
           <div className="text-xs text-gray-500 dark:text-gray-400 py-3">{t("common.loading")}</div>
         )}
         {error && !loading && (
-          <div className="text-xs text-red-600 py-3">{error}</div>
+          <div className="text-xs text-red-600 dark:text-red-400 py-3">{error}</div>
         )}
 
         {!loading && !error && detail && (
@@ -267,10 +268,15 @@ export default function WorkspaceMembersTab() {
                     >
                       <td className="px-3 py-2">
                         <div className="font-medium truncate max-w-[220px]">
-                          {m.display_name || m.userId}
+                          {m.display_name || m.email || m.userId}
                         </div>
-                        {m.display_name && (
-                          <div className="text-[10px] text-gray-400 font-mono truncate max-w-[220px]">
+                        {m.display_name && m.email && (
+                          <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[220px]">
+                            {m.email}
+                          </div>
+                        )}
+                        {m.display_name && !m.email && (
+                          <div className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[220px]">
                             {m.userId}
                           </div>
                         )}
@@ -304,20 +310,20 @@ export default function WorkspaceMembersTab() {
                           </span>
                         )}
                         {isSelf && (
-                          <span className="ml-1.5 text-[10px] text-gray-400">
+                          <span className="ml-1.5 text-[10px] text-gray-400 dark:text-gray-500">
                             ({t("workspace.members.you")})
                           </span>
                         )}
                       </td>
                       <td className="px-3 py-2 text-gray-500 dark:text-gray-400">
-                        {m.joined_at ? new Date(m.joined_at).toLocaleDateString() : "—"}
+                        {formatDate(m.joined_at)}
                       </td>
                       {isAdmin && (
                         <td className="px-3 py-2 text-right">
                           {canRemove && (
                             <button
                               onClick={() => setRemoveTarget(m)}
-                              className="p-1 text-gray-400 hover:text-red-600 rounded"
+                              className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 rounded"
                               title={t("workspace.members.remove")}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -350,20 +356,20 @@ export default function WorkspaceMembersTab() {
                   <div className="font-medium text-gray-700 dark:text-gray-200 truncate">{inv.email}</div>
                   <div className="text-[10px] text-gray-500 dark:text-gray-400">
                     {t(`workspace.role.${inv.role}`)}
-                    {inv.created_at ? ` · ${new Date(inv.created_at).toLocaleDateString()}` : ""}
+                    {inv.created_at ? ` · ${formatDate(inv.created_at, "")}` : ""}
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => copyInviteLink(inv.token)}
-                    className="p-1 text-gray-400 hover:text-blue-600 rounded"
+                    className="p-1 text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 rounded"
                     title={t("workspace.members.copyLink")}
                   >
                     <Copy className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => handleRevokeInvite(inv.token)}
-                    className="p-1 text-gray-400 hover:text-red-600 rounded"
+                    className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400 rounded"
                     title={t("workspace.members.revokeInvite")}
                   >
                     <X className="w-3.5 h-3.5" />
