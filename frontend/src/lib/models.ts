@@ -55,6 +55,30 @@ export const MODEL_GROUPS: ModelGroup[] = [
       { id: "us.anthropic.claude-3-5-haiku-20241022-v1:0", label: "3.5 Haiku (US)" },
     ],
   },
+  {
+    label: "DeepSeek",
+    models: [
+      { id: "deepseek.v3.2", label: "DeepSeek V3.2" },
+      { id: "us.deepseek.r1-v1:0", label: "DeepSeek R1 (US)" },
+    ],
+  },
+  {
+    label: "MiniMax",
+    models: [
+      { id: "minimax.minimax-m2.5", label: "MiniMax M2.5" },
+      { id: "minimax.minimax-m2.1", label: "MiniMax M2.1" },
+      { id: "minimax.minimax-m2", label: "MiniMax M2" },
+    ],
+  },
+  {
+    label: "Qwen",
+    models: [
+      { id: "qwen.qwen3-coder-next", label: "Qwen3 Coder Next" },
+      { id: "qwen.qwen3-next-80b-a3b", label: "Qwen3 Next 80B A3B" },
+      { id: "qwen.qwen3-coder-30b-a3b-v1:0", label: "Qwen3 Coder 30B A3B" },
+      { id: "qwen.qwen3-32b-v1:0", label: "Qwen3 32B" },
+    ],
+  },
 ];
 
 export const DEFAULT_MODEL_ID = MODEL_GROUPS[0].models[0].id;
