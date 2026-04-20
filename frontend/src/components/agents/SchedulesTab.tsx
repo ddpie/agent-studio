@@ -11,20 +11,26 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  Pencil,
+  Play,
 } from "lucide-react";
 import {
   listAgentSchedules,
   createAgentSchedule,
+  updateAgentSchedule,
   deleteAgentSchedule,
   listScheduleExecutions,
+  runAgentScheduleNow,
   type AgentSchedule,
   type ScheduleExecution,
 } from "../../lib/api-client";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import { toast } from "../../lib/toast";
+import ConfirmDialog from "../ui/ConfirmDialog";
 
 interface Props {
   agentId: string;
+  onViewTrace?: (sessionId: string) => void;
 }
 
 // Accept cron(...) or rate(N units). Mirrors backend validator in
@@ -45,7 +51,7 @@ function formatDuration(ms: number): string {
   return `${(ms / 60_000).toFixed(1)} min`;
 }
 
-export default function SchedulesTab({ agentId }: Props) {
+export default function SchedulesTab({ agentId, onViewTrace }: Props) {
   const { t } = useTranslation();
   const { currentWorkspace } = useWorkspaceStore();
   const role = currentWorkspace?.role || "viewer";
@@ -55,7 +61,9 @@ export default function SchedulesTab({ agentId }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<AgentSchedule | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [pendingDelete, setPendingDelete] = useState<{ name: string; suffix: string } | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -74,12 +82,35 @@ export default function SchedulesTab({ agentId }: Props) {
     refresh();
   }, [refresh]);
 
-  async function onDelete(name: string, suffix: string) {
-    if (!confirm(t("schedules.confirmDelete", { name: suffix || name }))) return;
+  function onDelete(name: string, suffix: string) {
+    setPendingDelete({ name, suffix });
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    const { name, suffix } = pendingDelete;
+    setPendingDelete(null);
     try {
       await deleteAgentSchedule(agentId, name);
       toast.success(t("schedules.deleted", { name: suffix || name }));
       refresh();
+    } catch (err) {
+      toast.error(err as Error);
+    }
+  }
+
+  async function onRunNow(schedule: AgentSchedule) {
+    try {
+      const res = await runAgentScheduleNow(agentId, schedule.name);
+      toast.success(t("schedules.runNowSuccess", { name: schedule.suffix || schedule.name }));
+      setExpanded((prev) => ({ ...prev, [schedule.name]: true }));
+      if (onViewTrace) {
+        // Jump to the trace view immediately so the user sees the
+        // "waiting for spans" state. The hook retries until spans land
+        // (agent cold-start + OTEL export + CloudWatch ingestion can
+        // take 40-60s).
+        onViewTrace(res.sessionId);
+      }
     } catch (err) {
       toast.error(err as Error);
     }
@@ -111,24 +142,24 @@ export default function SchedulesTab({ agentId }: Props) {
         )}
       </div>
 
-      {error && <div className="text-sm text-red-600">{error.message}</div>}
+      {error && <div className="text-sm text-red-600 dark:text-red-400">{error.message}</div>}
 
       {loading && !schedules && (
-        <div className="flex items-center gap-2 text-sm text-gray-500">
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
           <Loader2 className="w-4 h-4 animate-spin" />
           {t("common.loading")}
         </div>
       )}
 
       {schedules && schedules.length === 0 && !loading && (
-        <div className="text-sm text-gray-500" data-testid="schedules-empty">
+        <div className="text-sm text-gray-500 dark:text-gray-400" data-testid="schedules-empty">
           {t("schedules.empty")}
         </div>
       )}
 
       {schedules && schedules.length > 0 && (
         <table className="w-full text-sm" data-testid="schedules-table">
-          <thead className="text-xs text-gray-500 uppercase">
+          <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase">
             <tr>
               <th className="text-left py-2 w-6"></th>
               <th className="text-left py-2">{t("schedules.name")}</th>
@@ -148,6 +179,9 @@ export default function SchedulesTab({ agentId }: Props) {
                 onToggle={() => toggleExpand(s.name)}
                 canEdit={canEdit}
                 onDelete={() => onDelete(s.name, s.suffix)}
+                onEdit={() => setEditing(s)}
+                onRunNow={() => onRunNow(s)}
+                onViewTrace={onViewTrace}
               />
             ))}
           </tbody>
@@ -155,15 +189,40 @@ export default function SchedulesTab({ agentId }: Props) {
       )}
 
       {showCreate && (
-        <CreateScheduleModal
+        <ScheduleModal
           agentId={agentId}
           onClose={() => setShowCreate(false)}
-          onCreated={() => {
+          onSaved={() => {
             setShowCreate(false);
             refresh();
           }}
         />
       )}
+
+      {editing && (
+        <ScheduleModal
+          agentId={agentId}
+          existing={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            refresh();
+          }}
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title={t("schedules.delete")}
+        message={t("schedules.confirmDelete", {
+          name: pendingDelete ? pendingDelete.suffix || pendingDelete.name : "",
+        })}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        danger
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }
@@ -175,6 +234,9 @@ function RenderRow({
   onToggle,
   canEdit,
   onDelete,
+  onEdit,
+  onRunNow,
+  onViewTrace,
 }: {
   schedule: AgentSchedule;
   agentId: string;
@@ -182,7 +244,20 @@ function RenderRow({
   onToggle: () => void;
   canEdit: boolean;
   onDelete: () => void;
+  onEdit: () => void;
+  onRunNow: () => Promise<void>;
+  onViewTrace?: (sessionId: string) => void;
 }) {
+  const [running, setRunning] = useState(false);
+  const handleRun = async () => {
+    if (running) return;
+    setRunning(true);
+    try {
+      await onRunNow();
+    } finally {
+      setRunning(false);
+    }
+  };
   const { t } = useTranslation();
   return (
     <>
@@ -194,7 +269,7 @@ function RenderRow({
           <button
             type="button"
             onClick={onToggle}
-            className="p-0.5 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+            className="p-0.5 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
             data-testid={`expand-schedule-${schedule.name}`}
             aria-label={isExpanded ? t("schedules.runs.hide") : t("schedules.runs.show")}
           >
@@ -211,15 +286,37 @@ function RenderRow({
         <td className="py-2 text-xs">{schedule.createdAt || "-"}</td>
         <td className="py-2 text-right">
           {canEdit && (
-            <button
-              type="button"
-              onClick={onDelete}
-              data-testid={`delete-schedule-${schedule.name}`}
-              className="p-1 text-red-500 hover:text-red-700"
-              aria-label={t("schedules.delete")}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            <div className="inline-flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleRun}
+                disabled={running}
+                data-testid={`run-schedule-${schedule.name}`}
+                className="p-1 text-gray-500 hover:text-emerald-600 dark:text-gray-400 dark:hover:text-emerald-400 disabled:opacity-50"
+                aria-label={t("schedules.runNow")}
+                title={t("schedules.runNow")}
+              >
+                {running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+              </button>
+              <button
+                type="button"
+                onClick={onEdit}
+                data-testid={`edit-schedule-${schedule.name}`}
+                className="p-1 text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400"
+                aria-label={t("schedules.edit")}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                data-testid={`delete-schedule-${schedule.name}`}
+                className="p-1 text-red-500 hover:text-red-700 dark:hover:text-red-400"
+                aria-label={t("schedules.delete")}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
           )}
         </td>
       </tr>
@@ -230,7 +327,7 @@ function RenderRow({
         >
           <td></td>
           <td colSpan={5} className="py-3 pr-4">
-            <RecentRuns agentId={agentId} scheduleName={schedule.name} />
+            <RecentRuns agentId={agentId} scheduleName={schedule.name} onViewTrace={onViewTrace} />
           </td>
         </tr>
       )}
@@ -241,9 +338,11 @@ function RenderRow({
 function RecentRuns({
   agentId,
   scheduleName,
+  onViewTrace,
 }: {
   agentId: string;
   scheduleName: string;
+  onViewTrace?: (sessionId: string) => void;
 }) {
   const { t } = useTranslation();
   const [runs, setRuns] = useState<ScheduleExecution[] | null>(null);
@@ -277,7 +376,7 @@ function RecentRuns({
           type="button"
           onClick={load}
           disabled={loading}
-          className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-50"
+          className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-50"
           data-testid={`refresh-runs-${scheduleName}`}
         >
           <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
@@ -297,21 +396,21 @@ function RecentRuns({
       )}
 
       {error && (
-        <div className="flex items-center gap-1 text-xs text-red-600">
+        <div className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
           <AlertTriangle className="w-3 h-3" />
           {t("schedules.runs.loadError")}: {error.message}
         </div>
       )}
 
       {runs && runs.length === 0 && !loading && !error && (
-        <div className="text-xs text-gray-500" data-testid={`runs-empty-${scheduleName}`}>
+        <div className="text-xs text-gray-500 dark:text-gray-400" data-testid={`runs-empty-${scheduleName}`}>
           {t("schedules.runs.empty")}
         </div>
       )}
 
       {runs && runs.length > 0 && (
         <table className="w-full text-xs" data-testid={`runs-table-${scheduleName}`}>
-          <thead className="text-[10px] text-gray-500 uppercase">
+          <thead className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">
             <tr>
               <th className="text-left py-1">{t("schedules.runs.time")}</th>
               <th className="text-left py-1">{t("schedules.runs.status")}</th>
@@ -331,8 +430,20 @@ function RecentRuns({
                   <StatusBadge status={r.status} />
                 </td>
                 <td className="py-1">{formatDuration(r.durationMs)}</td>
-                <td className="py-1 font-mono text-[10px] text-gray-500 break-all">
-                  {r.sessionId}
+                <td className="py-1 font-mono text-[10px] break-all">
+                  {onViewTrace ? (
+                    <button
+                      type="button"
+                      onClick={() => onViewTrace(r.sessionId)}
+                      data-testid={`run-view-trace-${r.sessionId}`}
+                      title={t("schedules.viewTrace")}
+                      className="text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      {r.sessionId}
+                    </button>
+                  ) : (
+                    <span className="text-gray-500 dark:text-gray-400">{r.sessionId}</span>
+                  )}
                 </td>
               </tr>
             ))}
@@ -369,23 +480,29 @@ function StatusBadge({ status }: { status: ScheduleExecution["status"] }) {
   );
 }
 
-function CreateScheduleModal({
+function ScheduleModal({
   agentId,
+  existing,
   onClose,
-  onCreated,
+  onSaved,
 }: {
   agentId: string;
+  existing?: AgentSchedule;
   onClose: () => void;
-  onCreated: () => void;
+  onSaved: () => void;
 }) {
   const { t } = useTranslation();
-  const [name, setName] = useState("");
-  const [cron, setCron] = useState("cron(0 9 * * ? *)");
-  const [prompt, setPrompt] = useState("");
+  const isEdit = !!existing;
+  const [name, setName] = useState(existing?.suffix || "");
+  const [cron, setCron] = useState(existing?.cron || "cron(0 9 * * ? *)");
+  const [prompt, setPrompt] = useState(existing?.prompt || "");
+  const [state, setState] = useState<"ENABLED" | "DISABLED">(
+    (existing?.state as "ENABLED" | "DISABLED") || "ENABLED"
+  );
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const nameErr = name && !SUFFIX_RE.test(name)
+  const nameErr = !isEdit && name && !SUFFIX_RE.test(name)
     ? t("schedules.errors.nameFormat")
     : null;
   const cronErr = cron && !isValidCron(cron) ? t("schedules.errors.cronFormat") : null;
@@ -406,11 +523,28 @@ function CreateScheduleModal({
     setSubmitting(true);
     setErr(null);
     try {
-      await createAgentSchedule(agentId, { name, cron, prompt });
-      toast.success(t("schedules.created", { name }));
-      onCreated();
+      if (isEdit && existing) {
+        // Only send changed fields so the server keeps untouched
+        // target payload data intact.
+        const patch: { cron?: string; prompt?: string; state?: "ENABLED" | "DISABLED" } = {};
+        if (cron !== existing.cron) patch.cron = cron;
+        if (prompt !== (existing.prompt || "")) patch.prompt = prompt;
+        if (state !== (existing.state || "ENABLED")) patch.state = state;
+        if (Object.keys(patch).length === 0) {
+          onSaved();
+          return;
+        }
+        await updateAgentSchedule(agentId, existing.name, patch);
+        toast.success(t("schedules.updated", { name }));
+      } else {
+        await createAgentSchedule(agentId, { name, cron, prompt });
+        toast.success(t("schedules.created", { name }));
+      }
+      onSaved();
     } catch (e2) {
-      const msg = (e2 as Error).message || "Failed to create schedule";
+      const msg = (e2 as Error).message || (isEdit
+        ? t("schedules.updateFailed")
+        : "Failed to create schedule");
       setErr(msg);
       toast.error(msg);
     } finally {
@@ -422,16 +556,18 @@ function CreateScheduleModal({
     <div
       className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
       onClick={onClose}
-      data-testid="create-schedule-modal"
+      data-testid={isEdit ? "edit-schedule-modal" : "create-schedule-modal"}
     >
       <div
         className="bg-white dark:bg-gray-900 rounded-lg p-5 w-[560px] max-w-full"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-sm font-semibold mb-3">{t("schedules.modalTitle")}</h3>
+        <h3 className="text-sm font-semibold mb-3">
+          {isEdit ? t("schedules.editModalTitle") : t("schedules.modalTitle")}
+        </h3>
         <form onSubmit={onSubmit} className="space-y-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1" htmlFor="sched-name">
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1" htmlFor="sched-name">
               {t("schedules.nameLabel")}
             </label>
             <input
@@ -441,16 +577,19 @@ function CreateScheduleModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="daily-summary"
-              className="w-full text-sm px-2 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950"
+              disabled={isEdit}
+              className="w-full text-sm px-2 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 disabled:opacity-60 disabled:cursor-not-allowed"
               maxLength={32}
             />
-            <div className="text-[11px] text-gray-500 mt-1">
-              {t("schedules.nameHint", { prefix: `agent-studio-${agentId}-` })}
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+              {isEdit
+                ? t("schedules.nameCannotChange")
+                : t("schedules.nameHint", { prefix: `agent-studio-${agentId}-` })}
             </div>
-            {nameErr && <div className="text-xs text-red-600 mt-1">{nameErr}</div>}
+            {nameErr && <div className="text-xs text-red-600 dark:text-red-400 mt-1">{nameErr}</div>}
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1" htmlFor="sched-cron">
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1" htmlFor="sched-cron">
               {t("schedules.cronLabel")}
             </label>
             <input
@@ -459,15 +598,15 @@ function CreateScheduleModal({
               type="text"
               value={cron}
               onChange={(e) => setCron(e.target.value)}
-              className="w-full text-sm font-mono px-2 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950"
+              className="w-full text-sm font-mono px-2 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100"
             />
-            <div className="text-[11px] text-gray-500 mt-1">
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
               {t("schedules.cronHint")}
             </div>
-            {cronErr && <div className="text-xs text-red-600 mt-1">{cronErr}</div>}
+            {cronErr && <div className="text-xs text-red-600 dark:text-red-400 mt-1">{cronErr}</div>}
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1" htmlFor="sched-prompt">
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1" htmlFor="sched-prompt">
               {t("schedules.promptLabel")}
             </label>
             <textarea
@@ -476,11 +615,29 @@ function CreateScheduleModal({
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={4}
-              className="w-full text-sm px-2 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950"
+              className="w-full text-sm px-2 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100"
               maxLength={4000}
             />
-            {promptErr && <div className="text-xs text-red-600 mt-1">{promptErr}</div>}
+            {promptErr && <div className="text-xs text-red-600 dark:text-red-400 mt-1">{promptErr}</div>}
           </div>
+
+          {isEdit && (
+            <div>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1" htmlFor="sched-state">
+                {t("schedules.state")}
+              </label>
+              <select
+                id="sched-state"
+                data-testid="sched-state-input"
+                value={state}
+                onChange={(e) => setState(e.target.value as "ENABLED" | "DISABLED")}
+                className="w-full text-sm px-2 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100"
+              >
+                <option value="ENABLED">{t("schedules.enabled")}</option>
+                <option value="DISABLED">{t("schedules.disabled")}</option>
+              </select>
+            </div>
+          )}
 
           {err && (
             <div className="flex items-start gap-2 p-2 rounded bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900">
@@ -509,6 +666,8 @@ function CreateScheduleModal({
                   <Loader2 className="w-3 h-3 animate-spin" />
                   {t("common.loading")}
                 </span>
+              ) : isEdit ? (
+                t("common.save")
               ) : (
                 t("common.create")
               )}

@@ -127,6 +127,25 @@ def _agent_arn(agent_id: str) -> str:
     return f"arn:aws:bedrock-agentcore:{_AGENTCORE_REGION}:{_ACCOUNT_ID}:runtime/{agent_id}"
 
 
+def _extract_prompt(sched: dict) -> str:
+    """Best-effort extract of the user-authored prompt from a schedule.
+
+    list_schedules doesn't include Target.Input — callers expecting
+    `prompt` must first get_schedule(Name=...) and pass that item in.
+    On any parse failure we silently return "" so the list endpoint
+    never 500s on a malformed record.
+    """
+    try:
+        inp = sched.get("Target", {}).get("Input")
+        if not inp:
+            return ""
+        outer = json.loads(inp)
+        inner = json.loads(outer.get("Payload") or "{}")
+        return str(inner.get("prompt") or "")
+    except (ValueError, TypeError, AttributeError):
+        return ""
+
+
 def _schedule_response(agent_id: str, sched: dict) -> dict:
     """Shape a Scheduler API item for the frontend."""
     name = sched.get("Name", "")
@@ -141,13 +160,21 @@ def _schedule_response(agent_id: str, sched: dict) -> dict:
         "groupName": sched.get("GroupName", "default"),
         "createdAt": _iso(sched.get("CreationDate")),
         "lastModifiedAt": _iso(sched.get("LastModificationDate")),
+        "prompt": _extract_prompt(sched),
     }
 
 
 def _iso(value) -> str:
+    """Return an ISO-8601 string with a UTC tz suffix so browsers parse correctly.
+
+    AWS SDK returns aware datetimes, but guard against naive ones.
+    """
     if value is None:
         return ""
     try:
+        import datetime as _dt
+        if isinstance(value, _dt.datetime) and value.tzinfo is None:
+            value = value.replace(tzinfo=_dt.timezone.utc)
         return value.isoformat()
     except AttributeError:
         return str(value)
@@ -172,9 +199,17 @@ def list_schedules(wsId: str, agentId: str):
         paginator = scheduler.get_paginator("list_schedules")
         for page in paginator.paginate(NamePrefix=prefix, GroupName="default"):
             for sched in page.get("Schedules", []):
-                if not sched.get("Name", "").startswith(prefix):
+                sched_name = sched.get("Name", "")
+                if not sched_name.startswith(prefix):
                     continue
-                items.append(_schedule_response(agentId, sched))
+                # list_schedules omits Target.Input; re-fetch so the
+                # frontend can render/edit the original prompt. Best-
+                # effort — on per-item failure fall back to the list row.
+                try:
+                    full = scheduler.get_schedule(Name=sched_name, GroupName="default")
+                    items.append(_schedule_response(agentId, full))
+                except ClientError:
+                    items.append(_schedule_response(agentId, sched))
     except ClientError as e:
         logger.exception(
             "list_schedules failed",
@@ -235,13 +270,25 @@ def create_schedule(wsId: str, agentId: str):
     # prefix without a separate lookup table. `__schedule_name` is a
     # belt-and-braces tag: the sub-agent can also echo it into spans
     # if we later want server-side filtering.
+    # AgentCore requires runtimeSessionId >= 33 chars. Using the schedule's
+    # full name + fire time keeps it deterministic and well above the bound.
     session_id = f"sched-{suffix}-<aws.scheduler.scheduled-time>"
     inner_payload = {
         "prompt": prompt,
         "__schedule_name": full_name,
         "session_id": session_id,
     }
-    payload = {"AgentRuntimeArn": runtime_arn, "Payload": json.dumps(inner_payload)}
+    # Target.Input for the Universal Target `aws-sdk:bedrockagentcore:
+    # invokeAgentRuntime` maps top-level PascalCase keys to the API's
+    # request shape. `RuntimeSessionId` is therefore a separate top-level
+    # field — embedding it only inside `Payload` is NOT enough; without
+    # this, the invoke either silently 400s or runs with a service-chosen
+    # session id we can't correlate back to the schedule.
+    payload = {
+        "AgentRuntimeArn": runtime_arn,
+        "RuntimeSessionId": session_id,
+        "Payload": json.dumps(inner_payload),
+    }
     try:
         resp = scheduler.create_schedule(
             Name=full_name,
@@ -279,6 +326,140 @@ def create_schedule(wsId: str, agentId: str):
     )
 
 
+@router.put("/api/workspaces/<wsId>/agents/<agentId>/schedules/<name>")
+def update_schedule(wsId: str, agentId: str, name: str):
+    """Partial update — EventBridge UpdateSchedule is full-replace, so
+    we read the current schedule first and merge only the fields the
+    caller supplied (cron/prompt/state). `Name` is immutable.
+    """
+    user_id, ws_id, _, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
+    if err:
+        return err
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+    item = _get_agent_item(agentId)
+    if not item or item.get("workspace_id") != ws_id:
+        return forbidden()
+    if item.get("status") == "archived":
+        return forbidden()
+
+    prefix = _name_prefix(agentId)
+    if not name.startswith(prefix):
+        return bad_request(f"schedule name must start with '{prefix}'")
+    if not re.fullmatch(r"[0-9a-zA-Z_.\-]{1,64}", name):
+        return bad_request("invalid schedule name")
+
+    body = router.current_event.json_body or {}
+    cron = body.get("cron")
+    prompt = body.get("prompt")
+    state = body.get("state")
+
+    if cron is None and prompt is None and state is None:
+        return bad_request("at least one of cron, prompt, state must be provided")
+
+    if cron is not None:
+        if not isinstance(cron, str):
+            return bad_request("cron must be a string")
+        cron = cron.strip()
+        cron_err = _validate_cron(cron)
+        if cron_err:
+            return bad_request(cron_err)
+
+    if prompt is not None:
+        if not isinstance(prompt, str) or not prompt.strip():
+            return bad_request("prompt must be a non-empty string")
+        if len(prompt) > 4000:
+            return bad_request("prompt must be 4000 characters or less")
+
+    if state is not None:
+        if state not in ("ENABLED", "DISABLED"):
+            return bad_request("state must be 'ENABLED' or 'DISABLED'")
+
+    scheduler = _get_scheduler()
+    try:
+        existing = scheduler.get_schedule(Name=name, GroupName="default")
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        if code == "ResourceNotFoundException":
+            return not_found()
+        logger.exception(
+            "update_schedule get failed",
+            extra={"agentId": agentId, "name": name, "code": code},
+        )
+        return internal_error()
+
+    suffix = name[len(prefix):]
+    existing_target = existing.get("Target", {}) or {}
+    existing_input_raw = existing_target.get("Input") or "{}"
+    try:
+        existing_payload = json.loads(existing_input_raw)
+    except ValueError:
+        existing_payload = {}
+    try:
+        inner_payload = json.loads(existing_payload.get("Payload") or "{}")
+    except ValueError:
+        inner_payload = {}
+
+    if prompt is not None:
+        inner_payload["prompt"] = prompt
+    # Re-derive name + session_id to keep parity with create_schedule
+    # (a previous bad edit could have drifted these).
+    inner_payload["__schedule_name"] = name
+    inner_payload["session_id"] = f"sched-{suffix}-<aws.scheduler.scheduled-time>"
+
+    runtime_arn = existing_payload.get("AgentRuntimeArn") or _agent_arn(agentId)
+    new_input = json.dumps({
+        "AgentRuntimeArn": runtime_arn,
+        "RuntimeSessionId": inner_payload["session_id"],
+        "Payload": json.dumps(inner_payload),
+    })
+
+    new_target = {
+        "Arn": existing_target.get("Arn", "arn:aws:scheduler:::aws-sdk:bedrockagentcore:invokeAgentRuntime"),
+        "RoleArn": existing_target.get("RoleArn") or _SCHEDULER_TARGET_ROLE_ARN,
+        "Input": new_input,
+    }
+
+    new_cron = cron if cron is not None else existing.get("ScheduleExpression", "")
+    new_state = state if state is not None else existing.get("State", "ENABLED")
+    flexible = existing.get("FlexibleTimeWindow") or {"Mode": "OFF"}
+
+    update_kwargs: dict = {
+        "Name": name,
+        "GroupName": "default",
+        "ScheduleExpression": new_cron,
+        "FlexibleTimeWindow": flexible,
+        "Target": new_target,
+        "State": new_state,
+    }
+    description = existing.get("Description")
+    if description:
+        update_kwargs["Description"] = description
+
+    try:
+        scheduler.update_schedule(**update_kwargs)
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        message = e.response.get("Error", {}).get("Message", code)
+        if code == "ResourceNotFoundException":
+            return not_found()
+        if code == "ValidationException":
+            return bad_request(message)
+        logger.exception(
+            "update_schedule failed",
+            extra={"agentId": agentId, "name": name, "code": code},
+        )
+        return internal_error()
+
+    try:
+        refreshed = scheduler.get_schedule(Name=name, GroupName="default")
+    except ClientError:
+        refreshed = {**existing, "ScheduleExpression": new_cron, "State": new_state, "Target": new_target}
+
+    return success(_schedule_response(agentId, refreshed))
+
+
 @router.delete("/api/workspaces/<wsId>/agents/<agentId>/schedules/<name>")
 def delete_schedule(wsId: str, agentId: str, name: str):
     user_id, ws_id, _, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
@@ -313,6 +494,109 @@ def delete_schedule(wsId: str, agentId: str, name: str):
         return internal_error()
 
     return success({"deleted": name})
+
+
+@router.post("/api/workspaces/<wsId>/agents/<agentId>/schedules/<name>/run-now")
+def run_schedule_now(wsId: str, agentId: str, name: str):
+    """Debug trigger — fire the schedule immediately via a one-time
+    EventBridge schedule (at-expression ~5s in the future). This mirrors
+    the real cron path: same scheduler role, same universal target, same
+    payload shape — so the Recent Runs view picks it up without special
+    cases, and the API call returns in <1s (not blocked on agent runtime).
+    """
+    from datetime import datetime, timedelta, timezone
+    user_id, ws_id, _, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
+    if err:
+        return err
+    id_err = validate_id(agentId, "agentId")
+    if id_err:
+        return bad_request(id_err)
+    item = _get_agent_item(agentId)
+    if not item or item.get("workspace_id") != ws_id:
+        return forbidden()
+    if item.get("status") == "archived":
+        return forbidden()
+
+    prefix = _name_prefix(agentId)
+    if not name.startswith(prefix):
+        return bad_request(f"schedule name must start with '{prefix}'")
+    if not re.fullmatch(r"[0-9a-zA-Z_.\-]{1,64}", name):
+        return bad_request("invalid schedule name")
+
+    if not _SCHEDULER_TARGET_ROLE_ARN:
+        logger.error("SCHEDULER_TARGET_ROLE_ARN env var not configured")
+        return internal_error("Scheduler target role not configured")
+
+    scheduler = _get_scheduler()
+    try:
+        existing = scheduler.get_schedule(Name=name, GroupName="default")
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        if code == "ResourceNotFoundException":
+            return not_found()
+        logger.exception("get_schedule before run-now failed",
+                         extra={"agentId": agentId, "name": name, "code": code})
+        return internal_error()
+
+    target = existing.get("Target", {}) or {}
+    try:
+        outer = json.loads(target.get("Input") or "{}")
+        inner = json.loads(outer.get("Payload") or "{}")
+    except (ValueError, TypeError):
+        inner = {}
+    prompt = inner.get("prompt") or ""
+    if not prompt:
+        return bad_request("schedule has no prompt to run")
+
+    suffix = name[len(prefix):]
+    ts = int(time.time())
+    fire_at = datetime.now(timezone.utc) + timedelta(seconds=5)
+    fire_iso = fire_at.replace(microsecond=0).isoformat().replace("+00:00", "")
+    session_id = f"sched-{suffix}-manual-{ts}"[:100]
+
+    runtime_arn = _agent_arn(agentId)
+    inner_payload = {
+        "prompt": prompt,
+        "__schedule_name": name,
+        "__manual_trigger": True,
+        "session_id": session_id,
+    }
+    target_input = {
+        "AgentRuntimeArn": runtime_arn,
+        "RuntimeSessionId": session_id,
+        "Payload": json.dumps(inner_payload),
+    }
+    one_shot_name = f"{name[:45]}-run-{ts}"[:64]
+
+    try:
+        scheduler.create_schedule(
+            Name=one_shot_name,
+            GroupName="default",
+            ScheduleExpression=f"at({fire_iso})",
+            FlexibleTimeWindow={"Mode": "OFF"},
+            ActionAfterCompletion="DELETE",
+            Target={
+                "Arn": "arn:aws:scheduler:::aws-sdk:bedrockagentcore:invokeAgentRuntime",
+                "RoleArn": _SCHEDULER_TARGET_ROLE_ARN,
+                "Input": json.dumps(target_input),
+            },
+            Description=f"Manual run of {name} (by {user_id})",
+        )
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        message = e.response.get("Error", {}).get("Message", code)
+        logger.exception("run-now create_schedule failed",
+                         extra={"agentId": agentId, "name": name, "code": code})
+        if code == "ConflictException":
+            return bad_request("another manual run is already queued")
+        return internal_error(message or "run-now failed")
+
+    return success({
+        "sessionId": session_id,
+        "invokedAt": ts,
+        "scheduledFor": fire_iso,
+        "oneShotName": one_shot_name,
+    }, status_code=202)
 
 
 # ---------------------------------------------------------------------------
@@ -374,69 +658,91 @@ def list_schedule_executions(wsId: str, agentId: str, name: str):
 
     logs = _get_logs()
     now_s = int(time.time())
-    q = f"""
-fields attributes.session.id as sessionId, attributes.aws.agent.id as agentRuntimeId, name as spanName, status.code as statusCode, startTimeUnixNano, endTimeUnixNano, @message
-| filter agentRuntimeId = "{agentId}" and ispresent(sessionId) and strcontains(sessionId, "{session_prefix}")
-| stats min(startTimeUnixNano) as firstStartNs, max(endTimeUnixNano) as lastEndNs, count(*) as spanCount, max(statusCode) as worstStatus by sessionId
-| sort firstStartNs desc
-| limit {_MAX_EXECUTIONS}
-""".strip()
+    start_s = now_s - _EXEC_LOOKBACK_HOURS * 3600
 
-    try:
-        q_id = logs.start_query(
-            logGroupNames=[SPANS_LOG_GROUP],
-            startTime=now_s - _EXEC_LOOKBACK_HOURS * 3600,
-            endTime=now_s,
-            queryString=q,
-        )["queryId"]
-    except ClientError as e:
-        logger.exception(
-            "schedule executions start_query failed",
-            extra={"agentId": agentId, "name": name,
-                   "error_code": e.response.get("Error", {}).get("Code")},
-        )
-        return internal_error()
-
-    rows: list = []
-    deadline = time.time() + _EXEC_QUERY_TIMEOUT_S
-    try:
+    def _run_query(query_string: str) -> list:
+        """Run a Logs Insights query and return rows. Empty on timeout/failure."""
+        try:
+            q_id = logs.start_query(
+                logGroupNames=[SPANS_LOG_GROUP],
+                startTime=start_s,
+                endTime=now_s,
+                queryString=query_string,
+            )["queryId"]
+        except ClientError as e:
+            logger.exception(
+                "schedule executions start_query failed",
+                extra={"agentId": agentId, "name": name,
+                       "error_code": e.response.get("Error", {}).get("Code")},
+            )
+            return []
+        deadline = time.time() + _EXEC_QUERY_TIMEOUT_S
         while time.time() < deadline:
-            resp = logs.get_query_results(queryId=q_id)
+            try:
+                resp = logs.get_query_results(queryId=q_id)
+            except ClientError as e:
+                logger.exception(
+                    "schedule executions get_query_results failed",
+                    extra={"agentId": agentId, "name": name,
+                           "error_code": e.response.get("Error", {}).get("Code")},
+                )
+                return []
             status = resp.get("status")
             if status == "Complete":
-                rows = resp.get("results", [])
-                break
+                return resp.get("results", []) or []
             if status in ("Failed", "Cancelled"):
                 logger.warning(
                     "schedule executions query non-complete",
                     extra={"query_status": status, "name": name},
                 )
-                rows = []
-                break
+                return []
             time.sleep(0.3)
-        else:
-            try:
-                logs.stop_query(queryId=q_id)
-            except ClientError:
-                pass
-    except ClientError as e:
-        logger.exception(
-            "schedule executions get_query_results failed",
-            extra={"agentId": agentId, "name": name,
-                   "error_code": e.response.get("Error", {}).get("Code")},
-        )
-        return internal_error()
+        try:
+            logs.stop_query(queryId=q_id)
+        except ClientError:
+            pass
+        return []
+
+    primary_q = f"""
+fields attributes.session.id as sessionId, resource.attributes.service.name as svc, name as spanName, status.code as statusCode, startTimeUnixNano, endTimeUnixNano, @message
+| filter svc = "{agentId}" and ispresent(sessionId) and strcontains(sessionId, "{session_prefix}")
+| stats min(startTimeUnixNano) as firstStartNs, max(endTimeUnixNano) as lastEndNs, count(*) as spanCount, max(statusCode) as worstStatus by sessionId
+| sort firstStartNs desc
+| limit {_MAX_EXECUTIONS}
+""".strip()
+
+    rows = _run_query(primary_q)
+
+    # Fallback: schedules created before the deterministic session_id
+    # wiring was baked in won't be caught by the prefix filter. Re-query
+    # by `__schedule_name` (embedded in the payload and echoed in spans)
+    # and merge — dedupe by sessionId.
+    if not rows:
+        fallback_q = f"""
+fields attributes.session.id as sessionId, resource.attributes.service.name as svc, name as spanName, status.code as statusCode, startTimeUnixNano, endTimeUnixNano, @message
+| filter svc = "{agentId}" and ispresent(sessionId) and strcontains(@message, "{name}")
+| stats min(startTimeUnixNano) as firstStartNs, max(endTimeUnixNano) as lastEndNs, count(*) as spanCount, max(statusCode) as worstStatus by sessionId
+| sort firstStartNs desc
+| limit {_MAX_EXECUTIONS}
+""".strip()
+        rows = _run_query(fallback_q)
 
     executions: list[dict] = []
+    seen_sids: set[str] = set()
     for row in rows:
         sid = _field(row, "sessionId")
-        if not sid or not sid.startswith(session_prefix):
+        if not sid or sid in seen_sids:
             continue
+        seen_sids.add(sid)
         # sessionId shape: sched-<suffix>-<iso-time>. The trailing
         # segment is the EventBridge Scheduler fire time in ISO-8601,
         # so we lift it straight out for display — much cheaper + more
-        # precise than parsing @timestamp.
-        scheduled_time = sid[len(session_prefix):] if len(sid) > len(session_prefix) else ""
+        # precise than parsing @timestamp. Fallback rows may not match
+        # the prefix, leave scheduled_time empty in that case.
+        if sid.startswith(session_prefix) and len(sid) > len(session_prefix):
+            scheduled_time = sid[len(session_prefix):]
+        else:
+            scheduled_time = ""
         try:
             start_ns = int(_field(row, "firstStartNs") or "0")
             end_ns = int(_field(row, "lastEndNs") or start_ns)
