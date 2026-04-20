@@ -21,47 +21,62 @@ import LogsTab from "../agents/LogsTab";
 import EndpointsTab from "../agents/EndpointsTab";
 import SecretsTab from "../agents/SecretsTab";
 import EvaluationsTab from "../agents/EvaluationsTab";
-import TracesTab from "../agents/TracesTab";
+import RunsTab from "../agents/RunsTab";
 import AgentCostsSection from "../agents/AgentCostsSection";
 import IntegrationTab from "../agents/IntegrationTab";
 import SchedulesTab from "../agents/SchedulesTab";
 import PublishToggle from "../shared/PublishToggle";
-import DetailSideNav, { type NavItem } from "../agents/DetailSideNav";
+import DetailSideNav, { type NavEntry } from "../agents/DetailSideNav";
 import LazySection from "../agents/LazySection";
 import { useScrollSpy } from "../../hooks/useScrollSpy";
 
+const RUNS_SECTION_ID = "runs-section";
+
 export default function AgentDetailPage() {
-  const { agentId } = useParams();
+  const { agentId, sessionId: routeSessionId } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { currentWorkspace } = useWorkspaceStore();
   const [agent, setAgent] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<Error | null>(null);
-  const [selectedTraceSessionId, setSelectedTraceSessionId] = useState<string | null>(null);
+  const [selectedRunSessionId, setSelectedRunSessionId] = useState<string | null>(routeSessionId ?? null);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
 
-  const navItems: NavItem[] = useMemo(
+  const navItems: NavEntry[] = useMemo(
     () => [
-      { id: "deployments-section", label: t("deployments.tab"), icon: <Rocket className="w-3.5 h-3.5" /> },
+      { id: RUNS_SECTION_ID, label: t("runs.tab"), icon: <Activity className="w-3.5 h-3.5" /> },
       { id: "schedules-section", label: t("schedules.title"), icon: <Clock className="w-3.5 h-3.5" /> },
-      { id: "logs-section", label: t("logs.sectionTitle"), icon: <ScrollText className="w-3.5 h-3.5" /> },
-      { id: "traces-section", label: t("traces.tab"), icon: <Activity className="w-3.5 h-3.5" /> },
       { id: "evaluations-section", label: t("evaluations.tab"), icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
       { id: "costs-section", label: t("costs.title"), icon: <DollarSign className="w-3.5 h-3.5" /> },
-      { id: "secrets-section", label: t("secrets.title"), icon: <KeyRound className="w-3.5 h-3.5" /> },
       { id: "integration-section", label: t("integration.title"), icon: <Share2 className="w-3.5 h-3.5" /> },
-      // Endpoints is an advanced deployment feature (blue/green, rollback
-      // by pointer). Most users never touch it — demoted to the bottom so
-      // it doesn't crowd the "what's happening with my agent" surface.
-      { id: "endpoints-section", label: t("endpoints.tab"), icon: <Network className="w-3.5 h-3.5" /> },
+      {
+        type: "group",
+        id: "advanced",
+        label: t("agentDetail.sideNav.advanced"),
+        items: [
+          { id: "deployments-section", label: t("deployments.tab"), icon: <Rocket className="w-3.5 h-3.5" /> },
+          { id: "endpoints-section", label: t("endpoints.tab"), icon: <Network className="w-3.5 h-3.5" /> },
+          { id: "secrets-section", label: t("secrets.title"), icon: <KeyRound className="w-3.5 h-3.5" /> },
+          { id: "logs-section", label: t("logs.sectionTitle"), icon: <ScrollText className="w-3.5 h-3.5" /> },
+        ],
+      },
     ],
     [t],
   );
 
-  const { activeId, suppressFor, setActiveId } = useScrollSpy(
-    navItems.map((n) => n.id),
-    scrollRootRef,
-  );
+  const flatIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const entry of navItems) {
+      if ("type" in entry && entry.type === "group") {
+        for (const c of entry.items) ids.push(c.id);
+      } else {
+        ids.push((entry as { id: string }).id);
+      }
+    }
+    return ids;
+  }, [navItems]);
+
+  const { activeId, suppressFor, setActiveId } = useScrollSpy(flatIds, scrollRootRef);
 
   const handleNavNavigate = (id: string) => {
     // Lock scroll-spy for ~700ms while the smooth scroll plays out, and
@@ -71,10 +86,17 @@ export default function AgentDetailPage() {
     setActiveId(id);
   };
 
-  function viewTraceSession(sessionId: string) {
-    setSelectedTraceSessionId(sessionId);
+  const handleRunSelected = (sessionId: string) => {
+    if (!agentId) return;
+    if (sessionId === routeSessionId) return;
+    navigate(`/agents/${agentId}/runs/${encodeURIComponent(sessionId)}`);
+  };
+
+  const scrollToRuns = (sessionId: string) => {
+    setSelectedRunSessionId(sessionId);
+    handleRunSelected(sessionId);
     requestAnimationFrame(() => {
-      const el = document.getElementById("traces-section");
+      const el = document.getElementById(RUNS_SECTION_ID);
       const root = scrollRootRef.current;
       if (el && root) {
         const topWithin =
@@ -82,7 +104,7 @@ export default function AgentDetailPage() {
         root.scrollTo({ top: topWithin, behavior: "smooth" });
       }
     });
-  }
+  };
 
   useEffect(() => {
     if (!agentId) return;
@@ -90,6 +112,10 @@ export default function AgentDetailPage() {
       .then((data) => setAgent(data as Record<string, unknown>))
       .catch((err) => setError(err as Error));
   }, [agentId]);
+
+  useEffect(() => {
+    if (routeSessionId) setSelectedRunSessionId(routeSessionId);
+  }, [routeSessionId]);
 
   if (error) {
     return (
@@ -183,12 +209,20 @@ export default function AgentDetailPage() {
             <div className="flex-1 min-w-0 space-y-8">
               {agentId && (
                 <LazySection
-                  id="deployments-section"
-                  testId="deployments-section"
+                  id={RUNS_SECTION_ID}
+                  testId="runs-section"
                   rootRef={scrollRootRef}
+                  minHeight={400}
+                  // Eager so deep-links and "View trace" from Schedules
+                  // land on real content (not a placeholder that hydrates
+                  // after the jump and shifts the scroll target).
                   eager
                 >
-                  <DeploymentsTab agentId={agentId} />
+                  <RunsTab
+                    agentId={agentId}
+                    initialSessionId={selectedRunSessionId}
+                    onSelect={handleRunSelected}
+                  />
                 </LazySection>
               )}
               {agentId && (
@@ -197,37 +231,7 @@ export default function AgentDetailPage() {
                   testId="schedules-section"
                   rootRef={scrollRootRef}
                 >
-                  <SchedulesTab agentId={agentId} onViewTrace={viewTraceSession} />
-                </LazySection>
-              )}
-              {agentId && (
-                <LazySection
-                  id="logs-section"
-                  testId="logs-section"
-                  rootRef={scrollRootRef}
-                >
-                  <details className="border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900/30" open>
-                    <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
-                      {t("logs.sectionTitle")}
-                    </summary>
-                    <div className="border-t border-gray-200 dark:border-gray-700">
-                      <LogsTab agentId={agentId} />
-                    </div>
-                  </details>
-                </LazySection>
-              )}
-              {agentId && (
-                <LazySection
-                  id="traces-section"
-                  testId="traces-section"
-                  rootRef={scrollRootRef}
-                  minHeight={400}
-                  // Eager so "View trace" from Schedules can scroll to
-                  // real content (not a placeholder that hydrates after
-                  // the jump and shifts the scroll target).
-                  eager
-                >
-                  <TracesTab agentId={agentId} initialSessionId={selectedTraceSessionId} />
+                  <SchedulesTab agentId={agentId} onViewTrace={scrollToRuns} />
                 </LazySection>
               )}
               {agentId && (
@@ -252,20 +256,22 @@ export default function AgentDetailPage() {
               )}
               {agentId && (
                 <LazySection
-                  id="secrets-section"
-                  testId="secrets-section"
-                  rootRef={scrollRootRef}
-                >
-                  <SecretsTab agentId={agentId} />
-                </LazySection>
-              )}
-              {agentId && (
-                <LazySection
                   id="integration-section"
                   testId="integration-section"
                   rootRef={scrollRootRef}
                 >
                   <IntegrationTab agentId={agentId} />
+                </LazySection>
+              )}
+              {/* Advanced group — rendered linearly in DOM so scroll-spy
+                  tracks them even while the nav group is collapsed. */}
+              {agentId && (
+                <LazySection
+                  id="deployments-section"
+                  testId="deployments-section"
+                  rootRef={scrollRootRef}
+                >
+                  <DeploymentsTab agentId={agentId} />
                 </LazySection>
               )}
               {agentId && (
@@ -275,6 +281,24 @@ export default function AgentDetailPage() {
                   rootRef={scrollRootRef}
                 >
                   <EndpointsTab agentId={agentId} />
+                </LazySection>
+              )}
+              {agentId && (
+                <LazySection
+                  id="secrets-section"
+                  testId="secrets-section"
+                  rootRef={scrollRootRef}
+                >
+                  <SecretsTab agentId={agentId} />
+                </LazySection>
+              )}
+              {agentId && (
+                <LazySection
+                  id="logs-section"
+                  testId="logs-section"
+                  rootRef={scrollRootRef}
+                >
+                  <LogsTab agentId={agentId} />
                 </LazySection>
               )}
             </div>
