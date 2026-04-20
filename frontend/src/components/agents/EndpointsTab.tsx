@@ -12,6 +12,7 @@ import {
 import StatusBadge from "../common/StatusBadge";
 import EndpointDialog from "./EndpointDialog";
 import { toast } from "../../lib/toast";
+import ConfirmDialog from "../ui/ConfirmDialog";
 
 export interface EndpointsTabProps {
   agentId: string;
@@ -22,6 +23,7 @@ export default function EndpointsTab({ agentId }: EndpointsTabProps) {
   const endpoints = useRuntimeEndpoints(agentId);
   const versions = useRuntimeVersions(agentId);
   const [dialog, setDialog] = useState<null | { mode: "create" | "switch"; fixedName?: string }>(null);
+  const [pendingDelete, setPendingDelete] = useState<AgentEndpoint | null>(null);
 
   const versionStrings = useMemo(
     () => (versions.data ?? []).map((v) => v.agentRuntimeVersion),
@@ -52,8 +54,14 @@ export default function EndpointsTab({ agentId }: EndpointsTabProps) {
     }
   }
 
-  async function doDelete(ep: AgentEndpoint) {
-    if (!confirm(t("endpoints.confirmDelete", { name: ep.name }))) return;
+  function doDelete(ep: AgentEndpoint) {
+    setPendingDelete(ep);
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    const ep = pendingDelete;
+    setPendingDelete(null);
     try {
       await deleteAgentEndpoint(agentId, ep.name);
       toast.success(t("endpoints.deleted", { name: ep.name }));
@@ -76,10 +84,10 @@ export default function EndpointsTab({ agentId }: EndpointsTabProps) {
           {t("endpoints.create")}
         </button>
       </div>
-      {endpoints.error && <div className="text-red-600 text-sm">{endpoints.error.message}</div>}
+      {endpoints.error && <div className="text-red-600 dark:text-red-400 text-sm">{endpoints.error.message}</div>}
       {endpoints.data && (
         <table className="w-full text-sm" data-testid="endpoints-table">
-          <thead className="text-xs text-gray-500 uppercase">
+          <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase">
             <tr>
               <th className="text-left py-2">Name</th>
               <th className="text-left py-2">Status</th>
@@ -101,14 +109,14 @@ export default function EndpointsTab({ agentId }: EndpointsTabProps) {
                       <button
                         type="button"
                         onClick={() => setDialog({ mode: "switch", fixedName: ep.name })}
-                        className="text-xs text-blue-600 hover:underline"
+                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
                       >
                         {t("endpoints.switch")}
                       </button>
                       <button
                         type="button"
                         onClick={() => doDelete(ep)}
-                        className="text-xs text-red-600 hover:underline inline-flex items-center gap-0.5"
+                        className="text-xs text-red-600 dark:text-red-400 hover:underline inline-flex items-center gap-0.5"
                       >
                         <Trash2 className="w-3 h-3" />
                         {t("endpoints.delete")}
@@ -134,6 +142,16 @@ export default function EndpointsTab({ agentId }: EndpointsTabProps) {
           }
         />
       )}
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title={t("endpoints.delete")}
+        message={t("endpoints.confirmDelete", { name: pendingDelete?.name ?? "" })}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        danger
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

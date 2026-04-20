@@ -276,6 +276,7 @@ export interface AgentSchedule {
   groupName?: string;
   createdAt?: string;
   lastModifiedAt?: string;
+  prompt?: string;
 }
 
 export interface AgentScheduleCreated extends AgentSchedule {
@@ -299,9 +300,30 @@ export async function createAgentSchedule(
   );
 }
 
+export async function updateAgentSchedule(
+  agentId: string,
+  name: string,
+  patch: { cron?: string; prompt?: string; state?: "ENABLED" | "DISABLED" }
+): Promise<AgentSchedule> {
+  return apiPut<AgentSchedule>(
+    `/agents/${encodeURIComponent(agentId)}/schedules/${encodeURIComponent(name)}`,
+    patch
+  );
+}
+
 export async function deleteAgentSchedule(agentId: string, name: string): Promise<void> {
   await apiDelete(
     `/agents/${encodeURIComponent(agentId)}/schedules/${encodeURIComponent(name)}`
+  );
+}
+
+export async function runAgentScheduleNow(
+  agentId: string,
+  name: string
+): Promise<{ sessionId: string; invokedAt: number }> {
+  return apiPost(
+    `/agents/${encodeURIComponent(agentId)}/schedules/${encodeURIComponent(name)}/run-now`,
+    {}
   );
 }
 
@@ -431,6 +453,36 @@ export async function listAgentEvaluations(agentId: string): Promise<AgentEvalua
   return resp.evaluations ?? [];
 }
 
+// Workspace-level evaluator config status + enable.
+// NOTE: apiGet/apiPost auto-prefix /api/workspaces/{wsId}, so the paths
+// below are workspace-relative. The `wsId` parameter exists for API symmetry
+// and future-proofing — the transport layer pulls the active workspace ID
+// from localStorage; ensure the correct workspace is current before calling.
+
+export interface AgentEvaluationStatus {
+  exists: boolean;
+  configName: string;
+  status: string | null;          // "ACTIVE" | "CREATING" | "FAILED" | etc.
+  executionStatus: string | null; // "ENABLED" | "DISABLED" | null
+}
+
+export async function getAgentEvaluationStatus(
+  agentId: string,
+): Promise<AgentEvaluationStatus> {
+  return apiGet<AgentEvaluationStatus>(
+    `/agents/${encodeURIComponent(agentId)}/evaluations/status`,
+  );
+}
+
+export async function enableAgentEvaluations(
+  agentId: string,
+): Promise<{ configName: string; status: string }> {
+  return apiPost<{ configName: string; status: string }>(
+    `/agents/${encodeURIComponent(agentId)}/evaluations/enable`,
+    {},
+  );
+}
+
 // ── Traces (Sprint 2 F4) ──
 
 export interface TraceSummary {
@@ -438,6 +490,10 @@ export interface TraceSummary {
   traceId?: string;
   firstEvent?: string;
   spanCount: number;
+  model?: string | null;
+  totalTokens?: number | null;
+  durationMs?: number | null;
+  status?: string;
 }
 
 export interface TraceSpan {
@@ -462,6 +518,26 @@ export async function getSessionTrace(agentId: string, sessionId: string): Promi
     `/agents/${encodeURIComponent(agentId)}/traces/${encodeURIComponent(sessionId)}`
   );
   return resp.root ?? null;
+}
+
+export interface SessionOutput {
+  sessionId: string;
+  output: string;
+  hasOutput: boolean;
+  metrics: {
+    model: string | null;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    totalTokens: number | null;
+    durationMs: number | null;
+    status: string;
+  };
+}
+
+export async function getSessionOutput(agentId: string, sessionId: string): Promise<SessionOutput> {
+  return apiGet<SessionOutput>(
+    `/agents/${encodeURIComponent(agentId)}/traces/${encodeURIComponent(sessionId)}/output`
+  );
 }
 
 // ── Agent logs (inline CloudWatch viewer) ──
@@ -928,6 +1004,7 @@ export interface WorkspaceMember {
   role: "viewer" | "editor" | "admin" | "owner";
   joined_at: string;
   display_name?: string;
+  email?: string;
 }
 
 export interface WorkspaceDetail {

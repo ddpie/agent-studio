@@ -10,6 +10,7 @@ import {
   type A2aKeyCreated,
 } from "../../lib/api-client";
 import { toast } from "../../lib/toast";
+import ConfirmDialog from "../ui/ConfirmDialog";
 
 interface Props {
   agentId: string;
@@ -21,6 +22,7 @@ export default function IntegrationTab({ agentId, kind = "sub-agent" }: Props) {
   const { keys, loading, error, generate, revoke } = useA2aKeys(agentId, kind);
   const [justCreated, setJustCreated] = useState<A2aKeyCreated | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [pendingRevoke, setPendingRevoke] = useState<{ keyId: string; prefix: string } | null>(null);
 
   const cardUrl = kind === "meta-agent" ? getMetaA2aCardUrl() : getPublicAgentCardUrl(agentId);
   const endpointUrl = kind === "meta-agent" ? getMetaA2aEndpointUrl() : getA2aEndpointUrl(agentId);
@@ -45,8 +47,14 @@ export default function IntegrationTab({ agentId, kind = "sub-agent" }: Props) {
     }
   }
 
-  async function onRevoke(keyId: string, prefix: string) {
-    if (!confirm(t("integration.revokeConfirm", { prefix }))) return;
+  function onRevoke(keyId: string, prefix: string) {
+    setPendingRevoke({ keyId, prefix });
+  }
+
+  async function confirmRevoke() {
+    if (!pendingRevoke) return;
+    const { keyId } = pendingRevoke;
+    setPendingRevoke(null);
     try {
       await revoke(keyId);
       toast.success(t("integration.keyRevoked"));
@@ -81,14 +89,14 @@ export default function IntegrationTab({ agentId, kind = "sub-agent" }: Props) {
           </button>
         </div>
 
-        {error && <div className="text-sm text-red-600">{error.message}</div>}
+        {error && <div className="text-sm text-red-600 dark:text-red-400">{error.message}</div>}
         {activeKeys.length === 0 && !loading && (
-          <div className="text-sm text-gray-500">{t("integration.noKeys")}</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">{t("integration.noKeys")}</div>
         )}
 
         {activeKeys.length > 0 && (
           <table className="w-full text-sm" data-testid="a2a-keys-table">
-            <thead className="text-xs text-gray-500 uppercase">
+            <thead className="text-xs text-gray-500 dark:text-gray-400 uppercase">
               <tr>
                 <th className="text-left py-2">{t("integration.keysTitle")}</th>
                 <th className="text-left py-2">{t("integration.createdAt")}</th>
@@ -107,7 +115,7 @@ export default function IntegrationTab({ agentId, kind = "sub-agent" }: Props) {
                       type="button"
                       onClick={() => onRevoke(k.keyId, k.keyPrefix)}
                       data-testid={`revoke-key-${k.keyId}`}
-                      className="p-1 text-red-500 hover:text-red-700"
+                      className="p-1 text-red-500 hover:text-red-700 dark:hover:text-red-400"
                       aria-label={t("integration.revoke")}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -143,7 +151,7 @@ export default function IntegrationTab({ agentId, kind = "sub-agent" }: Props) {
                 type="button"
                 onClick={() => copy("new-key", justCreated.apiKey)}
                 data-testid="copy-new-key"
-                className="p-1 text-gray-500 hover:text-gray-700"
+                className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
                 aria-label={t("integration.copyKey")}
               >
                 {copied === "new-key" ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
@@ -162,6 +170,17 @@ export default function IntegrationTab({ agentId, kind = "sub-agent" }: Props) {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!pendingRevoke}
+        title={t("integration.revoke")}
+        message={t("integration.revokeConfirm", { prefix: pendingRevoke?.prefix ?? "" })}
+        confirmLabel={t("integration.revoke")}
+        cancelLabel={t("common.cancel")}
+        danger
+        onConfirm={confirmRevoke}
+        onCancel={() => setPendingRevoke(null)}
+      />
     </div>
   );
 }
@@ -174,7 +193,7 @@ function UrlBox({
 }) {
   return (
     <div>
-      <div className="text-xs text-gray-500 mb-1">{label}</div>
+      <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</div>
       <div className="flex items-center gap-2 p-2 rounded bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800">
         <code className="flex-1 text-xs font-mono break-all" data-testid={`${id}-value`}>
           {value}
@@ -183,7 +202,7 @@ function UrlBox({
           type="button"
           onClick={() => onCopy(id, value)}
           data-testid={`${id}-copy`}
-          className="p-1 text-gray-500 hover:text-gray-700"
+          className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
         >
           {copied === id ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
         </button>
