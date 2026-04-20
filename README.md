@@ -21,18 +21,16 @@
 
 ```mermaid
 graph LR
-    User((用户)) --> FE[Web Console<br/>React 19]
-    FE --> META[Meta-Agent]
-    FE -->|流式聊天| Agents
-
-    META -.生成代码/部署.-> Agents[Sub-Agent Runtimes]
-    Agents --- Skills[Skills] & Tools[Tools] & MCP[49 MCP Targets]
-
-    Agents -.OTEL.-> Spans[(aws/spans)]
-    Meta & Agents --- DDB[(DynamoDB)] & S3[(S3)]
-
-    FE --> API[API Gateway + Lambda] --> DDB
+    User((用户)) --> Web[Web Console]
+    Web --> Meta[Meta-Agent<br/>创建 / 管理]
+    Web --> Sub[Sub-Agents<br/>执行]
+    Meta -.codegen + deploy.-> Sub
+    Sub --> LLM[Bedrock LLMs]
+    Sub --> Ext[Skills · Tools · MCP]
+    Sub -.observability.-> Obs[Logs · Traces<br/>Evaluations · Costs]
 ```
+
+详细系统图（CloudFront / Lambda / EventBridge / Evaluator 等）见 [docs/architecture.md](docs/architecture.md)。
 
 ## 快速开始
 
@@ -133,18 +131,16 @@ An agent orchestration platform on AWS Bedrock AgentCore. Create, deploy, and ru
 
 ```mermaid
 graph LR
-    User((User)) --> FE[Web Console<br/>React 19]
-    FE --> META[Meta-Agent]
-    FE -->|streaming chat| Agents
-
-    META -.codegen/deploy.-> Agents[Sub-Agent Runtimes]
-    Agents --- Skills[Skills] & Tools[Tools] & MCP[49 MCP Targets]
-
-    Agents -.OTEL.-> Spans[(aws/spans)]
-    Meta & Agents --- DDB[(DynamoDB)] & S3[(S3)]
-
-    FE --> API[API Gateway + Lambda] --> DDB
+    User((User)) --> Web[Web Console]
+    Web --> Meta[Meta-Agent<br/>build / manage]
+    Web --> Sub[Sub-Agents<br/>execute]
+    Meta -.codegen + deploy.-> Sub
+    Sub --> LLM[Bedrock LLMs]
+    Sub --> Ext[Skills · Tools · MCP]
+    Sub -.observability.-> Obs[Logs · Traces<br/>Evaluations · Costs]
 ```
+
+Full system diagram (CloudFront / Lambda / EventBridge / Evaluator, …) lives in [docs/architecture.md](docs/architecture.md).
 
 ## Quick Start
 
