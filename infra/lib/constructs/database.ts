@@ -8,6 +8,7 @@ export class Database extends Construct {
   public readonly agentsTable: dynamodb.ITable;
   public readonly toolsTable: dynamodb.ITable;
   public readonly a2aKeysTable: dynamodb.Table;
+  public readonly runsTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props: {
     existingAgentsTableName: string;
@@ -63,6 +64,22 @@ export class Database extends Construct {
       indexName: "user-agent-index",
       partitionKey: { name: "userAgentKey", type: dynamodb.AttributeType.STRING },
       sortKey: { name: "createdAt", type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    this.runsTable = new dynamodb.Table(this, "Runs", {
+      tableName: "agent-studio-runs",
+      partitionKey: { name: "agentId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "runId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecovery: true,
+      timeToLiveAttribute: "ttl",
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+    this.runsTable.addGlobalSecondaryIndex({
+      indexName: "schedule-index",
+      partitionKey: { name: "scheduleId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "startedAt", type: dynamodb.AttributeType.STRING },
       projectionType: dynamodb.ProjectionType.ALL,
     });
   }
