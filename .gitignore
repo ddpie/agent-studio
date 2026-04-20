@@ -22,6 +22,7 @@ build/
 coverage/
 .coverage
 htmlcov/
+.pytest_cache/
 
 # Playwright
 frontend/.auth/

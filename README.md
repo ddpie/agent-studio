@@ -78,14 +78,7 @@ API 密钥 SHA-256 hash 存 `agent-studio-a2a-keys` DDB 表，每用户每 Agent
 四级角色：**viewer**（只读）/ **editor**（改配置 + 部署）/ **admin**（管成员）/ **owner**（唯一，可转让）。切 workspace 自动清 chat 历史避免跨域幻影。
 
 ### Agent Detail Page
-`/agents/{id}` 10 个 section：Deployments / 运行日志 / Endpoints / Secrets / Evaluations / Traces / Cost / A2A Integration / Schedules。viewer 只读，editor+ 可 Edit。
-
-### 安全红线（synth + pre-commit 守卫）
-- Lambda `AuthType` 禁止 `NONE`，`Principal` 禁止 `"*"` / `AnyPrincipal`
-- 禁止 broad Lambda resource-based policies
-- CloudFront OAC (SigV4) 保护 Function URL，origin-verify header 保护 API Gateway
-- WAF：AWS Managed Rules + IP 限速，CloudFront 层
-- S3 / DDB IAM 按 workspace / agent 前缀 scope down
+`/agents/{id}` 左侧 sticky 导航 + 右侧滚动内容，scroll-spy 高亮，IntersectionObserver lazy-mount。Sections：Deployments / Schedules / Logs / Traces / Evaluations / Costs / Secrets / Integration / Endpoints。viewer 只读，editor+ 可 Edit。Section 选中持久化到 sessionStorage（按 agentId）。
 
 ### Sandbox
 `run_command` 跑 AgentCore Code Interpreter，`fetch_webpage` 跑 AgentCore Browser。账户级共享资源经 `scripts/provision-agentcore-shared.sh` provision，ID 通过 env vars 传到 Sub-Agent。
@@ -195,14 +188,7 @@ API keys are SHA-256-hashed in the `agent-studio-a2a-keys` DDB table, scoped per
 Four roles: **viewer** (read-only), **editor** (config + deploy), **admin** (manage members), **owner** (single, transferable). Workspace switching clears chat history to avoid cross-workspace phantoms.
 
 ### Agent Detail Page
-`/agents/{id}` stacks 10 sections: Deployments / Runtime Logs / Endpoints / Secrets / Evaluations / Traces / Cost / A2A Integration / Schedules. Viewers read-only; editor+ gets Edit button.
-
-### Security red lines (synth + pre-commit guards)
-- No Lambda `AuthType=NONE`, no `Principal: "*"` / `AnyPrincipal`
-- No broad Lambda resource-based policies
-- CloudFront OAC (SigV4) fronts Function URLs; origin-verify header fronts API Gateway
-- WAF: AWS Managed Rules + IP rate limiting at CloudFront layer
-- S3 / DDB IAM scoped by workspace / agent prefix
+`/agents/{id}` is a sticky side-nav + scrolling content layout with scroll-spy highlighting and IntersectionObserver lazy-mount. Sections: Deployments / Schedules / Logs / Traces / Evaluations / Costs / Secrets / Integration / Endpoints. Viewers read-only; editor+ gets Edit. Section selection is persisted per agentId in sessionStorage.
 
 ### Sandbox
 `run_command` runs in AgentCore Code Interpreter, `fetch_webpage` in AgentCore Browser. Account-shared sandbox resources are provisioned once via `scripts/provision-agentcore-shared.sh`; their IDs reach sub-agents via env vars.
