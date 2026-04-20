@@ -44,30 +44,9 @@ for _name in _config.get("tool_names", []):
         continue
     _ALL_TOOLS.append(getattr(_tools_module, _name))
 
-def _tag_chat_title(payload):
-    """Stamp chat.title on the current span so the Runs list can show a
-    meaningful row title instead of the raw session UUID. We use the first
-    user message (this invocation's prompt) truncated to 60 chars.
-    Chat runs only — scheduled runs have their own session-id prefix."""
-    try:
-        from opentelemetry import trace as _otel_trace
-        span = _otel_trace.get_current_span()
-        if not span or not getattr(span, "is_recording", lambda: False)():
-            return
-        title = (payload.get("prompt") or "").strip()
-        if not title:
-            return
-        if len(title) > 60:
-            title = title[:60] + "..."
-        span.set_attribute("chat.title", title)
-    except Exception:
-        pass
-
-
 @app.entrypoint
 async def invoke(payload, context):
     model_id = payload.get("model_id", MODEL_ID)
-    _tag_chat_title(payload)
     import builtin_tools as _builtin
     _builtin._workspace_id = payload.get("workspace_id", "")
     skills_listing = _builtin.get_skills_listing()
@@ -218,30 +197,9 @@ for _name in _config.get("tool_names", []):
         continue
     _ALL_TOOLS.append(getattr(_tools_module, _name))
 
-def _tag_chat_title(payload):
-    """Stamp chat.title on the current span so the Runs list can show a
-    meaningful row title instead of the raw session UUID. We use the first
-    user message (this invocation's prompt) truncated to 60 chars.
-    Chat runs only — scheduled runs have their own session-id prefix."""
-    try:
-        from opentelemetry import trace as _otel_trace
-        span = _otel_trace.get_current_span()
-        if not span or not getattr(span, "is_recording", lambda: False)():
-            return
-        title = (payload.get("prompt") or "").strip()
-        if not title:
-            return
-        if len(title) > 60:
-            title = title[:60] + "..."
-        span.set_attribute("chat.title", title)
-    except Exception:
-        pass
-
-
 @app.entrypoint
 async def invoke(payload, context):
     model_id = payload.get("model_id", MODEL_ID)
-    _tag_chat_title(payload)
     import builtin_tools as _builtin
     _builtin._workspace_id = payload.get("workspace_id", "")
     skills_listing = _builtin.get_skills_listing()

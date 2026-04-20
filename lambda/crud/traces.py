@@ -134,45 +134,28 @@ def list_traces(wsId: str, agentId: str):
     # time. Pass 1: session totals (spans + firstEvent). Pass 2: look up
     # invoke_agent / POST /invocations per session for latency + tokens +
     # status. We pass the same 24h window to both.
-    # Group by sessionId only — a multi-turn chat shares one session id,
-    # so turns land in the same row (turnCount = count_distinct(traceId)).
-    # The Runs tab shows one row per conversation and expands to individual
-    # turns on click. Scheduled / manual / one-shot runs all have
-    # turnCount=1, which is fine.
     list_q = f"""
 fields @timestamp, attributes.session.id as sessionId, traceId, resource.attributes.service.name as svc
 | filter svc = "{agentId}" and ispresent(sessionId)
-| stats min(@timestamp) as firstEvent, max(@timestamp) as lastEvent, count(*) as spanCount, count_distinct(traceId) as turnCount by sessionId
+| stats min(@timestamp) as firstEvent, count(*) as spanCount by sessionId, traceId
 | sort firstEvent desc
 | limit 50
 """.strip()
 
-    # `chat.title` is only set on the root POST /invocations span in the
-    # session's first turn. Using `max()` picks the earliest recorded
-    # non-null value across the session — good enough when ADOT pushes
-    # them in order.
-    # CWL Logs Insights (Opensearch PPL) rejects reusing an `as`-aliased
-    # field name inside the same query — both the `fields` alias and the
-    # `stats ... as` must be unique. We use *Raw suffixes in `fields` and
-    # drop back to the clean names in `stats`. Without this every meta
-    # query hits MalformedQueryException and the Runs list loses tokens,
-    # latency, model, status AND chat.title.
     meta_q = f"""
-fields attributes.session.id as sid, resource.attributes.service.name as svc, name as spanName, status.code as statusRaw,
-       attributes.gen_ai.request.model as modelRaw,
-       attributes.gen_ai.usage.input_tokens as inputTokensRaw,
-       attributes.gen_ai.usage.output_tokens as outputTokensRaw,
-       attributes.gen_ai.usage.total_tokens as totalTokensRaw,
-       attributes.chat.title as titleRaw,
-       (durationNano / 1000000) as durMsRaw
+fields attributes.session.id as sid, resource.attributes.service.name as svc, name as spanName, status.code as sc,
+       attributes.gen_ai.request.model as mdl,
+       attributes.gen_ai.usage.input_tokens as inTok,
+       attributes.gen_ai.usage.output_tokens as outTok,
+       attributes.gen_ai.usage.total_tokens as totTok,
+       (durationNano / 1000000) as dur
 | filter svc = "{agentId}" and ispresent(sid) and (spanName = "invoke_agent Strands Agents" or spanName = "POST /invocations")
-| stats max(modelRaw) as model,
-        max(inputTokensRaw) as inputTokens,
-        max(outputTokensRaw) as outputTokens,
-        max(totalTokensRaw) as totalTokens,
-        earliest(titleRaw) as chatTitle,
-        max(durMsRaw) as durMs,
-        max(statusRaw) as statusCode by sid
+| stats max(mdl) as model,
+        max(inTok) as inputTokens,
+        max(outTok) as outputTokens,
+        max(totTok) as totalTokens,
+        max(dur) as durMs,
+        max(sc) as statusCode by sid
 | limit 100
 """.strip()
 
@@ -198,7 +181,6 @@ fields attributes.session.id as sid, resource.attributes.service.name as svc, na
             "inputTokens": _to_int(_field(row, "inputTokens")) or None,
             "outputTokens": _to_int(_field(row, "outputTokens")) or None,
             "totalTokens": _to_int(_field(row, "totalTokens")) or None,
-            "chatTitle": _field(row, "chatTitle") or None,
             "durationMs": _round_ms(_field(row, "durMs")),
             "status": _field(row, "statusCode") or "OK",
         }
@@ -212,21 +194,15 @@ fields attributes.session.id as sid, resource.attributes.service.name as svc, na
             count = int(_field(row, "spanCount") or "0")
         except ValueError:
             count = 0
-        try:
-            turns = int(_field(row, "turnCount") or "1")
-        except ValueError:
-            turns = 1
         meta = meta_by_sid.get(sid, {})
         sessions.append({
             "sessionId": sid,
+            "traceId": _field(row, "traceId"),
             "firstEvent": _as_utc_iso(_field(row, "firstEvent")),
-            "lastEvent": _as_utc_iso(_field(row, "lastEvent")),
             "spanCount": count,
-            "turnCount": turns,
             "model": meta.get("model"),
             "totalTokens": meta.get("totalTokens"),
             "durationMs": meta.get("durationMs"),
-            "title": meta.get("chatTitle"),
             "status": meta.get("status") or "OK",
         })
     return success({"sessions": sessions})
@@ -255,15 +231,11 @@ def get_session_trace(wsId: str, agentId: str, sessionId: str):
     if not sessionId or not _SESSION_ID_RE.match(sessionId):
         return bad_request("invalid sessionId")
 
-    # Pull traceId + chat.title so we can split a multi-turn conversation
-    # into per-turn span trees (one per traceId). Each trace == one user
-    # turn; its root "POST /invocations" span carries `chat.title` = the
-    # user's prompt for that turn.
     q = f"""
-fields spanId, parentSpanId, name, startTimeUnixNano, endTimeUnixNano, status.code as status, attributes.session.id as sessionId, traceId, attributes.chat.title as chatTitle
+fields spanId, parentSpanId, name, startTimeUnixNano, endTimeUnixNano, status.code as status, attributes.session.id as sessionId
 | filter sessionId = "{sessionId}"
 | sort startTimeUnixNano asc
-| limit 2000
+| limit 500
 """.strip()
 
     try:
@@ -276,12 +248,10 @@ fields spanId, parentSpanId, name, startTimeUnixNano, endTimeUnixNano, status.co
     if not rows:
         return not_found()
 
-    # Bucket spans by traceId (= one turn).
-    spans_by_trace: dict[str, dict[str, dict]] = {}
-    turn_meta: dict[str, dict] = {}
+    # Assemble spans into a single tree.
+    spans_by_id: dict[str, dict] = {}
     for row in rows:
         sid = _field(row, "spanId")
-        tid = _field(row, "traceId") or "__no_trace__"
         if not sid:
             continue
         try:
@@ -299,204 +269,37 @@ fields spanId, parentSpanId, name, startTimeUnixNano, endTimeUnixNano, status.co
             "status": _field(row, "status") or "OK",
             "children": [],
         }
-        spans_by_trace.setdefault(tid, {})[sid] = span
+        spans_by_id[sid] = span
 
-        title = _field(row, "chatTitle")
-        if title:
-            # The first span to carry chat.title wins — templates set it on
-            # the entrypoint span, which starts before any children.
-            turn_meta.setdefault(tid, {})["title"] = title
-
-    def _assemble_tree(spans_map: dict[str, dict], trace_id: str) -> dict:
-        root = None
-        orphans = []
-        for sp in spans_map.values():
-            parent_sid = sp["parentSpanId"]
-            if parent_sid and parent_sid in spans_map:
-                spans_map[parent_sid]["children"].append(sp)
-            else:
-                if root is None:
-                    root = sp
-                else:
-                    orphans.append(sp)
-        if root is None:
-            children = sorted(spans_map.values(), key=lambda s: s["startMs"])
-            root = {
-                "spanId": "__synthetic__",
-                "parentSpanId": None,
-                "name": f"trace:{trace_id}",
-                "startMs": children[0]["startMs"] if children else 0,
-                "durationMs": 0,
-                "status": "OK",
-                "children": children,
-            }
-        elif orphans:
-            root["children"].extend(sorted(orphans, key=lambda s: s["startMs"]))
-        return root
-
-    turns = []
-    total_spans = 0
-    for tid, spans_map in spans_by_trace.items():
-        root = _assemble_tree(spans_map, tid)
-        total_spans += len(spans_map)
-        turns.append({
-            "traceId": tid,
-            "title": turn_meta.get(tid, {}).get("title"),
-            "startMs": root.get("startMs", 0),
-            "durationMs": root.get("durationMs", 0),
-            "status": root.get("status", "OK"),
-            "spanCount": len(spans_map),
-            "root": root,
-        })
-
-    turns.sort(key=lambda t: t["startMs"])
-
-    # Back-compat: keep `root` for older clients (first turn's tree).
-    legacy_root = turns[0]["root"] if turns else None
-
-    return success({
-        "sessionId": sessionId,
-        "turns": turns,
-        "turnCount": len(turns),
-        "totalSpans": total_spans,
-        # Deprecated — prefer `turns[].root`.
-        "root": legacy_root,
-    })
-
-
-# Filter out framework / OTEL noise from the runtime log stream so what
-# remains is the sub-agent's stdout (= the final user-facing output).
-_OUTPUT_SKIP_PATTERNS = (
-    re.compile(r"^\d{4}-\d{2}-\d{2} .* (INFO|WARNING|ERROR|DEBUG) "),
-    re.compile(r"^WARNING:"),
-    re.compile(r"^INFO:"),
-    re.compile(r"^ERROR:"),
-    re.compile(r"Failed to export logs batch"),
-    re.compile(r'^\{"timestamp":'),
-)
-
-
-def _looks_like_framework_noise(line: str) -> bool:
-    s = line.strip()
-    if not s:
-        return True
-    for pat in _OUTPUT_SKIP_PATTERNS:
-        if pat.search(s):
-            return True
-    return False
-
-
-@router.get("/api/workspaces/<wsId>/agents/<agentId>/traces/<sessionId>/output")
-def get_session_output(wsId: str, agentId: str, sessionId: str):
-    """Return the agent's user-facing output text + per-session metrics.
-
-    We read stdout-like lines from the sub-agent's runtime log stream
-    (`/aws/bedrock-agentcore/runtimes/{agentId}-DEFAULT`) and aggregate
-    usage from the OTEL spans in aws/spans.
-
-    Kept separate from the span-tree endpoint so the heavy runtime-log
-    lookup only runs when the UI needs output.
-    """
-    user_id, ws_id, _, err = auth_check(router.current_event, ws_id=wsId)
-    if err:
-        return err
-    id_err = validate_id(agentId, "agentId")
-    if id_err:
-        return bad_request(id_err)
-    item = _get_agent_item(agentId)
-    if not item or item.get("workspace_id") != ws_id:
-        return forbidden()
-    if not sessionId or not _SESSION_ID_RE.match(sessionId):
-        return bad_request("invalid sessionId")
-
-    logs = _get_logs()
-
-    # 1) Metrics from aws/spans — invoke_agent gives tokens + model;
-    #    POST /invocations gives wall clock.
-    meta_q = f"""
-fields resource.attributes.service.name as svc, attributes.session.id as sid, name as spanName, status.code as statusCode,
-       attributes.gen_ai.request.model as model,
-       attributes.gen_ai.usage.input_tokens as inputTokens,
-       attributes.gen_ai.usage.output_tokens as outputTokens,
-       attributes.gen_ai.usage.total_tokens as totalTokens,
-       (durationNano / 1000000) as durMs
-| filter svc = "{agentId}" and sid = "{sessionId}" and (spanName = "invoke_agent Strands Agents" or spanName = "POST /invocations")
-| stats max(model) as model,
-        max(inputTokens) as inputTokens,
-        max(outputTokens) as outputTokens,
-        max(totalTokens) as totalTokens,
-        max(durMs) as durMs,
-        max(statusCode) as statusCode
-""".strip()
-    try:
-        meta_rows = _run_query(meta_q, hours=24, timeout_s=_STATS_QUERY_TIMEOUT_S)
-    except ClientError:
-        meta_rows = []
-
-    meta: dict = {"model": None, "inputTokens": None, "outputTokens": None,
-                  "totalTokens": None, "durationMs": None, "status": "OK"}
-    if meta_rows:
-        row = meta_rows[0]
-        meta["model"] = _field(row, "model")
-        meta["inputTokens"] = _to_int(_field(row, "inputTokens")) or None
-        meta["outputTokens"] = _to_int(_field(row, "outputTokens")) or None
-        meta["totalTokens"] = _to_int(_field(row, "totalTokens")) or None
-        meta["durationMs"] = _round_ms(_field(row, "durMs"))
-        meta["status"] = _field(row, "statusCode") or "OK"
-
-    # 2) Free-text output from the runtime log stream. Stream name shape:
-    #    `2026/04/20/[runtime-logs-<sessionId>]<stream-uuid>`
-    runtime_log_group = f"/aws/bedrock-agentcore/runtimes/{agentId}-DEFAULT"
-    stream_prefix_fragment = f"runtime-logs-{sessionId}"
-    output_lines: list[str] = []
-    matched_stream: str | None = None
-    try:
-        streams = logs.describe_log_streams(
-            logGroupName=runtime_log_group,
-            orderBy="LastEventTime",
-            descending=True,
-            limit=50,
-        ).get("logStreams", [])
-        for s in streams:
-            sname = s.get("logStreamName", "")
-            if stream_prefix_fragment in sname:
-                matched_stream = sname
-                break
-    except ClientError as e:
-        code = e.response.get("Error", {}).get("Code", "")
-        # Runtime log group may not exist yet for a freshly-deployed agent;
-        # surface an empty output with 200 rather than 500 so the UI can
-        # still show the metrics strip.
-        if code == "ResourceNotFoundException":
-            matched_stream = None
+    # Link children to parents.
+    root = None
+    orphans = []
+    for sp in spans_by_id.values():
+        parent_sid = sp["parentSpanId"]
+        if parent_sid and parent_sid in spans_by_id:
+            spans_by_id[parent_sid]["children"].append(sp)
         else:
-            logger.exception("describe_log_streams failed",
-                             extra={"agentId": agentId, "code": code})
-            return internal_error()
+            if root is None:
+                root = sp
+            else:
+                orphans.append(sp)
 
-    if matched_stream:
-        try:
-            ev_resp = logs.get_log_events(
-                logGroupName=runtime_log_group,
-                logStreamName=matched_stream,
-                startFromHead=True,
-                limit=200,
-            )
-            for e in ev_resp.get("events", []):
-                msg = (e.get("message") or "").rstrip()
-                if not _looks_like_framework_noise(msg):
-                    output_lines.append(msg)
-        except ClientError as e:
-            logger.warning("get_log_events failed",
-                           extra={"agentId": agentId, "stream": matched_stream,
-                                  "code": e.response.get("Error", {}).get("Code", "")})
+    # If no clear root exists, synthesize one.
+    if root is None:
+        children = sorted(spans_by_id.values(), key=lambda s: s["startMs"])
+        root = {
+            "spanId": "__synthetic__",
+            "parentSpanId": None,
+            "name": f"session:{sessionId}",
+            "startMs": children[0]["startMs"] if children else 0,
+            "durationMs": 0,
+            "status": "OK",
+            "children": children,
+        }
+    elif orphans:
+        root["children"].extend(sorted(orphans, key=lambda s: s["startMs"]))
 
-    return success({
-        "sessionId": sessionId,
-        "output": "\n".join(output_lines).strip(),
-        "hasOutput": bool(output_lines),
-        "metrics": meta,
-    })
+    return success({"root": root, "totalSpans": len(spans_by_id)})
 
 
 def _to_float(v) -> float | None:
