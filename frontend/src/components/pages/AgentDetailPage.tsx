@@ -33,13 +33,13 @@ import { useScrollSpy } from "../../hooks/useScrollSpy";
 const RUNS_SECTION_ID = "runs-section";
 
 export default function AgentDetailPage() {
-  const { agentId, sessionId: routeSessionId } = useParams();
+  const { agentId, runId: routeRunId } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { currentWorkspace } = useWorkspaceStore();
   const [agent, setAgent] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<Error | null>(null);
-  const [selectedRunSessionId, setSelectedRunSessionId] = useState<string | null>(routeSessionId ?? null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(routeRunId ?? null);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
 
   const navItems: NavEntry[] = useMemo(
@@ -86,15 +86,15 @@ export default function AgentDetailPage() {
     setActiveId(id);
   };
 
-  const handleRunSelected = (sessionId: string) => {
+  const handleRunSelected = (runId: string) => {
     if (!agentId) return;
-    if (sessionId === routeSessionId) return;
-    navigate(`/agents/${agentId}/runs/${encodeURIComponent(sessionId)}`);
+    if (runId === routeRunId) return;
+    navigate(`/agents/${agentId}/runs/${encodeURIComponent(runId)}`);
   };
 
-  const scrollToRuns = (sessionId: string) => {
-    setSelectedRunSessionId(sessionId);
-    handleRunSelected(sessionId);
+  const scrollToRuns = (runId: string) => {
+    setSelectedRunId(runId);
+    handleRunSelected(runId);
     requestAnimationFrame(() => {
       const el = document.getElementById(RUNS_SECTION_ID);
       const root = scrollRootRef.current;
@@ -114,8 +114,8 @@ export default function AgentDetailPage() {
   }, [agentId]);
 
   useEffect(() => {
-    if (routeSessionId) setSelectedRunSessionId(routeSessionId);
-  }, [routeSessionId]);
+    if (routeRunId) setSelectedRunId(routeRunId);
+  }, [routeRunId]);
 
   if (error) {
     return (
@@ -220,7 +220,7 @@ export default function AgentDetailPage() {
                 >
                   <RunsTab
                     agentId={agentId}
-                    initialSessionId={selectedRunSessionId}
+                    initialRunId={selectedRunId}
                     onSelect={handleRunSelected}
                   />
                 </LazySection>

@@ -517,27 +517,7 @@ export async function getSessionTrace(agentId: string, sessionId: string): Promi
   const resp = await apiGet<{ root?: TraceSpan }>(
     `/agents/${encodeURIComponent(agentId)}/traces/${encodeURIComponent(sessionId)}`
   );
-  return resp.root ?? null;
-}
-
-export interface SessionOutput {
-  sessionId: string;
-  output: string;
-  hasOutput: boolean;
-  metrics: {
-    model: string | null;
-    inputTokens: number | null;
-    outputTokens: number | null;
-    totalTokens: number | null;
-    durationMs: number | null;
-    status: string;
-  };
-}
-
-export async function getSessionOutput(agentId: string, sessionId: string): Promise<SessionOutput> {
-  return apiGet<SessionOutput>(
-    `/agents/${encodeURIComponent(agentId)}/traces/${encodeURIComponent(sessionId)}/output`
-  );
+  return resp?.root ?? null;
 }
 
 // ── Agent logs (inline CloudWatch viewer) ──

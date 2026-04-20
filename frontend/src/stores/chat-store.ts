@@ -198,6 +198,10 @@ export const useChatStore = create<ChatState>()(
             messages: session.messages,
             activeSessionId: session.id,
             selectedModelId: session.modelId || null,
+            // Drop the in-flight AgentCore sessionId — next sendMessage
+            // will mint a fresh one, so the loaded history starts a new
+            // server-side session (may be a different AgentCore container).
+            sessionId: undefined,
             statusText: null,
           });
         }
@@ -235,6 +239,17 @@ export const useChatStore = create<ChatState>()(
           timestamp: Date.now(),
         };
 
+        // Reuse one AgentCore session id across turns within the same chat.
+        // Each turn still gets its own traceId, so the Runs tab groups them
+        // as one session with N turns (matches LangSmith/Langfuse UX). The
+        // `newSession` / `loadSession` / `clearMessages` actions reset this
+        // back to undefined so a fresh chat gets a fresh session id.
+        let turnSessionId = get().sessionId;
+        if (!turnSessionId) {
+          turnSessionId = crypto.randomUUID();
+          set({ sessionId: turnSessionId });
+        }
+
         set((s) => ({
           messages: [...s.messages, userMsg, assistantMsg],
           isStreaming: true,
@@ -253,12 +268,12 @@ export const useChatStore = create<ChatState>()(
             const history = get().messages
               .filter((m) => m.id !== assistantMsg.id && m.content && m.role !== "system")
               .map(({ role, content }) => ({ role: role as "user" | "assistant", content }));
-            stream = invokeAgentById(currentAgentId, content, history, get().sessionId, onStatus, images, modelId);
+            stream = invokeAgentById(currentAgentId, content, history, turnSessionId, onStatus, images, modelId);
           } else {
             const history = get().messages
               .filter((m) => m.id !== assistantMsg.id && m.content && m.role !== "system")
               .map(({ role, content }) => ({ role: role as "user" | "assistant", content }));
-            stream = invokeMetaAgent(content, history, get().sessionId, onStatus, images, modelId);
+            stream = invokeMetaAgent(content, history, turnSessionId, onStatus, images, modelId);
           }
 
           // Batch chunks to reduce re-renders: accumulate text, flush every 80ms
