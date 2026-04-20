@@ -21,6 +21,7 @@ def _shared_env_vars(agent_id: str = "") -> dict:
     """
     env = {
         "AGENT_STUDIO_REGION": REGION,
+        "AGENT_STUDIO_RUNS_TABLE": "agent-studio-runs",
         # AgentCore Observability via ADOT — emits gen_ai.* spans to aws/spans.
         # AgentCore's data plane captures OTLP via the x-aws-log-group header,
         # so OTEL_EXPORTER_OTLP_ENDPOINT must NOT be set (no sidecar on
@@ -33,6 +34,13 @@ def _shared_env_vars(agent_id: str = "") -> dict:
         "OTEL_TRACES_EXPORTER": "otlp",
         "OTEL_LOGS_EXPORTER": "otlp",
         "OTEL_METRICS_EXPORTER": "awsemf",
+        # Emit the new `gen_ai.client.inference.operation.details` log event
+        # (OTEL gen_ai semconv) so AgentCore's Online Evaluators can read the
+        # prompt/response content. Without these three, Builtin.Correctness /
+        # Helpfulness / GoalSuccessRate all fail with LogEventMissingException.
+        "OTEL_SEMCONV_STABILITY_OPT_IN": "gen_ai_latest_experimental",
+        "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT": "SPAN_AND_EVENT",
+        "OTEL_INSTRUMENTATION_GENAI_EMIT_EVENT": "true",
     }
     ci = os.environ.get("AGENT_STUDIO_CODE_INTERPRETER_ID", "")
     br = os.environ.get("AGENT_STUDIO_BROWSER_ID", "")
