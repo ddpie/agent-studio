@@ -960,7 +960,7 @@
     "updated": "已更新调度 {{name}}",
     "updateFailed": "更新调度失败",
     "runNow": "立即运行",
-    "runNowSuccess": "已触发 {{name}} — 即将打开轨迹…",
+    "runNowSuccess": "已触发 {{name}}",
     "runNowFailed": "运行调度失败",
     "modes": {
       "minutes": "每 N 分钟",

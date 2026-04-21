@@ -60,7 +60,7 @@ async def invoke(payload, context):
     prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), save them to /mnt/workspace/ (persistent across sessions) instead of /tmp/ (ephemeral). ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files. After uploading, the download button appears automatically — do NOT create markdown links like [filename](url) for downloads."
     prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
     agent = Agent(
-        model=BedrockModel(model_id=model_id, max_tokens=200000),
+        model=BedrockModel(model_id=model_id, max_tokens=128000),
         system_prompt=prompt,
         tools=_ALL_TOOLS + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use],
     )
@@ -221,7 +221,7 @@ async def invoke(payload, context):
             except Exception as _mcp_err:
                 print(f"WARNING: MCP client failed to connect, skipping: {_mcp_err}", file=sys.stderr)
         agent = Agent(
-            model=BedrockModel(model_id=model_id, max_tokens=200000),
+            model=BedrockModel(model_id=model_id, max_tokens=128000),
             system_prompt=prompt,
             tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use],
         )
@@ -254,13 +254,15 @@ def _install_session_span_processor():
     """Install a SpanProcessor that tags every new span with
     `agent_studio.session_id` read from the module-level variable.
     Idempotent — safe to call on every invocation."""
+    import sys as _sys
     global _SPAN_PROCESSOR_INSTALLED
     if _SPAN_PROCESSOR_INSTALLED:
         return
     try:
         from opentelemetry import trace as _ot
         from opentelemetry.sdk.trace import SpanProcessor as _SP
-    except Exception:
+    except Exception as e:
+        print(f"AS_SPAN_TAG: import failed: {e}", file=_sys.stderr, flush=True)
         return
 
     class _SessionTagProcessor(_SP):
@@ -279,14 +281,17 @@ def _install_session_span_processor():
             return True
 
     provider = _ot.get_tracer_provider()
+    provider_cls = type(provider).__name__
     add = getattr(provider, "add_span_processor", None)
     if add is None:
+        print(f"AS_SPAN_TAG: provider {provider_cls} has no add_span_processor", file=_sys.stderr, flush=True)
         return
     try:
         add(_SessionTagProcessor())
         _SPAN_PROCESSOR_INSTALLED = True
-    except Exception:
-        pass
+        print(f"AS_SPAN_TAG: installed on {provider_cls}", file=_sys.stderr, flush=True)
+    except Exception as e:
+        print(f"AS_SPAN_TAG: add failed on {provider_cls}: {e}", file=_sys.stderr, flush=True)
 
 
 def _set_current_session_id(session_id):
@@ -1363,7 +1368,7 @@ def browser_use(action: str, url: str = "", selector: str = "",
             except Exception as e:
                 return _json.dumps({"error": f"fill failed: {e}"})
 
-        # screenshot
+        # screenshot — return image block (model can see it) + S3 link (user can download)
         png_bytes = await page.screenshot(full_page=True, type="png")
         if not png_bytes:
             return _json.dumps({"error": "screenshot returned no data"})
@@ -1377,10 +1382,13 @@ def browser_use(action: str, url: str = "", selector: str = "",
             )
         except Exception as e:
             return _json.dumps({"error": f"s3 upload failed: {e}"})
-        return (
-            "Screenshot captured. Include this download link in your response:\\n"
-            f"__S3_DOWNLOAD__:{s3_key}:screenshot.png"
-        )
+        return {
+            "status": "success",
+            "content": [
+                {"image": {"format": "png", "source": {"bytes": png_bytes}}},
+                {"text": f"Screenshot captured. Include this download link in your response:\\n__S3_DOWNLOAD__:{s3_key}:screenshot.png"},
+            ],
+        }
 
     try:
         return _run_async(_do_async())

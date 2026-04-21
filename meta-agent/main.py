@@ -444,7 +444,7 @@ async def invoke(payload, context):
     _ms._caller_id = caller_id
 
     agent = Agent(
-        model=BedrockModel(model_id=model_id, max_tokens=16384),
+        model=BedrockModel(model_id=model_id, max_tokens=128000),
         system_prompt=SYSTEM_PROMPT,
         tools=ALL_TOOLS,
     )
@@ -516,13 +516,12 @@ async def invoke(payload, context):
             tool_info = event["current_tool_use"]
             tool_name = tool_info.get("name", "")
             tool_use_id = tool_info.get("toolUseId", "")
-            if tool_name and tool_name != current_tool:
+            if tool_use_id and tool_name:
+                tool_use_id_map[tool_use_id] = tool_name
+            if tool_name and (tool_name != current_tool or tool_use_id not in tool_use_id_map or tool_input_buf == ""):
                 current_tool = tool_name
                 tool_input_buf = ""
-                if tool_use_id:
-                    tool_use_id_map[tool_use_id] = tool_name
                 yield json.dumps({"__tool": "start", "name": tool_name})
-            # Accumulate tool input
             raw_input = tool_info.get("input", "")
             if raw_input:
                 tool_input_buf = raw_input
@@ -537,13 +536,11 @@ async def invoke(payload, context):
                         continue
                     t_id = tr.get("toolUseId", "")
                     t_name = tool_use_id_map.get(t_id, "unknown")
-                    # Collect text from result content
                     output_parts = []
                     for c in tr.get("content", []):
                         if "text" in c:
                             output_parts.append(c["text"])
                     output_text = "\n".join(output_parts)
-                    # Encode input & output as base64
                     inp_str = ""
                     try:
                         parsed_inp = json.loads(tool_input_buf) if isinstance(tool_input_buf, str) and tool_input_buf.strip() else tool_input_buf
@@ -552,9 +549,14 @@ async def invoke(payload, context):
                     except Exception:
                         inp_str = str(tool_input_buf) if tool_input_buf else ""
                     inp_b64 = _b64.b64encode(inp_str.encode()).decode() if inp_str else ""
-                    # Truncate output if too long (keep first 2000 chars)
-                    if len(output_text) > 2000:
-                        output_text = output_text[:2000] + "\n... (truncated)"
+                    if output_text.lstrip().startswith("<"):
+                        max_out = 50000
+                    elif t_name == "load_skill":
+                        max_out = 10000
+                    else:
+                        max_out = 5000
+                    if len(output_text) > max_out:
+                        output_text = output_text[:max_out] + "\n... (truncated)"
                     out_b64 = _b64.b64encode(output_text.encode()).decode() if output_text else ""
                     yield json.dumps({"__tool": "result", "name": t_name, "input": inp_b64, "output": out_b64})
 
