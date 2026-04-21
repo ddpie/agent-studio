@@ -23,6 +23,7 @@ export interface ApiProps {
   a2aKeysTable: dynamodb.Table;
   runsTable: dynamodb.Table;
   originVerifyValue: string;
+  scheduleRunnerLambdaArn: string;
 }
 
 export class Api extends Construct {
@@ -72,6 +73,7 @@ export class Api extends Construct {
         // separate from the sub-agent execution roles so scheduler
         // trust doesn't widen those roles' blast radius.
         SCHEDULER_TARGET_ROLE_ARN: props.schedulerTargetRoleArn,
+        SCHEDULE_RUNNER_LAMBDA_ARN: props.scheduleRunnerLambdaArn,
       },
     });
 

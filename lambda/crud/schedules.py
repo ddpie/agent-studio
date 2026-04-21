@@ -60,6 +60,7 @@ _AGENTCORE_REGION = os.environ.get("AGENTCORE_REGION", REGION)
 # fallback role lacks `scheduler.amazonaws.com` in its trust policy,
 # create_schedule will fail at AWS — surfacing as a 500 here.
 _SCHEDULER_TARGET_ROLE_ARN = os.environ.get("SCHEDULER_TARGET_ROLE_ARN", "")
+_SCHEDULE_RUNNER_LAMBDA_ARN = os.environ.get("SCHEDULE_RUNNER_LAMBDA_ARN", "")
 
 # Suffix allowed chars: Scheduler names are [0-9a-zA-Z-_.]{1,64}. We
 # restrict to the narrower ID_PATTERN so the combined name stays safe.
@@ -261,7 +262,7 @@ def create_schedule(wsId: str, agentId: str):
 
     full_name = _build_full_name(agentId, suffix)
     scheduler = _get_scheduler()
-    universal_target_arn = "arn:aws:scheduler:::aws-sdk:bedrockagentcore:invokeAgentRuntime"
+    target_arn = _SCHEDULE_RUNNER_LAMBDA_ARN
     runtime_arn = _agent_arn(agentId)
     # EventBridge Scheduler substitutes `<aws.scheduler.scheduled-time>`
     # at dispatch with the fire time in ISO-8601 UTC (e.g.
@@ -297,7 +298,7 @@ def create_schedule(wsId: str, agentId: str):
             ScheduleExpression=cron,
             FlexibleTimeWindow={"Mode": "OFF"},
             Target={
-                "Arn": universal_target_arn,
+                "Arn": target_arn,
                 "RoleArn": _SCHEDULER_TARGET_ROLE_ARN,
                 "Input": json.dumps(payload),
                 "RetryPolicy": {
@@ -421,7 +422,7 @@ def update_schedule(wsId: str, agentId: str, name: str):
     })
 
     new_target = {
-        "Arn": existing_target.get("Arn", "arn:aws:scheduler:::aws-sdk:bedrockagentcore:invokeAgentRuntime"),
+        "Arn": _SCHEDULE_RUNNER_LAMBDA_ARN or existing_target.get("Arn", ""),
         "RoleArn": existing_target.get("RoleArn") or _SCHEDULER_TARGET_ROLE_ARN,
         "Input": new_input,
         "RetryPolicy": {
@@ -585,7 +586,7 @@ def run_schedule_now(wsId: str, agentId: str, name: str):
             FlexibleTimeWindow={"Mode": "OFF"},
             ActionAfterCompletion="DELETE",
             Target={
-                "Arn": "arn:aws:scheduler:::aws-sdk:bedrockagentcore:invokeAgentRuntime",
+                "Arn": _SCHEDULE_RUNNER_LAMBDA_ARN,
                 "RoleArn": _SCHEDULER_TARGET_ROLE_ARN,
                 "Input": json.dumps(target_input),
             },

@@ -11,6 +11,7 @@ import { Cdn } from "./constructs/cdn";
 import { AgentCoreShared } from "./constructs/agentcore-shared";
 import { A2aProxy } from "./constructs/a2a-proxy";
 import { BaseDeployment } from "./constructs/base-deployment";
+import { ScheduleRunner } from "./constructs/schedule-runner";
 import * as path from "path";
 
 export interface AgentStudioStackProps extends cdk.StackProps {
@@ -71,6 +72,10 @@ export class AgentStudioStack extends cdk.Stack {
     const originVerifyValue = process.env.ORIGIN_VERIFY_SECRET;
     if (!originVerifyValue) throw new Error("Missing ORIGIN_VERIFY_SECRET env var — generate with: openssl rand -hex 32");
 
+    const scheduleRunner = new ScheduleRunner(this, "ScheduleRunner", {
+      config,
+    });
+
     const api = new Api(this, "Api", {
       config,
       cognitoUserPoolId: auth.userPoolId,
@@ -86,6 +91,7 @@ export class AgentStudioStack extends cdk.Stack {
       a2aKeysTable: database.a2aKeysTable,
       runsTable: database.runsTable,
       originVerifyValue,
+      scheduleRunnerLambdaArn: scheduleRunner.lambda.functionArn,
     });
 
     const invoke = new Invoke(this, "Invoke", {
