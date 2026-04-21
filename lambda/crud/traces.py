@@ -134,8 +134,14 @@ def list_traces(wsId: str, agentId: str):
     # time. Pass 1: session totals (spans + firstEvent). Pass 2: look up
     # invoke_agent / POST /invocations per session for latency + tokens +
     # status. We pass the same 24h window to both.
+    #
+    # Session id resolution: prefer the sub-agent's own `agent_studio.session_id`
+    # (tagged per-span by our SpanProcessor) because AgentCore's managed
+    # `attributes.session.id` sticks to whichever session started the warm
+    # container. Fall back to the managed value for older runs that
+    # predate the SpanProcessor.
     list_q = f"""
-fields @timestamp, attributes.session.id as sessionId, traceId, resource.attributes.service.name as svc
+fields @timestamp, coalesce(attributes.agent_studio.session_id, attributes.session.id) as sessionId, traceId, resource.attributes.service.name as svc
 | filter svc = "{agentId}" and ispresent(sessionId)
 | stats min(@timestamp) as firstEvent, count(*) as spanCount by sessionId, traceId
 | sort firstEvent desc
@@ -143,7 +149,7 @@ fields @timestamp, attributes.session.id as sessionId, traceId, resource.attribu
 """.strip()
 
     meta_q = f"""
-fields attributes.session.id as sid, resource.attributes.service.name as svc, name as spanName, status.code as sc,
+fields coalesce(attributes.agent_studio.session_id, attributes.session.id) as sid, resource.attributes.service.name as svc, name as spanName, status.code as sc,
        attributes.gen_ai.request.model as mdl,
        attributes.gen_ai.usage.input_tokens as inTok,
        attributes.gen_ai.usage.output_tokens as outTok,
@@ -232,7 +238,7 @@ def get_session_trace(wsId: str, agentId: str, sessionId: str):
         return bad_request("invalid sessionId")
 
     q = f"""
-fields spanId, parentSpanId, name, startTimeUnixNano, endTimeUnixNano, status.code as status, attributes.session.id as sessionId
+fields spanId, parentSpanId, name, startTimeUnixNano, endTimeUnixNano, status.code as status, coalesce(attributes.agent_studio.session_id, attributes.session.id) as sessionId
 | filter sessionId = "{sessionId}"
 | sort startTimeUnixNano asc
 | limit 500

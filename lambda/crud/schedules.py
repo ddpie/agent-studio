@@ -713,8 +713,11 @@ def list_schedule_executions(wsId: str, agentId: str, name: str):
             pass
         return []
 
+    # Prefer the sub-agent-tagged `agent_studio.session_id` (correct
+    # across warm-container reuse) with fallback to AgentCore's managed
+    # `attributes.session.id` so older runs still show up.
     primary_q = f"""
-fields attributes.session.id as sessionId, resource.attributes.service.name as svc, name as spanName, status.code as statusCode, startTimeUnixNano, endTimeUnixNano, @message
+fields coalesce(attributes.agent_studio.session_id, attributes.session.id) as sessionId, resource.attributes.service.name as svc, name as spanName, status.code as statusCode, startTimeUnixNano, endTimeUnixNano, @message
 | filter svc = "{agentId}" and ispresent(sessionId) and strcontains(sessionId, "{session_prefix}")
 | stats min(startTimeUnixNano) as firstStartNs, max(endTimeUnixNano) as lastEndNs, count(*) as spanCount, max(statusCode) as worstStatus by sessionId
 | sort firstStartNs desc
@@ -729,7 +732,7 @@ fields attributes.session.id as sessionId, resource.attributes.service.name as s
     # and merge — dedupe by sessionId.
     if not rows:
         fallback_q = f"""
-fields attributes.session.id as sessionId, resource.attributes.service.name as svc, name as spanName, status.code as statusCode, startTimeUnixNano, endTimeUnixNano, @message
+fields coalesce(attributes.agent_studio.session_id, attributes.session.id) as sessionId, resource.attributes.service.name as svc, name as spanName, status.code as statusCode, startTimeUnixNano, endTimeUnixNano, @message
 | filter svc = "{agentId}" and ispresent(sessionId) and strcontains(@message, "{name}")
 | stats min(startTimeUnixNano) as firstStartNs, max(endTimeUnixNano) as lastEndNs, count(*) as spanCount, max(statusCode) as worstStatus by sessionId
 | sort firstStartNs desc
