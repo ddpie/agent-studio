@@ -70,3 +70,7 @@ infra/*.d.ts
 !infra/jest.config.js
 infra/node_modules/
 infra/.env
+
+# Base dependency layer (built artifact, not checked in)
+base/deployment.zip
+base/staged/

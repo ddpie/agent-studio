@@ -1088,31 +1088,51 @@ def read_document(file_key: str) -> str:
         return f"Error: unexpected failure while extracting document text: {e}"
 
 
-# ── Browser CDP helpers (shared by browser_use) ──────────────────────────
-_browser_cdp_id_counter = [0]
+# ── Browser (Playwright over AgentCore Browser CDP) ──────────────────────
+# Session state reused across tool calls (1h session timeout). The page and
+# its BrowserContext are pre-provisioned by AgentCore; we reuse index [0].
+_browser_state = {"playwright": None, "browser": None, "context": None,
+                  "page": None, "ws_session_id": None, "br_id": None}
 
 
-def _browser_cdp_session():
-    """Return an open (session_id, ws) pair, reusing across calls.
-
-    Reconnects transparently if the stored WebSocket is dead. Session
-    timeout is 1h; Agent Core will auto-recycle the browser session on
-    expiry.
-    """
-    import websocket  # websocket-client
+def _sign_browser_ws(cdp_url: str) -> dict:
+    """SigV4-sign a GET on the HTTPS equivalent of the CDP WebSocket URL
+    and return headers Playwright passes during WebSocket upgrade."""
     from botocore.auth import SigV4Auth
     from botocore.awsrequest import AWSRequest
+    boto_session = _boto3.Session(region_name=_REGION)
+    creds = boto_session.get_credentials().get_frozen_credentials()
+    https_url = cdp_url.replace("wss://", "https://")
+    host = cdp_url.split("/")[2]
+    req = AWSRequest(method="GET", url=https_url, headers={"host": host})
+    SigV4Auth(creds, "bedrock-agentcore", _REGION).add_auth(req)
+    headers = {
+        k: v for k, v in dict(req.headers).items()
+        if k in ("Authorization", "X-Amz-Date", "X-Amz-Security-Token", "Host")
+    }
+    return headers
 
-    session_id = getattr(browser_use, "_session_id", None)
-    ws = getattr(browser_use, "_ws", None)
-    if session_id and ws:
-        return session_id, ws
+
+def _get_browser_page():
+    """Return an active Playwright Page, creating/resuming the session.
+
+    Starts an AgentCore Browser session, enables the automation stream,
+    connects Playwright over CDP with SigV4 headers, and returns the
+    pre-provisioned page (AgentCore gives us contexts[0].pages[0]).
+    """
+    from playwright.sync_api import sync_playwright
+
+    if _browser_state["page"] is not None:
+        try:
+            if not _browser_state["page"].is_closed():
+                return _browser_state["page"]
+        except Exception:
+            pass  # fall through to re-create
 
     br_id = _os.environ.get("AGENT_STUDIO_BROWSER_ID")
     if not br_id:
         raise RuntimeError("AGENT_STUDIO_BROWSER_ID not configured")
-    boto_session = _boto3.Session(region_name=_REGION)
-    client = boto_session.client("bedrock-agentcore", region_name=_REGION)
+    client = _boto3.client("bedrock-agentcore", region_name=_REGION)
     sess = client.start_browser_session(
         browserIdentifier=br_id,
         name="agentstudio-browser-use",
@@ -1125,30 +1145,35 @@ def _browser_cdp_session():
         streamUpdate={"automationStreamUpdate": {"streamStatus": "ENABLED"}},
     )
     cdp = sess["streams"]["automationStream"]["streamEndpoint"]
-    creds = boto_session.get_credentials().get_frozen_credentials()
-    https_url = cdp.replace("wss://", "https://")
-    host = cdp.split("/")[2]
-    req = AWSRequest(method="GET", url=https_url, headers={"host": host})
-    SigV4Auth(creds, "bedrock-agentcore", _REGION).add_auth(req)
-    auth_headers = [
-        f"{k}: {v}" for k, v in dict(req.headers).items()
-        if k in ("Authorization", "X-Amz-Date", "X-Amz-Security-Token", "Host")
-    ]
-    w = websocket.create_connection(cdp, timeout=30, header=auth_headers)
-    browser_use._session_id = sess["sessionId"]
-    browser_use._ws = w
-    return sess["sessionId"], w
+    headers = _sign_browser_ws(cdp)
+
+    pw = sync_playwright().start()
+    browser = pw.chromium.connect_over_cdp(cdp, headers=headers)
+    context = browser.contexts[0] if browser.contexts else browser.new_context()
+    page = context.pages[0] if context.pages else context.new_page()
+
+    _browser_state.update({
+        "playwright": pw, "browser": browser, "context": context, "page": page,
+        "ws_session_id": sess["sessionId"], "br_id": br_id,
+    })
+    return page
 
 
-def _browser_cdp_send(ws, method, params=None):
-    """Send a CDP command and wait for the matching response."""
-    _browser_cdp_id_counter[0] += 1
-    mid = _browser_cdp_id_counter[0]
-    ws.send(_json.dumps({"id": mid, "method": method, "params": params or {}}))
-    while True:
-        data = _json.loads(ws.recv())
-        if data.get("id") == mid:
-            return data
+def _reset_browser_state():
+    """Close Playwright + browser; clear state so next call reconnects."""
+    for key in ("browser", "playwright"):
+        obj = _browser_state.get(key)
+        if obj is None:
+            continue
+        try:
+            if key == "browser":
+                obj.close()
+            else:
+                obj.stop()
+        except Exception:
+            pass
+    _browser_state.update({"playwright": None, "browser": None,
+                           "context": None, "page": None})
 
 
 @_tool
@@ -1180,7 +1205,6 @@ def browser_use(action: str, url: str = "", selector: str = "",
         "fill"       → "OK: filled <selector>" or an error string
         "eval"       → JSON-encoded result of the expression
     """
-    import time as _time2
     import base64 as _base64
     if action not in ("navigate", "text", "screenshot", "click", "fill", "eval"):
         return _json.dumps({"error": f"unknown action: {action}"})
@@ -1188,24 +1212,16 @@ def browser_use(action: str, url: str = "", selector: str = "",
         if not url or not url.startswith(("http://", "https://")):
             return _json.dumps({"error": "navigate requires http(s) url"})
 
-    try:
-        _sid, ws = _browser_cdp_session()
-    except Exception as e:
-        return _json.dumps({"error": f"start_browser_session failed: {e}"})
-
     def _do():
+        page = _get_browser_page()
+        timeout_ms = max(wait_ms, 15000)
+
         if action == "navigate":
-            _browser_cdp_send(ws, "Page.enable")
-            _browser_cdp_send(ws, "Page.navigate", {"url": url})
-            _time2.sleep(max(0, wait_ms) / 1000.0)
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
             return f"OK: navigated to {url}"
 
         if action == "text":
-            resp = _browser_cdp_send(ws, "Runtime.evaluate", {
-                "expression": "document.body ? document.body.innerText : ''",
-                "returnByValue": True,
-            })
-            text = ((resp.get("result") or {}).get("result") or {}).get("value") or ""
+            text = page.inner_text("body")
             import re as _re2
             text = _re2.sub(r"\\n{3,}", "\\n\\n", text)
             text = _re2.sub(r" {2,}", " ", text).strip()
@@ -1216,62 +1232,41 @@ def browser_use(action: str, url: str = "", selector: str = "",
         if action == "eval":
             if not expression:
                 return _json.dumps({"error": "eval requires expression"})
-            resp = _browser_cdp_send(ws, "Runtime.evaluate", {
-                "expression": expression,
-                "returnByValue": True,
-                "awaitPromise": True,
-            })
-            r = (resp.get("result") or {}).get("result") or {}
-            if "value" in r:
-                return _json.dumps({"value": r["value"]})
-            return _json.dumps({"value": None, "type": r.get("type")})
+            try:
+                # Playwright's evaluate returns the JS result directly
+                result = page.evaluate(expression)
+                return _json.dumps({"value": result})
+            except Exception as e:
+                return _json.dumps({"error": f"eval failed: {e}"})
 
         if action == "click":
             if not selector:
                 return _json.dumps({"error": "click requires selector"})
-            expr = (
-                "(() => { const el = document.querySelector(" + _json.dumps(selector) + "); "
-                "if (!el) return 'not_found'; el.click(); return 'ok'; })()"
-            )
-            resp = _browser_cdp_send(ws, "Runtime.evaluate", {
-                "expression": expr, "returnByValue": True,
-            })
-            outcome = ((resp.get("result") or {}).get("result") or {}).get("value")
-            _time2.sleep(max(0, wait_ms) / 1000.0)
-            if outcome == "ok":
+            try:
+                page.click(selector, timeout=timeout_ms)
                 return f"OK: clicked {selector}"
-            return _json.dumps({"error": f"click failed: {outcome}"})
+            except Exception as e:
+                return _json.dumps({"error": f"click failed: {e}"})
 
         if action == "fill":
             if not selector:
                 return _json.dumps({"error": "fill requires selector"})
-            expr = (
-                "(() => { const el = document.querySelector(" + _json.dumps(selector) + "); "
-                "if (!el) return 'not_found'; el.focus(); "
-                "el.value = " + _json.dumps(value) + "; "
-                "el.dispatchEvent(new Event('input', {bubbles:true})); "
-                "el.dispatchEvent(new Event('change', {bubbles:true})); "
-                "return 'ok'; })()"
-            )
-            resp = _browser_cdp_send(ws, "Runtime.evaluate", {
-                "expression": expr, "returnByValue": True,
-            })
-            outcome = ((resp.get("result") or {}).get("result") or {}).get("value")
-            if outcome == "ok":
+            try:
+                page.fill(selector, value, timeout=timeout_ms)
                 return f"OK: filled {selector}"
-            return _json.dumps({"error": f"fill failed: {outcome}"})
+            except Exception as e:
+                return _json.dumps({"error": f"fill failed: {e}"})
 
         # screenshot
-        resp = _browser_cdp_send(ws, "Page.captureScreenshot", {"format": "png"})
-        b64 = (resp.get("result") or {}).get("data")
-        if not b64:
+        png_bytes = page.screenshot(full_page=True, type="png")
+        if not png_bytes:
             return _json.dumps({"error": "screenshot returned no data"})
         import uuid as _uuid2
         s3_key = f"outputs/{_uuid2.uuid4().hex[:12]}_screenshot.png"
         try:
             _s3.put_object(
                 Bucket=_S3_BUCKET, Key=s3_key,
-                Body=_base64.b64decode(b64),
+                Body=png_bytes,
                 ContentType="image/png",
                 ContentDisposition='attachment; filename="screenshot.png"',
             )
@@ -1284,19 +1279,12 @@ def browser_use(action: str, url: str = "", selector: str = "",
 
     try:
         return _do()
-    except Exception:
-        # Session likely expired / ws dropped — reconnect once.
+    except Exception as e:
+        # Session expired / page closed / connection dropped — retry once.
+        _reset_browser_state()
         try:
-            try:
-                ws.close()
-            except Exception:
-                pass
-            browser_use._session_id = None
-            browser_use._ws = None
-            _sid, ws = _browser_cdp_session()
             return _do()
-        except Exception as e:
-            browser_use._session_id = None
-            browser_use._ws = None
-            return _json.dumps({"error": f"browser_use failed: {e}"})
+        except Exception as e2:
+            _reset_browser_state()
+            return _json.dumps({"error": f"browser_use failed: {e2}"})
 '''

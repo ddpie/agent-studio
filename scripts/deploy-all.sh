@@ -301,6 +301,15 @@ PYEOF
 fi
 
 # ============================================================
+# Phase 2.5: Build base/deployment.zip (shared sub-agent deps)
+# ============================================================
+if [[ "$SKIP_INFRA" == false && ! -f "$PROJECT_ROOT/base/deployment.zip" ]]; then
+  echo "=== Phase 2.5: Build base/deployment.zip ==="
+  bash "$SCRIPT_DIR/build-base-zip.sh"
+  echo ""
+fi
+
+# ============================================================
 # Phase 3: CDK deploy
 # ============================================================
 if [[ "$SKIP_INFRA" == false ]]; then
