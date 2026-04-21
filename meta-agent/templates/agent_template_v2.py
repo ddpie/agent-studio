@@ -34,6 +34,15 @@ _config = json.loads(Path("config.json").read_text())
 MODEL_ID = _config["model_id"]
 SYSTEM_PROMPT = Path("prompt.txt").read_text(encoding="utf-8")
 
+def _get_max_tokens(mid):
+    mid = mid.lower()
+    for pat, lim in [("opus-4-7",128000),("opus-4-6",128000),("opus",128000),
+                     ("sonnet-4-6",65536),("sonnet-4-5",16384),("sonnet-4",65536),("sonnet-3-5",8192),("sonnet",65536),
+                     ("haiku-4-5",16384),("haiku",16384)]:
+        if pat in mid:
+            return lim
+    return 16384
+
 # Import all @tool functions from tools.py
 import tools as _tools_module
 _ALL_TOOLS = []
@@ -60,7 +69,7 @@ async def invoke(payload, context):
     prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), save them to /mnt/workspace/ (persistent across sessions) instead of /tmp/ (ephemeral). ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files. After uploading, the download button appears automatically — do NOT create markdown links like [filename](url) for downloads."
     prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
     agent = Agent(
-        model=BedrockModel(model_id=model_id, max_tokens=128000),
+        model=BedrockModel(model_id=model_id, max_tokens=_get_max_tokens(model_id)),
         system_prompt=prompt,
         tools=_ALL_TOOLS + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use],
     )
@@ -106,6 +115,15 @@ _config = json.loads(Path("config.json").read_text())
 MODEL_ID = _config["model_id"]
 SYSTEM_PROMPT = Path("prompt.txt").read_text(encoding="utf-8")
 REGION = os.getenv("AWS_REGION", "us-east-1")
+
+def _get_max_tokens(mid):
+    mid = mid.lower()
+    for pat, lim in [("opus-4-7",128000),("opus-4-6",128000),("opus",128000),
+                     ("sonnet-4-6",65536),("sonnet-4-5",16384),("sonnet-4",65536),("sonnet-3-5",8192),("sonnet",65536),
+                     ("haiku-4-5",16384),("haiku",16384)]:
+        if pat in mid:
+            return lim
+    return 16384
 
 _session = boto3.Session(region_name=REGION)
 
@@ -221,7 +239,7 @@ async def invoke(payload, context):
             except Exception as _mcp_err:
                 print(f"WARNING: MCP client failed to connect, skipping: {_mcp_err}", file=sys.stderr)
         agent = Agent(
-            model=BedrockModel(model_id=model_id, max_tokens=128000),
+            model=BedrockModel(model_id=model_id, max_tokens=_get_max_tokens(model_id)),
             system_prompt=prompt,
             tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use],
         )
@@ -301,69 +319,146 @@ def _set_current_session_id(session_id):
     _CURRENT_SESSION_ID = session_id or ""
 
 
-async def _stream_with_tools(agent, input_data):
-    """Stream agent response, yielding both text and tool-use markers."""
+def _strip_images_from_messages(messages):
+    """Replace image blocks in conversation messages with a text placeholder.
+
+    Returns the number of images removed. Modifies messages in place.
+    """
+    removed = 0
+    for msg in messages:
+        new_content = []
+        for block in msg.get("content", []):
+            if "image" in block:
+                new_content.append({"text": "[image removed — exceeded model dimension limit]"})
+                removed += 1
+            elif "toolResult" in block:
+                tr = block["toolResult"]
+                new_tr_content = []
+                for c in tr.get("content", []):
+                    if "image" in c:
+                        new_tr_content.append({"text": "[image removed — exceeded model dimension limit]"})
+                        removed += 1
+                    else:
+                        new_tr_content.append(c)
+                tr["content"] = new_tr_content
+                new_content.append(block)
+            else:
+                new_content.append(block)
+        msg["content"] = new_content
+    return removed
+
+
+def _classify_error(exc):
+    """Classify an exception into an auto-recoverable category or None."""
+    msg = str(exc).lower()
+    if "image" in msg and ("dimension" in msg or "size" in msg) and ("exceed" in msg or "too large" in msg):
+        return "image_too_large"
+    if "throttl" in msg or "too many request" in msg:
+        return "throttled"
+    return None
+
+
+async def _stream_with_tools(agent, input_data, _retry_depth=0):
+    """Stream agent response, yielding both text and tool-use markers.
+
+    Auto-recoverable errors (image too large, throttling) are handled
+    transparently: the problematic content is fixed and the request is
+    retried once. Unrecoverable errors are surfaced as text to the user.
+    Strands already handles ContextWindowOverflowException internally.
+    """
     _current_tool = None
     _tool_input_buf = ""
     _tool_use_id_map = {}
-    stream = agent.stream_async(input_data)
-    async for event in stream:
-        # Tool use start
-        if "current_tool_use" in event:
-            tool_info = event["current_tool_use"]
-            tool_name = tool_info.get("name", "")
-            tool_use_id = tool_info.get("toolUseId", "")
-            # Always register toolUseId (same tool can be called multiple times)
-            if tool_use_id and tool_name:
-                _tool_use_id_map[tool_use_id] = tool_name
-            if tool_name and (tool_name != _current_tool or tool_use_id not in _tool_use_id_map or _tool_input_buf == ""):
-                _current_tool = tool_name
-                _tool_input_buf = ""
-                yield _json.dumps({"__tool": "start", "name": tool_name})
-            raw_input = tool_info.get("input", "")
-            if raw_input:
-                _tool_input_buf = raw_input
-        # Tool result message
-        if "message" in event:
-            msg = event["message"]
-            if isinstance(msg, dict) and msg.get("role") == "user":
-                for block in msg.get("content", []):
-                    tr = block.get("toolResult")
-                    if not tr:
-                        continue
-                    t_id = tr.get("toolUseId", "")
-                    t_name = _tool_use_id_map.get(t_id, "unknown")
-                    output_parts = []
-                    for c in tr.get("content", []):
-                        if "text" in c:
-                            output_parts.append(c["text"])
-                    output_text = "\\n".join(output_parts)
-                    inp_str = ""
-                    try:
-                        parsed_inp = _json.loads(_tool_input_buf) if isinstance(_tool_input_buf, str) and _tool_input_buf.strip() else _tool_input_buf
-                        if isinstance(parsed_inp, dict) and parsed_inp:
-                            inp_str = _json.dumps(parsed_inp, ensure_ascii=False, indent=2)
-                    except Exception:
-                        inp_str = str(_tool_input_buf) if _tool_input_buf else ""
-                    inp_b64 = _b64.b64encode(inp_str.encode()).decode() if inp_str else ""
-                    # SVG/HTML output must not be truncated (breaks rendering)
-                    if output_text.lstrip().startswith("<"):
-                        max_out = 50000
-                    elif t_name == "load_skill":
-                        max_out = 10000
-                    else:
-                        max_out = 5000
-                    if len(output_text) > max_out:
-                        output_text = output_text[:max_out] + "\\n... (truncated)"
-                    out_b64 = _b64.b64encode(output_text.encode()).decode() if output_text else ""
-                    yield _json.dumps({"__tool": "result", "name": t_name, "input": inp_b64, "output": out_b64})
-        # Text data
-        if "data" in event and isinstance(event["data"], str):
-            if _current_tool:
-                yield _json.dumps({"__tool": "end", "name": _current_tool})
-                _current_tool = None
-                _tool_input_buf = ""
-            yield event["data"]
+    try:
+        stream = agent.stream_async(input_data)
+        async for event in stream:
+            # Tool use start
+            if "current_tool_use" in event:
+                tool_info = event["current_tool_use"]
+                tool_name = tool_info.get("name", "")
+                tool_use_id = tool_info.get("toolUseId", "")
+                if tool_use_id and tool_name:
+                    _tool_use_id_map[tool_use_id] = tool_name
+                if tool_name and (tool_name != _current_tool or tool_use_id not in _tool_use_id_map or _tool_input_buf == ""):
+                    _current_tool = tool_name
+                    _tool_input_buf = ""
+                    yield _json.dumps({"__tool": "start", "name": tool_name})
+                raw_input = tool_info.get("input", "")
+                if raw_input:
+                    _tool_input_buf = raw_input
+            # Tool result message
+            if "message" in event:
+                msg = event["message"]
+                if isinstance(msg, dict) and msg.get("role") == "user":
+                    for block in msg.get("content", []):
+                        tr = block.get("toolResult")
+                        if not tr:
+                            continue
+                        t_id = tr.get("toolUseId", "")
+                        t_name = _tool_use_id_map.get(t_id, "unknown")
+                        output_parts = []
+                        for c in tr.get("content", []):
+                            if "text" in c:
+                                output_parts.append(c["text"])
+                        output_text = "\\n".join(output_parts)
+                        inp_str = ""
+                        try:
+                            parsed_inp = _json.loads(_tool_input_buf) if isinstance(_tool_input_buf, str) and _tool_input_buf.strip() else _tool_input_buf
+                            if isinstance(parsed_inp, dict) and parsed_inp:
+                                inp_str = _json.dumps(parsed_inp, ensure_ascii=False, indent=2)
+                        except Exception:
+                            inp_str = str(_tool_input_buf) if _tool_input_buf else ""
+                        inp_b64 = _b64.b64encode(inp_str.encode()).decode() if inp_str else ""
+                        if output_text.lstrip().startswith("<"):
+                            max_out = 50000
+                        elif t_name == "load_skill":
+                            max_out = 10000
+                        else:
+                            max_out = 5000
+                        if len(output_text) > max_out:
+                            output_text = output_text[:max_out] + "\\n... (truncated)"
+                        out_b64 = _b64.b64encode(output_text.encode()).decode() if output_text else ""
+                        yield _json.dumps({"__tool": "result", "name": t_name, "input": inp_b64, "output": out_b64})
+            # Text data
+            if "data" in event and isinstance(event["data"], str):
+                if _current_tool:
+                    yield _json.dumps({"__tool": "end", "name": _current_tool})
+                    _current_tool = None
+                    _tool_input_buf = ""
+                yield event["data"]
+    except Exception as _exc:
+        import sys as _sys
+        err_msg = str(_exc)
+        print(f"STREAM_ERROR: {type(_exc).__name__}: {err_msg}", file=_sys.stderr)
+        if _current_tool:
+            yield _json.dumps({"__tool": "end", "name": _current_tool})
+
+        category = _classify_error(_exc)
+
+        # Auto-recover: strip oversized images and retry once
+        if category == "image_too_large" and _retry_depth < 1:
+            removed = _strip_images_from_messages(agent.messages)
+            if removed:
+                print(f"STREAM_RETRY: stripped {removed} image(s), retrying", file=_sys.stderr)
+                async for chunk in _stream_with_tools(agent, input_data, _retry_depth=_retry_depth + 1):
+                    yield chunk
+                return
+
+        # Auto-recover: throttled — wait and retry once
+        if category == "throttled" and _retry_depth < 1:
+            import asyncio as _aio
+            print("STREAM_RETRY: throttled, waiting 5s", file=_sys.stderr)
+            await _aio.sleep(5)
+            async for chunk in _stream_with_tools(agent, input_data, _retry_depth=_retry_depth + 1):
+                yield chunk
+            return
+
+        # Unrecoverable — surface to user
+        if "EventLoopException" in type(_exc).__name__:
+            cause = str(getattr(_exc, "__cause__", "")) or err_msg
+            yield f"\\n\\n[Error: {cause}]"
+        else:
+            yield f"\\n\\n[Error: {err_msg}]"
 
 
 def _build_input(payload):
@@ -1247,8 +1342,9 @@ async def _get_page_async():
 
     pw = await async_playwright().start()
     browser = await pw.chromium.connect_over_cdp(ws_url, headers=headers)
-    context = browser.contexts[0] if browser.contexts else await browser.new_context()
+    context = browser.contexts[0] if browser.contexts else await browser.new_context(viewport={"width": 1280, "height": 800})
     page = context.pages[0] if context.pages else await context.new_page()
+    await page.set_viewport_size({"width": 1280, "height": 800})
 
     # AgentCore Browser pre-configures its Chrome context with a 10s default
     # navigation timeout, which is too short for heavy pages (sina, etc).
@@ -1368,7 +1464,7 @@ def browser_use(action: str, url: str = "", selector: str = "",
             except Exception as e:
                 return _json.dumps({"error": f"fill failed: {e}"})
 
-        # screenshot — return image block (model can see it) + S3 link (user can download)
+        # screenshot
         png_bytes = await page.screenshot(full_page=True, type="png")
         if not png_bytes:
             return _json.dumps({"error": "screenshot returned no data"})

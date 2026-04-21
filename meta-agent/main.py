@@ -29,7 +29,7 @@ from strands import Agent
 from strands.models import BedrockModel
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
-from config import MODEL_ID
+from config import MODEL_ID, get_max_tokens
 from tools.create_agent import create_agent, list_prompt_templates
 
 # Auto-publish tool catalog on startup
@@ -444,7 +444,7 @@ async def invoke(payload, context):
     _ms._caller_id = caller_id
 
     agent = Agent(
-        model=BedrockModel(model_id=model_id, max_tokens=128000),
+        model=BedrockModel(model_id=model_id, max_tokens=get_max_tokens(model_id)),
         system_prompt=SYSTEM_PROMPT,
         tools=ALL_TOOLS,
     )
