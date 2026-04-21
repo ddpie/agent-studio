@@ -287,9 +287,8 @@ def update_agent(
         package = build_deployment_package_v2(main_py, tools_py, prompt_txt, config_json, skill_scripts=skill_scripts)
         s3_key = upload_deployment(agent_id, package)
 
-        # Update runtime in-place (assumed role for iam:PassRole)
-        from config import get_control_client
-        control = get_control_client()
+        # Update runtime in-place
+        control = boto3.client("bedrock-agentcore-control", region_name=REGION)
         control.update_agent_runtime(
             agentRuntimeId=agent_id,
             roleArn=AGENT_ROLE_ARN,
