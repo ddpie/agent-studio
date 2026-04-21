@@ -14,7 +14,7 @@ export class AgentCoreRoles extends Construct {
   public readonly evaluatorRoleArn: string;
   public readonly schedulerTargetRoleArn: string;
 
-  // Legacy aliases — kept so existing stack references don't break
+  // Legacy aliases for existing stack references
   public readonly basicRoleArn: string;
   public readonly readonlyRoleArn: string;
   public readonly dataAccessRoleArn: string;
@@ -61,9 +61,7 @@ export class AgentCoreRoles extends Construct {
           "bedrock-agentcore:ListAgentRuntimes",
           "bedrock-agentcore:GetAgentRuntime",
         ],
-        resources: [
-          `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*`,
-        ],
+        resources: [`arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*`],
       }),
       new iam.PolicyStatement({
         actions: [
@@ -83,64 +81,79 @@ export class AgentCoreRoles extends Construct {
       }),
     ];
 
-    // ─── Sub-Agent Role: what every normal agent gets ───
-    // S3: read entire bucket + write to runs/outputs/uploads
-    // DDB: read all platform tables (except a2a-keys) + write runs
-    const subAgentRole = new iam.Role(this, "SubAgentRole", {
-      roleName: `AgentStudioSubAgent-${props.region}`,
+    // ─── Sub-Agent data statements (shared by all sub-agent roles) ───
+    const subAgentDataStatements = [
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject"],
+        resources: [`arn:aws:s3:::${props.s3Bucket}/*`],
+      }),
+      new iam.PolicyStatement({
+        actions: ["s3:ListBucket"],
+        resources: [`arn:aws:s3:::${props.s3Bucket}`],
+      }),
+      new iam.PolicyStatement({
+        actions: ["s3:PutObject", "s3:DeleteObject"],
+        resources: [
+          `arn:aws:s3:::${props.s3Bucket}/runs/*`,
+          `arn:aws:s3:::${props.s3Bucket}/outputs/*`,
+          `arn:aws:s3:::${props.s3Bucket}/uploads/*`,
+        ],
+      }),
+      new iam.PolicyStatement({
+        actions: ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan", "dynamodb:BatchGetItem"],
+        resources: [
+          `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-agents`,
+          `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-agents/index/*`,
+          `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-tools`,
+          `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-tools/index/*`,
+          `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-workspaces`,
+          `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-workspaces/index/*`,
+          `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-skills`,
+          `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-skills/index/*`,
+          `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-runs`,
+          `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-runs/index/*`,
+        ],
+      }),
+      new iam.PolicyStatement({
+        actions: ["dynamodb:PutItem", "dynamodb:UpdateItem"],
+        resources: [`arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-runs`],
+      }),
+    ];
+
+    // Helper to apply all sub-agent policies to a role
+    const applySubAgentPolicies = (role: iam.Role) => {
+      baselineStatements.forEach((s) => role.addToPolicy(s));
+      subAgentDataStatements.forEach((s) => role.addToPolicy(s));
+    };
+
+    // ─── Sub-Agent Role (primary, logical ID "BasicRole" preserved for CFN compat) ───
+    const subAgentRole = new iam.Role(this, "BasicRole", {
+      roleName: `AgentStudioSubAgent-basic-${props.region}`,
       assumedBy: trustPrincipal,
     });
-    baselineStatements.forEach((s) => subAgentRole.addToPolicy(s));
+    applySubAgentPolicies(subAgentRole);
 
-    // S3 read — entire bucket (agents need skills, uploads, tools, outputs, etc.)
-    subAgentRole.addToPolicy(new iam.PolicyStatement({
-      actions: ["s3:GetObject"],
-      resources: [`arn:aws:s3:::${props.s3Bucket}/*`],
-    }));
-    subAgentRole.addToPolicy(new iam.PolicyStatement({
-      actions: ["s3:ListBucket"],
-      resources: [`arn:aws:s3:::${props.s3Bucket}`],
-    }));
-    // S3 write — scoped to operational prefixes (not agents/ or base/)
-    subAgentRole.addToPolicy(new iam.PolicyStatement({
-      actions: ["s3:PutObject", "s3:DeleteObject"],
-      resources: [
-        `arn:aws:s3:::${props.s3Bucket}/runs/*`,
-        `arn:aws:s3:::${props.s3Bucket}/outputs/*`,
-        `arn:aws:s3:::${props.s3Bucket}/uploads/*`,
-      ],
-    }));
-    // DDB read — all platform tables except a2a-keys
-    subAgentRole.addToPolicy(new iam.PolicyStatement({
-      actions: ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan", "dynamodb:BatchGetItem"],
-      resources: [
-        `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-agents`,
-        `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-agents/index/*`,
-        `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-tools`,
-        `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-tools/index/*`,
-        `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-workspaces`,
-        `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-workspaces/index/*`,
-        `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-skills`,
-        `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-skills/index/*`,
-        `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-runs`,
-        `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-runs/index/*`,
-      ],
-    }));
-    // DDB write — runs table only
-    subAgentRole.addToPolicy(new iam.PolicyStatement({
-      actions: ["dynamodb:PutItem", "dynamodb:UpdateItem"],
-      resources: [`arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-runs`],
-    }));
+    // Legacy roles — already-deployed agents reference these ARNs.
+    // Same policies as subAgentRole so all tiers behave identically.
+    const readonlyRole = new iam.Role(this, "ReadonlyRole", {
+      roleName: `AgentStudioSubAgentRole-${props.region}`,
+      assumedBy: trustPrincipal,
+    });
+    applySubAgentPolicies(readonlyRole);
+
+    const dataAccessRole = new iam.Role(this, "DataAccessRole", {
+      roleName: `AgentStudioSubAgent-dataaccess-${props.region}`,
+      assumedBy: trustPrincipal,
+    });
+    applySubAgentPolicies(dataAccessRole);
 
     // ─── Meta-Agent Role: manages agent lifecycle ───
-    // Everything sub-agent has + write to agents/skills/tools in S3 and DDB
     const metaAgentRole = new iam.Role(this, "MetaAgentRole", {
       roleName: `AgentStudioMetaAgent-${props.region}`,
       assumedBy: trustPrincipal,
     });
     baselineStatements.forEach((s) => metaAgentRole.addToPolicy(s));
-
-    // S3 full read + write to entire bucket (deploys agent zips, skills, tools)
+    // S3 full read + write to entire bucket
     metaAgentRole.addToPolicy(new iam.PolicyStatement({
       actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
       resources: [`arn:aws:s3:::${props.s3Bucket}/*`],
@@ -165,7 +178,7 @@ export class AgentCoreRoles extends Construct {
         `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-runs/index/*`,
       ],
     }));
-    // AgentCore control-plane — Meta-Agent creates/updates sub-agent runtimes
+    // AgentCore control-plane
     metaAgentRole.addToPolicy(new iam.PolicyStatement({
       actions: [
         "bedrock-agentcore:CreateAgentRuntime",
@@ -177,22 +190,17 @@ export class AgentCoreRoles extends Construct {
 
     this.subAgentRoleArn = subAgentRole.roleArn;
     this.metaAgentRoleArn = metaAgentRole.roleArn;
-
-    // Legacy aliases — all tiers now resolve to sub-agent role
     this.basicRoleArn = subAgentRole.roleArn;
-    this.readonlyRoleArn = subAgentRole.roleArn;
-    this.dataAccessRoleArn = subAgentRole.roleArn;
+    this.readonlyRoleArn = readonlyRole.roleArn;
+    this.dataAccessRoleArn = dataAccessRole.roleArn;
 
     new cdk.CfnOutput(this, "SubAgentRoleArn", { value: subAgentRole.roleArn });
     new cdk.CfnOutput(this, "MetaAgentRoleArn", { value: metaAgentRole.roleArn });
-    // Legacy outputs for backward compat
     new cdk.CfnOutput(this, "BasicRoleArn", { value: subAgentRole.roleArn });
-    new cdk.CfnOutput(this, "ReadonlyRoleArn", { value: subAgentRole.roleArn });
-    new cdk.CfnOutput(this, "DataAccessRoleArn", { value: subAgentRole.roleArn });
+    new cdk.CfnOutput(this, "ReadonlyRoleArn", { value: readonlyRole.roleArn });
+    new cdk.CfnOutput(this, "DataAccessRoleArn", { value: dataAccessRole.roleArn });
 
-    // Evaluator execution role — Online Evaluation Config assumes this to
-    // read span logs + call Bedrock for LLM-as-Judge + write eval output
-    // to CloudWatch Logs. Shared across all workspace eval configs.
+    // ─── Evaluator execution role ───
     const evaluatorRole = new iam.Role(this, "EvaluatorExecutionRole", {
       roleName: `AgentStudioEvaluatorExecution-${props.region}`,
       assumedBy: new iam.ServicePrincipal("bedrock-agentcore.amazonaws.com", {
@@ -219,19 +227,12 @@ export class AgentCoreRoles extends Construct {
         `arn:aws:logs:${props.region}:${props.accountId}:log-group:/aws/vendedlogs/bedrock-agentcore/evaluation/*`,
       ],
     }));
-    // DescribeLogGroups only supports "*" resource — service uses it to
-    // validate the input log groups before accepting the eval config.
     evaluatorRole.addToPolicy(new iam.PolicyStatement({
       actions: ["logs:DescribeLogGroups"],
       resources: ["*"],
     }));
     evaluatorRole.addToPolicy(new iam.PolicyStatement({
-      actions: [
-        "bedrock:InvokeModel",
-        "bedrock:InvokeModelWithResponseStream",
-        "bedrock:Converse",
-        "bedrock:ConverseStream",
-      ],
+      actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:Converse", "bedrock:ConverseStream"],
       resources: [`arn:aws:bedrock:${props.region}::foundation-model/*`],
     }));
     this.evaluatorRoleArn = evaluatorRole.roleArn;
@@ -241,20 +242,7 @@ export class AgentCoreRoles extends Construct {
       exportName: "AgentStudio-EvaluatorRoleArn",
     });
 
-    // Scheduler target role — assumed by EventBridge Scheduler to invoke
-    // sub-agent runtimes on a cron/rate trigger. Kept separate from the
-    // sub-agent execution roles so the scheduler trust boundary does not
-    // widen those roles' blast radius.
-    //
-    // Trust policy is scoped with aws:SourceAccount + aws:SourceArn to
-    // schedules in the default group whose name starts with
-    // "agent-studio-" — matches the name prefix enforced by the CRUD
-    // Lambda in lambda/crud/schedules.py.
-    // Trust conditioned on aws:SourceAccount only. SourceArn cannot be
-    // used here: EventBridge Scheduler validates the role via sts:AssumeRole
-    // during create-schedule, before the schedule exists, so the SourceArn
-    // context key is unset and ArnLike always fails. SourceAccount alone is
-    // sufficient to prevent cross-account confused-deputy.
+    // ─── Scheduler target role ───
     const schedulerTargetRole = new iam.Role(this, "SchedulerTargetRole", {
       roleName: `AgentStudioSchedulerTargetRole-${props.region}`,
       assumedBy: new iam.ServicePrincipal("scheduler.amazonaws.com", {
@@ -263,7 +251,6 @@ export class AgentCoreRoles extends Construct {
         },
       }),
     });
-    // Scoped to runtimes in this account/region — never "*".
     schedulerTargetRole.addToPolicy(new iam.PolicyStatement({
       actions: ["bedrock-agentcore:InvokeAgentRuntime"],
       resources: [

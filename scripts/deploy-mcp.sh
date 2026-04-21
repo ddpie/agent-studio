@@ -596,7 +596,7 @@ if runtime_id:
 else:
     # Create new runtime
     # Use the AgentCore default execution role
-    execution_role = f"arn:aws:iam::{account_id}:role/AgentStudioSubAgent-{region}"
+    execution_role = f"arn:aws:iam::{account_id}:role/AgentStudioSubAgent-basic-{region}"
     try:
         resp = control.create_agent_runtime(
             agentRuntimeName=runtime_name,
