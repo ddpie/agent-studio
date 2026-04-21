@@ -13,11 +13,7 @@ export class AgentCoreRoles extends Construct {
   public readonly metaAgentRoleArn: string;
   public readonly evaluatorRoleArn: string;
   public readonly schedulerTargetRoleArn: string;
-
-  // Legacy aliases for existing stack references
   public readonly basicRoleArn: string;
-  public readonly readonlyRoleArn: string;
-  public readonly dataAccessRoleArn: string;
 
   constructor(scope: Construct, id: string, props: AgentCoreRolesProps) {
     super(scope, id);
@@ -81,7 +77,7 @@ export class AgentCoreRoles extends Construct {
       }),
     ];
 
-    // ─── Sub-Agent data statements (shared by all sub-agent roles) ───
+    // ─── Sub-Agent data access (S3 + DDB) ───
     const subAgentDataStatements = [
       new iam.PolicyStatement({
         actions: ["s3:GetObject"],
@@ -120,40 +116,20 @@ export class AgentCoreRoles extends Construct {
       }),
     ];
 
-    // Helper to apply all sub-agent policies to a role
-    const applySubAgentPolicies = (role: iam.Role) => {
-      baselineStatements.forEach((s) => role.addToPolicy(s));
-      subAgentDataStatements.forEach((s) => role.addToPolicy(s));
-    };
-
-    // ─── Sub-Agent Role (primary, logical ID "BasicRole" preserved for CFN compat) ───
+    // ─── Sub-Agent Role (logical ID "BasicRole" for CFN stability) ───
     const subAgentRole = new iam.Role(this, "BasicRole", {
       roleName: `AgentStudioSubAgent-basic-${props.region}`,
       assumedBy: trustPrincipal,
     });
-    applySubAgentPolicies(subAgentRole);
+    baselineStatements.forEach((s) => subAgentRole.addToPolicy(s));
+    subAgentDataStatements.forEach((s) => subAgentRole.addToPolicy(s));
 
-    // Legacy roles — already-deployed agents reference these ARNs.
-    // Same policies as subAgentRole so all tiers behave identically.
-    const readonlyRole = new iam.Role(this, "ReadonlyRole", {
-      roleName: `AgentStudioSubAgentRole-${props.region}`,
-      assumedBy: trustPrincipal,
-    });
-    applySubAgentPolicies(readonlyRole);
-
-    const dataAccessRole = new iam.Role(this, "DataAccessRole", {
-      roleName: `AgentStudioSubAgent-dataaccess-${props.region}`,
-      assumedBy: trustPrincipal,
-    });
-    applySubAgentPolicies(dataAccessRole);
-
-    // ─── Meta-Agent Role: manages agent lifecycle ───
+    // ─── Meta-Agent Role ───
     const metaAgentRole = new iam.Role(this, "MetaAgentRole", {
       roleName: `AgentStudioMetaAgent-${props.region}`,
       assumedBy: trustPrincipal,
     });
     baselineStatements.forEach((s) => metaAgentRole.addToPolicy(s));
-    // S3 full read + write to entire bucket
     metaAgentRole.addToPolicy(new iam.PolicyStatement({
       actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
       resources: [`arn:aws:s3:::${props.s3Bucket}/*`],
@@ -162,7 +138,6 @@ export class AgentCoreRoles extends Construct {
       actions: ["s3:ListBucket"],
       resources: [`arn:aws:s3:::${props.s3Bucket}`],
     }));
-    // DDB full CRUD on platform tables (except a2a-keys)
     metaAgentRole.addToPolicy(new iam.PolicyStatement({
       actions: ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan", "dynamodb:BatchGetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:BatchWriteItem"],
       resources: [
@@ -178,7 +153,6 @@ export class AgentCoreRoles extends Construct {
         `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-runs/index/*`,
       ],
     }));
-    // AgentCore control-plane
     metaAgentRole.addToPolicy(new iam.PolicyStatement({
       actions: [
         "bedrock-agentcore:CreateAgentRuntime",
@@ -191,14 +165,9 @@ export class AgentCoreRoles extends Construct {
     this.subAgentRoleArn = subAgentRole.roleArn;
     this.metaAgentRoleArn = metaAgentRole.roleArn;
     this.basicRoleArn = subAgentRole.roleArn;
-    this.readonlyRoleArn = readonlyRole.roleArn;
-    this.dataAccessRoleArn = dataAccessRole.roleArn;
 
     new cdk.CfnOutput(this, "SubAgentRoleArn", { value: subAgentRole.roleArn });
     new cdk.CfnOutput(this, "MetaAgentRoleArn", { value: metaAgentRole.roleArn });
-    new cdk.CfnOutput(this, "BasicRoleArn", { value: subAgentRole.roleArn });
-    new cdk.CfnOutput(this, "ReadonlyRoleArn", { value: readonlyRole.roleArn });
-    new cdk.CfnOutput(this, "DataAccessRoleArn", { value: dataAccessRole.roleArn });
 
     // ─── Evaluator execution role ───
     const evaluatorRole = new iam.Role(this, "EvaluatorExecutionRole", {
