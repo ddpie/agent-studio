@@ -1096,19 +1096,30 @@ _browser_tool_instance = None
 
 
 def _ensure_playwright_driver_executable():
-    """AgentCore deploy-zip extraction drops unix exec bits. chmod +x
-    the Playwright node driver so Playwright can spawn it."""
+    """AgentCore extracts deployment.zip with Python zipfile which drops
+    unix exec bits, AND /var/task is read-only so chmod fails in-place.
+
+    Fix: copy the `node` binary to /tmp (writable), chmod +x, then point
+    Playwright at it via PLAYWRIGHT_NODEJS_PATH. cli.js and the rest of
+    the driver dir only need read permission, which zipfile preserves.
+    """
+    import shutil as _shutil
     import stat as _stat
-    for _root in ("/var/task/playwright/driver", "/var/task/playwright/driver/package"):
-        if not _os.path.isdir(_root):
-            continue
-        for root, _dirs, files in _os.walk(_root):
-            for f in files:
-                p = _os.path.join(root, f)
-                try:
-                    _os.chmod(p, _os.stat(p).st_mode | _stat.S_IXUSR | _stat.S_IXGRP | _stat.S_IXOTH)
-                except Exception:
-                    pass
+
+    src_node = "/var/task/playwright/driver/node"
+    dst_node = "/tmp/playwright-node"
+
+    if not _os.path.isfile(src_node):
+        return  # playwright not installed
+
+    try:
+        if not _os.path.isfile(dst_node):
+            _shutil.copyfile(src_node, dst_node)
+        _os.chmod(dst_node, 0o755)
+        _os.environ["PLAYWRIGHT_NODEJS_PATH"] = dst_node
+    except Exception as _e:
+        import sys as _sys
+        print(f"playwright driver prep failed: {_e}", file=_sys.stderr)
 
 
 def _get_browser_tool():
