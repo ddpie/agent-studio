@@ -1,9 +1,5 @@
 import { test, expect } from "@playwright/test";
 
-function escapeForRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 async function openFirstAgent(page: import("@playwright/test").Page) {
   await page.goto("/");
   await page.waitForURL(/agents/);
@@ -14,20 +10,20 @@ async function openFirstAgent(page: import("@playwright/test").Page) {
   await expect(page.getByTestId("agent-detail-title")).toBeVisible({ timeout: 15_000 });
 }
 
-test.describe("Runs-first refactor", () => {
-  test("Runs is the first side-nav item on an agent detail page", async ({ page }) => {
+test.describe("Schedules-centric refactor", () => {
+  test("Schedules section is the first side-nav item on an agent detail page", async ({ page }) => {
     await openFirstAgent(page);
-    await expect(page.getByTestId("runs-section")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("traces-tab")).toBeVisible(); // inner TracesTab testid preserved
-    // Side-nav exposes a `nav-runs-section` testid (DetailSideNav renders `nav-${item.id}`).
-    await expect(page.getByTestId("nav-runs-section")).toBeVisible();
+    await expect(page.getByTestId("schedules-section")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("schedules-tab")).toBeVisible();
+    await expect(page.getByTestId("nav-schedules-section")).toBeVisible();
+    // Former standalone Runs section is gone — its role moved inside Schedules.
+    await expect(page.getByTestId("runs-section")).toHaveCount(0);
   });
 
   test("Advanced group is collapsed by default and toggles open", async ({ page }) => {
     await openFirstAgent(page);
     const toggle = page.getByTestId("nav-group-toggle-advanced");
     await expect(toggle).toBeVisible();
-    // Child nav items (deployments/endpoints/secrets/logs) not rendered while collapsed.
     await expect(page.getByTestId("nav-deployments-section")).toHaveCount(0);
     await toggle.click();
     await expect(page.getByTestId("nav-deployments-section")).toBeVisible();
@@ -42,46 +38,41 @@ test.describe("Runs-first refactor", () => {
     await expect(page.getByTestId("nav-deployments-section")).toBeVisible();
     await page.reload();
     await expect(page.getByTestId("agent-detail-title")).toBeVisible({ timeout: 15_000 });
-    // sessionStorage persists across reload in same tab.
     await expect(page.getByTestId("nav-deployments-section")).toBeVisible();
   });
 
-  test("Clicking a run row updates URL to /agents/:id/runs/:sessionId", async ({ page }) => {
+  test("Clicking a recent-run card opens the run-detail modal", async ({ page }) => {
     await openFirstAgent(page);
-    const firstRow = page.locator("[data-testid^='session-row-']").first();
-    const hasRuns = await firstRow.count();
-    test.skip(hasRuns === 0, "No runs to test row-click against in this environment");
-    const sessionId = (await firstRow.getAttribute("data-testid"))!.replace(/^session-row-/, "");
-    await firstRow.click();
-    // The URL is pushed with encodeURIComponent(sessionId) so colons in ISO timestamps become %3A.
-    const encoded = encodeURIComponent(sessionId);
-    await expect(page).toHaveURL(new RegExp(`#/agents/[^/]+/runs/${escapeForRegex(encoded)}$`), { timeout: 5_000 });
+    // Find any schedule row and expand it.
+    const expandBtn = page.locator("[data-testid^='expand-schedule-']").first();
+    const hasSchedule = await expandBtn.count();
+    test.skip(hasSchedule === 0, "No schedules configured in this environment");
+    await expandBtn.click();
+    const runCard = page.locator("[data-testid^='run-card-']").first();
+    const hasRun = await runCard.count();
+    test.skip(hasRun === 0, "No runs for this schedule yet");
+    await runCard.click();
+    await expect(page.getByTestId("run-detail-modal")).toBeVisible({ timeout: 5_000 });
+    // ESC closes the modal.
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("run-detail-modal")).toHaveCount(0);
   });
 
-  test("Deep-linking /agents/:id/runs/:sessionId pre-selects the run", async ({ page }) => {
+  test("Deep-linking /agents/:id/runs/:runId opens the run-detail modal on load", async ({ page }) => {
     await openFirstAgent(page);
-    const firstRow = page.locator("[data-testid^='session-row-']").first();
-    const hasRuns = await firstRow.count();
-    test.skip(hasRuns === 0, "No runs to test deep-link against in this environment");
-    const sessionId = (await firstRow.getAttribute("data-testid"))!.replace(/^session-row-/, "");
+    const expandBtn = page.locator("[data-testid^='expand-schedule-']").first();
+    const hasSchedule = await expandBtn.count();
+    test.skip(hasSchedule === 0, "No schedules configured in this environment");
+    await expandBtn.click();
+    const runCard = page.locator("[data-testid^='run-card-']").first();
+    const hasRun = await runCard.count();
+    test.skip(hasRun === 0, "No runs for this schedule yet");
+    const testId = (await runCard.getAttribute("data-testid"))!;
+    const runId = testId.replace(/^run-card-/, "");
     const currentUrl = page.url();
-    // Strip any trailing `/runs/...` if present, then append the deep-link path.
     const base = currentUrl.replace(/\/runs\/[^/?#]+$/, "");
-    await page.goto(`${base}/runs/${encodeURIComponent(sessionId)}`);
+    await page.goto(`${base}/runs/${encodeURIComponent(runId)}`);
     await expect(page.getByTestId("agent-detail-title")).toBeVisible({ timeout: 15_000 });
-    // The "select a session" placeholder in TracesTab is hidden when a run is selected.
-    await expect(page.getByText(/select a session/i)).toHaveCount(0);
-  });
-
-  test("Trigger-source badge renders for each run row (when runs exist)", async ({ page }) => {
-    await openFirstAgent(page);
-    const rows = page.locator("[data-testid^='session-row-']");
-    const count = await rows.count();
-    test.skip(count === 0, "No runs to assert badges against in this environment");
-    for (let i = 0; i < Math.min(count, 5); i++) {
-      const testId = await rows.nth(i).getAttribute("data-testid");
-      const sessionId = testId!.replace(/^session-row-/, "");
-      await expect(page.getByTestId(`run-source-${sessionId}`)).toBeVisible();
-    }
+    await expect(page.getByTestId("run-detail-modal")).toBeVisible({ timeout: 5_000 });
   });
 });

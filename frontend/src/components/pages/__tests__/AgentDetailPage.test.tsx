@@ -100,6 +100,29 @@ vi.mock("../../../lib/api-client", () => ({
   },
 }));
 
+// Schedules' recent-runs list + RunDetailModal both lean on the runs
+// client directly, so stub the whole module here to keep tests offline.
+vi.mock("../../../lib/runs-client", () => ({
+  listRuns: vi.fn().mockResolvedValue({ runs: [], nextToken: undefined }),
+  getRun: vi.fn().mockResolvedValue({
+    runId: "01JWXYZ-test-run",
+    trigger: "schedule",
+    scheduleId: null,
+    sessionId: null,
+    status: "completed",
+    input: "",
+    outputUrl: null,
+    artifactRefs: [],
+    usage: { promptTokens: null, completionTokens: null, totalTokens: null },
+    durationMs: null,
+    model: null,
+    error: null,
+    startedAt: "2026-04-21T00:00:00Z",
+    completedAt: null,
+  }),
+  fetchRunOutput: vi.fn().mockResolvedValue({ text: "", toolCalls: [] }),
+}));
+
 const mockStore = { currentWorkspace: { workspaceId: "ws-1", role: "viewer" as const } };
 vi.mock("../../../stores/workspace-store", () => ({
   useWorkspaceStore: () => mockStore,
@@ -161,11 +184,11 @@ describe("AgentDetailPage", () => {
     expect(await screen.findByTestId("evaluations-tab")).toBeInTheDocument();
   });
 
-  it("renders Runs section (formerly Traces)", async () => {
+  it("renders Schedules section (the runs view now lives inside it)", async () => {
     renderPage();
     await screen.findByTestId("agent-detail-title");
-    expect(await screen.findByTestId("runs-section")).toBeInTheDocument();
-    expect(await screen.findByTestId("runs-tab")).toBeInTheDocument();
+    expect(await screen.findByTestId("schedules-section")).toBeInTheDocument();
+    expect(await screen.findByTestId("schedules-tab")).toBeInTheDocument();
   });
 
   it("renders Integration section with card/endpoint URLs", async () => {
@@ -186,10 +209,10 @@ describe("AgentDetailPage", () => {
     expect(await screen.findByTestId("logs-section")).toBeInTheDocument();
   });
 
-  it("pre-selects a run when routed to /agents/:id/runs/:runId", async () => {
+  it("opens the run-detail modal when deep-linked via /agents/:id/runs/:runId", async () => {
     renderPage("/agents/agt-1/runs/01JWXYZ-test-run");
     await screen.findByTestId("agent-detail-title");
-    // When a runId is pre-selected, the "select a run" placeholder is hidden.
-    expect(screen.queryByText(/select a run/i)).not.toBeInTheDocument();
+    // Modal mounts on load; inner content may be Loading but the shell is there.
+    expect(await screen.findByTestId("run-detail-modal")).toBeInTheDocument();
   });
 });

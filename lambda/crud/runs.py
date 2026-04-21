@@ -117,13 +117,21 @@ def list_runs(wsId: str, agentId: str):
     qs = router.current_event.query_string_parameters or {}
     limit = min(int(qs.get("limit", "50")), 100)
     next_token = qs.get("nextToken")
+    schedule_id = (qs.get("scheduleId") or "").strip() or None
 
-    kwargs = {
+    kwargs: dict = {
         "KeyConditionExpression": "agentId = :aid",
         "ExpressionAttributeValues": {":aid": agentId},
         "ScanIndexForward": False,
         "Limit": limit,
     }
+    # ScheduleId filter — DDB has no GSI for this attribute, so we walk
+    # the agent's runs and apply FilterExpression server-side. The caller
+    # typically asks for one specific schedule under one agent so the scan
+    # window stays small; pagination handles the rest.
+    if schedule_id:
+        kwargs["FilterExpression"] = "scheduleId = :sid"
+        kwargs["ExpressionAttributeValues"][":sid"] = schedule_id
     if next_token:
         import json as _json
         try:

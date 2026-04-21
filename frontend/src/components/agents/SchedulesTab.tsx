@@ -8,9 +8,6 @@ import {
   ChevronDown,
   ChevronRight,
   RefreshCw,
-  CheckCircle2,
-  XCircle,
-  Clock,
   Pencil,
   Play,
 } from "lucide-react";
@@ -19,10 +16,8 @@ import {
   createAgentSchedule,
   updateAgentSchedule,
   deleteAgentSchedule,
-  listScheduleExecutions,
   runAgentScheduleNow,
   type AgentSchedule,
-  type ScheduleExecution,
 } from "../../lib/api-client";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import { toast } from "../../lib/toast";
@@ -37,10 +32,15 @@ import {
   type ScheduleMode,
   type ScheduleSpec,
 } from "../../lib/cron-builder";
+import { useRunList } from "../../hooks/useRuns";
+import RunListItem from "./RunListItem";
+import RunDetailModal from "./RunDetailModal";
 
 interface Props {
   agentId: string;
-  onViewTrace?: (sessionId: string) => void;
+  /** If provided, opens the run detail modal on mount. Used by deep-link
+   * /agents/:id/runs/:runId to keep backward compatibility. */
+  initialRunId?: string | null;
 }
 
 // Accept cron(...) or rate(N units). Mirrors backend validator in
@@ -54,14 +54,7 @@ function isValidCron(expr: string): boolean {
   return CRON_RE.test(expr) || RATE_RE.test(expr);
 }
 
-function formatDuration(ms: number): string {
-  if (!ms || ms < 0) return "-";
-  if (ms < 1000) return `${ms} ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
-  return `${(ms / 60_000).toFixed(1)} min`;
-}
-
-export default function SchedulesTab({ agentId, onViewTrace }: Props) {
+export default function SchedulesTab({ agentId, initialRunId }: Props) {
   const { t } = useTranslation();
   const { currentWorkspace } = useWorkspaceStore();
   const role = currentWorkspace?.role || "viewer";
@@ -74,6 +67,8 @@ export default function SchedulesTab({ agentId, onViewTrace }: Props) {
   const [editing, setEditing] = useState<AgentSchedule | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pendingDelete, setPendingDelete] = useState<{ name: string; suffix: string } | null>(null);
+  // Deep-link support: /agents/:id/runs/:runId opens this modal on mount.
+  const [deepLinkRunId, setDeepLinkRunId] = useState<string | null>(initialRunId ?? null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -111,16 +106,11 @@ export default function SchedulesTab({ agentId, onViewTrace }: Props) {
 
   async function onRunNow(schedule: AgentSchedule) {
     try {
-      const res = await runAgentScheduleNow(agentId, schedule.name);
+      await runAgentScheduleNow(agentId, schedule.name);
       toast.success(t("schedules.runNowSuccess", { name: schedule.suffix || schedule.name }));
+      // Expand this schedule so the user sees the freshly queued run land
+      // in the recent-runs list once DDB catches up.
       setExpanded((prev) => ({ ...prev, [schedule.name]: true }));
-      if (onViewTrace) {
-        // Jump to the trace view immediately so the user sees the
-        // "waiting for spans" state. The hook retries until spans land
-        // (agent cold-start + OTEL export + CloudWatch ingestion can
-        // take 40-60s).
-        onViewTrace(res.sessionId);
-      }
     } catch (err) {
       toast.error(err as Error);
     }
@@ -191,7 +181,6 @@ export default function SchedulesTab({ agentId, onViewTrace }: Props) {
                 onDelete={() => onDelete(s.name, s.suffix)}
                 onEdit={() => setEditing(s)}
                 onRunNow={() => onRunNow(s)}
-                onViewTrace={onViewTrace}
               />
             ))}
           </tbody>
@@ -233,6 +222,14 @@ export default function SchedulesTab({ agentId, onViewTrace }: Props) {
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}
       />
+
+      {deepLinkRunId && (
+        <RunDetailModal
+          agentId={agentId}
+          runId={deepLinkRunId}
+          onClose={() => setDeepLinkRunId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -246,7 +243,6 @@ function RenderRow({
   onDelete,
   onEdit,
   onRunNow,
-  onViewTrace,
 }: {
   schedule: AgentSchedule;
   agentId: string;
@@ -256,7 +252,6 @@ function RenderRow({
   onDelete: () => void;
   onEdit: () => void;
   onRunNow: () => Promise<void>;
-  onViewTrace?: (sessionId: string) => void;
 }) {
   const [running, setRunning] = useState(false);
   const handleRun = async () => {
@@ -337,7 +332,7 @@ function RenderRow({
         >
           <td></td>
           <td colSpan={5} className="py-3 pr-4">
-            <RecentRuns agentId={agentId} scheduleName={schedule.name} onViewTrace={onViewTrace} />
+            <RecentRuns agentId={agentId} scheduleName={schedule.name} />
           </td>
         </tr>
       )}
@@ -348,33 +343,16 @@ function RenderRow({
 function RecentRuns({
   agentId,
   scheduleName,
-  onViewTrace,
 }: {
   agentId: string;
   scheduleName: string;
-  onViewTrace?: (sessionId: string) => void;
 }) {
   const { t } = useTranslation();
-  const [runs, setRuns] = useState<ScheduleExecution[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const items = await listScheduleExecutions(agentId, scheduleName);
-      setRuns(items);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setLoading(false);
-    }
-  }, [agentId, scheduleName]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const { runs, error, loading, loadingMore, hasMore, refresh, loadMore } = useRunList(
+    agentId,
+    { scheduleId: scheduleName, limit: 20 },
+  );
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   return (
     <div>
@@ -384,7 +362,7 @@ function RecentRuns({
         </div>
         <button
           type="button"
-          onClick={load}
+          onClick={refresh}
           disabled={loading}
           className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 disabled:opacity-50"
           data-testid={`refresh-runs-${scheduleName}`}
@@ -399,7 +377,7 @@ function RecentRuns({
           {[0, 1, 2].map((i) => (
             <div
               key={i}
-              className="h-6 rounded bg-gray-200/60 dark:bg-gray-800/60 animate-pulse"
+              className="h-14 rounded bg-gray-200/60 dark:bg-gray-800/60 animate-pulse"
             />
           ))}
         </div>
@@ -419,74 +397,49 @@ function RecentRuns({
       )}
 
       {runs && runs.length > 0 && (
-        <table className="w-full text-xs" data-testid={`runs-table-${scheduleName}`}>
-          <thead className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">
-            <tr>
-              <th className="text-left py-1">{t("schedules.runs.time")}</th>
-              <th className="text-left py-1">{t("schedules.runs.status")}</th>
-              <th className="text-left py-1">{t("schedules.runs.duration")}</th>
-              <th className="text-left py-1">{t("schedules.runs.session")}</th>
-            </tr>
-          </thead>
-          <tbody>
+        <>
+          <ul className="space-y-1" data-testid={`runs-list-${scheduleName}`}>
             {runs.map((r) => (
-              <tr
-                key={r.sessionId}
-                className="border-t border-gray-200 dark:border-gray-800"
-                data-testid={`run-row-${r.sessionId}`}
-              >
-                <td className="py-1 font-mono">{r.scheduledTime || "-"}</td>
-                <td className="py-1">
-                  <StatusBadge status={r.status} />
-                </td>
-                <td className="py-1">{formatDuration(r.durationMs)}</td>
-                <td className="py-1 font-mono text-[10px] break-all">
-                  {onViewTrace ? (
-                    <button
-                      type="button"
-                      onClick={() => onViewTrace(r.sessionId)}
-                      data-testid={`run-view-trace-${r.sessionId}`}
-                      title={t("schedules.viewTrace")}
-                      className="text-blue-600 hover:underline dark:text-blue-400"
-                    >
-                      {r.sessionId}
-                    </button>
-                  ) : (
-                    <span className="text-gray-500 dark:text-gray-400">{r.sessionId}</span>
-                  )}
-                </td>
-              </tr>
+              <RunListItem
+                key={r.runId}
+                run={r}
+                selected={false}
+                hideSource
+                onSelect={() => setSelectedRunId(r.runId)}
+              />
             ))}
-          </tbody>
-        </table>
+          </ul>
+          {hasMore && (
+            <div className="flex justify-center mt-2">
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loadingMore}
+                data-testid={`load-more-runs-${scheduleName}`}
+                className="inline-flex items-center gap-1 px-3 py-1 text-[11px] text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
+              >
+                {loadingMore ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    {t("common.loading")}
+                  </>
+                ) : (
+                  t("schedules.runs.loadMore")
+                )}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {selectedRunId && (
+        <RunDetailModal
+          agentId={agentId}
+          runId={selectedRunId}
+          onClose={() => setSelectedRunId(null)}
+        />
       )}
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: ScheduleExecution["status"] }) {
-  const { t } = useTranslation();
-  if (status === "failure") {
-    return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300">
-        <XCircle className="w-3 h-3" />
-        {t("schedules.runs.statusFailure")}
-      </span>
-    );
-  }
-  if (status === "running") {
-    return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300">
-        <Clock className="w-3 h-3" />
-        {t("schedules.runs.statusRunning")}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300">
-      <CheckCircle2 className="w-3 h-3" />
-      {t("schedules.runs.statusSuccess")}
-    </span>
   );
 }
 
