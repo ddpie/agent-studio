@@ -1119,6 +1119,11 @@ def _browser_cdp_session():
         sessionTimeoutSeconds=3600,
         viewPort={"width": 1280, "height": 800},
     )
+    client.update_browser_stream(
+        browserIdentifier=br_id,
+        sessionId=sess["sessionId"],
+        streamUpdate={"automationStreamUpdate": {"streamStatus": "ENABLED"}},
+    )
     cdp = sess["streams"]["automationStream"]["streamEndpoint"]
     creds = boto_session.get_credentials().get_frozen_credentials()
     https_url = cdp.replace("wss://", "https://")
