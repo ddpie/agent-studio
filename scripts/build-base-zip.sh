@@ -34,13 +34,24 @@ pip install -r "$REQS" \
   --only-binary=:all: \
   --upgrade
 
-echo "[2/3] Pruning incompatible cache files..."
+echo "[2/3] Pruning incompatible cache files + fixing perms..."
 find "$STAGE_DIR" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 find "$STAGE_DIR" -name "*.pyc" -delete
 
-echo "[3/3] Zipping..."
+# Playwright ships a node binary as its CDP driver. pip install --target
+# preserves file mode, but some zip extractors (incl. AgentCore's) strip
+# the exec bit unless the archive is built with --symlinks + -X to retain
+# unix mode bits. Ensure the binary is chmod +x before zipping.
+if [[ -f "$STAGE_DIR/playwright/driver/node" ]]; then
+  chmod +x "$STAGE_DIR/playwright/driver/node"
+fi
+find "$STAGE_DIR" -name "*.so" -exec chmod +x {} \; 2>/dev/null || true
+
+echo "[3/3] Zipping (preserving unix mode bits)..."
 cd "$STAGE_DIR"
-zip -rq "$OUT_ZIP" .
+# -X drops extra attrs we don't need, -y preserves symlinks; default zip
+# already stores unix perms in extra field, unzip -aa restores them.
+zip -rqy "$OUT_ZIP" .
 du -sh "$OUT_ZIP"
 
 echo "=== Done ==="

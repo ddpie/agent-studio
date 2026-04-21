@@ -1113,6 +1113,19 @@ def _sign_browser_ws(cdp_url: str) -> dict:
     return headers
 
 
+def _ensure_playwright_driver_executable():
+    """AgentCore deploy-zip extraction drops unix exec bits. chmod +x
+    the Playwright node driver so sync_playwright().start() can spawn it."""
+    import stat as _stat
+    for root, _dirs, files in _os.walk("/var/task/playwright/driver"):
+        for f in files:
+            p = _os.path.join(root, f)
+            try:
+                _os.chmod(p, _os.stat(p).st_mode | _stat.S_IXUSR | _stat.S_IXGRP | _stat.S_IXOTH)
+            except Exception:
+                pass
+
+
 def _get_browser_page():
     """Return an active Playwright Page, creating/resuming the session.
 
@@ -1120,6 +1133,7 @@ def _get_browser_page():
     connects Playwright over CDP with SigV4 headers, and returns the
     pre-provisioned page (AgentCore gives us contexts[0].pages[0]).
     """
+    _ensure_playwright_driver_executable()
     from playwright.sync_api import sync_playwright
 
     if _browser_state["page"] is not None:
