@@ -1041,54 +1041,129 @@ def run_command(command: str, language: str = "python") -> str:
     return stdout.strip() if stdout.strip() else "(no output)"
 
 
+def _read_from_code_interpreter(path):
+    """Fetch a file from the Code Interpreter sandbox. Returns bytes or None.
+
+    run_command executes inside an AgentCore Code Interpreter container
+    that is filesystem-isolated from the sub-agent. Files the model just
+    generated (matplotlib pngs, python-pptx files, pandas csvs) live
+    there, not in the sub-agent's /tmp. `readFiles` is the documented
+    way to copy them out.
+    """
+    import base64 as _b64_
+    session_id = getattr(run_command, "_session_id", None)
+    if not session_id:
+        return None
+    ci_id = _os.environ.get("AGENT_STUDIO_CODE_INTERPRETER_ID")
+    if not ci_id:
+        return None
+    import boto3 as _boto3
+    client = _boto3.client("bedrock-agentcore", region_name=_REGION)
+    try:
+        resp = client.invoke_code_interpreter(
+            codeInterpreterIdentifier=ci_id,
+            sessionId=session_id,
+            name="readFiles",
+            arguments={"paths": [path]},
+        )
+    except Exception:
+        return None
+
+    # Walk the EventStream; first resource block with data wins. Content
+    # comes back as either `{blob: {data: <base64>, mimeType}}` or a
+    # `{text: ...}` block depending on whether CI considers the file
+    # binary or text.
+    for event in resp.get("stream", []):
+        result = event.get("result") or {}
+        for block in result.get("content", []) or []:
+            if "resource" in block:
+                r = block["resource"]
+                blob = r.get("blob") if isinstance(r, dict) else None
+                if blob and blob.get("data"):
+                    try:
+                        return _b64_.b64decode(blob["data"])
+                    except Exception:
+                        pass
+                text = r.get("text") if isinstance(r, dict) else None
+                if isinstance(text, str):
+                    return text.encode("utf-8")
+            if "blob" in block:
+                data = block["blob"].get("data")
+                if data:
+                    try:
+                        return _b64_.b64decode(data)
+                    except Exception:
+                        pass
+            if "text" in block and isinstance(block["text"], str):
+                return block["text"].encode("utf-8")
+    return None
+
+
 @_tool
 def upload_to_s3(local_path: str, filename: str = "") -> str:
-    """Upload a local file to S3 for user download. Use this after generating files (e.g. PPTX, PDF, CSV).
+    """Upload a file to S3 for user download. Use this after generating files (e.g. PPTX, PDF, CSV, PNG).
 
-    The file will be stored permanently. The user's browser will generate a download link on demand.
+    Accepts both sub-agent local paths (e.g. /mnt/workspace/out.pptx) and
+    Code Interpreter sandbox paths (e.g. /tmp/chart.png created inside a
+    run_command call). The file is stored permanently and a download link
+    appears automatically in the chat UI.
 
     Args:
-        local_path: Absolute path to the file on the local filesystem (e.g. /tmp/output.pptx).
-        filename: Optional display filename. If empty, uses the original filename.
+        local_path: Absolute path to the file. Local filesystem checked
+            first; if missing, the active Code Interpreter session is
+            queried as a fallback.
+        filename: Optional display filename. If empty, uses basename(local_path).
 
     Returns:
         JSON with s3_key for the uploaded file, or error message.
     """
     import os as _os2
-    import time as _time
-
-    if not _os2.path.isfile(local_path):
-        return _json.dumps({"error": f"File not found: {local_path}"})
 
     fname = filename or _os2.path.basename(local_path)
     import uuid as _uuid
     s3_key = f"outputs/{_uuid.uuid4().hex[:12]}_{fname}"
 
+    # Detect content type
+    ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+    content_types = {
+        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "pdf": "application/pdf",
+        "csv": "text/csv",
+        "json": "application/json",
+        "txt": "text/plain",
+        "md": "text/markdown",
+        "png": "image/png",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "svg": "image/svg+xml",
+        "zip": "application/zip",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+    content_type = content_types.get(ext, "application/octet-stream")
+    extra_args = {"ContentType": content_type, "ContentDisposition": f'attachment; filename="{fname}"'}
+
+    # Fast path: file is on the sub-agent's local filesystem
+    if _os2.path.isfile(local_path):
+        try:
+            _s3.upload_file(local_path, _S3_BUCKET, s3_key, ExtraArgs=extra_args)
+            return f"File uploaded successfully. Include this download link in your response:\\n__S3_DOWNLOAD__:{s3_key}:{fname}"
+        except Exception as e:
+            return f"Upload failed: {e}"
+
+    # Fallback: file was generated inside the Code Interpreter sandbox.
+    data = _read_from_code_interpreter(local_path)
+    if data is None:
+        return _json.dumps({
+            "error": (
+                f"File not found: {local_path}. Checked the sub-agent's "
+                "filesystem and the Code Interpreter sandbox. Make sure "
+                "the file was actually written (check run_command output) "
+                "and that you're passing the exact path that was used in "
+                "the run_command code."
+            )
+        })
     try:
-        # Detect content type
-        ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
-        content_types = {
-            "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            "pdf": "application/pdf",
-            "csv": "text/csv",
-            "json": "application/json",
-            "txt": "text/plain",
-            "md": "text/markdown",
-            "png": "image/png",
-            "jpg": "image/jpeg",
-            "jpeg": "image/jpeg",
-            "svg": "image/svg+xml",
-            "zip": "application/zip",
-            "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        }
-        content_type = content_types.get(ext, "application/octet-stream")
-
-        _s3.upload_file(
-            local_path, _S3_BUCKET, s3_key,
-            ExtraArgs={"ContentType": content_type, "ContentDisposition": f'attachment; filename="{fname}"'},
-        )
-
-        # Return plain text with download marker — LLM should include this verbatim in response
+        _s3.put_object(Bucket=_S3_BUCKET, Key=s3_key, Body=data, **extra_args)
         return f"File uploaded successfully. Include this download link in your response:\\n__S3_DOWNLOAD__:{s3_key}:{fname}"
     except Exception as e:
         return f"Upload failed: {e}"
