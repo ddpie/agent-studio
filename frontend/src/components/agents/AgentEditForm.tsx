@@ -206,9 +206,9 @@ export default function AgentEditForm() {
 
         {/* Validation Results */}
         {deploy.validationResult && (deploy.validationResult.errors.length > 0 || deploy.validationResult.warnings.length > 0) && (
-          <div className={`rounded-lg text-sm border ${!deploy.validationResult.valid ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800" : "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800"}`}>
+          <div className={`rounded-lg text-sm border ${!deploy.validationResult.valid ? "bg-red-50 dark:bg-red-950/60 border-red-200 dark:border-red-800" : "bg-amber-50 dark:bg-amber-950/60 border-amber-200 dark:border-amber-800"}`}>
             <div className="px-4 py-3">
-              <p className={`font-medium ${deploy.validationResult.valid ? "text-amber-700 dark:text-amber-300" : "text-red-600 dark:text-red-400"}`}>
+              <p className={`font-medium ${deploy.validationResult.valid ? "text-amber-700 dark:text-amber-200" : "text-red-600 dark:text-red-200"}`}>
                 {!deploy.validationResult.valid
                   ? t("agentEditor.validationFailed")
                   : deploy.validationResult.warnings.length > 0
@@ -218,9 +218,9 @@ export default function AgentEditForm() {
               {deploy.validationResult.errors.length > 0 && (
                 <ul className="mt-2 space-y-1">
                   {deploy.validationResult.errors.map((e, i) => (
-                    <li key={i} className="text-[11px] text-red-700 dark:text-red-200 flex items-start gap-1.5">
+                    <li key={i} className="text-[11px] text-red-800 dark:text-red-50 flex items-start gap-1.5">
                       <span className="text-red-500 dark:text-red-300 mt-0.5 flex-shrink-0">&#x2716;</span>
-                      <span className="prose prose-xs max-w-none [&_*]:!text-inherit [&_p]:m-0 [&_code]:!text-red-800 dark:[&_code]:!text-red-200 [&_strong]:!text-red-800 dark:[&_strong]:!text-red-100"><ReactMarkdown>{e}</ReactMarkdown></span>
+                      <span className="prose prose-xs max-w-none [&_*]:!text-inherit [&_p]:m-0 [&_code]:!text-red-900 dark:[&_code]:!text-red-100 [&_strong]:!text-red-900 dark:[&_strong]:!text-white"><ReactMarkdown>{e}</ReactMarkdown></span>
                     </li>
                   ))}
                 </ul>
@@ -228,9 +228,9 @@ export default function AgentEditForm() {
               {deploy.validationResult.warnings.length > 0 && (
                 <ul className="mt-2 space-y-1">
                   {deploy.validationResult.warnings.map((w, i) => (
-                    <li key={i} className="text-[11px] text-amber-800 dark:text-amber-200 flex items-start gap-1.5">
+                    <li key={i} className="text-[11px] text-amber-900 dark:text-amber-50 flex items-start gap-1.5">
                       <span className="text-amber-600 dark:text-amber-300 mt-0.5 flex-shrink-0">&#x26A0;</span>
-                      <span className="prose prose-xs max-w-none [&_*]:!text-inherit [&_p]:m-0 [&_code]:!text-amber-900 dark:[&_code]:!text-amber-100 [&_strong]:!text-amber-900 dark:[&_strong]:!text-amber-100"><ReactMarkdown>{w}</ReactMarkdown></span>
+                      <span className="prose prose-xs max-w-none [&_*]:!text-inherit [&_p]:m-0 [&_code]:!text-amber-900 dark:[&_code]:!text-amber-100 [&_strong]:!text-amber-900 dark:[&_strong]:!text-white"><ReactMarkdown>{w}</ReactMarkdown></span>
                     </li>
                   ))}
                 </ul>
