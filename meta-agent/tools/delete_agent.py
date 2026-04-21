@@ -31,11 +31,21 @@ def delete_agent(agent_id: str) -> str:
     if record.get("status") == "archived":
         return json.dumps({"error": "Agent is already archived"})
 
-    # Delete runtime only
+    # Delete the AgentCore runtime. Agents created via the in-app "new agent"
+    # flow or cloned from the marketplace exist only as a DDB placeholder —
+    # they have a UUID agentId but no deployed runtime yet. AgentCore
+    # returns AccessDeniedException (not NotFound) for non-existent runtime
+    # ids, so we swallow both and continue to the DDB archive step.
+    runtime_note = ""
     try:
         delete_runtime(agent_id)
     except Exception as e:
-        return json.dumps({"error": f"Failed to delete runtime: {e}"})
+        msg = str(e)
+        benign = ("AccessDeniedException" in msg or "ResourceNotFoundException" in msg
+                  or "not authorized" in msg.lower() or "not found" in msg.lower())
+        if not benign:
+            return json.dumps({"error": f"Failed to delete runtime: {e}"})
+        runtime_note = "runtime was never deployed (or already deleted); archived DDB record only"
 
     # Mark as archived in DynamoDB
     table.update_item(
@@ -45,7 +55,10 @@ def delete_agent(agent_id: str) -> str:
         ExpressionAttributeValues={":val": "archived"},
     )
 
-    return json.dumps({"agent_id": agent_id, "action": "archived", "status": "archived"})
+    result = {"agent_id": agent_id, "action": "archived", "status": "archived"}
+    if runtime_note:
+        result["note"] = runtime_note
+    return json.dumps(result)
 
 
 @tool
