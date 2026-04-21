@@ -123,18 +123,6 @@ export default function RunDetail({ agentId, detail, output, loading }: Props) {
           </div>
         )}
 
-        {/* Tool Calls */}
-        {!loading && output && output.toolCalls && output.toolCalls.length > 0 && (
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t("runs.toolCalls") || "Tool Calls"}</h3>
-            <div className="space-y-2">
-              {output.toolCalls.map((tool, idx) => (
-                <ToolCallItem key={idx} tool={tool} />
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Attachments */}
         {detail.artifactRefs && detail.artifactRefs.length > 0 && (() => {
           const images = detail.artifactRefs.filter((a) => IMAGE_RE.test(a.filename));
@@ -167,6 +155,18 @@ export default function RunDetail({ agentId, detail, output, loading }: Props) {
             </div>
           );
         })()}
+
+        {/* Tool Calls */}
+        {!loading && output && output.toolCalls && output.toolCalls.length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t("runs.toolCalls") || "Tool Calls"}</h3>
+            <div className="space-y-2">
+              {output.toolCalls.map((tool, idx) => (
+                <ToolCallItem key={idx} tool={tool} />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Span Tree */}
         {detail.sessionId && (

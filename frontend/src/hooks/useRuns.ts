@@ -83,6 +83,7 @@ export function useRunDetail(agentId: string | null, runId: string | null) {
   const [output, setOutput] = useState<RunOutput | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
+  const [tick, setTick] = useState(0);
   const mountedRef = useRef(true);
 
   useEffect(() => () => { mountedRef.current = false; }, []);
@@ -122,7 +123,13 @@ export function useRunDetail(agentId: string | null, runId: string | null) {
         if (!cancelled && mountedRef.current) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [agentId, runId]);
+  }, [agentId, runId, tick]);
 
-  return { detail, output, error, loading };
+  return {
+    detail,
+    output,
+    error,
+    loading,
+    refresh: () => setTick((t) => t + 1),
+  };
 }

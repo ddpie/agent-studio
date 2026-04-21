@@ -1,10 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+import { X, ZoomIn, ZoomOut, RotateCcw, ImageOff } from "lucide-react";
 import { fetchSignedS3 } from "../../lib/s3-utils";
 
 export default function ImageLightbox({ src, alt }: { src: string; alt?: string }) {
   const [open, setOpen] = useState(false);
-  const [displayUrl, setDisplayUrl] = useState(src);
+  // Start empty: rendering <img src="https://s3.../foo.png"> before the
+  // signed URL resolves triggers a 403 and the "broken image" icon flashes
+  // for a couple hundred ms. Keep the box blank until we actually have a
+  // fetchable URL (data: URL or blob: URL from fetchSignedS3).
+  const [displayUrl, setDisplayUrl] = useState<string>(src.startsWith("data:") ? src : "");
+  const [failed, setFailed] = useState(false);
   const [scale, setScale] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ dragging: boolean; startX: number; startY: number; origX: number; origY: number }>({
@@ -14,13 +19,24 @@ export default function ImageLightbox({ src, alt }: { src: string; alt?: string 
   useEffect(() => {
     if (src.startsWith("data:")) {
       setDisplayUrl(src);
+      setFailed(false);
       return;
     }
+    setDisplayUrl("");
+    setFailed(false);
     let revoked = false;
     fetchSignedS3(src).then((url) => {
-      if (!revoked) setDisplayUrl(url);
+      if (revoked) return;
+      // fetchSignedS3 falls back to the original URL on failure — that
+      // path would 403 against S3, so treat a non-blob/non-data result as
+      // a failure rather than rendering a broken <img>.
+      if (url.startsWith("blob:") || url.startsWith("data:")) {
+        setDisplayUrl(url);
+      } else {
+        setFailed(true);
+      }
     }).catch(() => {
-      setDisplayUrl(src);
+      if (!revoked) setFailed(true);
     });
     return () => { revoked = true; };
   }, [src]);
@@ -60,12 +76,26 @@ export default function ImageLightbox({ src, alt }: { src: string; alt?: string 
 
   return (
     <>
-      <img
-        src={displayUrl}
-        alt={alt || ""}
-        className="max-w-48 max-h-48 rounded-lg object-contain cursor-pointer hover:opacity-80 transition-opacity"
-        onClick={handleOpen}
-      />
+      {displayUrl ? (
+        <img
+          src={displayUrl}
+          alt={alt || ""}
+          className="max-w-48 max-h-48 rounded-lg object-contain cursor-pointer hover:opacity-80 transition-opacity"
+          onClick={handleOpen}
+        />
+      ) : failed ? (
+        <div
+          title={alt || ""}
+          className="w-48 h-36 rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex items-center justify-center text-gray-400 dark:text-gray-500"
+        >
+          <ImageOff className="w-6 h-6" />
+        </div>
+      ) : (
+        <div
+          aria-hidden
+          className="w-48 h-36 rounded-lg bg-gray-200/70 dark:bg-gray-800/70 animate-pulse"
+        />
+      )}
       {open && (
         <div
           className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"

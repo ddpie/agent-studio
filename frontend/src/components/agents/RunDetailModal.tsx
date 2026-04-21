@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Loader2 } from "lucide-react";
+import { X, Loader2, RefreshCw } from "lucide-react";
 import { useRunDetail } from "../../hooks/useRuns";
 import RunDetail from "./RunDetail";
 
@@ -18,7 +18,7 @@ export default function RunDetailModal({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const { detail, output, loading, error } = useRunDetail(agentId, runId);
+  const { detail, output, loading, error, refresh } = useRunDetail(agentId, runId);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -42,15 +42,28 @@ export default function RunDetailModal({
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
             {t("runs.detailTitle", "Run detail")}
           </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            data-testid="run-detail-modal-close"
-            aria-label={t("common.close", "Close")}
-            className="p-1 rounded text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={loading}
+              data-testid="run-detail-modal-refresh"
+              aria-label={t("common.refresh", "Refresh")}
+              title={t("common.refresh", "Refresh")}
+              className="p-1 rounded text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              data-testid="run-detail-modal-close"
+              aria-label={t("common.close", "Close")}
+              className="p-1 rounded text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
         <div className="flex-1 min-h-0">
           {loading && !detail && (
