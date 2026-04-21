@@ -10,7 +10,7 @@
 - **Skill 热插拔** — AgentSkills.io 格式，运行时按需加载，跨 Agent 共享
 - **MCP 工具集** — 49 个 AWS 官方 MCP target，14 个服务类别，直连 AgentCore Runtime
 - **多模态输入** — 图片 + PDF / Excel / CSV / TSV，内置 `read_document` 自动解析
-- **定时触发** — EventBridge Scheduler cron / rate 表达式定时调用 Agent，执行历史可查
+- **定时触发** — 可视化 Schedule builder（每 N 分钟 / 每小时 / 每天 / 每周 / 每月 / 自定义 cron），含人类可读描述与下 5 次触发预览；每次执行记录为卡片，点击弹出运行详情（输入、输出、附件、span 树）
 - **Agent 互调** — `link_agent` 把另一个 Agent 挂为 tool，走 A2A 协议 + 自动配密钥
 - **Marketplace** — Agent / Skill / Tool 发布 + 克隆（元数据跨 workspace 可见，源码隔离）
 - **多 Workspace + RBAC** — switcher + 成员邀请 + 四级角色 + ownership 转让
@@ -76,10 +76,10 @@ API 密钥 SHA-256 hash 存 `agent-studio-a2a-keys` DDB 表，每用户每 Agent
 四级角色：**viewer**（只读）/ **editor**（改配置 + 部署）/ **admin**（管成员）/ **owner**（唯一，可转让）。切 workspace 自动清 chat 历史避免跨域幻影。
 
 ### Agent Detail Page
-`/agents/{id}` 左侧 sticky 导航 + 右侧滚动内容，scroll-spy 高亮，IntersectionObserver lazy-mount。Sections：Deployments / Schedules / Logs / Traces / Evaluations / Costs / Secrets / Integration / Endpoints。viewer 只读，editor+ 可 Edit。Section 选中持久化到 sessionStorage（按 agentId）。
+`/agents/{id}` 左侧 sticky 导航 + 右侧滚动内容，scroll-spy 高亮，IntersectionObserver lazy-mount。Sections：Schedules / Costs / Integration + Advanced 组（Deployments / Endpoints / Secrets / Logs）。Schedules 行展开后显示最近 20 条执行（卡片形式，带状态 / 耗时 / tokens / 触发源），点击任一卡片弹出运行详情 modal（metrics / input / output / tool calls / attachments / span tree），底部"加载更多"按 `nextToken` 翻页。viewer 只读，editor+ 可 Edit。
 
-### Sandbox
-`run_command` 跑 AgentCore Code Interpreter，`fetch_webpage` 跑 AgentCore Browser。账户级共享资源经 `scripts/provision-agentcore-shared.sh` provision，ID 通过 env vars 传到 Sub-Agent。
+### Sandbox + Browser
+每个 Sub-Agent 默认内置两个沙箱工具：`run_command`（Code Interpreter，支持 python / js / ts / shell，session 复用 1h）和 `browser_use`（navigate / click / fill / eval / screenshot，CDP over WebSocket，session 复用 1h）。`fetch_webpage` 作为轻量 HTML scraper 保留在 tools_library 里按需引入。账户级共享资源经 `scripts/provision-agentcore-shared.sh` provision，ID 通过 env vars 传到 Sub-Agent。
 
 ## 项目结构
 
@@ -120,7 +120,7 @@ An agent orchestration platform on AWS Bedrock AgentCore. Create, deploy, and ru
 - **Hot-swappable Skills** — AgentSkills.io format, lazy-loaded at runtime, shared across agents.
 - **MCP toolbelt** — 49 AWS-official MCP targets across 14 service categories, direct-connect.
 - **Multimodal input** — Images + PDF / Excel / CSV / TSV via built-in `read_document`.
-- **Scheduled triggers** — EventBridge Scheduler cron/rate, with execution history.
+- **Scheduled triggers** — Visual schedule builder (every-N-minutes / hourly / daily / weekly / monthly / custom cron) with plain-English descriptions and the next 5 fire times previewed. Each execution is a card; click to pop a run-detail modal with inputs, outputs, attachments, and span tree.
 - **Agent-as-tool** — `link_agent` mounts one agent as another's tool over A2A, keys auto-provisioned.
 - **Marketplace** — Publish and clone agents / skills / tools; metadata visible across workspaces, source stays private until cloned.
 - **Multi-workspace + RBAC** — Switcher, invitations, viewer/editor/admin/owner, ownership transfer.
@@ -184,10 +184,10 @@ API keys are SHA-256-hashed in the `agent-studio-a2a-keys` DDB table, scoped per
 Four roles: **viewer** (read-only), **editor** (config + deploy), **admin** (manage members), **owner** (single, transferable). Workspace switching clears chat history to avoid cross-workspace phantoms.
 
 ### Agent Detail Page
-`/agents/{id}` is a sticky side-nav + scrolling content layout with scroll-spy highlighting and IntersectionObserver lazy-mount. Sections: Deployments / Schedules / Logs / Traces / Evaluations / Costs / Secrets / Integration / Endpoints. Viewers read-only; editor+ gets Edit. Section selection is persisted per agentId in sessionStorage.
+`/agents/{id}` is a sticky side-nav + scrolling content layout with scroll-spy highlighting and IntersectionObserver lazy-mount. Sections: Schedules / Costs / Integration + an Advanced group (Deployments / Endpoints / Secrets / Logs). Expanding a schedule row lists its most recent 20 runs as cards (status / duration / tokens / trigger source); clicking one pops a run-detail modal with metrics, input, output, tool calls, attachments, and span tree, with a Load-more button that pages via `nextToken`. Viewers read-only; editor+ gets Edit.
 
-### Sandbox
-`run_command` runs in AgentCore Code Interpreter, `fetch_webpage` in AgentCore Browser. Account-shared sandbox resources are provisioned once via `scripts/provision-agentcore-shared.sh`; their IDs reach sub-agents via env vars.
+### Sandbox + Browser
+Every sub-agent ships with two built-in sandbox tools: `run_command` (Code Interpreter — python / js / ts / shell, 1h warm session) and `browser_use` (navigate / click / fill / eval / screenshot over CDP WebSocket, 1h warm session). `fetch_webpage` remains available in tools_library as a lightweight HTML scraper. Account-shared sandbox resources are provisioned once via `scripts/provision-agentcore-shared.sh`; their IDs reach sub-agents via env vars.
 
 ## Project Structure
 
