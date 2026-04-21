@@ -10,6 +10,8 @@ import { Invoke } from "./constructs/invoke";
 import { Cdn } from "./constructs/cdn";
 import { AgentCoreShared } from "./constructs/agentcore-shared";
 import { A2aProxy } from "./constructs/a2a-proxy";
+import { BaseDeployment } from "./constructs/base-deployment";
+import * as path from "path";
 
 export interface AgentStudioStackProps extends cdk.StackProps {
   config: AgentStudioConfig;
@@ -36,6 +38,13 @@ export class AgentStudioStack extends cdk.Stack {
       region: config.region,
       accountId: config.accountId,
       s3Bucket: config.s3Bucket,
+    });
+
+    // Upload base/deployment.zip — the shared dependency layer every
+    // sub-agent downloads. Build with: bash scripts/build-base-zip.sh
+    new BaseDeployment(this, "BaseDeployment", {
+      targetBucket: config.s3Bucket,
+      zipPath: path.resolve(__dirname, "../../base/deployment.zip"),
     });
 
     // Account-shared CodeInterpreter + Browser. Sub-agents' run_command and
