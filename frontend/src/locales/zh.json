@@ -164,6 +164,7 @@
   "runs": {
     "tab": "运行记录",
     "subtitle": "定时和手动执行记录",
+    "detailTitle": "运行详情",
     "empty": "暂无运行记录",
     "emptyHint": "创建定时任务或点击「立即运行」后，结果会显示在这里。",
     "selectHint": "选择一条记录查看详情",
@@ -1006,6 +1007,7 @@
       "empty": "暂无执行记录。",
       "loading": "正在加载执行记录…",
       "loadError": "加载执行记录失败。",
+      "loadMore": "加载更多",
       "statusSuccess": "成功",
       "statusFailure": "失败",
       "statusRunning": "运行中",

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   listRuns,
   getRun,
@@ -8,10 +8,23 @@ import {
   type RunOutput,
 } from "../lib/runs-client";
 
-export function useRunList(agentId: string | null) {
+interface UseRunListOptions {
+  scheduleId?: string;
+  limit?: number;
+}
+
+/**
+ * List runs for an agent, optionally filtered by scheduleId. Returns
+ * the first page on mount/refresh; call `loadMore()` to append the next
+ * page. `hasMore` reflects whether the backend returned a `nextToken`.
+ */
+export function useRunList(agentId: string | null, options: UseRunListOptions = {}) {
+  const { scheduleId, limit = 20 } = options;
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [cursor, setCursor] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const mountedRef = useRef(true);
 
@@ -21,10 +34,11 @@ export function useRunList(agentId: string | null) {
     if (!agentId) return;
     let cancelled = false;
     setLoading(true);
-    listRuns(agentId)
+    listRuns(agentId, { limit, scheduleId })
       .then((r) => {
         if (!cancelled && mountedRef.current) {
           setRuns(r.runs);
+          setCursor(r.nextToken ?? null);
           setError(null);
         }
       })
@@ -35,13 +49,32 @@ export function useRunList(agentId: string | null) {
         if (!cancelled && mountedRef.current) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [agentId, tick]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentId, scheduleId, limit, tick]);
+
+  const loadMore = useCallback(async () => {
+    if (!agentId || !cursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const r = await listRuns(agentId, { limit, scheduleId, cursor });
+      if (!mountedRef.current) return;
+      setRuns((prev) => [...(prev ?? []), ...r.runs]);
+      setCursor(r.nextToken ?? null);
+    } catch (err) {
+      if (mountedRef.current) setError(err as Error);
+    } finally {
+      if (mountedRef.current) setLoadingMore(false);
+    }
+  }, [agentId, cursor, loadingMore, limit, scheduleId]);
 
   return {
     runs,
     error,
     loading,
+    loadingMore,
+    hasMore: cursor !== null,
     refresh: () => setTick((t) => t + 1),
+    loadMore,
   };
 }
 

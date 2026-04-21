@@ -8,8 +8,6 @@ import {
   ScrollText,
   Network,
   KeyRound,
-
-  Activity,
   DollarSign,
   Share2,
   Clock,
@@ -21,7 +19,6 @@ import LogsTab from "../agents/LogsTab";
 import EndpointsTab from "../agents/EndpointsTab";
 import SecretsTab from "../agents/SecretsTab";
 
-import RunsTab from "../agents/RunsTab";
 import AgentCostsSection from "../agents/AgentCostsSection";
 import IntegrationTab from "../agents/IntegrationTab";
 import SchedulesTab from "../agents/SchedulesTab";
@@ -30,8 +27,6 @@ import DetailSideNav, { type NavEntry } from "../agents/DetailSideNav";
 import LazySection from "../agents/LazySection";
 import { useScrollSpy } from "../../hooks/useScrollSpy";
 
-const RUNS_SECTION_ID = "runs-section";
-
 export default function AgentDetailPage() {
   const { agentId, runId: routeRunId } = useParams();
   const navigate = useNavigate();
@@ -39,12 +34,10 @@ export default function AgentDetailPage() {
   const { currentWorkspace } = useWorkspaceStore();
   const [agent, setAgent] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<Error | null>(null);
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(routeRunId ?? null);
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
 
   const navItems: NavEntry[] = useMemo(
     () => [
-      { id: RUNS_SECTION_ID, label: t("runs.tab"), icon: <Activity className="w-3.5 h-3.5" /> },
       { id: "schedules-section", label: t("schedules.title"), icon: <Clock className="w-3.5 h-3.5" /> },
 
       { id: "costs-section", label: t("costs.title"), icon: <DollarSign className="w-3.5 h-3.5" /> },
@@ -86,27 +79,12 @@ export default function AgentDetailPage() {
     setActiveId(id);
   };
 
-  const handleRunSelected = (runId: string) => {
-    if (!agentId) return;
-    if (runId === routeRunId) return;
-    navigate(`/agents/${agentId}/runs/${encodeURIComponent(runId)}`);
-  };
-
-  const scrollToRuns = (runId: string) => {
-    setSelectedRunId(runId);
-    handleRunSelected(runId);
-  };
-
   useEffect(() => {
     if (!agentId) return;
     fetchAgent(agentId)
       .then((data) => setAgent(data as Record<string, unknown>))
       .catch((err) => setError(err as Error));
   }, [agentId]);
-
-  useEffect(() => {
-    if (routeRunId) setSelectedRunId(routeRunId);
-  }, [routeRunId]);
 
   if (error) {
     return (
@@ -200,29 +178,16 @@ export default function AgentDetailPage() {
             <div className="flex-1 min-w-0 space-y-8">
               {agentId && (
                 <LazySection
-                  id={RUNS_SECTION_ID}
-                  testId="runs-section"
-                  rootRef={scrollRootRef}
-                  minHeight={400}
-                  // Eager so deep-links and "View trace" from Schedules
-                  // land on real content (not a placeholder that hydrates
-                  // after the jump and shifts the scroll target).
-                  eager
-                >
-                  <RunsTab
-                    agentId={agentId}
-                    initialRunId={selectedRunId}
-                    onSelect={handleRunSelected}
-                  />
-                </LazySection>
-              )}
-              {agentId && (
-                <LazySection
                   id="schedules-section"
                   testId="schedules-section"
                   rootRef={scrollRootRef}
+                  minHeight={400}
+                  // Eager so deep-links (/agents/:id/runs/:runId) land on
+                  // hydrated content and the run modal can open without a
+                  // layout shift.
+                  eager
                 >
-                  <SchedulesTab agentId={agentId} onViewTrace={scrollToRuns} />
+                  <SchedulesTab agentId={agentId} initialRunId={routeRunId ?? null} />
                 </LazySection>
               )}
               {agentId && (

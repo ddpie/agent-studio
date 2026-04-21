@@ -43,9 +43,22 @@ export interface RunDetail {
   completedAt: string | null;
 }
 
-export async function listRuns(agentId: string, limit = 50): Promise<{ runs: RunSummary[]; nextToken?: string }> {
+export interface ListRunsOptions {
+  limit?: number;
+  scheduleId?: string;
+  cursor?: string;
+}
+
+export async function listRuns(
+  agentId: string,
+  options: ListRunsOptions = {},
+): Promise<{ runs: RunSummary[]; nextToken?: string }> {
+  const params = new URLSearchParams();
+  params.set("limit", String(options.limit ?? 20));
+  if (options.scheduleId) params.set("scheduleId", options.scheduleId);
+  if (options.cursor) params.set("nextToken", options.cursor);
   return apiGet<{ runs: RunSummary[]; nextToken?: string }>(
-    `/agents/${encodeURIComponent(agentId)}/runs?limit=${limit}`
+    `/agents/${encodeURIComponent(agentId)}/runs?${params.toString()}`,
   );
 }
 

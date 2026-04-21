@@ -164,6 +164,7 @@
   "runs": {
     "tab": "Runs",
     "subtitle": "Scheduled & manual executions",
+    "detailTitle": "Run detail",
     "empty": "No runs yet",
     "emptyHint": "Schedule a task or use Run Now to see results here.",
     "selectHint": "Select a run to view details",
@@ -1006,6 +1007,7 @@
       "empty": "No runs yet.",
       "loading": "Loading runs…",
       "loadError": "Failed to load runs.",
+      "loadMore": "Load more",
       "statusSuccess": "Success",
       "statusFailure": "Failure",
       "statusRunning": "Running",
