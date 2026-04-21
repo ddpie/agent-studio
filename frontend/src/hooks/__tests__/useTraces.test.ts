@@ -44,7 +44,10 @@ describe("useSessionTrace", () => {
     );
     expect(getSessionTrace).not.toHaveBeenCalled();
     rerender({ sid: "s-abc" });
-    await waitFor(() => expect(result.current.root?.spanId).toBe("r"));
+    // useSessionTrace delays its first poll by 10s to avoid spamming
+    // the API while CloudWatch is still ingesting spans; bump the
+    // wait window so the first attempt lands inside this test.
+    await waitFor(() => expect(result.current.root?.spanId).toBe("r"), { timeout: 12_000 });
     expect(getSessionTrace).toHaveBeenCalledWith("agt-1", "s-abc");
-  });
+  }, 15_000);
 });
