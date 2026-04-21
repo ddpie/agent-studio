@@ -320,7 +320,8 @@ def _redeploy_source(source_id: str, meta: dict) -> str:
     package = build_deployment_package_v2(main_py, tools_py, prompt_txt, config_json)
     s3_key = upload_deployment(source_id, package)
 
-    control = boto3.client("bedrock-agentcore-control", region_name=REGION)
+    from config import get_control_client
+    control = get_control_client()
     control.update_agent_runtime(
         agentRuntimeId=source_id,
         roleArn=AGENT_ROLE_ARN,

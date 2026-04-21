@@ -267,7 +267,8 @@ def upload_deployment(agent_id_or_name: str, package: bytes) -> str:
 
 def create_runtime(agent_name: str, description: str, s3_key: str, role_arn: str = AGENT_ROLE_ARN) -> dict:
     """Create an AgentCore Runtime. Returns {agent_id, agent_arn}."""
-    control = boto3.client("bedrock-agentcore-control", region_name=REGION)
+    from config import get_control_client
+    control = get_control_client()
 
     resp = control.create_agent_runtime(
         agentRuntimeName=agent_name,
@@ -346,6 +347,7 @@ def invoke_runtime(agent_id: str, prompt: str) -> str:
 
 def delete_runtime(agent_id: str):
     """Delete an agent runtime."""
-    control = boto3.client("bedrock-agentcore-control", region_name=REGION)
+    from config import get_control_client
+    control = get_control_client()
     control.delete_agent_runtime(agentRuntimeId=agent_id)
 

@@ -45,6 +45,30 @@ DEFAULT_PERMISSION_TIER = "readonly"
 CODE_INTERPRETER_ID = os.environ.get("AGENT_STUDIO_CODE_INTERPRETER_ID", "")
 BROWSER_ID = os.environ.get("AGENT_STUDIO_BROWSER_ID", "")
 
+
+def get_control_client():
+    """bedrock-agentcore-control client that can iam:PassRole.
+
+    AgentCore injects platform credentials (AmazonBedrockAgentCoreSDKRuntime)
+    into the runtime container — those don't carry iam:PassRole. For
+    create/update/delete runtime calls we assume our own MetaAgent role
+    which has that permission.
+    """
+    import boto3 as _b
+    sts = _b.client("sts", region_name=REGION)
+    creds = sts.assume_role(
+        RoleArn=AGENT_ROLE_ARN,
+        RoleSessionName="meta-agent-control",
+        DurationSeconds=900,
+    )["Credentials"]
+    return _b.client(
+        "bedrock-agentcore-control",
+        region_name=REGION,
+        aws_access_key_id=creds["AccessKeyId"],
+        aws_secret_access_key=creds["SecretAccessKey"],
+        aws_session_token=creds["SessionToken"],
+    )
+
 MCP_GATEWAY_URL = os.getenv("MCP_GATEWAY_URL", "")
 if not MCP_GATEWAY_URL:
     try:
