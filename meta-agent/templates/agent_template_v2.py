@@ -26,7 +26,7 @@ from pathlib import Path
 from strands import Agent
 from strands.models import BedrockModel
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
-from stream_utils import _stream_with_tools, _build_input
+from stream_utils import _stream_with_tools, _build_input, _stream_and_record
 
 app = BedrockAgentCoreApp()
 
@@ -62,7 +62,7 @@ async def invoke(payload, context):
     agent = Agent(
         model=BedrockModel(model_id=model_id),
         system_prompt=prompt,
-        tools=_ALL_TOOLS + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document],
+        tools=_ALL_TOOLS + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use],
     )
     async for chunk in _stream_and_record(agent, payload):
         yield chunk
@@ -93,7 +93,7 @@ from strands.models import BedrockModel
 from strands.tools.mcp import MCPClient
 from mcp.client.streamable_http import streamablehttp_client
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
-from stream_utils import _stream_with_tools, _build_input
+from stream_utils import _stream_with_tools, _build_input, _stream_and_record
 import boto3
 import httpx
 from botocore.auth import SigV4Auth
@@ -223,7 +223,7 @@ async def invoke(payload, context):
         agent = Agent(
             model=BedrockModel(model_id=model_id),
             system_prompt=prompt,
-            tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document],
+            tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use],
         )
         async for chunk in _stream_and_record(agent, payload):
             yield chunk
@@ -381,8 +381,8 @@ import re as _re
 import time as _time
 
 _RUNS_TABLE = _os.environ.get("AGENT_STUDIO_RUNS_TABLE", "")
-_S3_BUCKET = _os.environ.get("AGENT_STUDIO_S3_BUCKET", "")
 _REGION = _os.environ.get("AWS_REGION", _os.environ.get("AGENT_STUDIO_REGION", "us-east-1"))
+_S3_BUCKET = _os.environ.get("AGENT_STUDIO_S3_BUCKET", "")
 _AGENT_ID = ""
 # Parse agent id from OTEL_RESOURCE_ATTRIBUTES: "service.name=<id>,..."
 for _kv in _os.environ.get("OTEL_RESOURCE_ATTRIBUTES", "").split(","):
@@ -1059,4 +1059,200 @@ def read_document(file_key: str) -> str:
         return _doc_truncate(body)
     except Exception as e:
         return f"Error: unexpected failure while extracting document text: {e}"
+
+
+# ── Browser CDP helpers (shared by browser_use) ──────────────────────────
+_browser_cdp_id_counter = [0]
+
+
+def _browser_cdp_session():
+    """Return an open (session_id, ws) pair, reusing across calls.
+
+    Reconnects transparently if the stored WebSocket is dead. Session
+    timeout is 1h; Agent Core will auto-recycle the browser session on
+    expiry.
+    """
+    import websocket  # websocket-client
+
+    session_id = getattr(browser_use, "_session_id", None)
+    ws = getattr(browser_use, "_ws", None)
+    if session_id and ws:
+        return session_id, ws
+
+    br_id = _os.environ.get("AGENT_STUDIO_BROWSER_ID")
+    if not br_id:
+        raise RuntimeError("AGENT_STUDIO_BROWSER_ID not configured")
+    client = _boto3.client("bedrock-agentcore", region_name=_REGION)
+    sess = client.start_browser_session(
+        browserIdentifier=br_id,
+        name="agentstudio-browser-use",
+        sessionTimeoutSeconds=3600,
+        viewPort={"width": 1280, "height": 800},
+    )
+    cdp = sess["streams"]["automationStream"]["streamEndpoint"]
+    w = websocket.create_connection(cdp, timeout=30)
+    browser_use._session_id = sess["sessionId"]
+    browser_use._ws = w
+    return sess["sessionId"], w
+
+
+def _browser_cdp_send(ws, method, params=None):
+    """Send a CDP command and wait for the matching response."""
+    _browser_cdp_id_counter[0] += 1
+    mid = _browser_cdp_id_counter[0]
+    ws.send(_json.dumps({"id": mid, "method": method, "params": params or {}}))
+    while True:
+        data = _json.loads(ws.recv())
+        if data.get("id") == mid:
+            return data
+
+
+@_tool
+def browser_use(action: str, url: str = "", selector: str = "",
+                value: str = "", expression: str = "",
+                wait_ms: int = 2000) -> str:
+    """Interact with a managed headless Chrome via AgentCore Browser.
+
+    Use this when a task requires navigating real web pages: login flows,
+    clicking buttons, filling forms, evaluating JavaScript, or capturing a
+    screenshot. For a static HTML scrape, fetch_webpage (if loaded) is
+    cheaper. Session is warm for 1h across calls.
+
+    Args:
+        action: One of "navigate", "text", "screenshot", "click", "fill",
+            "eval".
+        url: Target URL for "navigate" (http/https only).
+        selector: CSS selector for "click" / "fill".
+        value: Input value for "fill".
+        expression: JavaScript expression for "eval" (returnByValue=true).
+        wait_ms: Extra wait after navigate/click before reading back, in ms.
+            Default 2000.
+
+    Returns:
+        "navigate"   → "OK: navigated to <url>"
+        "text"       → body.innerText (truncated to 8000 chars)
+        "screenshot" → S3 download marker (auto-uploaded PNG)
+        "click"      → "OK: clicked <selector>" or an error string
+        "fill"       → "OK: filled <selector>" or an error string
+        "eval"       → JSON-encoded result of the expression
+    """
+    import time as _time2
+    import base64 as _base64
+    if action not in ("navigate", "text", "screenshot", "click", "fill", "eval"):
+        return _json.dumps({"error": f"unknown action: {action}"})
+    if action == "navigate":
+        if not url or not url.startswith(("http://", "https://")):
+            return _json.dumps({"error": "navigate requires http(s) url"})
+
+    try:
+        _sid, ws = _browser_cdp_session()
+    except Exception as e:
+        return _json.dumps({"error": f"start_browser_session failed: {e}"})
+
+    def _do():
+        if action == "navigate":
+            _browser_cdp_send(ws, "Page.enable")
+            _browser_cdp_send(ws, "Page.navigate", {"url": url})
+            _time2.sleep(max(0, wait_ms) / 1000.0)
+            return f"OK: navigated to {url}"
+
+        if action == "text":
+            resp = _browser_cdp_send(ws, "Runtime.evaluate", {
+                "expression": "document.body ? document.body.innerText : ''",
+                "returnByValue": True,
+            })
+            text = ((resp.get("result") or {}).get("result") or {}).get("value") or ""
+            import re as _re2
+            text = _re2.sub(r"\\n{3,}", "\\n\\n", text)
+            text = _re2.sub(r" {2,}", " ", text).strip()
+            if len(text) > 8000:
+                text = text[:8000] + "\\n\\n... (truncated at 8000 chars)"
+            return text
+
+        if action == "eval":
+            if not expression:
+                return _json.dumps({"error": "eval requires expression"})
+            resp = _browser_cdp_send(ws, "Runtime.evaluate", {
+                "expression": expression,
+                "returnByValue": True,
+                "awaitPromise": True,
+            })
+            r = (resp.get("result") or {}).get("result") or {}
+            if "value" in r:
+                return _json.dumps({"value": r["value"]})
+            return _json.dumps({"value": None, "type": r.get("type")})
+
+        if action == "click":
+            if not selector:
+                return _json.dumps({"error": "click requires selector"})
+            expr = (
+                "(() => { const el = document.querySelector(" + _json.dumps(selector) + "); "
+                "if (!el) return 'not_found'; el.click(); return 'ok'; })()"
+            )
+            resp = _browser_cdp_send(ws, "Runtime.evaluate", {
+                "expression": expr, "returnByValue": True,
+            })
+            outcome = ((resp.get("result") or {}).get("result") or {}).get("value")
+            _time2.sleep(max(0, wait_ms) / 1000.0)
+            if outcome == "ok":
+                return f"OK: clicked {selector}"
+            return _json.dumps({"error": f"click failed: {outcome}"})
+
+        if action == "fill":
+            if not selector:
+                return _json.dumps({"error": "fill requires selector"})
+            expr = (
+                "(() => { const el = document.querySelector(" + _json.dumps(selector) + "); "
+                "if (!el) return 'not_found'; el.focus(); "
+                "el.value = " + _json.dumps(value) + "; "
+                "el.dispatchEvent(new Event('input', {bubbles:true})); "
+                "el.dispatchEvent(new Event('change', {bubbles:true})); "
+                "return 'ok'; })()"
+            )
+            resp = _browser_cdp_send(ws, "Runtime.evaluate", {
+                "expression": expr, "returnByValue": True,
+            })
+            outcome = ((resp.get("result") or {}).get("result") or {}).get("value")
+            if outcome == "ok":
+                return f"OK: filled {selector}"
+            return _json.dumps({"error": f"fill failed: {outcome}"})
+
+        # screenshot
+        resp = _browser_cdp_send(ws, "Page.captureScreenshot", {"format": "png"})
+        b64 = (resp.get("result") or {}).get("data")
+        if not b64:
+            return _json.dumps({"error": "screenshot returned no data"})
+        import uuid as _uuid2
+        s3_key = f"outputs/{_uuid2.uuid4().hex[:12]}_screenshot.png"
+        try:
+            _s3.put_object(
+                Bucket=_S3_BUCKET, Key=s3_key,
+                Body=_base64.b64decode(b64),
+                ContentType="image/png",
+                ContentDisposition='attachment; filename="screenshot.png"',
+            )
+        except Exception as e:
+            return _json.dumps({"error": f"s3 upload failed: {e}"})
+        return (
+            "Screenshot captured. Include this download link in your response:\\n"
+            f"__S3_DOWNLOAD__:{s3_key}:screenshot.png"
+        )
+
+    try:
+        return _do()
+    except Exception:
+        # Session likely expired / ws dropped — reconnect once.
+        try:
+            try:
+                ws.close()
+            except Exception:
+                pass
+            browser_use._session_id = None
+            browser_use._ws = None
+            _sid, ws = _browser_cdp_session()
+            return _do()
+        except Exception as e:
+            browser_use._session_id = None
+            browser_use._ws = None
+            return _json.dumps({"error": f"browser_use failed: {e}"})
 '''

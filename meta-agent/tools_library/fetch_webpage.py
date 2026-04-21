@@ -33,27 +33,31 @@ def fetch_webpage(url: str, max_length: int = 8000) -> str:
     region = os.environ.get("AGENT_STUDIO_REGION", "us-east-1")
     client = boto3.client("bedrock-agentcore", region_name=region)
 
-    try:
-        sess = client.start_browser_session(
+    # Reuse an existing CDP connection across calls — start_browser_session
+    # costs ~500ms-1.5s per call, which dominates latency for fast fetches.
+    # Session stays warm for 1h; if the ws drops we transparently reopen.
+    session_id = getattr(fetch_webpage, "_session_id", None)
+    ws = getattr(fetch_webpage, "_ws", None)
+
+    def _start_new():
+        s = client.start_browser_session(
             browserIdentifier=browser_id,
             name="agentstudio-fetch",
-            sessionTimeoutSeconds=180,
+            sessionTimeoutSeconds=3600,
             viewPort={"width": 1280, "height": 800},
         )
-    except Exception as e:
-        return f"Error: start_browser_session failed: {e}"
+        w = websocket.create_connection(
+            s["streams"]["automationStream"]["streamEndpoint"], timeout=30
+        )
+        fetch_webpage._session_id = s["sessionId"]
+        fetch_webpage._ws = w
+        return s["sessionId"], w
 
-    session_id = sess["sessionId"]
-    cdp_url = sess["streams"]["automationStream"]["streamEndpoint"]
-
-    try:
-        ws = websocket.create_connection(cdp_url, timeout=30)
-    except Exception as e:
+    if session_id is None or ws is None:
         try:
-            client.stop_browser_session(browserIdentifier=browser_id, sessionId=session_id)
-        except Exception:
-            pass
-        return f"Error: CDP connect failed: {e}"
+            session_id, ws = _start_new()
+        except Exception as e:
+            return f"Error: start_browser_session failed: {e}"
 
     def _send(method, params=None, _id=[1]):
         msg_id = _id[0]
@@ -65,8 +69,7 @@ def fetch_webpage(url: str, max_length: int = 8000) -> str:
             if data.get("id") == msg_id:
                 return data
 
-    try:
-        _send("Target.getTargets")
+    def _run():
         _send("Page.enable")
         _send("Page.navigate", {"url": url})
         time.sleep(3)
@@ -75,18 +78,27 @@ def fetch_webpage(url: str, max_length: int = 8000) -> str:
             "returnByValue": True,
             "awaitPromise": False,
         })
-        text = ((resp.get("result") or {}).get("result") or {}).get("value") or ""
-    except Exception as e:
-        text = f"Error: CDP interaction failed: {e}"
-    finally:
+        return ((resp.get("result") or {}).get("result") or {}).get("value") or ""
+
+    try:
+        text = _run()
+    except Exception:
+        # Session likely expired / ws dropped — rebuild once.
         try:
-            ws.close()
-        except Exception:
-            pass
-        try:
-            client.stop_browser_session(browserIdentifier=browser_id, sessionId=session_id)
-        except Exception:
-            pass
+            try:
+                ws.close()
+            except Exception:
+                pass
+            try:
+                client.stop_browser_session(browserIdentifier=browser_id, sessionId=session_id)
+            except Exception:
+                pass
+            session_id, ws = _start_new()
+            text = _run()
+        except Exception as e:
+            fetch_webpage._session_id = None
+            fetch_webpage._ws = None
+            return f"Error: CDP interaction failed: {e}"
 
     import re
     text = re.sub(r"\\n{3,}", "\\n\\n", text)
