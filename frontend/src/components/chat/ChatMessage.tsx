@@ -162,29 +162,45 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
               seen.add(key);
               return true;
             });
+            const isImage = (name: string) =>
+              /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(name);
+            const images = unique.filter(([, , name]) => isImage(name));
+            const files = unique.filter(([, , name]) => !isImage(name));
             return (
-              <div className="flex flex-wrap gap-2 mt-3">
-                {unique.map(([, key, filename], i) => (
-                  <button
-                    key={i}
-                    onClick={async () => {
-                      try {
-                        const url = await generateDownloadUrl(key);
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = filename;
-                        a.click();
-                      } catch (err) {
-                        console.error("Download failed:", err);
-                      }
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    {filename}
-                  </button>
-                ))}
-              </div>
+              <>
+                {images.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {images.map(([, key, filename], i) => {
+                      const s3Url = `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/${key}`;
+                      return <ImageLightbox key={`img-${i}`} src={s3Url} alt={filename} />;
+                    })}
+                  </div>
+                )}
+                {files.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {files.map(([, key, filename], i) => (
+                      <button
+                        key={`file-${i}`}
+                        onClick={async () => {
+                          try {
+                            const url = await generateDownloadUrl(key);
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = filename;
+                            a.click();
+                          } catch (err) {
+                            console.error("Download failed:", err);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        {filename}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
             );
           })()}
           </>
