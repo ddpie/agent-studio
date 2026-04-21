@@ -961,6 +961,36 @@
     "runNow": "Run now",
     "runNowSuccess": "Triggered {{name}} — opening trace…",
     "runNowFailed": "Failed to run schedule",
+    "modes": {
+      "minutes": "Every N minutes",
+      "hourly": "Hourly",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "advanced": "Advanced"
+    },
+    "builder": {
+      "every": "Every",
+      "minutes": "minutes",
+      "hours": "hours",
+      "days": "days",
+      "at": "at",
+      "atMinute": "at minute",
+      "pastTheHour": "past the hour",
+      "onDay": "on day",
+      "expression": "Expression",
+      "inPlainEnglish": "In plain English",
+      "nextRuns": "Next 5 runs",
+      "weekdayShort": {
+        "0": "Sun",
+        "1": "Mon",
+        "2": "Tue",
+        "3": "Wed",
+        "4": "Thu",
+        "5": "Fri",
+        "6": "Sat"
+      }
+    },
     "errors": {
       "nameFormat": "Name must contain only letters, digits, '_' or '-'.",
       "cronFormat": "Expression must be cron(...) or rate(N minute|hour|day).",

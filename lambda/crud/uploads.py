@@ -567,7 +567,8 @@ def clone_public_agent(agentId: str):
         "agentId": new_id,
         "workspace_id": dst_ws_id,
         "name": new_name,
-        "display_name": src.get("display_name", "") or src.get("name", ""),
+        "display_name": src.get("display_name", "") or src.get("displayName", "") or src.get("name", ""),
+        "displayName": src.get("displayName", "") or src.get("display_name", "") or src.get("name", ""),
         "description": src.get("description", ""),
         "model_id": src.get("model_id", ""),
         "default_model_id": src.get("default_model_id", ""),
@@ -576,8 +577,8 @@ def clone_public_agent(agentId: str):
         "welcome_message": src.get("welcome_message", ""),
         "suggestions": src.get("suggestions", []),
         "tool_names": src.get("tool_names", []),
-        "skill_ids": [],   # skills are per-workspace; user re-attaches after clone
-        "skills": [],
+        "skills": src.get("skills", []),
+        "skill_ids": [s.get("id", "") for s in src.get("skills", []) if isinstance(s, dict)] if src.get("skills") else [],
         "mcp_targets": src.get("mcp_targets", []),
         "status": "active",
         "visibility": "private",
@@ -587,6 +588,32 @@ def clone_public_agent(agentId: str):
         "updated_at": now,
     }
     table.put_item(Item=item)
+
+    # Copy S3 artifacts (metadata, prompt, tool code, skills) so the clone
+    # can be deployed without re-configuring from scratch via Meta-Agent.
+    s3 = _get_s3()
+    src_prefix = f"agents/{agentId}/"
+    dst_prefix = f"agents/{new_id}/"
+    try:
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=ASSETS_BUCKET, Prefix=src_prefix):
+            for obj in page.get("Contents", []):
+                src_key = obj["Key"]
+                # Skip deployment.zip — clone must be (re-)deployed via Meta-Agent.
+                # Skip assistant-history and staging — session-specific.
+                rel = src_key[len(src_prefix):]
+                if rel.startswith("deployment.zip") or rel.startswith("assistant-history") or rel.startswith("staging"):
+                    continue
+                dst_key = dst_prefix + rel
+                s3.copy_object(
+                    Bucket=ASSETS_BUCKET,
+                    CopySource={"Bucket": ASSETS_BUCKET, "Key": src_key},
+                    Key=dst_key,
+                )
+    except Exception as e:
+        logger.warning("S3 artifact copy failed during agent clone (agent record still created)",
+                       extra={"src": agentId, "dst": new_id, "error": str(e)})
+
     return success({"agentId": new_id, "name": new_name, "workspace_id": dst_ws_id}, status_code=201)
 
 

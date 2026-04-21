@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Plus,
@@ -27,6 +27,16 @@ import {
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import { toast } from "../../lib/toast";
 import ConfirmDialog from "../ui/ConfirmDialog";
+import cronstrue from "cronstrue";
+import "cronstrue/locales/zh_CN";
+import {
+  buildExpression,
+  parseExpression,
+  nextOccurrences,
+  formatLocalShort,
+  type ScheduleMode,
+  type ScheduleSpec,
+} from "../../lib/cron-builder";
 
 interface Props {
   agentId: string;
@@ -491,16 +501,30 @@ function ScheduleModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const isEdit = !!existing;
   const [name, setName] = useState(existing?.suffix || "");
-  const [cron, setCron] = useState(existing?.cron || "cron(0 9 * * ? *)");
+  const initialSpec = useMemo<ScheduleSpec>(
+    () => (existing?.cron ? parseExpression(existing.cron) : { mode: "daily", minute: 0, hour: 9 }),
+    [existing?.cron],
+  );
+  const [spec, setSpec] = useState<ScheduleSpec>(initialSpec);
+  const cron = useMemo(() => buildExpression(spec), [spec]);
   const [prompt, setPrompt] = useState(existing?.prompt || "");
   const [state, setState] = useState<"ENABLED" | "DISABLED">(
     (existing?.state as "ENABLED" | "DISABLED") || "ENABLED"
   );
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const nextRuns = useMemo(() => {
+    if (!cron || !isValidCron(cron)) return [];
+    try {
+      return nextOccurrences(cron, 5);
+    } catch {
+      return [];
+    }
+  }, [cron]);
 
   const nameErr = !isEdit && name && !SUFFIX_RE.test(name)
     ? t("schedules.errors.nameFormat")
@@ -588,23 +612,15 @@ function ScheduleModal({
             </div>
             {nameErr && <div className="text-xs text-red-600 dark:text-red-400 mt-1">{nameErr}</div>}
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1" htmlFor="sched-cron">
-              {t("schedules.cronLabel")}
-            </label>
-            <input
-              id="sched-cron"
-              data-testid="sched-cron-input"
-              type="text"
-              value={cron}
-              onChange={(e) => setCron(e.target.value)}
-              className="w-full text-sm font-mono px-2 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100"
-            />
-            <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
-              {t("schedules.cronHint")}
-            </div>
-            {cronErr && <div className="text-xs text-red-600 dark:text-red-400 mt-1">{cronErr}</div>}
-          </div>
+          <ScheduleBuilder
+            spec={spec}
+            onChange={setSpec}
+            cron={cron}
+            nextRuns={nextRuns}
+            cronErr={cronErr}
+            locale={i18n.language}
+          />
+          {cronErr && <div className="text-xs text-red-600 dark:text-red-400 mt-1">{cronErr}</div>}
           <div>
             <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1" htmlFor="sched-prompt">
               {t("schedules.promptLabel")}
@@ -677,4 +693,314 @@ function ScheduleModal({
       </div>
     </div>
   );
+}
+
+
+// ─── Schedule Builder ────────────────────────────────────────────────
+
+const MODE_OPTIONS: ScheduleMode[] = ["minutes", "hourly", "daily", "weekly", "monthly", "advanced"];
+
+function ScheduleBuilder({
+  spec,
+  onChange,
+  cron,
+  nextRuns,
+  cronErr,
+  locale,
+}: {
+  spec: ScheduleSpec;
+  onChange: (s: ScheduleSpec) => void;
+  cron: string;
+  nextRuns: Date[];
+  cronErr: string | null;
+  locale: string;
+}) {
+  const { t } = useTranslation();
+  const zh = locale.startsWith("zh");
+
+  const humanReadable = useMemo(() => {
+    if (!cron || cronErr) return "";
+    // rate() is trivial — describe it ourselves.
+    const rate = cron.match(/^rate\(\s*(\d+)\s+(minute|minutes|hour|hours|day|days)\s*\)$/i);
+    if (rate) {
+      const n = rate[1];
+      const u = rate[2].toLowerCase();
+      if (zh) {
+        const zu = u.startsWith("hour") ? "小时" : u.startsWith("day") ? "天" : "分钟";
+        return `每 ${n} ${zu}`;
+      }
+      return `Every ${n} ${u}`;
+    }
+    try {
+      // cronstrue speaks 5-field + Quartz; AWS 6-field is compatible when
+      // we feed it as Quartz by keeping the `?` and dropping the trailing
+      // year token. `throwExceptionOnParseError: false` returns an error
+      // string inline instead of throwing, which we then suppress.
+      const body = cron.replace(/^cron\(|\)$/g, "").trim();
+      const parts = body.split(/\s+/);
+      const quartz = parts.length === 6 ? parts.slice(0, 5).join(" ") : body;
+      const desc = cronstrue.toString(quartz, {
+        locale: zh ? "zh_CN" : "en",
+        use24HourTimeFormat: true,
+        throwExceptionOnParseError: false,
+      });
+      if (desc && !/error|expression/i.test(desc.split(":")[0])) return desc;
+      return "";
+    } catch {
+      return "";
+    }
+  }, [cron, cronErr, zh]);
+
+  return (
+    <div>
+      <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">
+        {t("schedules.cronLabel")}
+      </label>
+
+      {/* Mode tabs */}
+      <div className="flex flex-wrap gap-1 mb-2" role="tablist">
+        {MODE_OPTIONS.map((m) => (
+          <button
+            key={m}
+            type="button"
+            data-testid={`sched-mode-${m}`}
+            onClick={() => onChange(switchMode(m, spec))}
+            className={`text-[11px] px-2.5 py-1 rounded-md border transition-colors ${
+              spec.mode === m
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+            }`}
+          >
+            {t(`schedules.modes.${m}`)}
+          </button>
+        ))}
+      </div>
+
+      {/* Mode-specific controls */}
+      <div className="rounded-md border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 p-3">
+        {spec.mode === "minutes" && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-gray-600 dark:text-gray-300">{t("schedules.builder.every")}</span>
+            <input
+              type="number"
+              min={1}
+              max={999}
+              value={spec.rateValue ?? 5}
+              onChange={(e) => onChange({ ...spec, rateValue: Number(e.target.value) || 1 })}
+              data-testid="sched-rate-value"
+              className="w-16 px-2 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100"
+            />
+            <select
+              value={spec.rateUnit ?? "minutes"}
+              onChange={(e) => onChange({ ...spec, rateUnit: e.target.value as ScheduleSpec["rateUnit"] })}
+              data-testid="sched-rate-unit"
+              className="px-2 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100"
+            >
+              <option value="minutes">{t("schedules.builder.minutes")}</option>
+              <option value="hours">{t("schedules.builder.hours")}</option>
+              <option value="days">{t("schedules.builder.days")}</option>
+            </select>
+          </div>
+        )}
+
+        {spec.mode === "hourly" && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-gray-600 dark:text-gray-300">{t("schedules.builder.atMinute")}</span>
+            <NumberInput
+              value={spec.minute ?? 0}
+              min={0}
+              max={59}
+              onChange={(v) => onChange({ ...spec, minute: v })}
+              testId="sched-minute"
+            />
+            <span className="text-gray-500 dark:text-gray-400">{t("schedules.builder.pastTheHour")}</span>
+          </div>
+        )}
+
+        {spec.mode === "daily" && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-gray-600 dark:text-gray-300">{t("schedules.builder.at")}</span>
+            <TimeInput
+              hour={spec.hour ?? 9}
+              minute={spec.minute ?? 0}
+              onChange={(h, m) => onChange({ ...spec, hour: h, minute: m })}
+            />
+            <span className="text-gray-500 dark:text-gray-400">UTC</span>
+          </div>
+        )}
+
+        {spec.mode === "weekly" && (
+          <div className="space-y-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-600 dark:text-gray-300">{t("schedules.builder.at")}</span>
+              <TimeInput
+                hour={spec.hour ?? 9}
+                minute={spec.minute ?? 0}
+                onChange={(h, m) => onChange({ ...spec, hour: h, minute: m })}
+              />
+              <span className="text-gray-500 dark:text-gray-400">UTC</span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {[0, 1, 2, 3, 4, 5, 6].map((d) => {
+                const active = (spec.weekdays ?? [1]).includes(d);
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    data-testid={`sched-weekday-${d}`}
+                    onClick={() => {
+                      const cur = new Set(spec.weekdays ?? [1]);
+                      if (cur.has(d)) cur.delete(d);
+                      else cur.add(d);
+                      onChange({ ...spec, weekdays: [...cur].sort((a, b) => a - b) });
+                    }}
+                    className={`w-9 h-7 text-[11px] rounded border ${
+                      active
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    }`}
+                  >
+                    {t(`schedules.builder.weekdayShort.${d}`)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {spec.mode === "monthly" && (
+          <div className="flex items-center gap-2 text-xs flex-wrap">
+            <span className="text-gray-600 dark:text-gray-300">{t("schedules.builder.onDay")}</span>
+            <NumberInput
+              value={spec.dayOfMonth ?? 1}
+              min={1}
+              max={31}
+              onChange={(v) => onChange({ ...spec, dayOfMonth: v })}
+              testId="sched-dom"
+            />
+            <span className="text-gray-600 dark:text-gray-300">{t("schedules.builder.at")}</span>
+            <TimeInput
+              hour={spec.hour ?? 9}
+              minute={spec.minute ?? 0}
+              onChange={(h, m) => onChange({ ...spec, hour: h, minute: m })}
+            />
+            <span className="text-gray-500 dark:text-gray-400">UTC</span>
+          </div>
+        )}
+
+        {spec.mode === "advanced" && (
+          <div className="space-y-1">
+            <input
+              type="text"
+              value={spec.raw ?? ""}
+              onChange={(e) => onChange({ mode: "advanced", raw: e.target.value })}
+              data-testid="sched-raw-input"
+              placeholder="cron(0 9 * * ? *) or rate(5 minutes)"
+              className="w-full text-xs font-mono px-2 py-1.5 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100"
+            />
+            <div className="text-[11px] text-gray-500 dark:text-gray-400">
+              {t("schedules.cronHint")}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Preview strip: expression + human-readable + next 5 runs */}
+      <div className="mt-2 space-y-1.5">
+        <div className="flex items-center gap-2 text-[11px]">
+          <span className="text-gray-500 dark:text-gray-400 w-20 shrink-0">{t("schedules.builder.expression")}</span>
+          <code className="flex-1 px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-mono text-gray-800 dark:text-gray-200 break-all">
+            {cron || "—"}
+          </code>
+        </div>
+        {humanReadable && !cronErr && (
+          <div className="flex items-start gap-2 text-[11px]">
+            <span className="text-gray-500 dark:text-gray-400 w-20 shrink-0 pt-0.5">{t("schedules.builder.inPlainEnglish")}</span>
+            <span className="flex-1 text-gray-700 dark:text-gray-300" data-testid="sched-human">{humanReadable}</span>
+          </div>
+        )}
+        {!cronErr && nextRuns.length > 0 && (
+          <div className="flex items-start gap-2 text-[11px]">
+            <span className="text-gray-500 dark:text-gray-400 w-20 shrink-0 pt-0.5">{t("schedules.builder.nextRuns")}</span>
+            <ul className="flex-1 space-y-0.5 text-gray-700 dark:text-gray-300" data-testid="sched-next-runs">
+              {nextRuns.map((d, i) => (
+                <li key={i} className="font-mono">
+                  {formatLocalShort(d)} <span className="text-gray-400 dark:text-gray-500">({localTzLabel()})</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function switchMode(mode: ScheduleMode, prev: ScheduleSpec): ScheduleSpec {
+  // Preserve hour/minute across compatible modes so switching preset
+  // doesn't throw away user's typed time.
+  const h = prev.hour ?? 9;
+  const m = prev.minute ?? 0;
+  switch (mode) {
+    case "minutes":
+      return { mode, rateValue: prev.rateValue ?? 5, rateUnit: prev.rateUnit ?? "minutes" };
+    case "hourly":
+      return { mode, minute: m };
+    case "daily":
+      return { mode, minute: m, hour: h };
+    case "weekly":
+      return { mode, minute: m, hour: h, weekdays: prev.weekdays ?? [1] };
+    case "monthly":
+      return { mode, minute: m, hour: h, dayOfMonth: prev.dayOfMonth ?? 1 };
+    case "advanced":
+      return { mode, raw: prev.raw ?? "" };
+  }
+}
+
+function NumberInput({
+  value, min, max, onChange, testId,
+}: { value: number; min: number; max: number; onChange: (v: number) => void; testId?: string }) {
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      value={value}
+      onChange={(e) => {
+        const v = Number(e.target.value);
+        if (Number.isNaN(v)) return;
+        onChange(Math.max(min, Math.min(max, v)));
+      }}
+      data-testid={testId}
+      className="w-14 px-2 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100"
+    />
+  );
+}
+
+function TimeInput({
+  hour, minute, onChange,
+}: { hour: number; minute: number; onChange: (h: number, m: number) => void }) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    <input
+      type="time"
+      value={`${pad(hour)}:${pad(minute)}`}
+      onChange={(e) => {
+        const [h, m] = e.target.value.split(":").map((x) => Number(x));
+        if (Number.isNaN(h) || Number.isNaN(m)) return;
+        onChange(h, m);
+      }}
+      data-testid="sched-time-input"
+      className="px-2 py-1 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-mono"
+    />
+  );
+}
+
+function localTzLabel(): string {
+  const offset = -new Date().getTimezoneOffset();
+  const sign = offset >= 0 ? "+" : "-";
+  const abs = Math.abs(offset);
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  return m ? `UTC${sign}${h}:${String(m).padStart(2, "0")}` : `UTC${sign}${h}`;
 }

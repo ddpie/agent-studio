@@ -961,6 +961,36 @@
     "runNow": "立即运行",
     "runNowSuccess": "已触发 {{name}} — 即将打开轨迹…",
     "runNowFailed": "运行调度失败",
+    "modes": {
+      "minutes": "每 N 分钟",
+      "hourly": "每小时",
+      "daily": "每天",
+      "weekly": "每周",
+      "monthly": "每月",
+      "advanced": "自定义"
+    },
+    "builder": {
+      "every": "每",
+      "minutes": "分钟",
+      "hours": "小时",
+      "days": "天",
+      "at": "在",
+      "atMinute": "第",
+      "pastTheHour": "分钟",
+      "onDay": "每月",
+      "expression": "表达式",
+      "inPlainEnglish": "人类可读",
+      "nextRuns": "下 5 次触发",
+      "weekdayShort": {
+        "0": "日",
+        "1": "一",
+        "2": "二",
+        "3": "三",
+        "4": "四",
+        "5": "五",
+        "6": "六"
+      }
+    },
     "errors": {
       "nameFormat": "名称只能包含字母、数字、下划线或连字符。",
       "cronFormat": "表达式必须为 cron(...) 或 rate(N minute|hour|day)。",

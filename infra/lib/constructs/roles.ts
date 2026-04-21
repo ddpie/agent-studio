@@ -59,6 +59,7 @@ export class AgentCoreRoles extends Construct {
           "bedrock-agentcore:InvokeAgentRuntime",
           "bedrock-agentcore:ListAgentRuntimes",
           "bedrock-agentcore:GetAgentRuntime",
+          "bedrock-agentcore:DeleteAgentRuntime",
         ],
         resources: [`arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*`],
       }),
