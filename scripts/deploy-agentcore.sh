@@ -179,7 +179,7 @@ if mode == "update":
     existing = control.get_agent_runtime(agentRuntimeId=agent_id)
     control.update_agent_runtime(
         agentRuntimeId=agent_id,
-        roleArn=existing["roleArn"],
+        roleArn=role_arn,
         networkConfiguration={"networkMode": existing["networkConfiguration"]["networkMode"]},
         agentRuntimeArtifact={
             "codeConfiguration": {
