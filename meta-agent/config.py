@@ -26,6 +26,12 @@ SCHEDULER_TARGET_ROLE_ARN = os.getenv(
     f"arn:aws:iam::{ACCOUNT_ID}:role/AgentStudioSchedulerTargetRole-{REGION}",
 )
 BASE_DEPLOYMENT_KEY = "base/deployment.zip"
+# Sub-agents use a fatter base layer that includes Playwright + strands-agents-tools
+# (for browser_use tool). Meta-Agent stays on the slim base to keep cold-start
+# inside the 30s AgentCore runtime init budget.
+SUB_AGENT_BASE_DEPLOYMENT_KEY = os.getenv(
+    "SUB_AGENT_BASE_DEPLOYMENT_KEY", "base/sub-agent-deployment.zip"
+)
 MODEL_ID = os.getenv("AGENT_STUDIO_MODEL_ID", "us.anthropic.claude-opus-4-7")
 AGENTS_TABLE = os.getenv("AGENT_STUDIO_AGENTS_TABLE", "agent-studio-agents")
 TOOLS_TABLE = os.getenv("AGENT_STUDIO_TOOLS_TABLE", "agent-studio-tools")

@@ -1,0 +1,13 @@
+# Sub-agent base layer — extends base/requirements.txt with browser automation
+# deps. Produces base/sub-agent-deployment.zip, uploaded via CDK to
+# s3://bucket/base/sub-agent-deployment.zip and consumed by deploy.py's
+# build_deployment_package_v2().
+#
+# Platform: manylinux2014_aarch64 + py3.10 (AgentCore runtime).
+
+-r requirements.txt
+
+# Browser automation via the official AgentCoreBrowser tool
+strands-agents-tools==0.5.0
+playwright==1.58.0
+nest-asyncio==1.6.0
