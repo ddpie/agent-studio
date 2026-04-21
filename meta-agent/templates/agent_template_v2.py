@@ -1111,21 +1111,24 @@ def _doc_truncate(text: str) -> str:
 
 @_tool
 def read_document(file_key: str) -> str:
-    """Read an uploaded document (PDF, xlsx, csv, tsv) from S3 and return its text content.
+    """Read an uploaded document from S3 and return its text content.
 
-    Prefer this over generic file readers when the user uploads a PDF, Excel workbook, or
-    tabular text file. Two key shapes are accepted:
+    Handles both binary documents (PDF, Excel, CSV, TSV) and plain-text
+    files (Markdown, JSON, YAML, log files, source code, etc.). Two key
+    shapes are accepted:
 
     * ``workspaces/<caller_ws>/storage/...`` — files stored in the caller's workspace.
     * ``uploads/attachments/<sessionId>/...`` — chat attachments uploaded from the UI
       (the session ID is an unguessable identifier produced client-side).
 
-    Any other prefix (including other workspaces) is rejected.
+    Any other prefix (including other workspaces) is rejected. Sub-agents
+    cannot fetch S3 over HTTPS (bucket rejects anonymous GETs); always
+    use this tool to read user-attached files.
 
     Args:
         file_key: Relative S3 key. Examples:
             ``workspaces/ws-abc/storage/uploads/u-xyz/report.pdf`` or
-            ``uploads/attachments/sess-123/report.pdf``.
+            ``uploads/attachments/sess-123/notes.md``.
 
     Returns:
         Plain text extracted from the document, or a short diagnostic string on error.
@@ -1162,8 +1165,19 @@ def read_document(file_key: str) -> str:
             "Cross-workspace reads are not allowed."
         )
 
-    # Resolve extension — case-insensitive
+    # Resolve kind — case-insensitive. Plain-text extensions fall through
+    # to a single UTF-8 decode branch so they share the S3 access path.
     lower = key.lower()
+    _PLAINTEXT_EXTS = (
+        ".md", ".markdown", ".txt", ".log",
+        ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".env",
+        ".xml", ".html", ".htm", ".css", ".svg",
+        ".py", ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs",
+        ".sh", ".bash", ".zsh", ".fish",
+        ".java", ".c", ".h", ".cpp", ".hpp", ".cs", ".go", ".rs", ".rb", ".php", ".kt", ".swift",
+        ".sql", ".graphql", ".proto",
+        ".dockerfile", ".gitignore", ".editorconfig",
+    )
     if lower.endswith(".pdf"):
         kind = "pdf"
     elif lower.endswith(".xlsx") or lower.endswith(".xlsm"):
@@ -1172,10 +1186,13 @@ def read_document(file_key: str) -> str:
         kind = "csv"
     elif lower.endswith(".tsv"):
         kind = "tsv"
+    elif any(lower.endswith(ext) for ext in _PLAINTEXT_EXTS):
+        kind = "text"
     else:
         return (
-            "Error: unsupported file type. read_document supports .pdf, .xlsx, .xlsm, "
-            ".csv, .tsv. For plain text use a different tool."
+            "Error: unsupported file type. read_document handles .pdf, .xlsx, .xlsm, "
+            ".csv, .tsv, and common plain-text formats (.md, .txt, .json, .yaml, "
+            ".log, source code, etc.)."
         )
 
     # Size check via HEAD before download
@@ -1203,6 +1220,17 @@ def read_document(file_key: str) -> str:
         )
 
     try:
+        if kind == "text":
+            # Try UTF-8 first, fall back to latin-1 so binary-ish log files
+            # still surface something useful instead of blowing up.
+            try:
+                body = data.decode("utf-8")
+            except UnicodeDecodeError:
+                body = data.decode("latin-1", errors="replace")
+            if not body.strip():
+                return "(File is empty.)"
+            return _doc_truncate(body)
+
         if kind == "pdf":
             import io as _io
             try:
