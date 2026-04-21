@@ -4,7 +4,6 @@ import { RefreshCw, Calendar, User } from "lucide-react";
 import { useRunList, useRunDetail } from "../../hooks/useRuns";
 import RunDetail from "./RunDetail";
 import TraceStatsStrip from "./TraceStatsStrip";
-import { formatDateTime } from "../../lib/date-format";
 import type { RunSummary } from "../../lib/runs-client";
 import type { TraceStatsRange } from "../../lib/api-client";
 
@@ -34,6 +33,7 @@ function scheduleSuffix(scheduleId: string | null): string | null {
 }
 
 function RunListItem({ run, selected, onSelect }: { run: RunSummary; selected: boolean; onSelect: () => void }) {
+  const { t } = useTranslation();
   const isError = run.status === "failed" || run.status === "timeout";
   const suffix = scheduleSuffix(run.scheduleId);
   return (
@@ -58,7 +58,7 @@ function RunListItem({ run, selected, onSelect }: { run: RunSummary; selected: b
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[10px] text-gray-500 dark:text-gray-400">
           <span className={`inline-flex items-center gap-1 ${isError ? "text-red-600 dark:text-red-400" : ""}`}>
             <span className={`inline-block w-1.5 h-1.5 rounded-full ${isError ? "bg-red-500" : run.status === "running" ? "bg-amber-500" : "bg-emerald-500"}`} />
-            {run.status}
+            {t(`runs.statusLabel.${run.status}`, run.status)}
           </span>
           {run.durationMs != null && <span>{run.durationMs < 1000 ? `${run.durationMs}ms` : `${(run.durationMs / 1000).toFixed(1)}s`}</span>}
           {run.totalTokens != null && <span>{run.totalTokens < 1000 ? `${run.totalTokens} tok` : `${(run.totalTokens / 1000).toFixed(1)}k tok`}</span>}
@@ -68,12 +68,12 @@ function RunListItem({ run, selected, onSelect }: { run: RunSummary; selected: b
           {run.trigger === "schedule" ? (
             <>
               <Calendar className="w-3 h-3" />
-              <span>{suffix ? `Schedule · ${suffix}` : "Schedule"}</span>
+              <span>{suffix ? `${t("runs.source.scheduled")} · ${suffix}` : t("runs.source.scheduled")}</span>
             </>
           ) : (
             <>
               <User className="w-3 h-3" />
-              <span>Manual</span>
+              <span>{t("runs.source.manual")}</span>
             </>
           )}
         </div>

@@ -115,7 +115,8 @@
     "configStatus": "评估配置当前状态：{{status}}。",
     "configFailed": "评估配置创建失败，请联系管理员排查。",
     "noDataTitle": "最近 7 天内暂无评估结果",
-    "noDataBody": "与此 Agent 进行一些对话以收集分数。每次调用后几分钟内会出现新的评估。"
+    "noDataBody": "与此 Agent 进行一些对话以收集分数。每次调用后几分钟内会出现新的评估。",
+    "spanMappingError": "评估器已执行但无法解析 Agent Span（AgentSpanMappingException）。这是 Strands SDK 与 AgentCore 的已知兼容性问题，上游修复发布后分数即可正常显示。"
   },
   "traces": {
     "tab": "追踪",
@@ -162,13 +163,35 @@
   },
   "runs": {
     "tab": "运行记录",
-    "subtitle": "最近的执行，按时间倒序",
+    "subtitle": "定时和手动执行记录",
+    "empty": "暂无运行记录",
+    "emptyHint": "创建定时任务或点击「立即运行」后，结果会显示在这里。",
+    "selectHint": "选择一条记录查看详情",
+    "model": "模型",
+    "tokens": "Token",
+    "latency": "延迟",
+    "status": "状态",
+    "input": "输入",
+    "output": "输出",
+    "error": "错误",
+    "toolCalls": "工具调用",
+    "toolInput": "输入",
+    "toolOutput": "输出",
+    "attachments": "附件",
+    "spanTree": "Span 树",
+    "spansPending": "Span 数据正在采集中...",
+    "startedAt": "开始时间",
+    "completedAt": "完成时间",
     "source": {
       "scheduled": "定时",
-      "manual": "手动",
-      "chat": "聊天"
+      "manual": "手动"
     },
-    "openRun": "查看运行"
+    "statusLabel": {
+      "running": "运行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "timeout": "超时"
+    }
   },
   "agentDetail": {
     "title": "{{name}}",

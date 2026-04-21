@@ -18,7 +18,7 @@ REGION="${AGENT_STUDIO_REGION:?AGENT_STUDIO_REGION is required}"
 ACCOUNT_ID="${AGENT_STUDIO_ACCOUNT_ID:?AGENT_STUDIO_ACCOUNT_ID is required}"
 BUCKET="${AGENT_STUDIO_S3_BUCKET:?AGENT_STUDIO_S3_BUCKET is required}"
 META_AGENT_ID="${AGENT_STUDIO_META_AGENT_ID:-}"
-ROLE_ARN="${AGENT_STUDIO_ROLE_ARN:-arn:aws:iam::${ACCOUNT_ID}:role/AgentStudioSubAgentRole-${REGION}}"
+ROLE_ARN="${AGENT_STUDIO_ROLE_ARN:-arn:aws:iam::${ACCOUNT_ID}:role/AgentStudioMetaAgent-${REGION}}"
 
 echo "=== Agent Studio Deploy ==="
 echo "Region:  $REGION"
@@ -116,7 +116,7 @@ region = os.environ["AGENT_STUDIO_REGION"]
 bucket = os.environ["AGENT_STUDIO_S3_BUCKET"]
 agent_id = os.environ.get("AGENT_STUDIO_META_AGENT_ID", "")
 role_arn = os.environ.get("AGENT_STUDIO_ROLE_ARN",
-    f"arn:aws:iam::{os.environ['AGENT_STUDIO_ACCOUNT_ID']}:role/AgentStudioSubAgentRole-{region}")
+    f"arn:aws:iam::{os.environ['AGENT_STUDIO_ACCOUNT_ID']}:role/AgentStudioMetaAgent-{region}")
 
 control = boto3.client("bedrock-agentcore-control", region_name=region)
 

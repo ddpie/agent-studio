@@ -95,15 +95,6 @@ export default function AgentDetailPage() {
   const scrollToRuns = (runId: string) => {
     setSelectedRunId(runId);
     handleRunSelected(runId);
-    requestAnimationFrame(() => {
-      const el = document.getElementById(RUNS_SECTION_ID);
-      const root = scrollRootRef.current;
-      if (el && root) {
-        const topWithin =
-          el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop - 8;
-        root.scrollTo({ top: topWithin, behavior: "smooth" });
-      }
-    });
   };
 
   useEffect(() => {

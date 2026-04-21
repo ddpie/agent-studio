@@ -440,7 +440,7 @@ def _write_run_started(agent_id, run_id, session_id, payload):
         import sys
         print(f"WARNING: failed to write run started: {e}", file=sys.stderr)
 
-def _write_run_completed(agent_id, run_id, chunks, usage=None):
+def _write_run_completed(agent_id, run_id, chunks, duration_ms=None, usage=None, model_id=None):
     if not _RUNS_TABLE:
         return
     try:
@@ -492,10 +492,22 @@ def _write_run_completed(agent_id, run_id, chunks, usage=None):
             ":oref": output_key,
             ":arefs": artifact_refs,
         }
+        expr_names = {"#st": "status"}
+        if duration_ms is not None:
+            update_expr += ", durationMs = :dur"
+            expr_values[":dur"] = duration_ms
+        if usage:
+            update_expr += ", promptTokens = :pt, completionTokens = :ct, totalTokens = :tt"
+            expr_values[":pt"] = usage.get("promptTokens", 0)
+            expr_values[":ct"] = usage.get("completionTokens", 0)
+            expr_values[":tt"] = usage.get("totalTokens", 0)
+        if model_id:
+            update_expr += ", model = :mdl"
+            expr_values[":mdl"] = model_id
         table.update_item(
             Key={"agentId": agent_id, "runId": run_id},
             UpdateExpression=update_expr,
-            ExpressionAttributeNames={"#st": "status"},
+            ExpressionAttributeNames=expr_names,
             ExpressionAttributeValues=expr_values,
         )
     except Exception as e:
@@ -534,11 +546,26 @@ async def _stream_and_record(agent, payload):
     run_id = _generate_ulid()
     _write_run_started(_AGENT_ID, run_id, session_id, payload)
     chunks = []
+    start_ns = _time.time_ns()
     try:
         async for chunk in _stream_with_tools(agent, _build_input(payload)):
             chunks.append(chunk)
             yield chunk
-        _write_run_completed(_AGENT_ID, run_id, chunks)
+        duration_ms = int((_time.time_ns() - start_ns) / 1_000_000)
+        usage = None
+        model_id = None
+        try:
+            m = agent.event_loop_metrics.accumulated_usage
+            usage = {"promptTokens": m.get("inputTokens", 0), "completionTokens": m.get("outputTokens", 0), "totalTokens": m.get("totalTokens", 0)}
+        except Exception:
+            pass
+        try:
+            model_id = getattr(agent.model, "model_id", None) or (agent.model.config.get("model_id") if hasattr(agent.model, "config") else None)
+            if not model_id:
+                model_id = MODEL_ID
+        except Exception:
+            model_id = MODEL_ID
+        _write_run_completed(_AGENT_ID, run_id, chunks, duration_ms=duration_ms, usage=usage, model_id=model_id)
     except Exception as e:
         _write_run_failed(_AGENT_ID, run_id, e)
         raise
@@ -1073,6 +1100,8 @@ def _browser_cdp_session():
     expiry.
     """
     import websocket  # websocket-client
+    from botocore.auth import SigV4Auth
+    from botocore.awsrequest import AWSRequest
 
     session_id = getattr(browser_use, "_session_id", None)
     ws = getattr(browser_use, "_ws", None)
@@ -1082,7 +1111,8 @@ def _browser_cdp_session():
     br_id = _os.environ.get("AGENT_STUDIO_BROWSER_ID")
     if not br_id:
         raise RuntimeError("AGENT_STUDIO_BROWSER_ID not configured")
-    client = _boto3.client("bedrock-agentcore", region_name=_REGION)
+    boto_session = _boto3.Session(region_name=_REGION)
+    client = boto_session.client("bedrock-agentcore", region_name=_REGION)
     sess = client.start_browser_session(
         browserIdentifier=br_id,
         name="agentstudio-browser-use",
@@ -1090,7 +1120,16 @@ def _browser_cdp_session():
         viewPort={"width": 1280, "height": 800},
     )
     cdp = sess["streams"]["automationStream"]["streamEndpoint"]
-    w = websocket.create_connection(cdp, timeout=30)
+    creds = boto_session.get_credentials().get_frozen_credentials()
+    https_url = cdp.replace("wss://", "https://")
+    host = cdp.split("/")[2]
+    req = AWSRequest(method="GET", url=https_url, headers={"host": host})
+    SigV4Auth(creds, "bedrock-agentcore", _REGION).add_auth(req)
+    auth_headers = [
+        f"{k}: {v}" for k, v in dict(req.headers).items()
+        if k in ("Authorization", "X-Amz-Date", "X-Amz-Security-Token", "Host")
+    ]
+    w = websocket.create_connection(cdp, timeout=30, header=auth_headers)
     browser_use._session_id = sess["sessionId"]
     browser_use._ws = w
     return sess["sessionId"], w

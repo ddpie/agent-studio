@@ -53,10 +53,19 @@ _SINCE_MIN = {
 
 _VALID_LEVELS = {"ALL", "ERROR", "WARN", "INFO"}
 
-# Matches messages that start with `[ERROR]` / `[WARN]` / `[INFO]` /
-# `[DEBUG]`. Agents emit this prefix via the stream_utils helpers; if a
-# message doesn't match, we leave `level` blank (UI shows a neutral badge).
-_LEVEL_PREFIX_RE = re.compile(r"^\s*\[(ERROR|WARN|WARNING|INFO|DEBUG)\]", re.IGNORECASE)
+# Match log level from multiple formats:
+#   [ERROR] ...             — bracket prefix
+#   2026-04-20 12:00:00,123 ERROR [...] ...  — Python logging
+#   ERROR: ...              — simple prefix
+#   WARNING: ...            — Python warnings module
+_LEVEL_RE = re.compile(
+    r"(?:"
+    r"^\s*\[(ERROR|WARN|WARNING|INFO|DEBUG)\]"       # [LEVEL]
+    r"|^\d{4}-\d{2}-\d{2}\s[\d:,]+\s+(ERROR|WARN|WARNING|INFO|DEBUG)\s"  # timestamp LEVEL
+    r"|^(ERROR|WARN|WARNING|INFO|DEBUG):\s"           # LEVEL:
+    r")",
+    re.IGNORECASE,
+)
 
 # Search term: keep simple — letters/digits/spaces/basic punctuation. This
 # is interpolated into the CloudWatch filter pattern so we reject anything
@@ -80,14 +89,13 @@ def _get_agent_item(agent_id: str) -> dict | None:
 
 
 def _parse_level(message: str) -> str:
-    """Extract `ERROR` / `WARN` / `INFO` / `DEBUG` from a leading `[LEVEL]`
-    prefix. Returns empty string when no prefix is present — the UI renders
-    a neutral badge in that case rather than guessing.
+    """Extract ERROR / WARN / INFO / DEBUG from multiple log formats.
+    Returns empty string when no level is found.
     """
-    m = _LEVEL_PREFIX_RE.match(message or "")
+    m = _LEVEL_RE.match(message or "")
     if not m:
         return ""
-    lvl = m.group(1).upper()
+    lvl = (m.group(1) or m.group(2) or m.group(3) or "").upper()
     return "WARN" if lvl == "WARNING" else lvl
 
 
@@ -102,18 +110,16 @@ def _truncate(message: str) -> str:
 def _build_filter_pattern(level: str, search: str) -> str:
     """CloudWatch filter pattern. Empty string = match everything.
 
-    We use the simple `"quoted text"` form for substring matching. When
-    both level and search are supplied we AND them via `?` logic — but
-    CloudWatch's basic pattern syntax can't AND literal substrings cleanly,
-    so we prefer a single filter (level OR search, not both). When both
-    are set, we apply the level filter in CloudWatch and do the search
-    in-process over the returned page — keeps this predictable.
+    Runtime logs use multiple formats (Python logging, bracket prefix,
+    plain prefix). We match all by searching for the bare level keyword
+    which appears in every format. When both level and search are set,
+    we apply the level filter in CloudWatch and do the search
+    in-process over the returned page.
     """
     if level and level != "ALL":
         if level == "WARN":
-            # Accept both `[WARN]` and `[WARNING]`.
-            return '?"[WARN]" ?"[WARNING]"'
-        return f'"[{level}]"'
+            return '?"WARN" ?"WARNING"'
+        return f'"{level}"'
     if search:
         return f'"{search}"'
     return ""

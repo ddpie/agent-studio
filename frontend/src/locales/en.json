@@ -115,7 +115,8 @@
     "configStatus": "Evaluator configuration is {{status}}.",
     "configFailed": "Evaluator configuration failed to provision. Contact an administrator to investigate.",
     "noDataTitle": "No evaluations in the last 7 days",
-    "noDataBody": "Run some conversations with this agent to collect scores. New evaluations show up within a few minutes after each invocation."
+    "noDataBody": "Run some conversations with this agent to collect scores. New evaluations show up within a few minutes after each invocation.",
+    "spanMappingError": "Evaluators ran but could not parse agent spans (AgentSpanMappingException). This is a known Strands SDK / AgentCore compatibility issue — scores will appear once the upstream fix is released."
   },
   "traces": {
     "tab": "Traces",
@@ -162,13 +163,35 @@
   },
   "runs": {
     "tab": "Runs",
-    "subtitle": "Recent invocations, newest first",
+    "subtitle": "Scheduled & manual executions",
+    "empty": "No runs yet",
+    "emptyHint": "Schedule a task or use Run Now to see results here.",
+    "selectHint": "Select a run to view details",
+    "model": "Model",
+    "tokens": "Tokens",
+    "latency": "Latency",
+    "status": "Status",
+    "input": "Input",
+    "output": "Output",
+    "error": "Error",
+    "toolCalls": "Tool Calls",
+    "toolInput": "Input",
+    "toolOutput": "Output",
+    "attachments": "Attachments",
+    "spanTree": "Span Tree",
+    "spansPending": "Spans are still being ingested...",
+    "startedAt": "Started",
+    "completedAt": "Completed",
     "source": {
       "scheduled": "Scheduled",
-      "manual": "Manual",
-      "chat": "Chat"
+      "manual": "Manual"
     },
-    "openRun": "Open run"
+    "statusLabel": {
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "timeout": "Timeout"
+    }
   },
   "agentDetail": {
     "title": "{{name}}",

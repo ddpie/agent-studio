@@ -4,16 +4,16 @@ import { apiGet } from "./api-client";
 
 export interface RunSummary {
   runId: string;
-  trigger: "schedule" | "manual" | "chat" | "a2a";
-  scheduleId?: string;
-  status: "running" | "success" | "failure";
-  input?: string;
-  model?: string;
-  totalTokens?: number;
-  durationMs?: number;
-  artifactCount?: number;
+  trigger: "schedule" | "manual";
+  scheduleId: string | null;
+  status: "running" | "completed" | "failed" | "timeout";
+  input: string;
+  model: string | null;
+  totalTokens: number | null;
+  durationMs: number | null;
+  artifactCount: number;
   startedAt: string;
-  completedAt?: string;
+  completedAt: string | null;
 }
 
 export interface RunArtifact {
@@ -21,45 +21,32 @@ export interface RunArtifact {
   filename: string;
 }
 
-export interface RunToolCall {
-  name: string;
-  input: unknown;
-  output: unknown;
-  status: string;
-  durationMs?: number;
-}
-
 export interface RunOutput {
   text: string;
-  toolCalls: RunToolCall[];
+  toolCalls: Array<{ name: string; input: string; output: string }>;
 }
 
 export interface RunDetail {
   runId: string;
-  trigger: "schedule" | "manual" | "chat" | "a2a";
-  scheduleId?: string;
-  sessionId?: string;
-  status: "running" | "success" | "failure";
-  input?: string;
-  outputUrl?: string;
-  artifactRefs?: RunArtifact[];
-  usage?: {
-    inputTokens?: number;
-    outputTokens?: number;
-    totalTokens?: number;
-  };
-  durationMs?: number;
-  model?: string;
-  error?: string;
+  trigger: "schedule" | "manual";
+  scheduleId: string | null;
+  sessionId: string | null;
+  status: "running" | "completed" | "failed" | "timeout";
+  input: string;
+  outputUrl: string | null;
+  artifactRefs: RunArtifact[];
+  usage: { promptTokens: number | null; completionTokens: number | null; totalTokens: number | null };
+  durationMs: number | null;
+  model: string | null;
+  error: { code: string; message: string } | null;
   startedAt: string;
-  completedAt?: string;
+  completedAt: string | null;
 }
 
-export async function listRuns(agentId: string, limit = 50): Promise<RunSummary[]> {
-  const resp = await apiGet<{ runs?: RunSummary[] }>(
+export async function listRuns(agentId: string, limit = 50): Promise<{ runs: RunSummary[]; nextToken?: string }> {
+  return apiGet<{ runs: RunSummary[]; nextToken?: string }>(
     `/agents/${encodeURIComponent(agentId)}/runs?limit=${limit}`
   );
-  return resp.runs ?? [];
 }
 
 export async function getRun(agentId: string, runId: string): Promise<RunDetail> {

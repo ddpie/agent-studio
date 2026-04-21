@@ -65,20 +65,27 @@ def test_eval_config_failure_does_not_block_workspace_create(mock_jwt, user_id, 
 
 
 def test_create_eval_config_idempotent():
-    """If eval config already exists (repeat workspace create on retry),
-    don't fail — detect existing and return its name."""
+    """ConflictException on create is handled gracefully; backfill runs."""
+    import importlib
+    import shared.config as _cfg
+    importlib.reload(_cfg)
+    import crud.evaluations as _ev
+    importlib.reload(_ev)
     from botocore.exceptions import ClientError
-    from crud.evaluations import create_eval_config_for_workspace
+    from crud.evaluations import create_eval_config_for_agent
 
-    with patch("crud.evaluations._get_control") as mock_c:
+    with patch("crud.evaluations._get_control") as mock_c, \
+         patch("crud.evaluations._ensure_runtime_log_group") as mock_backfill:
         client = MagicMock()
         client.create_online_evaluation_config.side_effect = ClientError(
             {"Error": {"Code": "ConflictException", "Message": "already exists"}},
             "CreateOnlineEvaluationConfig",
         )
         mock_c.return_value = client
-        name = create_eval_config_for_workspace(workspace_id="abc-123")
-    assert name.startswith("agentstudio_ws_")
+        name = create_eval_config_for_agent("abc-123", "myAgent-XYZ")
+    assert name.startswith("agentstudio_")
+    assert "myAgent" in name
+    mock_backfill.assert_called_once()
 
 
 def test_create_eval_config_no_role_returns_empty(monkeypatch):
@@ -141,8 +148,14 @@ def test_get_agent_evaluations_returns_scores(mock_jwt, user_id, workspace_id):
         ],
     }
 
+    fake_cfg = {
+        "onlineEvaluationConfigId": "cfg-test-ABC",
+        "onlineEvaluationConfigName": "agentstudio_test",
+    }
+
     with patch("crud.evaluations.auth_check") as auth, \
          patch("crud.evaluations._get_agent_item") as ga, \
+         patch("crud.evaluations._find_config_by_name", return_value=fake_cfg), \
          patch("crud.evaluations._get_logs", return_value=fake_logs):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}

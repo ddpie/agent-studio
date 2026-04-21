@@ -406,15 +406,8 @@ def validate_agent(
             if lib in _UNAVAILABLE_LIBS:
                 errors.append(f"Library '{lib}' is not available in the sandbox. Use MCP Gateway or a different approach.")
 
-        # 6. Readonly permission tier vs write operations
-        if permission_tier in ("basic", "readonly"):
-            write_matches = _WRITE_RE.findall(tool_definitions)
-            if write_matches:
-                unique = sorted(set(m.strip() for m in write_matches))
-                warnings.append(
-                    f"Agent has '{permission_tier}' permission but tool code contains write operations: "
-                    f"[{', '.join(unique[:5])}]. These may fail at runtime due to IAM restrictions."
-                )
+        # 6. (Removed) Previously checked readonly tier vs write operations.
+        # All sub-agents now use a unified role with sufficient permissions.
 
         # 7. Security patterns
         if "import os" in tool_definitions and ("os.system" in tool_definitions or "subprocess" in tool_definitions):

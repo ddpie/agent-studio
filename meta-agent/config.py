@@ -16,7 +16,7 @@ S3_BUCKET = os.getenv(
 )
 AGENT_ROLE_ARN = os.getenv(
     "AGENT_STUDIO_ROLE_ARN",
-    f"arn:aws:iam::{ACCOUNT_ID}:role/AgentStudioSubAgentRole-{REGION}",
+    f"arn:aws:iam::{ACCOUNT_ID}:role/AgentStudioMetaAgent-{REGION}",
 )
 # Dedicated role assumed by EventBridge Scheduler to invoke agent
 # runtimes. Trust policy MUST allow scheduler.amazonaws.com — the
@@ -30,11 +30,15 @@ MODEL_ID = os.getenv("AGENT_STUDIO_MODEL_ID", "us.anthropic.claude-opus-4-7")
 AGENTS_TABLE = os.getenv("AGENT_STUDIO_AGENTS_TABLE", "agent-studio-agents")
 TOOLS_TABLE = os.getenv("AGENT_STUDIO_TOOLS_TABLE", "agent-studio-tools")
 
-# Permission tier → IAM Role mapping
+# Sub-agent role — single unified role for all sub-agents
+SUB_AGENT_ROLE_ARN = f"arn:aws:iam::{ACCOUNT_ID}:role/AgentStudioSubAgent-{REGION}"
+
+# Legacy tier mapping — all tiers now resolve to the unified sub-agent role.
+# Kept for backward compat with existing agents that have permissionTier stored.
 PERMISSION_TIER_ROLES = {
-    "basic": f"arn:aws:iam::{ACCOUNT_ID}:role/AgentStudioSubAgent-basic-{REGION}",
-    "readonly": f"arn:aws:iam::{ACCOUNT_ID}:role/AgentStudioSubAgentRole-{REGION}",
-    "data-access": f"arn:aws:iam::{ACCOUNT_ID}:role/AgentStudioSubAgent-dataaccess-{REGION}",
+    "basic": SUB_AGENT_ROLE_ARN,
+    "readonly": SUB_AGENT_ROLE_ARN,
+    "data-access": SUB_AGENT_ROLE_ARN,
 }
 DEFAULT_PERMISSION_TIER = "readonly"
 
