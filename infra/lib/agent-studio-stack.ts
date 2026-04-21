@@ -40,11 +40,12 @@ export class AgentStudioStack extends cdk.Stack {
       s3Bucket: config.s3Bucket,
     });
 
-    // Upload base/deployment.zip — the shared dependency layer every
-    // sub-agent downloads. Build with: bash scripts/build-base-zip.sh
+    // Upload base/deployment.zip (Meta-Agent) + sub-agent-deployment.zip
+    // (sub-agents, includes Playwright). Build both with:
+    //   bash scripts/build-base-zip.sh
     new BaseDeployment(this, "BaseDeployment", {
       targetBucket: config.s3Bucket,
-      zipPath: path.resolve(__dirname, "../../base/deployment.zip"),
+      baseDir: path.resolve(__dirname, "../../base"),
     });
 
     // Account-shared CodeInterpreter + Browser. Sub-agents' run_command and

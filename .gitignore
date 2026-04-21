@@ -74,3 +74,5 @@ infra/.env
 # Base dependency layer (built artifact, not checked in)
 base/deployment.zip
 base/staged/
+base/sub-agent-deployment.zip
+base/staged-*/

@@ -6,29 +6,34 @@ import * as fs from "fs";
 import { Construct } from "constructs";
 
 export interface BaseDeploymentProps {
-  /** The bucket that sub-agents download base/deployment.zip from. */
+  /** The bucket that runtimes download base zips from. */
   targetBucket: s3.IBucket | string;
-  /** Absolute path to the pre-built deployment.zip on disk. */
-  zipPath: string;
+  /** Directory containing deployment.zip + sub-agent-deployment.zip. */
+  baseDir: string;
 }
 
 /**
- * Uploads base/deployment.zip (the shared sub-agent dependency layer)
- * to s3://{bucket}/base/deployment.zip.
+ * Uploads base/deployment.zip and base/sub-agent-deployment.zip to S3.
  *
- * The zip is NOT built by CDK — run `bash scripts/build-base-zip.sh`
- * first. CDK only manages the upload so the artifact is reproducible
- * across deployments and ties to stack lifecycle.
+ * - deployment.zip           : slim deps for Meta-Agent (cold-start < 30s)
+ * - sub-agent-deployment.zip : fat deps incl. Playwright for browser_use
+ *
+ * Zips are built out-of-band by scripts/build-base-zip.sh; CDK just
+ * uploads them via BucketDeployment so the upload is reproducible across
+ * new environments and tied to stack lifecycle.
  */
 export class BaseDeployment extends Construct {
   constructor(scope: Construct, id: string, props: BaseDeploymentProps) {
     super(scope, id);
 
-    if (!fs.existsSync(props.zipPath)) {
-      throw new Error(
-        `base/deployment.zip not found at ${props.zipPath}. ` +
-          `Run: bash scripts/build-base-zip.sh before cdk deploy.`,
-      );
+    const requiredZips = ["deployment.zip", "sub-agent-deployment.zip"];
+    for (const zip of requiredZips) {
+      const full = path.join(props.baseDir, zip);
+      if (!fs.existsSync(full)) {
+        throw new Error(
+          `${full} not found. Run: bash scripts/build-base-zip.sh before cdk deploy.`,
+        );
+      }
     }
 
     const bucket =
@@ -36,18 +41,20 @@ export class BaseDeployment extends Construct {
         ? s3.Bucket.fromBucketName(this, "TargetBucket", props.targetBucket)
         : props.targetBucket;
 
-    new s3deploy.BucketDeployment(this, "UploadBaseZip", {
+    new s3deploy.BucketDeployment(this, "UploadBaseZips", {
       sources: [
-        s3deploy.Source.asset(path.dirname(props.zipPath), {
-          // Only include deployment.zip from the directory
-          exclude: ["*", "!deployment.zip"],
+        s3deploy.Source.asset(props.baseDir, {
+          exclude: ["*", "!deployment.zip", "!sub-agent-deployment.zip"],
         }),
       ],
       destinationBucket: bucket,
       destinationKeyPrefix: "base",
       prune: false,
       retainOnDelete: true,
-      memoryLimit: 512,
+      // Sub-agent zip is ~100MB; the deploy Lambda's /tmp needs room
+      // to stage + unzip without running out of space.
+      memoryLimit: 1024,
+      ephemeralStorageSize: cdk.Size.mebibytes(2048),
     });
   }
 }

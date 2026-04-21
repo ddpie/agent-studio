@@ -8,7 +8,7 @@ import os
 import time
 import zipfile
 
-from config import REGION, ACCOUNT_ID, S3_BUCKET, AGENT_ROLE_ARN, BASE_DEPLOYMENT_KEY
+from config import REGION, ACCOUNT_ID, S3_BUCKET, AGENT_ROLE_ARN, BASE_DEPLOYMENT_KEY, SUB_AGENT_BASE_DEPLOYMENT_KEY
 
 
 def _shared_env_vars(agent_id: str = "") -> dict:
@@ -163,9 +163,16 @@ def build_deployment_package_v2(
 
     Files written: main.py, tools.py, prompt.txt, config.json
     stream_utils.py is expected to be in the base zip already.
+
+    Sub-agents use SUB_AGENT_BASE_DEPLOYMENT_KEY (fat zip with Playwright +
+    strands-agents-tools for browser_use). Falls back to BASE_DEPLOYMENT_KEY
+    if the fat zip is missing (e.g. in early dev environments).
     """
     s3 = boto3.client("s3", region_name=REGION)
-    base_resp = s3.get_object(Bucket=S3_BUCKET, Key=BASE_DEPLOYMENT_KEY)
+    try:
+        base_resp = s3.get_object(Bucket=S3_BUCKET, Key=SUB_AGENT_BASE_DEPLOYMENT_KEY)
+    except s3.exceptions.NoSuchKey:
+        base_resp = s3.get_object(Bucket=S3_BUCKET, Key=BASE_DEPLOYMENT_KEY)
     base_data = base_resp["Body"].read()
 
     agent_files = {"main.py", "tools.py", "prompt.txt", "config.json"}
