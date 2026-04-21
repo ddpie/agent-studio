@@ -60,9 +60,17 @@ body {
     margin-bottom: 0.4em;
     padding: 0.5em 0.75em;
     font-size: 0.85em;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  pre code {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
   }
   code {
     font-size: 0.85em;
+    overflow-wrap: anywhere;
   }
 
   blockquote {
@@ -104,6 +112,13 @@ body {
   }
   details.tool-call > *:not(summary) {
     padding: 0.3em 0.6em;
+  }
+  details.tool-call pre,
+  details.tool-call code {
+    max-width: 100%;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
   }
 }
 
