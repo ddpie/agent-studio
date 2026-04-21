@@ -1088,30 +1088,31 @@ def read_document(file_key: str) -> str:
         return f"Error: unexpected failure while extracting document text: {e}"
 
 
-# ── Browser (AgentCore Browser via official strands-agents-tools) ─────────
-# Use the official AgentCoreBrowser tool from strands-agents-tools. It wraps
-# async_playwright + nest_asyncio correctly, manages CDP session lifecycle,
-# and is the pattern demonstrated in AWS's AgentCore samples.
-_browser_tool_instance = None
+# ── Browser (async Playwright over AgentCore Browser CDP) ────────────────
+# Pattern follows AWS sample:
+# agentcore-samples/02-use-cases/enterprise-web-intelligence-agent/strands/browser_tools.py
+# — use async_playwright directly (not strands_tools.browser) with a single
+# persistent event loop + nest_asyncio, since Strands agents call sync tools
+# from inside an async event loop and strands_tools.browser's session dict
+# gets lost across calls in that setup.
+
+_browser_state = {"loop": None, "playwright": None, "browser": None, "page": None,
+                  "client": None, "session_id": None}
 
 
 def _ensure_playwright_driver_executable():
     """AgentCore extracts deployment.zip with Python zipfile which drops
     unix exec bits, AND /var/task is read-only so chmod fails in-place.
 
-    Fix: copy the `node` binary to /tmp (writable), chmod +x, then point
-    Playwright at it via PLAYWRIGHT_NODEJS_PATH. cli.js and the rest of
-    the driver dir only need read permission, which zipfile preserves.
+    Copy node to /tmp (writable), chmod +x, point Playwright at it via
+    PLAYWRIGHT_NODEJS_PATH. cli.js etc. only need read permission, which
+    zipfile preserves.
     """
     import shutil as _shutil
-    import stat as _stat
-
     src_node = "/var/task/playwright/driver/node"
     dst_node = "/tmp/playwright-node"
-
     if not _os.path.isfile(src_node):
-        return  # playwright not installed
-
+        return
     try:
         if not _os.path.isfile(dst_node):
             _shutil.copyfile(src_node, dst_node)
@@ -1122,15 +1123,78 @@ def _ensure_playwright_driver_executable():
         print(f"playwright driver prep failed: {_e}", file=_sys.stderr)
 
 
-def _get_browser_tool():
-    """Lazy init the official AgentCoreBrowser tool wrapper."""
-    global _browser_tool_instance
-    if _browser_tool_instance is not None:
-        return _browser_tool_instance
+def _run_async(coro):
+    """Run an async coroutine on our persistent event loop."""
+    import asyncio as _aio
+    loop = _browser_state["loop"]
+    if loop is None or loop.is_closed():
+        try:
+            import nest_asyncio as _nest
+            _nest.apply()
+        except Exception:
+            pass
+        loop = _aio.new_event_loop()
+        _aio.set_event_loop(loop)
+        _browser_state["loop"] = loop
+    return loop.run_until_complete(coro)
+
+
+async def _get_page_async():
+    """Ensure browser session is started and return the active Page."""
+    if _browser_state["page"] is not None:
+        try:
+            if not _browser_state["page"].is_closed():
+                return _browser_state["page"]
+        except Exception:
+            pass
+
     _ensure_playwright_driver_executable()
-    from strands_tools.browser.agent_core_browser import AgentCoreBrowser
-    _browser_tool_instance = AgentCoreBrowser(region=_REGION)
-    return _browser_tool_instance
+
+    br_id = _os.environ.get("AGENT_STUDIO_BROWSER_ID")
+    if not br_id:
+        raise RuntimeError("AGENT_STUDIO_BROWSER_ID not configured")
+
+    from bedrock_agentcore.tools.browser_client import BrowserClient
+    from playwright.async_api import async_playwright
+
+    client = BrowserClient(region=_REGION)
+    session_id = client.start(identifier=br_id, session_timeout_seconds=3600)
+
+    ws_url, headers = client.generate_ws_headers()
+
+    pw = await async_playwright().start()
+    browser = await pw.chromium.connect_over_cdp(ws_url, headers=headers)
+    context = browser.contexts[0] if browser.contexts else await browser.new_context()
+    page = context.pages[0] if context.pages else await context.new_page()
+
+    _browser_state.update({
+        "playwright": pw, "browser": browser, "page": page,
+        "client": client, "session_id": session_id,
+    })
+    return page
+
+
+async def _reset_browser_async():
+    """Close the current browser connection; next call will reconnect."""
+    for key, obj in (("browser", _browser_state.get("browser")),
+                     ("playwright", _browser_state.get("playwright"))):
+        if obj is None:
+            continue
+        try:
+            if key == "browser":
+                await obj.close()
+            else:
+                await obj.stop()
+        except Exception:
+            pass
+    client = _browser_state.get("client")
+    if client is not None:
+        try:
+            client.stop()
+        except Exception:
+            pass
+    _browser_state.update({"playwright": None, "browser": None,
+                           "page": None, "client": None, "session_id": None})
 
 
 @_tool
@@ -1141,18 +1205,15 @@ def browser_use(action: str, url: str = "", selector: str = "",
 
     Use this when a task requires navigating real web pages: login flows,
     clicking buttons, filling forms, evaluating JavaScript, or capturing a
-    screenshot. For a static HTML scrape, fetch_webpage (if loaded) is
-    cheaper. Session is warm for 1h across calls.
+    screenshot. Session is warm for 1h across calls.
 
     Args:
-        action: One of "navigate", "text", "screenshot", "click", "fill",
-            "eval".
+        action: One of "navigate", "text", "screenshot", "click", "fill", "eval".
         url: Target URL for "navigate" (http/https only).
         selector: CSS selector for "click" / "fill".
         value: Input value for "fill".
-        expression: JavaScript expression for "eval" (returnByValue=true).
+        expression: JavaScript expression for "eval".
         wait_ms: Extra wait after navigate/click before reading back, in ms.
-            Default 2000.
 
     Returns:
         "navigate"   → "OK: navigated to <url>"
@@ -1169,44 +1230,19 @@ def browser_use(action: str, url: str = "", selector: str = "",
         if not url or not url.startswith(("http://", "https://")):
             return _json.dumps({"error": "navigate requires http(s) url"})
 
-    try:
-        tool = _get_browser_tool()
-    except Exception as e:
-        return _json.dumps({"error": f"browser_use init failed: {e}"})
-
-    # Shared session across tool calls. strands_tools.browser manages
-    # lifecycle inside its own event loop via nest_asyncio.
-    session_name = getattr(browser_use, "_session_name", None)
-    if not session_name:
-        session_name = f"agentstudio-{_uuid2.uuid4().hex[:12]}"
-        browser_use._session_name = session_name
-
-    def _call(action_dict):
-        from strands_tools.browser.models import BrowserInput
-        return tool.browser(BrowserInput(**action_dict))
-
-    def _extract(res):
-        if isinstance(res, dict):
-            content = res.get("content") or []
-            if content and isinstance(content, list):
-                out = content[0]
-                if isinstance(out, dict) and "text" in out:
-                    return out["text"]
-            return _json.dumps(res)
-        return str(res)
-
-    def _do():
-        # Ensure session exists
-        _call({"action": {"type": "init_session", "session_name": session_name,
-                          "description": "Agent Studio browser session"}})
+    async def _do_async():
+        page = await _get_page_async()
+        timeout_ms = max(wait_ms, 15000)
 
         if action == "navigate":
-            res = _call({"action": {"type": "navigate", "session_name": session_name, "url": url}})
-            return _extract(res) or f"OK: navigated to {url}"
+            await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            return f"OK: navigated to {url}"
 
         if action == "text":
-            res = _call({"action": {"type": "get_text", "session_name": session_name}})
-            text = _extract(res) or ""
+            text = await page.inner_text("body")
+            import re as _re2
+            text = _re2.sub(r"\\n{3,}", "\\n\\n", text)
+            text = _re2.sub(r" {2,}", " ", text).strip()
             if len(text) > 8000:
                 text = text[:8000] + "\\n\\n... (truncated at 8000 chars)"
             return text
@@ -1214,32 +1250,35 @@ def browser_use(action: str, url: str = "", selector: str = "",
         if action == "eval":
             if not expression:
                 return _json.dumps({"error": "eval requires expression"})
-            res = _call({"action": {"type": "evaluate", "session_name": session_name, "script": expression}})
-            return _extract(res)
+            try:
+                result = await page.evaluate(expression)
+                return _json.dumps({"value": result})
+            except Exception as e:
+                return _json.dumps({"error": f"eval failed: {e}"})
 
         if action == "click":
             if not selector:
                 return _json.dumps({"error": "click requires selector"})
-            res = _call({"action": {"type": "click", "session_name": session_name, "selector": selector}})
-            return _extract(res)
+            try:
+                await page.click(selector, timeout=timeout_ms)
+                return f"OK: clicked {selector}"
+            except Exception as e:
+                return _json.dumps({"error": f"click failed: {e}"})
 
         if action == "fill":
             if not selector:
                 return _json.dumps({"error": "fill requires selector"})
-            res = _call({"action": {"type": "type", "session_name": session_name, "selector": selector, "text": value}})
-            return _extract(res)
+            try:
+                await page.fill(selector, value, timeout=timeout_ms)
+                return f"OK: filled {selector}"
+            except Exception as e:
+                return _json.dumps({"error": f"fill failed: {e}"})
 
         # screenshot
-        s3_key = f"outputs/{_uuid2.uuid4().hex[:12]}_screenshot.png"
-        local = f"/tmp/{_uuid2.uuid4().hex[:12]}_screenshot.png"
-        res = _call({"action": {"type": "screenshot", "session_name": session_name, "path": local}})
-        try:
-            with open(local, "rb") as _fp:
-                png_bytes = _fp.read()
-        except Exception as e:
-            return _json.dumps({"error": f"screenshot read failed: {e}"})
+        png_bytes = await page.screenshot(full_page=True, type="png")
         if not png_bytes:
-            return _json.dumps({"error": "screenshot empty"})
+            return _json.dumps({"error": "screenshot returned no data"})
+        s3_key = f"outputs/{_uuid2.uuid4().hex[:12]}_screenshot.png"
         try:
             _s3.put_object(
                 Bucket=_S3_BUCKET, Key=s3_key,
@@ -1255,12 +1294,14 @@ def browser_use(action: str, url: str = "", selector: str = "",
         )
 
     try:
-        return _do()
+        return _run_async(_do_async())
     except Exception as e:
-        # Retry once — connection may have dropped
-        browser_use._session_name = None
         try:
-            return _do()
+            _run_async(_reset_browser_async())
+        except Exception:
+            pass
+        try:
+            return _run_async(_do_async())
         except Exception as e2:
             return _json.dumps({"error": f"browser_use failed: {e2}"})
 '''
