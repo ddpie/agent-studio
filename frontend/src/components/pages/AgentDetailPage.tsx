@@ -8,7 +8,7 @@ import {
   ScrollText,
   Network,
   KeyRound,
-  ClipboardCheck,
+
   Activity,
   DollarSign,
   Share2,
@@ -20,7 +20,7 @@ import DeploymentsTab from "../agents/DeploymentsTab";
 import LogsTab from "../agents/LogsTab";
 import EndpointsTab from "../agents/EndpointsTab";
 import SecretsTab from "../agents/SecretsTab";
-import EvaluationsTab from "../agents/EvaluationsTab";
+
 import RunsTab from "../agents/RunsTab";
 import AgentCostsSection from "../agents/AgentCostsSection";
 import IntegrationTab from "../agents/IntegrationTab";
@@ -46,7 +46,7 @@ export default function AgentDetailPage() {
     () => [
       { id: RUNS_SECTION_ID, label: t("runs.tab"), icon: <Activity className="w-3.5 h-3.5" /> },
       { id: "schedules-section", label: t("schedules.title"), icon: <Clock className="w-3.5 h-3.5" /> },
-      { id: "evaluations-section", label: t("evaluations.tab"), icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
+
       { id: "costs-section", label: t("costs.title"), icon: <DollarSign className="w-3.5 h-3.5" /> },
       { id: "integration-section", label: t("integration.title"), icon: <Share2 className="w-3.5 h-3.5" /> },
       {
@@ -223,15 +223,6 @@ export default function AgentDetailPage() {
                   rootRef={scrollRootRef}
                 >
                   <SchedulesTab agentId={agentId} onViewTrace={scrollToRuns} />
-                </LazySection>
-              )}
-              {agentId && (
-                <LazySection
-                  id="evaluations-section"
-                  testId="evaluations-section"
-                  rootRef={scrollRootRef}
-                >
-                  <EvaluationsTab agentId={agentId} />
                 </LazySection>
               )}
               {agentId && (

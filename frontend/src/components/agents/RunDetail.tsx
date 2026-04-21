@@ -7,7 +7,11 @@ import { useSessionTrace } from "../../hooks/useTraces";
 import { generateDownloadUrl } from "../../lib/s3-storage";
 import { formatDateTime } from "../../lib/date-format";
 import SpanTree from "./SpanTree";
+import ImageLightbox from "../ui/ImageLightbox";
+import { agentConfig } from "../../config";
 import type { RunDetail as RunDetailType, RunOutput } from "../../lib/runs-client";
+
+const IMAGE_RE = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
 
 interface Props {
   agentId: string;
@@ -51,9 +55,10 @@ export default function RunDetail({ agentId, detail, output, loading }: Props) {
   };
 
 
-  const promptTokens = detail.usage?.promptTokens ?? null;
-  const completionTokens = detail.usage?.completionTokens ?? null;
-  const totalTokens = detail.usage?.totalTokens ?? null;
+  const promptTokens = detail.usage?.promptTokens != null ? Number(detail.usage.promptTokens) : null;
+  const completionTokens = detail.usage?.completionTokens != null ? Number(detail.usage.completionTokens) : null;
+  const totalTokens = detail.usage?.totalTokens != null ? Number(detail.usage.totalTokens) : null;
+  const durationMs = detail.durationMs != null ? Number(detail.durationMs) : null;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -73,7 +78,7 @@ export default function RunDetail({ agentId, detail, output, loading }: Props) {
           />
           <Metric
             label={t("runs.latency") || "Latency"}
-            value={detail.durationMs != null ? `${(detail.durationMs / 1000).toFixed(2)}s` : "—"}
+            value={durationMs != null ? `${(durationMs / 1000).toFixed(2)}s` : "—"}
           />
           <Metric label={t("runs.status") || "Status"} value={t(`runs.statusLabel.${detail.status}`, detail.status)} />
         </div>
@@ -123,60 +128,45 @@ export default function RunDetail({ agentId, detail, output, loading }: Props) {
           <div>
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t("runs.toolCalls") || "Tool Calls"}</h3>
             <div className="space-y-2">
-              {output.toolCalls.map((tool, idx) => {
-                const [expanded, setExpanded] = useState(false);
-                return (
-                  <div key={idx} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded overflow-hidden">
-                    <button
-                      onClick={() => setExpanded(!expanded)}
-                      className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        {expanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                        <span className="text-sm font-mono text-gray-800 dark:text-gray-200">{tool.name}</span>
-                      </div>
-                    </button>
-                    {expanded && (
-                      <div className="border-t border-gray-200 dark:border-gray-800 p-3 space-y-2">
-                        <div>
-                          <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">{t("runs.toolInput") || "Input"}</div>
-                          <pre className="text-xs bg-gray-50 dark:bg-gray-950 p-2 rounded overflow-x-auto text-gray-800 dark:text-gray-200">
-                            {typeof tool.input === "string" ? tool.input : JSON.stringify(tool.input, null, 2)}
-                          </pre>
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">{t("runs.toolOutput") || "Output"}</div>
-                          <pre className="text-xs bg-gray-50 dark:bg-gray-950 p-2 rounded overflow-x-auto text-gray-800 dark:text-gray-200">
-                            {JSON.stringify(tool.output, null, 2)}
-                          </pre>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {output.toolCalls.map((tool, idx) => (
+                <ToolCallItem key={idx} tool={tool} />
+              ))}
             </div>
           </div>
         )}
 
         {/* Attachments */}
-        {detail.artifactRefs && detail.artifactRefs.length > 0 && (
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t("runs.attachments") || "Attachments"}</h3>
-            <div className="flex flex-wrap gap-2">
-              {detail.artifactRefs.map((artifact, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleDownload(artifact.key, artifact.filename)}
-                  className="flex items-center gap-2 px-3 py-2 rounded border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm"
-                >
-                  <Download className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                  <span className="text-gray-800 dark:text-gray-200">{artifact.filename}</span>
-                </button>
-              ))}
+        {detail.artifactRefs && detail.artifactRefs.length > 0 && (() => {
+          const images = detail.artifactRefs.filter((a) => IMAGE_RE.test(a.filename));
+          const files = detail.artifactRefs.filter((a) => !IMAGE_RE.test(a.filename));
+          return (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">{t("runs.attachments") || "Attachments"}</h3>
+              {images.length > 0 && (
+                <div className="flex flex-wrap gap-3 mb-3">
+                  {images.map((artifact, idx) => {
+                    const s3Url = `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/${artifact.key}`;
+                    return <ImageLightbox key={`img-${idx}`} src={s3Url} alt={artifact.filename} />;
+                  })}
+                </div>
+              )}
+              {files.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {files.map((artifact, idx) => (
+                    <button
+                      key={`file-${idx}`}
+                      onClick={() => handleDownload(artifact.key, artifact.filename)}
+                      className="flex items-center gap-2 px-3 py-2 rounded border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm"
+                    >
+                      <Download className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                      <span className="text-gray-800 dark:text-gray-200">{artifact.filename}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Span Tree */}
         {detail.sessionId && (
@@ -216,6 +206,40 @@ export default function RunDetail({ agentId, detail, output, loading }: Props) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ToolCallItem({ tool }: { tool: { name: string; input: string; output: string } }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          {expanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+          <span className="text-sm font-mono text-gray-800 dark:text-gray-200">{tool.name}</span>
+        </div>
+      </button>
+      {expanded && (
+        <div className="border-t border-gray-200 dark:border-gray-800 p-3 space-y-2">
+          <div>
+            <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">{t("runs.toolInput") || "Input"}</div>
+            <pre className="text-xs bg-gray-50 dark:bg-gray-950 p-2 rounded overflow-x-auto text-gray-800 dark:text-gray-200">
+              {typeof tool.input === "string" ? tool.input : JSON.stringify(tool.input, null, 2)}
+            </pre>
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">{t("runs.toolOutput") || "Output"}</div>
+            <pre className="text-xs bg-gray-50 dark:bg-gray-950 p-2 rounded overflow-x-auto text-gray-800 dark:text-gray-200">
+              {typeof tool.output === "string" ? tool.output : JSON.stringify(tool.output, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

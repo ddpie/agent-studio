@@ -60,8 +60,8 @@ function RunListItem({ run, selected, onSelect }: { run: RunSummary; selected: b
             <span className={`inline-block w-1.5 h-1.5 rounded-full ${isError ? "bg-red-500" : run.status === "running" ? "bg-amber-500" : "bg-emerald-500"}`} />
             {t(`runs.statusLabel.${run.status}`, run.status)}
           </span>
-          {run.durationMs != null && <span>{run.durationMs < 1000 ? `${run.durationMs}ms` : `${(run.durationMs / 1000).toFixed(1)}s`}</span>}
-          {run.totalTokens != null && <span>{run.totalTokens < 1000 ? `${run.totalTokens} tok` : `${(run.totalTokens / 1000).toFixed(1)}k tok`}</span>}
+          {run.durationMs != null && <span>{Number(run.durationMs) < 1000 ? `${Number(run.durationMs)}ms` : `${(Number(run.durationMs) / 1000).toFixed(1)}s`}</span>}
+          {run.totalTokens != null && <span>{Number(run.totalTokens) < 1000 ? `${Number(run.totalTokens)} tok` : `${(Number(run.totalTokens) / 1000).toFixed(1)}k tok`}</span>}
           {run.artifactCount > 0 && <span>📎 {run.artifactCount}</span>}
         </div>
         <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400">

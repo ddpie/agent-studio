@@ -1,14 +1,22 @@
 """Unified API response helpers."""
 import json
+from decimal import Decimal
 
 from aws_lambda_powertools.event_handler import Response
+
+
+class _DecimalEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, Decimal):
+            return int(o) if o == o.to_integral_value() else float(o)
+        return super().default(o)
 
 
 def success(data: dict | list, status_code: int = 200) -> Response:
     return Response(
         status_code=status_code,
         content_type="application/json",
-        body=json.dumps(data),
+        body=json.dumps(data, cls=_DecimalEncoder),
     )
 
 
