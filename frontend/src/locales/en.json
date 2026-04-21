@@ -960,7 +960,7 @@
     "updated": "Schedule {{name}} updated",
     "updateFailed": "Failed to update schedule",
     "runNow": "Run now",
-    "runNowSuccess": "Triggered {{name}} — opening trace…",
+    "runNowSuccess": "Triggered {{name}}",
     "runNowFailed": "Failed to run schedule",
     "modes": {
       "minutes": "Every N minutes",

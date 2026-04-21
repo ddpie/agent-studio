@@ -383,6 +383,12 @@ export const useChatStore = create<ChatState>()(
             scheduleFlush();
           }
 
+          // Flush any remaining toolBuffer as plain text (partial marker that never completed)
+          if (toolBuffer) {
+            pendingText += toolBuffer;
+            toolBuffer = "";
+          }
+
           // Final flush
           if (flushTimer) clearTimeout(flushTimer);
           flushPending();

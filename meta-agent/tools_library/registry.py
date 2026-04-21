@@ -15,6 +15,15 @@ _ALL_TOOLS = [
     agent_caller,
 ]
 
+# Pre-built indexes for O(1) lookup instead of linear scan
+_FUNC_NAME_INDEX: dict[str, str] = {}  # func_name -> TOOL_CODE
+_TOOL_ID_INDEX: dict[str, object] = {}  # tool_id -> module
+for _mod in _ALL_TOOLS:
+    _TOOL_ID_INDEX[_mod.TOOL_META["id"]] = _mod
+    for _fname in _mod.TOOL_NAMES.split(","):
+        _fname = _fname.strip()
+        if _fname:
+            _FUNC_NAME_INDEX[_fname] = _mod.TOOL_CODE
 
 _ddb_client = None
 
@@ -95,9 +104,9 @@ def get_tool_code_by_func_name(func_name: str) -> str | None:
 
     Checks in-memory registry first, then falls back to DynamoDB for user-created tools.
     """
-    for mod in _ALL_TOOLS:
-        if func_name in [n.strip() for n in mod.TOOL_NAMES.split(",")]:
-            return mod.TOOL_CODE
+    code = _FUNC_NAME_INDEX.get(func_name)
+    if code:
+        return code
     # Fallback: check DynamoDB for user-created tools
     try:
         ddb = _get_ddb_client()
@@ -115,18 +124,14 @@ def get_tool_code_by_func_name(func_name: str) -> str | None:
 
 def get_tool_code(tool_id: str) -> str | None:
     """Get the Python code for a tool by its ID."""
-    for mod in _ALL_TOOLS:
-        if mod.TOOL_META["id"] == tool_id:
-            return mod.TOOL_CODE
-    return None
+    mod = _TOOL_ID_INDEX.get(tool_id)
+    return mod.TOOL_CODE if mod else None
 
 
 def get_tool_names(tool_id: str) -> str | None:
     """Get the tool function names for a tool by its ID."""
-    for mod in _ALL_TOOLS:
-        if mod.TOOL_META["id"] == tool_id:
-            return mod.TOOL_NAMES
-    return None
+    mod = _TOOL_ID_INDEX.get(tool_id)
+    return mod.TOOL_NAMES if mod else None
 
 
 def assemble_tools(tool_ids: list[str]) -> tuple[str, str]:
@@ -138,11 +143,10 @@ def assemble_tools(tool_ids: list[str]) -> tuple[str, str]:
     codes = []
     names = []
     for tid in tool_ids:
-        for mod in _ALL_TOOLS:
-            if mod.TOOL_META["id"] == tid:
-                codes.append(mod.TOOL_CODE.strip())
-                names.append(mod.TOOL_NAMES)
-                break
+        mod = _TOOL_ID_INDEX.get(tid)
+        if mod:
+            codes.append(mod.TOOL_CODE.strip())
+            names.append(mod.TOOL_NAMES)
     return "\n\n".join(codes), ",".join(names)
 
 

@@ -97,6 +97,9 @@ async function* invokeAgent(
     // CloudFront OAC requires x-amz-content-sha256 for POST to Lambda Function URL
     const hashBuffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(bodyStr));
     const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+    // Timeout for the initial connection only (not the streaming phase).
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => timeoutController.abort(), 60_000);
     let response: Response;
     try {
       response = await fetch(url, {
@@ -108,8 +111,10 @@ async function* invokeAgent(
           Accept: "text/event-stream",
         },
         body: bodyStr,
+        signal: timeoutController.signal,
       });
     } catch (netErr) {
+      clearTimeout(timeoutId);
       if (attempt === 0 && !navigator.onLine) {
         onStatus?.("Waiting for network...");
         const back = await waitForOnlineOrTimeout(30_000);
@@ -121,6 +126,9 @@ async function* invokeAgent(
       lastError = netErr as Error;
       break;
     }
+
+    // Connection established — cancel the timeout so it doesn't fire during streaming.
+    clearTimeout(timeoutId);
 
     if (response.ok) {
       onStatus?.(null);
@@ -177,5 +185,7 @@ async function* parseSSEStream(response: Response): AsyncGenerator<string> {
     }
   } catch (streamErr) {
     yield `\n\n[${(streamErr as Error).message || "stream interrupted"}]\n`;
+  } finally {
+    await reader.cancel().catch(() => {});
   }
 }
