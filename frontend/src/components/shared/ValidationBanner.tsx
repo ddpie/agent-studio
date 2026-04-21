@@ -33,10 +33,11 @@ export default function ValidationBanner({ result, onDismiss, onAutoFix, autoFix
       <div className="px-4 py-2">
         <div className="flex items-center justify-between">
           <p className={`text-xs font-medium ${
-            !result.valid ? "text-red-500"
+            !result.valid
+              ? isDark ? "text-red-300" : "text-red-600"
               : isSuccess
                 ? isDark ? "text-green-400" : "text-green-600"
-                : "text-amber-600"
+                : isDark ? "text-amber-300" : "text-amber-700"
           }`}>
             {!result.valid
               ? t("validation.failed")
@@ -46,10 +47,10 @@ export default function ValidationBanner({ result, onDismiss, onAutoFix, autoFix
           </p>
         </div>
         {result.errors.map((e, i) => (
-          <p key={`e${i}`} className="text-[11px] text-red-500 mt-1">&#x2716; {e}</p>
+          <p key={`e${i}`} className={`text-[11px] mt-1 ${isDark ? "text-red-300" : "text-red-600"}`}>&#x2716; {e}</p>
         ))}
         {result.warnings.map((w, i) => (
-          <p key={`w${i}`} className="text-[11px] text-amber-600 mt-1">&#x26A0; {w}</p>
+          <p key={`w${i}`} className={`text-[11px] mt-1 ${isDark ? "text-amber-300" : "text-amber-700"}`}>&#x26A0; {w}</p>
         ))}
         {hasIssues && (
           <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">

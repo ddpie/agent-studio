@@ -263,13 +263,13 @@ export default function ToolDetail() {
         <div className={`mx-6 mt-2 rounded-lg text-sm border ${!validationResult.valid ? isDark ? "bg-red-900/20 border-red-800" : "bg-red-50 border-red-200" : validationResult.errors.length === 0 && validationResult.warnings.length === 0 ? isDark ? "bg-green-900/20 border-green-800" : "bg-green-50 border-green-200" : isDark ? "bg-amber-900/20 border-amber-800" : "bg-amber-50 border-amber-200"}`}>
           <div className="px-4 py-2">
             <div className="flex items-center justify-between">
-              <p className={`text-xs font-medium ${!validationResult.valid ? "text-red-500" : validationResult.errors.length === 0 && validationResult.warnings.length === 0 ? isDark ? "text-green-400" : "text-green-600" : "text-amber-600"}`}>
+              <p className={`text-xs font-medium ${!validationResult.valid ? isDark ? "text-red-300" : "text-red-600" : validationResult.errors.length === 0 && validationResult.warnings.length === 0 ? isDark ? "text-green-400" : "text-green-600" : isDark ? "text-amber-200" : "text-amber-700"}`}>
                 {!validationResult.valid ? t("validation.failed") : validationResult.errors.length === 0 && validationResult.warnings.length === 0 ? t("validation.noIssues") : t("validation.passedWithWarnings", { count: validationResult.warnings.length })}
               </p>
               <button onClick={() => setValidationResult(null)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400"><X className="w-3 h-3" /></button>
             </div>
-            {validationResult.errors.map((e, i) => <p key={`e${i}`} className="text-[11px] text-red-500 mt-1">&#x2716; {e}</p>)}
-            {validationResult.warnings.map((w, i) => <p key={`w${i}`} className="text-[11px] text-amber-600 mt-1">&#x26A0; {w}</p>)}
+            {validationResult.errors.map((e, i) => <p key={`e${i}`} className={`text-[11px] mt-1 ${isDark ? "text-red-200" : "text-red-600"}`}>&#x2716; {e}</p>)}
+            {validationResult.warnings.map((w, i) => <p key={`w${i}`} className={`text-[11px] mt-1 ${isDark ? "text-amber-200" : "text-amber-700"}`}>&#x26A0; {w}</p>)}
             {canEdit && (validationResult.errors.length > 0 || validationResult.warnings.length > 0) && (
               <button onClick={() => {
                 const issues = [...validationResult.errors.map(e => `Error: ${e}`), ...validationResult.warnings.map(w => `Warning: ${w}`)].join("\n");
