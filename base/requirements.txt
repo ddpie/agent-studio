@@ -19,7 +19,12 @@ aws-opentelemetry-distro==0.17.0
 mcp==1.27.0
 
 # Browser automation (AgentCore Browser via Playwright CDP)
+# strands-agents-tools bundles the AgentCoreBrowser tool — official impl
+# that uses async_playwright + nest_asyncio. We use it via
+# `AgentCoreBrowser().browser` in generated sub-agents.
 playwright==1.58.0
+strands-agents-tools
+nest-asyncio
 
 # Document parsing for read_document builtin tool
 beautifulsoup4==4.14.3
