@@ -33,3 +33,9 @@ requests==2.32.5
 
 # WebSocket client (used by browser_use SigV4 signing)
 websocket-client==1.9.0
+
+# Python 3.10 ExceptionGroup backport — required by anyio/asyncio code paths
+# in strands. Pip's resolver marks it as an environment marker dependency
+# for py<3.11 and sometimes drops it during --platform cross-target install,
+# which causes silent ImportError at runtime init (30s timeout with no logs).
+exceptiongroup==1.3.1

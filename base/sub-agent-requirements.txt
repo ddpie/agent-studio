@@ -11,3 +11,6 @@
 strands-agents-tools==0.5.0
 playwright==1.58.0
 nest-asyncio==1.6.0
+
+# Python 3.10 ExceptionGroup backport (see base/requirements.txt)
+exceptiongroup==1.3.1
