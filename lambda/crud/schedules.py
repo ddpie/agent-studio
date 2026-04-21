@@ -300,6 +300,9 @@ def create_schedule(wsId: str, agentId: str):
                 "Arn": universal_target_arn,
                 "RoleArn": _SCHEDULER_TARGET_ROLE_ARN,
                 "Input": json.dumps(payload),
+                "RetryPolicy": {
+                    "MaximumRetryAttempts": 0,
+                },
             },
             Description=f"Agent Studio schedule for {agentId} (by {user_id})",
         )
@@ -421,6 +424,9 @@ def update_schedule(wsId: str, agentId: str, name: str):
         "Arn": existing_target.get("Arn", "arn:aws:scheduler:::aws-sdk:bedrockagentcore:invokeAgentRuntime"),
         "RoleArn": existing_target.get("RoleArn") or _SCHEDULER_TARGET_ROLE_ARN,
         "Input": new_input,
+        "RetryPolicy": {
+            "MaximumRetryAttempts": 0,
+        },
     }
 
     new_cron = cron if cron is not None else existing.get("ScheduleExpression", "")
