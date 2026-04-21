@@ -1140,7 +1140,17 @@ def upload_to_s3(local_path: str, filename: str = "") -> str:
         "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }
     content_type = content_types.get(ext, "application/octet-stream")
-    extra_args = {"ContentType": content_type, "ContentDisposition": f'attachment; filename="{fname}"'}
+    # RFC 5987: non-ASCII filenames must go through `filename*=UTF-8''<url-encoded>`
+    # — plain `filename="..."` only accepts US-ASCII and Chinese/Japanese/
+    # emoji filenames silently get latin-1 mangled in the stored header.
+    import urllib.parse as _urlparse
+    if fname.isascii():
+        disposition = f'attachment; filename="{fname}"'
+    else:
+        ascii_fallback = fname.encode("ascii", "replace").decode("ascii")
+        quoted = _urlparse.quote(fname, safe="")
+        disposition = f"attachment; filename=\\"{ascii_fallback}\\"; filename*=UTF-8''{quoted}"
+    extra_args = {"ContentType": content_type, "ContentDisposition": disposition}
 
     # Fast path: file is on the sub-agent's local filesystem
     if _os2.path.isfile(local_path):

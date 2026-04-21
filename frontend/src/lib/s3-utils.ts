@@ -56,7 +56,12 @@ export async function fetchSignedS3(s3Url: string): Promise<string> {
 
   try {
     const url = new URL(s3Url);
-    const pathParts = url.pathname.split("/");
+    // new URL() percent-encodes non-ASCII path segments — e.g. a key with
+    // Chinese characters comes out as `outputs/abc_%E6%B5%81.png`. The
+    // backend presign API expects the raw key (utf-8 bytes, no encoding),
+    // so decode the pathname back before slicing.
+    const rawPath = decodeURIComponent(url.pathname);
+    const pathParts = rawPath.split("/");
     const bucketIdx = pathParts.indexOf(agentConfig.s3Bucket);
     if (bucketIdx >= 0) {
       const key = pathParts.slice(bucketIdx + 1).join("/");
