@@ -547,6 +547,8 @@ async def _stream_and_record(agent, payload):
     _write_run_started(_AGENT_ID, run_id, session_id, payload)
     chunks = []
     start_ns = _time.time_ns()
+    _completed = False
+    _failed = False
     try:
         async for chunk in _stream_with_tools(agent, _build_input(payload)):
             chunks.append(chunk)
@@ -566,9 +568,22 @@ async def _stream_and_record(agent, payload):
         except Exception:
             model_id = MODEL_ID
         _write_run_completed(_AGENT_ID, run_id, chunks, duration_ms=duration_ms, usage=usage, model_id=model_id)
+        _completed = True
     except Exception as e:
         _write_run_failed(_AGENT_ID, run_id, e)
+        _failed = True
         raise
+    finally:
+        if not _completed and not _failed:
+            # Stream consumer disconnected before completion (browser closed,
+            # network drop, Invoke Lambda timeout). The async generator is
+            # being GC'd without an exception — write a partial record so the
+            # run doesn't stay stuck as "running" forever.
+            duration_ms = int((_time.time_ns() - start_ns) / 1_000_000)
+            if chunks:
+                _write_run_completed(_AGENT_ID, run_id, chunks, duration_ms=duration_ms)
+            else:
+                _write_run_failed(_AGENT_ID, run_id, RuntimeError("stream disconnected before any output"))
 '''
 
 # ── tools.py header ─────────────────────────────────────────────────────────
