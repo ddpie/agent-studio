@@ -1088,106 +1088,38 @@ def read_document(file_key: str) -> str:
         return f"Error: unexpected failure while extracting document text: {e}"
 
 
-# ── Browser (Playwright over AgentCore Browser CDP) ──────────────────────
-# Session state reused across tool calls (1h session timeout). The page and
-# its BrowserContext are pre-provisioned by AgentCore; we reuse index [0].
-_browser_state = {"playwright": None, "browser": None, "context": None,
-                  "page": None, "ws_session_id": None, "br_id": None}
-
-
-def _sign_browser_ws(cdp_url: str) -> dict:
-    """SigV4-sign a GET on the HTTPS equivalent of the CDP WebSocket URL
-    and return headers Playwright passes during WebSocket upgrade."""
-    from botocore.auth import SigV4Auth
-    from botocore.awsrequest import AWSRequest
-    boto_session = _boto3.Session(region_name=_REGION)
-    creds = boto_session.get_credentials().get_frozen_credentials()
-    https_url = cdp_url.replace("wss://", "https://")
-    host = cdp_url.split("/")[2]
-    req = AWSRequest(method="GET", url=https_url, headers={"host": host})
-    SigV4Auth(creds, "bedrock-agentcore", _REGION).add_auth(req)
-    headers = {
-        k: v for k, v in dict(req.headers).items()
-        if k in ("Authorization", "X-Amz-Date", "X-Amz-Security-Token", "Host")
-    }
-    return headers
+# ── Browser (AgentCore Browser via official strands-agents-tools) ─────────
+# Use the official AgentCoreBrowser tool from strands-agents-tools. It wraps
+# async_playwright + nest_asyncio correctly, manages CDP session lifecycle,
+# and is the pattern demonstrated in AWS's AgentCore samples.
+_browser_tool_instance = None
 
 
 def _ensure_playwright_driver_executable():
     """AgentCore deploy-zip extraction drops unix exec bits. chmod +x
-    the Playwright node driver so sync_playwright().start() can spawn it."""
+    the Playwright node driver so Playwright can spawn it."""
     import stat as _stat
-    for root, _dirs, files in _os.walk("/var/task/playwright/driver"):
-        for f in files:
-            p = _os.path.join(root, f)
-            try:
-                _os.chmod(p, _os.stat(p).st_mode | _stat.S_IXUSR | _stat.S_IXGRP | _stat.S_IXOTH)
-            except Exception:
-                pass
-
-
-def _get_browser_page():
-    """Return an active Playwright Page, creating/resuming the session.
-
-    Starts an AgentCore Browser session, enables the automation stream,
-    connects Playwright over CDP with SigV4 headers, and returns the
-    pre-provisioned page (AgentCore gives us contexts[0].pages[0]).
-    """
-    _ensure_playwright_driver_executable()
-    from playwright.sync_api import sync_playwright
-
-    if _browser_state["page"] is not None:
-        try:
-            if not _browser_state["page"].is_closed():
-                return _browser_state["page"]
-        except Exception:
-            pass  # fall through to re-create
-
-    br_id = _os.environ.get("AGENT_STUDIO_BROWSER_ID")
-    if not br_id:
-        raise RuntimeError("AGENT_STUDIO_BROWSER_ID not configured")
-    client = _boto3.client("bedrock-agentcore", region_name=_REGION)
-    sess = client.start_browser_session(
-        browserIdentifier=br_id,
-        name="agentstudio-browser-use",
-        sessionTimeoutSeconds=3600,
-        viewPort={"width": 1280, "height": 800},
-    )
-    client.update_browser_stream(
-        browserIdentifier=br_id,
-        sessionId=sess["sessionId"],
-        streamUpdate={"automationStreamUpdate": {"streamStatus": "ENABLED"}},
-    )
-    cdp = sess["streams"]["automationStream"]["streamEndpoint"]
-    headers = _sign_browser_ws(cdp)
-
-    pw = sync_playwright().start()
-    browser = pw.chromium.connect_over_cdp(cdp, headers=headers)
-    context = browser.contexts[0] if browser.contexts else browser.new_context()
-    page = context.pages[0] if context.pages else context.new_page()
-
-    _browser_state.update({
-        "playwright": pw, "browser": browser, "context": context, "page": page,
-        "ws_session_id": sess["sessionId"], "br_id": br_id,
-    })
-    return page
-
-
-def _reset_browser_state():
-    """Close Playwright + browser; clear state so next call reconnects."""
-    for key in ("browser", "playwright"):
-        obj = _browser_state.get(key)
-        if obj is None:
+    for _root in ("/var/task/playwright/driver", "/var/task/playwright/driver/package"):
+        if not _os.path.isdir(_root):
             continue
-        try:
-            if key == "browser":
-                obj.close()
-            else:
-                obj.stop()
-        except Exception:
-            pass
-    _browser_state.update({"playwright": None, "browser": None,
-                           "context": None, "page": None})
+        for root, _dirs, files in _os.walk(_root):
+            for f in files:
+                p = _os.path.join(root, f)
+                try:
+                    _os.chmod(p, _os.stat(p).st_mode | _stat.S_IXUSR | _stat.S_IXGRP | _stat.S_IXOTH)
+                except Exception:
+                    pass
+
+
+def _get_browser_tool():
+    """Lazy init the official AgentCoreBrowser tool wrapper."""
+    global _browser_tool_instance
+    if _browser_tool_instance is not None:
+        return _browser_tool_instance
+    _ensure_playwright_driver_executable()
+    from strands_tools.browser.agent_core_browser import AgentCoreBrowser
+    _browser_tool_instance = AgentCoreBrowser(region=_REGION)
+    return _browser_tool_instance
 
 
 @_tool
@@ -1219,26 +1151,51 @@ def browser_use(action: str, url: str = "", selector: str = "",
         "fill"       → "OK: filled <selector>" or an error string
         "eval"       → JSON-encoded result of the expression
     """
-    import base64 as _base64
+    import uuid as _uuid2
     if action not in ("navigate", "text", "screenshot", "click", "fill", "eval"):
         return _json.dumps({"error": f"unknown action: {action}"})
     if action == "navigate":
         if not url or not url.startswith(("http://", "https://")):
             return _json.dumps({"error": "navigate requires http(s) url"})
 
+    try:
+        tool = _get_browser_tool()
+    except Exception as e:
+        return _json.dumps({"error": f"browser_use init failed: {e}"})
+
+    # Shared session across tool calls. strands_tools.browser manages
+    # lifecycle inside its own event loop via nest_asyncio.
+    session_name = getattr(browser_use, "_session_name", None)
+    if not session_name:
+        session_name = f"agentstudio-{_uuid2.uuid4().hex[:12]}"
+        browser_use._session_name = session_name
+
+    def _call(action_dict):
+        from strands_tools.browser.models import BrowserInput
+        return tool.browser(BrowserInput(**action_dict))
+
+    def _extract(res):
+        if isinstance(res, dict):
+            content = res.get("content") or []
+            if content and isinstance(content, list):
+                out = content[0]
+                if isinstance(out, dict) and "text" in out:
+                    return out["text"]
+            return _json.dumps(res)
+        return str(res)
+
     def _do():
-        page = _get_browser_page()
-        timeout_ms = max(wait_ms, 15000)
+        # Ensure session exists
+        _call({"action": {"type": "init_session", "session_name": session_name,
+                          "description": "Agent Studio browser session"}})
 
         if action == "navigate":
-            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-            return f"OK: navigated to {url}"
+            res = _call({"action": {"type": "navigate", "session_name": session_name, "url": url}})
+            return _extract(res) or f"OK: navigated to {url}"
 
         if action == "text":
-            text = page.inner_text("body")
-            import re as _re2
-            text = _re2.sub(r"\\n{3,}", "\\n\\n", text)
-            text = _re2.sub(r" {2,}", " ", text).strip()
+            res = _call({"action": {"type": "get_text", "session_name": session_name}})
+            text = _extract(res) or ""
             if len(text) > 8000:
                 text = text[:8000] + "\\n\\n... (truncated at 8000 chars)"
             return text
@@ -1246,37 +1203,32 @@ def browser_use(action: str, url: str = "", selector: str = "",
         if action == "eval":
             if not expression:
                 return _json.dumps({"error": "eval requires expression"})
-            try:
-                # Playwright's evaluate returns the JS result directly
-                result = page.evaluate(expression)
-                return _json.dumps({"value": result})
-            except Exception as e:
-                return _json.dumps({"error": f"eval failed: {e}"})
+            res = _call({"action": {"type": "evaluate", "session_name": session_name, "script": expression}})
+            return _extract(res)
 
         if action == "click":
             if not selector:
                 return _json.dumps({"error": "click requires selector"})
-            try:
-                page.click(selector, timeout=timeout_ms)
-                return f"OK: clicked {selector}"
-            except Exception as e:
-                return _json.dumps({"error": f"click failed: {e}"})
+            res = _call({"action": {"type": "click", "session_name": session_name, "selector": selector}})
+            return _extract(res)
 
         if action == "fill":
             if not selector:
                 return _json.dumps({"error": "fill requires selector"})
-            try:
-                page.fill(selector, value, timeout=timeout_ms)
-                return f"OK: filled {selector}"
-            except Exception as e:
-                return _json.dumps({"error": f"fill failed: {e}"})
+            res = _call({"action": {"type": "type", "session_name": session_name, "selector": selector, "text": value}})
+            return _extract(res)
 
         # screenshot
-        png_bytes = page.screenshot(full_page=True, type="png")
-        if not png_bytes:
-            return _json.dumps({"error": "screenshot returned no data"})
-        import uuid as _uuid2
         s3_key = f"outputs/{_uuid2.uuid4().hex[:12]}_screenshot.png"
+        local = f"/tmp/{_uuid2.uuid4().hex[:12]}_screenshot.png"
+        res = _call({"action": {"type": "screenshot", "session_name": session_name, "path": local}})
+        try:
+            with open(local, "rb") as _fp:
+                png_bytes = _fp.read()
+        except Exception as e:
+            return _json.dumps({"error": f"screenshot read failed: {e}"})
+        if not png_bytes:
+            return _json.dumps({"error": "screenshot empty"})
         try:
             _s3.put_object(
                 Bucket=_S3_BUCKET, Key=s3_key,
@@ -1294,11 +1246,10 @@ def browser_use(action: str, url: str = "", selector: str = "",
     try:
         return _do()
     except Exception as e:
-        # Session expired / page closed / connection dropped — retry once.
-        _reset_browser_state()
+        # Retry once — connection may have dropped
+        browser_use._session_name = None
         try:
             return _do()
         except Exception as e2:
-            _reset_browser_state()
             return _json.dumps({"error": f"browser_use failed: {e2}"})
 '''
