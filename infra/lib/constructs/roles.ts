@@ -242,6 +242,12 @@ export class AgentCoreRoles extends Construct {
         `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*/runtime-endpoint/*`,
       ],
     }));
+    schedulerTargetRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["lambda:InvokeFunction"],
+      resources: [
+        `arn:aws:lambda:${props.region}:${props.accountId}:function:agent-studio-schedule-runner`,
+      ],
+    }));
     this.schedulerTargetRoleArn = schedulerTargetRole.roleArn;
 
     new cdk.CfnOutput(this, "SchedulerTargetRoleArn", {
