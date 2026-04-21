@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import boto3
 from strands import tool
 
-from config import MODEL_ID, REGION, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE
+from config import MODEL_ID, REGION, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE, SUB_AGENT_ROLE_ARN
 from deploy import build_deployment_package_v2, upload_deployment, wait_for_ready, validate_agent_files, build_skill_prompt_section, _shared_env_vars
 from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_template_prompt, BASE_GUIDELINES
@@ -291,7 +291,7 @@ def update_agent(
         control = boto3.client("bedrock-agentcore-control", region_name=REGION)
         control.update_agent_runtime(
             agentRuntimeId=agent_id,
-            roleArn=AGENT_ROLE_ARN,
+            roleArn=SUB_AGENT_ROLE_ARN,
             agentRuntimeArtifact={
                 "codeConfiguration": {
                     "code": {"s3": {"bucket": S3_BUCKET, "prefix": s3_key}},
