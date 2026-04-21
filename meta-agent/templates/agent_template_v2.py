@@ -1167,6 +1167,17 @@ async def _get_page_async():
     context = browser.contexts[0] if browser.contexts else await browser.new_context()
     page = context.pages[0] if context.pages else await context.new_page()
 
+    # AgentCore Browser pre-configures its Chrome context with a 10s default
+    # navigation timeout, which is too short for heavy pages (sina, etc).
+    # Override at both context and page level so neither fallback is 10s.
+    try:
+        context.set_default_navigation_timeout(45000)
+        context.set_default_timeout(45000)
+        page.set_default_navigation_timeout(45000)
+        page.set_default_timeout(45000)
+    except Exception:
+        pass
+
     _browser_state.update({
         "playwright": pw, "browser": browser, "page": page,
         "client": client, "session_id": session_id,
@@ -1232,7 +1243,7 @@ def browser_use(action: str, url: str = "", selector: str = "",
 
     async def _do_async():
         page = await _get_page_async()
-        timeout_ms = max(wait_ms, 15000)
+        timeout_ms = max(wait_ms, 45000)
 
         if action == "navigate":
             await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)

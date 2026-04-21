@@ -283,40 +283,43 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
   };
   responseStream = awslambda.HttpResponseStream.from(responseStream, meta);
 
+  // SSE frames can be split across TCP chunks; a single `data:` payload may
+  // be tens of KB (tool outputs with base64) so buffer partial lines.
+  let sseBuffer = "";
+  const flushLines = (flushAll = false) => {
+    sseBuffer = sseBuffer.replace(/\r\n/g, "\n");
+    const lines = sseBuffer.split("\n");
+    sseBuffer = flushAll ? "" : (lines.pop() || "");
+    for (const line of lines) {
+      if (!line || line.startsWith(":")) continue;
+      if (line.startsWith("data: ")) {
+        responseStream.write(`${line}\n\n`);
+      }
+      // Lines that don't start with `data:` are SSE metadata (event:, id:, retry:)
+      // or incidental whitespace; drop them rather than synthesizing a new
+      // `data:` frame which would corrupt the payload if it's a fragment.
+    }
+  };
+
   try {
     const stream = agentResp.response;
     if (stream && Symbol.asyncIterator in stream) {
       for await (const chunk of stream) {
         if (chunk instanceof Uint8Array || Buffer.isBuffer(chunk)) {
-          const text = Buffer.from(chunk).toString("utf-8");
-          for (const line of text.split("\n")) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith(":")) continue;
-            if (trimmed.startsWith("data: ")) {
-              responseStream.write(`${trimmed}\n\n`);
-            } else {
-              responseStream.write(`data: ${trimmed}\n\n`);
-            }
-          }
+          sseBuffer += Buffer.from(chunk).toString("utf-8");
+          flushLines();
         }
       }
+      flushLines(true);
     } else if (stream && typeof stream.read === "function") {
       // Fallback: read as buffer
-      const raw = await new Promise((resolve, reject) => {
+      sseBuffer = await new Promise((resolve, reject) => {
         const chunks = [];
         stream.on("data", (c) => chunks.push(c));
         stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
         stream.on("error", reject);
       });
-      for (const line of raw.split("\n")) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith(":")) continue;
-        if (trimmed.startsWith("data: ")) {
-          responseStream.write(`${trimmed}\n\n`);
-        } else {
-          responseStream.write(`data: ${trimmed}\n\n`);
-        }
-      }
+      flushLines(true);
     }
   } catch (err) {
     console.error("SSE streaming error:", err);
