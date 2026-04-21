@@ -333,6 +333,12 @@ def get_agent_evaluations(wsId: str, agentId: str):
     now_ms = int(time.time() * 1000)
     start_ms = now_ms - 7 * 24 * 3600 * 1000
 
+    # The AgentCore evaluator pipeline writes sessionId here using whatever
+    # `attributes.session.id` it read off aws/spans — which is stale on
+    # warm-container reuse. We can't swap this for agent_studio.session_id
+    # at the evaluator-output layer (the evaluator emits the log, not us);
+    # scores still attribute to the wrong session id until AgentCore fixes
+    # its managed session-id injection. Tracked in the span-tagging fix.
     q = """
 fields @timestamp,
        attributes.gen_ai.evaluation.name as evaluator,

@@ -60,7 +60,7 @@ async def invoke(payload, context):
     prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), save them to /mnt/workspace/ (persistent across sessions) instead of /tmp/ (ephemeral). ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files. After uploading, the download button appears automatically — do NOT create markdown links like [filename](url) for downloads."
     prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
     agent = Agent(
-        model=BedrockModel(model_id=model_id),
+        model=BedrockModel(model_id=model_id, max_tokens=200000),
         system_prompt=prompt,
         tools=_ALL_TOOLS + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use],
     )
@@ -221,7 +221,7 @@ async def invoke(payload, context):
             except Exception as _mcp_err:
                 print(f"WARNING: MCP client failed to connect, skipping: {_mcp_err}", file=sys.stderr)
         agent = Agent(
-            model=BedrockModel(model_id=model_id),
+            model=BedrockModel(model_id=model_id, max_tokens=200000),
             system_prompt=prompt,
             tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use],
         )
@@ -238,6 +238,62 @@ STREAM_UTILS_CODE = '''\
 
 import json as _json
 import base64 as _b64
+
+
+# ── Session tagging on spans ────────────────────────────────────────────
+# AgentCore's managed OTEL pipeline injects `attributes.session.id` once
+# per warm container and never refreshes it — so span queries filtered
+# by the caller-supplied session_id miss every invocation after the
+# first. We shadow that with our own attribute, updated per invocation
+# via a module-level variable + a SpanProcessor that stamps on_start.
+_CURRENT_SESSION_ID = ""
+_SPAN_PROCESSOR_INSTALLED = False
+
+
+def _install_session_span_processor():
+    """Install a SpanProcessor that tags every new span with
+    `agent_studio.session_id` read from the module-level variable.
+    Idempotent — safe to call on every invocation."""
+    global _SPAN_PROCESSOR_INSTALLED
+    if _SPAN_PROCESSOR_INSTALLED:
+        return
+    try:
+        from opentelemetry import trace as _ot
+        from opentelemetry.sdk.trace import SpanProcessor as _SP
+    except Exception:
+        return
+
+    class _SessionTagProcessor(_SP):
+        def on_start(self, span, parent_context=None):
+            sid = _CURRENT_SESSION_ID
+            if sid:
+                try:
+                    span.set_attribute("agent_studio.session_id", sid)
+                except Exception:
+                    pass
+        def on_end(self, span):
+            pass
+        def shutdown(self):
+            pass
+        def force_flush(self, timeout_millis=30000):
+            return True
+
+    provider = _ot.get_tracer_provider()
+    add = getattr(provider, "add_span_processor", None)
+    if add is None:
+        return
+    try:
+        add(_SessionTagProcessor())
+        _SPAN_PROCESSOR_INSTALLED = True
+    except Exception:
+        pass
+
+
+def _set_current_session_id(session_id):
+    """Update the module-level session id that the SpanProcessor reads
+    when stamping new spans. Called at the start of every invocation."""
+    global _CURRENT_SESSION_ID
+    _CURRENT_SESSION_ID = session_id or ""
 
 
 async def _stream_with_tools(agent, input_data):
@@ -538,6 +594,13 @@ def _write_run_failed(agent_id, run_id, error):
 async def _stream_and_record(agent, payload):
     """Wrap _stream_with_tools: for sched- sessions, record to DDB + S3."""
     session_id = payload.get("session_id", "")
+    # Tag every span emitted during this invocation with the caller's
+    # session_id so trace queries can find them. This replaces the
+    # AgentCore-managed `attributes.session.id` which goes stale on
+    # warm-container reuse (it sticks to the first session that started
+    # the pod and silently misattributes every subsequent run).
+    _install_session_span_processor()
+    _set_current_session_id(session_id)
     if not session_id.startswith("sched-") or not _AGENT_ID:
         async for chunk in _stream_with_tools(agent, _build_input(payload)):
             yield chunk
