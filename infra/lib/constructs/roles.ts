@@ -129,6 +129,19 @@ export class AgentCoreRoles extends Construct {
       roleName: `AgentStudioMetaAgent-${props.region}`,
       assumedBy: trustPrincipal,
     });
+    // Also allow the AgentCore platform runtime role to assume this role.
+    // Meta-Agent code runs under that platform role and needs to
+    // sts:AssumeRole into MetaAgent role to get iam:PassRole for
+    // create/update/delete runtime calls.
+    metaAgentRole.assumeRolePolicy!.addStatements(new iam.PolicyStatement({
+      actions: ["sts:AssumeRole"],
+      principals: [new iam.AccountPrincipal(props.accountId)],
+      conditions: {
+        StringLike: {
+          "aws:PrincipalArn": `arn:aws:iam::${props.accountId}:role/AmazonBedrockAgentCoreSDKRuntime-${props.region}-*`,
+        },
+      },
+    }));
     baselineStatements.forEach((s) => metaAgentRole.addToPolicy(s));
     metaAgentRole.addToPolicy(new iam.PolicyStatement({
       actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
