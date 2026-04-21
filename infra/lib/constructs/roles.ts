@@ -71,7 +71,11 @@ export class AgentCoreRoles extends Construct {
           "bedrock-agentcore:InvokeBrowser",
           "bedrock-agentcore:StopBrowserSession",
           "bedrock-agentcore:GetBrowserSession",
+          "bedrock-agentcore:ListBrowserSessions",
+          "bedrock-agentcore:SaveBrowserSessionProfile",
           "bedrock-agentcore:UpdateBrowserStream",
+          "bedrock-agentcore:ConnectBrowserStream",
+          "bedrock-agentcore:ConnectBrowserAutomationStream",
         ],
         resources: [
           `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:code-interpreter-custom/*`,
