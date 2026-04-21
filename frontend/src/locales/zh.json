@@ -979,7 +979,7 @@
       "pastTheHour": "分钟",
       "onDay": "每月",
       "expression": "表达式",
-      "inPlainEnglish": "人类可读",
+      "inPlainEnglish": "说明",
       "nextRuns": "下 5 次触发",
       "weekdayShort": {
         "0": "日",
