@@ -59,10 +59,14 @@ export function useSessionTrace(agentId: string | null, sessionId: string | null
     if (!agentId || !sessionId) return;
     let cancelled = false;
     let retry = 0;
-    // A schedule-triggered run + OTEL export + CloudWatch ingestion +
-    // Logs Insights indexing can easily take 40-60s before spans are
-    // queryable. 36 × 2.5s = 90s covers the common case.
-    const MAX_RETRIES = 36;
+    // Schedule-triggered runs need ~40-60s before spans are queryable
+    // (runtime cold-start + OTEL flush + CloudWatch ingestion + Logs
+    // Insights indexing). Poll every 5s for up to ~90s. A 10s pre-delay
+    // avoids spamming the first ~9 requests that are guaranteed to 404.
+    const MAX_RETRIES = 18;
+    const POLL_INTERVAL_MS = 5000;
+    const FIRST_POLL_DELAY_MS = 10_000;
+
     const attempt = (): void => {
       setLoading(true);
       getSessionTrace(agentId, sessionId)
@@ -76,7 +80,7 @@ export function useSessionTrace(agentId: string | null, sessionId: string | null
           } else if (retry < MAX_RETRIES) {
             retry += 1;
             setPending(true);
-            setTimeout(attempt, 2500);
+            setTimeout(attempt, POLL_INTERVAL_MS);
           } else {
             setRoot(null);
             setPending(true);
@@ -94,7 +98,7 @@ export function useSessionTrace(agentId: string | null, sessionId: string | null
           if (status === 404 && retry < MAX_RETRIES) {
             retry += 1;
             setPending(true);
-            setTimeout(attempt, 2500);
+            setTimeout(attempt, POLL_INTERVAL_MS);
             return;
           }
           setError(err as Error);
@@ -102,8 +106,16 @@ export function useSessionTrace(agentId: string | null, sessionId: string | null
           setLoading(false);
         });
     };
-    attempt();
-    return () => { cancelled = true; };
+
+    // Show "pending" state immediately so the UI doesn't look frozen
+    // during the pre-delay, then fire the first request.
+    setPending(true);
+    setLoading(true);
+    const firstTimer = setTimeout(attempt, FIRST_POLL_DELAY_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(firstTimer);
+    };
   }, [agentId, sessionId]);
 
   return { root, error, loading, pending };
