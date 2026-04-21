@@ -161,6 +161,13 @@ export class AgentCoreRoles extends Construct {
       ],
       resources: [`arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*`],
     }));
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["iam:PassRole"],
+      resources: [subAgentRole.roleArn, metaAgentRole.roleArn],
+      conditions: {
+        StringEquals: { "iam:PassedToService": "bedrock-agentcore.amazonaws.com" },
+      },
+    }));
 
     this.subAgentRoleArn = subAgentRole.roleArn;
     this.metaAgentRoleArn = metaAgentRole.roleArn;
