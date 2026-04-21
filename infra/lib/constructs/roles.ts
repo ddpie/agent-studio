@@ -49,7 +49,10 @@ export class AgentCoreRoles extends Construct {
       }),
       new iam.PolicyStatement({
         actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:Converse", "bedrock:ConverseStream"],
-        resources: [`arn:aws:bedrock:${props.region}::foundation-model/*`],
+        resources: [
+          `arn:aws:bedrock:*::foundation-model/*`,
+          `arn:aws:bedrock:*:${props.accountId}:inference-profile/*`,
+        ],
       }),
       new iam.PolicyStatement({
         actions: [
