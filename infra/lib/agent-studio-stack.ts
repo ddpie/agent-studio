@@ -41,13 +41,13 @@ export class AgentStudioStack extends cdk.Stack {
     // Account-shared CodeInterpreter + Browser. Sub-agents' run_command and
     // fetch_webpage tools route through these.
     const agentCoreShared = new AgentCoreShared(this, "AgentCoreShared", {
-      executionRoleArn: roles.basicRoleArn,
+      executionRoleArn: roles.subAgentRoleArn,
     });
 
     // Meta-Agent Runtime (CfnRuntime or existing reference)
     const metaAgent = new MetaAgentRuntime(this, "MetaAgentRuntime", {
       s3Bucket: config.s3Bucket,
-      roleArn: roles.readonlyRoleArn,
+      roleArn: roles.metaAgentRoleArn,
       region: config.region,
       accountId: config.accountId,
       existingRuntimeId: props.existingMetaAgentId,

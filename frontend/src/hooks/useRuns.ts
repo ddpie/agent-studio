@@ -24,7 +24,7 @@ export function useRunList(agentId: string | null) {
     listRuns(agentId)
       .then((r) => {
         if (!cancelled && mountedRef.current) {
-          setRuns(r);
+          setRuns(r.runs);
           setError(null);
         }
       })

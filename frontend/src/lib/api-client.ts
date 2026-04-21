@@ -446,11 +446,22 @@ export interface AgentEvaluation {
   reason?: string;
 }
 
-export async function listAgentEvaluations(agentId: string): Promise<AgentEvaluation[]> {
-  const resp = await apiGet<{ evaluations?: AgentEvaluation[] }>(
+export interface EvaluationDiagnostics {
+  allFailed: boolean;
+  errorCount: number;
+  hint: string;
+}
+
+export interface ListEvaluationsResponse {
+  evaluations: AgentEvaluation[];
+  diagnostics?: EvaluationDiagnostics;
+}
+
+export async function listAgentEvaluations(agentId: string): Promise<ListEvaluationsResponse> {
+  const resp = await apiGet<{ evaluations?: AgentEvaluation[]; diagnostics?: EvaluationDiagnostics }>(
     `/agents/${encodeURIComponent(agentId)}/evaluations`
   );
-  return resp.evaluations ?? [];
+  return { evaluations: resp.evaluations ?? [], diagnostics: resp.diagnostics };
 }
 
 // Workspace-level evaluator config status + enable.

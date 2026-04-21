@@ -173,7 +173,8 @@ def get_run(wsId: str, agentId: str, runId: str):
     item = resp.get("Item")
     if not item:
         return not_found()
-    if item.get("workspaceId") != ws_id:
+    item_ws = item.get("workspaceId") or ""
+    if item_ws and item_ws != ws_id:
         return forbidden()
 
     status = item.get("status", "running")

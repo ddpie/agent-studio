@@ -22,6 +22,7 @@ def _shared_env_vars(agent_id: str = "") -> dict:
     env = {
         "AGENT_STUDIO_REGION": REGION,
         "AGENT_STUDIO_RUNS_TABLE": "agent-studio-runs",
+        "AGENT_STUDIO_S3_BUCKET": S3_BUCKET,
         # AgentCore Observability via ADOT — emits gen_ai.* spans to aws/spans.
         # AgentCore's data plane captures OTLP via the x-aws-log-group header,
         # so OTEL_EXPORTER_OTLP_ENDPOINT must NOT be set (no sidecar on

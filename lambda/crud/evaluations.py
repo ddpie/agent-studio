@@ -5,6 +5,7 @@ be a list of exactly 1. Since `service.name` in spans is the agent
 runtime id, one eval config maps to one agent. We key configs by
 `{ws-prefix}_{agent-id}` and keep them in sync with agent CRUD.
 """
+import hashlib
 import re
 import time
 
@@ -64,13 +65,19 @@ def _get_agent_item(agent_id: str) -> dict | None:
 def _eval_config_name_for_agent(workspace_id: str, agent_id: str) -> str:
     """Deterministic per-agent config name.
 
-    API regex: [a-zA-Z][a-zA-Z0-9_]{0,47}. Strip non-alphanumeric from
-    workspace id + agent id, truncate, concatenate. Agent ids already
-    fit the charset; workspace UUIDs need hyphens stripped.
+    API regex: [a-zA-Z][a-zA-Z0-9_]{0,47} (max 48 chars). Strip
+    non-alphanumeric, concatenate with a short hash of the full agent_id
+    so two agents whose names share the first N chars after stripping
+    (e.g. `CustomerServiceBotV1-x` vs `CustomerServiceBotV2-y`) can't
+    collide into the same config name.
+
+    Layout: `agentstudio_{ws16}_{agent14}_{hash6}` = 12+16+1+14+1+6 = 50,
+    so agent is truncated to 13 chars to fit 48.
     """
     safe_ws = re.sub(r"[^A-Za-z0-9]", "", workspace_id)[:16]
-    safe_agent = re.sub(r"[^A-Za-z0-9]", "", agent_id)[:24]
-    return f"agentstudio_{safe_ws}_{safe_agent}"[:48]
+    safe_agent = re.sub(r"[^A-Za-z0-9]", "", agent_id)[:13]
+    agent_hash = hashlib.sha1(agent_id.encode("utf-8")).hexdigest()[:6]
+    return f"agentstudio_{safe_ws}_{safe_agent}_{agent_hash}"[:48]
 
 
 def _find_config_by_name(name: str) -> dict | None:
@@ -97,6 +104,15 @@ def _find_config_by_name(name: str) -> dict | None:
             return None
 
 
+def _runtime_log_group_for_agent(agent_id: str) -> str:
+    """Agent's runtime log group — where ADOT writes gen_ai input/output
+    messages as OTLP log records (agentic observability mode). Evaluators
+    need both aws/spans (for spans) and this log group (for message events)
+    to compute scores; omitting it yields LogEventMissingException and no
+    output."""
+    return f"/aws/bedrock-agentcore/runtimes/{agent_id}-DEFAULT"
+
+
 def create_eval_config_for_agent(workspace_id: str, agent_id: str) -> str:
     """Idempotently create a per-agent OnlineEvaluationConfig.
 
@@ -118,7 +134,10 @@ def create_eval_config_for_agent(workspace_id: str, agent_id: str) -> str:
             },
             dataSourceConfig={
                 "cloudWatchLogs": {
-                    "logGroupNames": [SPANS_LOG_GROUP],
+                    "logGroupNames": [
+                        SPANS_LOG_GROUP,
+                        _runtime_log_group_for_agent(agent_id),
+                    ],
                     # AgentCore accepts exactly 1 service name. Use the agent
                     # id — that's what `resource.attributes.service.name`
                     # holds on spans.
@@ -135,11 +154,52 @@ def create_eval_config_for_agent(workspace_id: str, agent_id: str) -> str:
         code = e.response.get("Error", {}).get("Code")
         if code == "ConflictException":
             logger.info("eval config already exists", extra={"config_name": name})
+            _ensure_runtime_log_group(name, agent_id)
         else:
             logger.exception("create_online_evaluation_config failed",
                              extra={"config_name": name, "error_code": code})
             raise
     return name
+
+
+def _ensure_runtime_log_group(config_name: str, agent_id: str) -> None:
+    """Backfill: configs created before the runtime log group was added to
+    the data source need to be updated so evaluators can read message events.
+    Called from the idempotent create path; no-op when already present."""
+    try:
+        existing = _find_config_by_name(config_name)
+    except ClientError:
+        return
+    if not existing:
+        return
+    cfg_id = existing.get("onlineEvaluationConfigId") or existing.get("id")
+    if not cfg_id:
+        return
+    try:
+        full = _get_control().get_online_evaluation_config(onlineEvaluationConfigId=cfg_id)
+    except ClientError:
+        return
+    lgs = (((full.get("dataSourceConfig") or {}).get("cloudWatchLogs") or {})
+           .get("logGroupNames") or [])
+    runtime_lg = _runtime_log_group_for_agent(agent_id)
+    if runtime_lg in lgs:
+        return
+    try:
+        _get_control().update_online_evaluation_config(
+            onlineEvaluationConfigId=cfg_id,
+            dataSourceConfig={
+                "cloudWatchLogs": {
+                    "logGroupNames": [SPANS_LOG_GROUP, runtime_lg],
+                    "serviceNames": [agent_id],
+                },
+            },
+        )
+        logger.info("backfilled runtime log group on eval config",
+                    extra={"config_name": config_name, "agent_id": agent_id})
+    except ClientError as e:
+        logger.warning("backfill runtime log group failed",
+                       extra={"config_name": config_name,
+                              "error_code": e.response.get("Error", {}).get("Code")})
 
 
 def delete_eval_config_for_agent(workspace_id: str, agent_id: str) -> None:
@@ -274,9 +334,15 @@ def get_agent_evaluations(wsId: str, agentId: str):
     start_ms = now_ms - 7 * 24 * 3600 * 1000
 
     q = """
-fields @timestamp, evaluatorId as evaluator, score, sessionId, traceId, reason
+fields @timestamp,
+       attributes.gen_ai.evaluation.name as evaluator,
+       attributes.gen_ai.evaluation.score as score,
+       attributes.session.id as sessionId,
+       traceId,
+       attributes.gen_ai.evaluation.reason as reason,
+       attributes.error.type as errorType
 | sort @timestamp desc
-| limit 100
+| limit 200
 """.strip()
 
     try:
@@ -293,10 +359,15 @@ fields @timestamp, evaluatorId as evaluator, score, sessionId, traceId, reason
         return internal_error()
 
     out = []
+    errors = 0
     for row in rows:
         ts = _field(row, "@timestamp")
         ev = _field(row, "evaluator")
         sc_raw = _field(row, "score")
+        error_type = _field(row, "errorType")
+        if error_type:
+            errors += 1
+            continue
         try:
             sc = float(sc_raw) if sc_raw is not None else None
         except (TypeError, ValueError):
@@ -312,7 +383,16 @@ fields @timestamp, evaluatorId as evaluator, score, sessionId, traceId, reason
             "reason": _field(row, "reason"),
         })
 
-    return success({"evaluations": out})
+    resp_body: dict = {"evaluations": out}
+    if errors and not out:
+        resp_body["diagnostics"] = {
+            "allFailed": True,
+            "errorCount": errors,
+            "hint": "AgentSpanMappingException — evaluators could not parse "
+                    "user_query from spans. This is a known Strands SDK / "
+                    "AgentCore compatibility issue being tracked upstream.",
+        }
+    return success(resp_body)
 
 
 # ---------------------------------------------------------------------------

@@ -277,6 +277,7 @@ def create_schedule(wsId: str, agentId: str):
         "prompt": prompt,
         "__schedule_name": full_name,
         "session_id": session_id,
+        "workspace_id": ws_id,
     }
     # Target.Input for the Universal Target `aws-sdk:bedrockagentcore:
     # invokeAgentRuntime` maps top-level PascalCase keys to the API's
@@ -407,6 +408,7 @@ def update_schedule(wsId: str, agentId: str, name: str):
     # (a previous bad edit could have drifted these).
     inner_payload["__schedule_name"] = name
     inner_payload["session_id"] = f"sched-{suffix}-<aws.scheduler.scheduled-time>"
+    inner_payload["workspace_id"] = ws_id
 
     runtime_arn = existing_payload.get("AgentRuntimeArn") or _agent_arn(agentId)
     new_input = json.dumps({
@@ -560,6 +562,7 @@ def run_schedule_now(wsId: str, agentId: str, name: str):
         "__schedule_name": name,
         "__manual_trigger": True,
         "session_id": session_id,
+        "workspace_id": ws_id,
     }
     target_input = {
         "AgentRuntimeArn": runtime_arn,

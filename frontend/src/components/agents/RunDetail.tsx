@@ -32,7 +32,7 @@ function stripS3Markers(text: string): string {
 export default function RunDetail({ agentId, detail, output, loading }: Props) {
   const { t } = useTranslation();
   const [showSpans, setShowSpans] = useState(false);
-  const { trace, loading: traceLoading, pending: tracePending } = useSessionTrace(
+  const { root: traceRoot, loading: traceLoading, pending: tracePending } = useSessionTrace(
     showSpans ? agentId : null,
     showSpans && detail.sessionId ? detail.sessionId : null
   );
@@ -50,21 +50,9 @@ export default function RunDetail({ agentId, detail, output, loading }: Props) {
     }
   };
 
-  const statusBadge = (() => {
-    switch (detail.status) {
-      case "running":
-        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"><Loader2 className="w-3 h-3 animate-spin" />{t("runs.statusRunning") || "Running"}</span>;
-      case "success":
-        return <span className="px-2 py-0.5 rounded text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">{t("runs.statusSuccess") || "Success"}</span>;
-      case "failure":
-        return <span className="px-2 py-0.5 rounded text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">{t("runs.statusFailure") || "Failure"}</span>;
-      default:
-        return null;
-    }
-  })();
 
-  const promptTokens = detail.usage?.inputTokens ?? null;
-  const completionTokens = detail.usage?.outputTokens ?? null;
+  const promptTokens = detail.usage?.promptTokens ?? null;
+  const completionTokens = detail.usage?.completionTokens ?? null;
   const totalTokens = detail.usage?.totalTokens ?? null;
 
   return (
@@ -87,7 +75,7 @@ export default function RunDetail({ agentId, detail, output, loading }: Props) {
             label={t("runs.latency") || "Latency"}
             value={detail.durationMs != null ? `${(detail.durationMs / 1000).toFixed(2)}s` : "—"}
           />
-          <Metric label={t("runs.status") || "Status"} value={detail.status} />
+          <Metric label={t("runs.status") || "Status"} value={t(`runs.statusLabel.${detail.status}`, detail.status)} />
         </div>
 
         {/* Input */}
@@ -105,7 +93,8 @@ export default function RunDetail({ agentId, detail, output, loading }: Props) {
           <div>
             <h3 className="text-sm font-semibold text-red-700 dark:text-red-300 mb-2">{t("runs.error") || "Error"}</h3>
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-3 text-sm text-red-800 dark:text-red-200 whitespace-pre-wrap">
-              {detail.error}
+              <div className="font-medium">{detail.error.code}</div>
+              <div className="mt-1">{detail.error.message}</div>
             </div>
           </div>
         )}
@@ -145,26 +134,14 @@ export default function RunDetail({ agentId, detail, output, loading }: Props) {
                       <div className="flex items-center gap-2">
                         {expanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
                         <span className="text-sm font-mono text-gray-800 dark:text-gray-200">{tool.name}</span>
-                        {tool.durationMs != null && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400">({tool.durationMs}ms)</span>
-                        )}
                       </div>
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded ${
-                          tool.status === "success"
-                            ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"
-                            : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
-                        }`}
-                      >
-                        {tool.status}
-                      </span>
                     </button>
                     {expanded && (
                       <div className="border-t border-gray-200 dark:border-gray-800 p-3 space-y-2">
                         <div>
                           <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">{t("runs.toolInput") || "Input"}</div>
                           <pre className="text-xs bg-gray-50 dark:bg-gray-950 p-2 rounded overflow-x-auto text-gray-800 dark:text-gray-200">
-                            {JSON.stringify(tool.input, null, 2)}
+                            {typeof tool.input === "string" ? tool.input : JSON.stringify(tool.input, null, 2)}
                           </pre>
                         </div>
                         <div>
@@ -223,8 +200,8 @@ export default function RunDetail({ agentId, detail, output, loading }: Props) {
                     {t("runs.spansPending") || "Spans are still being ingested..."}
                   </div>
                 )}
-                {trace && trace.turns && trace.turns.length > 0 && trace.turns[0].root && (
-                  <SpanTree root={trace.turns[0].root} />
+                {traceRoot && (
+                  <SpanTree root={traceRoot} />
                 )}
               </>
             )}

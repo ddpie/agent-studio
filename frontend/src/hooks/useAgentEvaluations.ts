@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { listAgentEvaluations, type AgentEvaluation } from "../lib/api-client";
+import { listAgentEvaluations, type AgentEvaluation, type EvaluationDiagnostics } from "../lib/api-client";
 
 export interface EvaluatorStats {
   latest: number;
@@ -11,6 +11,7 @@ export interface EvaluatorStats {
 
 export function useAgentEvaluations(agentId: string | null) {
   const [rows, setRows] = useState<AgentEvaluation[] | null>(null);
+  const [diagnostics, setDiagnostics] = useState<EvaluationDiagnostics | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
@@ -25,7 +26,8 @@ export function useAgentEvaluations(agentId: string | null) {
     listAgentEvaluations(agentId)
       .then((r) => {
         if (!cancelled && mountedRef.current) {
-          setRows(r);
+          setRows(r.evaluations);
+          setDiagnostics(r.diagnostics ?? null);
           setError(null);
         }
       })
@@ -67,6 +69,7 @@ export function useAgentEvaluations(agentId: string | null) {
   return {
     rows,
     grouped,
+    diagnostics,
     error,
     loading,
     refresh: () => setTick((t) => t + 1),

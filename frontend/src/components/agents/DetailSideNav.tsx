@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export interface NavItem {
   id: string;
@@ -116,21 +116,10 @@ export default function DetailSideNav({
     scrollToSection(id);
   };
 
-  // Restore saved section on mount (or when the memory key changes).
-  useEffect(() => {
-    if (!memoryKey) return;
-    const saved = readSavedSection(memoryKey);
-    if (!saved) return;
-    const el = document.getElementById(saved);
-    if (!el) return;
-    requestAnimationFrame(() => {
-      const root = scrollRootRef.current;
-      if (!root) return;
-      const topWithin =
-        el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop - 16;
-      root.scrollTo({ top: topWithin, behavior: "auto" });
-    });
-  }, [memoryKey, scrollRootRef]);
+  // On mount, restore the saved *active highlight* for the side-nav but
+  // do NOT auto-scroll — users expect the page to start at the top when
+  // navigating from the agent list. Deep-link scrolling (e.g.
+  // /agents/:id/runs/:runId) is handled by the parent page, not here.
 
   const renderItem = (item: NavItem) => {
     const isActive = activeId === item.id;

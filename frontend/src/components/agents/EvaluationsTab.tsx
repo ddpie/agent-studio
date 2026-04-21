@@ -45,7 +45,7 @@ function EvaluatorRow({ evaluator, stats }: { evaluator: string; stats: Evaluato
 
 export default function EvaluationsTab({ agentId }: EvaluationsTabProps) {
   const { t } = useTranslation();
-  const { grouped, error, loading, refresh } = useAgentEvaluations(agentId);
+  const { grouped, diagnostics, error, loading, refresh } = useAgentEvaluations(agentId);
 
   const [status, setStatus] = useState<AgentEvaluationStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
@@ -169,7 +169,9 @@ export default function EvaluationsTab({ agentId }: EvaluationsTabProps) {
             {t("evaluations.noDataTitle")}
           </div>
           <div className="text-gray-500 dark:text-gray-400 mt-1">
-            {t("evaluations.noDataBody")}
+            {diagnostics?.allFailed
+              ? t("evaluations.spanMappingError")
+              : t("evaluations.noDataBody")}
           </div>
         </div>
       )}
