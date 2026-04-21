@@ -41,7 +41,7 @@ export class AgentStudioStack extends cdk.Stack {
     // Account-shared CodeInterpreter + Browser. Sub-agents' run_command and
     // fetch_webpage tools route through these.
     const agentCoreShared = new AgentCoreShared(this, "AgentCoreShared", {
-      executionRoleArn: roles.subAgentRoleArn,
+      executionRoleArn: roles.basicRoleArn,
     });
 
     // Meta-Agent Runtime (CfnRuntime or existing reference)

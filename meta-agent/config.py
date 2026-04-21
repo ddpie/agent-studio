@@ -31,7 +31,7 @@ AGENTS_TABLE = os.getenv("AGENT_STUDIO_AGENTS_TABLE", "agent-studio-agents")
 TOOLS_TABLE = os.getenv("AGENT_STUDIO_TOOLS_TABLE", "agent-studio-tools")
 
 # Sub-agent role — single unified role for all sub-agents
-SUB_AGENT_ROLE_ARN = f"arn:aws:iam::{ACCOUNT_ID}:role/AgentStudioSubAgent-{REGION}"
+SUB_AGENT_ROLE_ARN = f"arn:aws:iam::{ACCOUNT_ID}:role/AgentStudioSubAgent-basic-{REGION}"
 
 # Legacy tier mapping — all tiers now resolve to the unified sub-agent role.
 # Kept for backward compat with existing agents that have permissionTier stored.
