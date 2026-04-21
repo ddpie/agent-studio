@@ -218,9 +218,9 @@ export default function AgentEditForm() {
               {deploy.validationResult.errors.length > 0 && (
                 <ul className="mt-2 space-y-1">
                   {deploy.validationResult.errors.map((e, i) => (
-                    <li key={i} className="text-[11px] text-red-800 dark:text-red-50 flex items-start gap-1.5">
-                      <span className="text-red-500 dark:text-red-300 mt-0.5 flex-shrink-0">&#x2716;</span>
-                      <span className="prose prose-xs max-w-none [&_*]:!text-inherit [&_p]:m-0 [&_code]:!text-red-900 dark:[&_code]:!text-red-100 [&_strong]:!text-red-900 dark:[&_strong]:!text-white"><ReactMarkdown>{e}</ReactMarkdown></span>
+                    <li key={i} className="text-[11px] text-red-900 dark:text-white flex items-start gap-1.5">
+                      <span className="text-red-600 dark:text-red-300 mt-0.5 flex-shrink-0">&#x2716;</span>
+                      <span className="prose prose-xs max-w-none [&_*]:!text-inherit [&_p]:m-0 [&_code]:!bg-black/20 [&_code]:!px-1 [&_code]:!rounded [&_strong]:!font-semibold"><ReactMarkdown>{e}</ReactMarkdown></span>
                     </li>
                   ))}
                 </ul>
@@ -228,9 +228,9 @@ export default function AgentEditForm() {
               {deploy.validationResult.warnings.length > 0 && (
                 <ul className="mt-2 space-y-1">
                   {deploy.validationResult.warnings.map((w, i) => (
-                    <li key={i} className="text-[11px] text-amber-900 dark:text-amber-50 flex items-start gap-1.5">
+                    <li key={i} className="text-[11px] text-amber-900 dark:text-white flex items-start gap-1.5">
                       <span className="text-amber-600 dark:text-amber-300 mt-0.5 flex-shrink-0">&#x26A0;</span>
-                      <span className="prose prose-xs max-w-none [&_*]:!text-inherit [&_p]:m-0 [&_code]:!text-amber-900 dark:[&_code]:!text-amber-100 [&_strong]:!text-amber-900 dark:[&_strong]:!text-white"><ReactMarkdown>{w}</ReactMarkdown></span>
+                      <span className="prose prose-xs max-w-none [&_*]:!text-inherit [&_p]:m-0 [&_code]:!bg-black/20 [&_code]:!px-1 [&_code]:!rounded [&_strong]:!font-semibold"><ReactMarkdown>{w}</ReactMarkdown></span>
                     </li>
                   ))}
                 </ul>
@@ -240,14 +240,14 @@ export default function AgentEditForm() {
                 <div className="mt-2 flex flex-wrap gap-2">
                   {Object.entries(deploy.validationResult.prompt_scores).map(([dim, score]) => (
                     <span key={dim} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                      score >= 4 ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300" : score >= 3 ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
+                      score >= 4 ? "bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-100" : score >= 3 ? "bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-100" : "bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-100"
                     }`}>
                       {t(`promptDimensions.${dim}`, dim.replace(/_/g, " "))}: {score}/5
                     </span>
                   ))}
                   {deploy.validationResult.prompt_overall != null && (
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                      deploy.validationResult.prompt_overall >= 4 ? "bg-green-200 dark:bg-green-900/40 text-green-800 dark:text-green-200" : deploy.validationResult.prompt_overall >= 3 ? "bg-yellow-200 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200" : "bg-red-200 dark:bg-red-900/40 text-red-800 dark:text-red-200"
+                      deploy.validationResult.prompt_overall >= 4 ? "bg-green-200 dark:bg-green-900/60 text-green-900 dark:text-white" : deploy.validationResult.prompt_overall >= 3 ? "bg-yellow-200 dark:bg-yellow-900/60 text-yellow-900 dark:text-white" : "bg-red-200 dark:bg-red-900/60 text-red-900 dark:text-white"
                     }`}>
                       {t("promptDimensions.overall")}: {deploy.validationResult.prompt_overall}/5
                     </span>
