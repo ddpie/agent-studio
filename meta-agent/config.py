@@ -51,6 +51,35 @@ DEFAULT_PERMISSION_TIER = "readonly"
 CODE_INTERPRETER_ID = os.environ.get("AGENT_STUDIO_CODE_INTERPRETER_ID", "")
 BROWSER_ID = os.environ.get("AGENT_STUDIO_BROWSER_ID", "")
 
+# Max output tokens per model family.
+# Bedrock API doesn't expose this; values from Anthropic docs + runtime errors.
+# Key: substring matched against model_id (first match wins, checked in order).
+_MAX_TOKENS_TABLE = [
+    ("opus-4-7",    128000),   # Claude Opus 4.7
+    ("opus-4-6",    128000),   # Claude Opus 4.6
+    ("opus-4-5",    32000),    # Claude Opus 4.5
+    ("opus-4-1",    32000),    # Claude Opus 4.1
+    ("opus",        128000),   # Opus fallback (future versions)
+    ("sonnet-4-6",  65536),    # Claude Sonnet 4.6
+    ("sonnet-4-5",  16384),    # Claude Sonnet 4.5
+    ("sonnet-4",    65536),    # Claude Sonnet 4 / 4.x fallback
+    ("sonnet-3-5",  8192),     # Claude 3.5 Sonnet
+    ("sonnet",      65536),    # Sonnet fallback
+    ("haiku-4-5",   16384),    # Claude Haiku 4.5
+    ("haiku-3",     4096),     # Claude 3 Haiku
+    ("haiku",       16384),    # Haiku fallback
+]
+
+
+def get_max_tokens(model_id: str) -> int:
+    """Return the max output tokens for a Bedrock model ID."""
+    mid = model_id.lower()
+    for pattern, limit in _MAX_TOKENS_TABLE:
+        if pattern in mid:
+            return limit
+    return 16384  # conservative default for unknown models
+
+
 MCP_GATEWAY_URL = os.getenv("MCP_GATEWAY_URL", "")
 if not MCP_GATEWAY_URL:
     try:
