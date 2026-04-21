@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 import boto3
 from strands import tool
 
-from config import MODEL_ID, REGION, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE
+from config import MODEL_ID, REGION, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE, SUB_AGENT_ROLE_ARN
 from deploy import (
     build_deployment_package_v2,
     upload_deployment,
@@ -323,7 +323,7 @@ def _redeploy_source(source_id: str, meta: dict) -> str:
     control = boto3.client("bedrock-agentcore-control", region_name=REGION)
     control.update_agent_runtime(
         agentRuntimeId=source_id,
-        roleArn=AGENT_ROLE_ARN,
+        roleArn=SUB_AGENT_ROLE_ARN,
         agentRuntimeArtifact={
             "codeConfiguration": {
                 "code": {"s3": {"bucket": S3_BUCKET, "prefix": s3_key}},
