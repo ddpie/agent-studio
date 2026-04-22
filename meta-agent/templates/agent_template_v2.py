@@ -977,9 +977,173 @@ def load_skill(name: str, file: str = "") -> str:
     return content
 
 
+class _CodeInterpreterFS:
+    """Typed access to the Code Interpreter sandbox filesystem.
+
+    The CI sandbox runs in a separate container from the sub-agent, so
+    the two filesystems are unrelated. Worse, even *inside* the sandbox
+    there are two separate file views:
+
+      - writeFiles / readFiles ops see a managed virtual FS used for
+        uploads. `readFiles` reject absolute paths and cannot see files
+        that the sandbox's own Python process wrote.
+      - executeCode / executeCommand see the real OS filesystem (cwd
+        `/opt/amazon/genesis1p-tools/var` at time of writing). Anything
+        matplotlib.savefig / open(...).write / pandas.to_csv produces
+        lands here, invisible to readFiles.
+
+    So `read_bytes` round-trips bytes through `executeCode` stdout (base64
+    + sentinels). `write_bytes` keeps using writeFiles since uploads into
+    the sandbox are what that op was built for.
+
+    Returns (value, error) tuples consistently; None error means success.
+    """
+
+    @staticmethod
+    def _normalize(path):
+        p = (path or "").lstrip("/")
+        # matplotlib / PIL etc. default to `/tmp/foo.png`. The CI sandbox
+        # workdir is the session root, so strip a leading `tmp/` to match.
+        if p.startswith("tmp/"):
+            p = p[len("tmp/"):]
+        if p.startswith("./"):
+            p = p[2:]
+        return p
+
+    @staticmethod
+    def _session():
+        session_id = getattr(run_command, "_session_id", None)
+        ci_id = _os.environ.get("AGENT_STUDIO_CODE_INTERPRETER_ID")
+        if not session_id or not ci_id:
+            return None, None, None
+        import boto3 as _boto3
+        return _boto3.client("bedrock-agentcore", region_name=_REGION), ci_id, session_id
+
+    @classmethod
+    def _invoke(cls, name, arguments):
+        """Call a CI filesystem op. Returns (stream_events, error_str_or_None)."""
+        client, ci_id, session_id = cls._session()
+        if client is None:
+            return [], "no active Code Interpreter session — call run_command first"
+        try:
+            resp = client.invoke_code_interpreter(
+                codeInterpreterIdentifier=ci_id,
+                sessionId=session_id,
+                name=name,
+                arguments=arguments,
+            )
+        except Exception as e:
+            return [], f"invoke_code_interpreter({name}) failed: {e}"
+        events = list(resp.get("stream", []))
+        for ev in events:
+            result = ev.get("result") or {}
+            if result.get("isError"):
+                msgs = []
+                for block in result.get("content", []) or []:
+                    if isinstance(block.get("text"), str):
+                        msgs.append(block["text"])
+                    r = block.get("resource")
+                    if isinstance(r, dict) and isinstance(r.get("text"), str):
+                        msgs.append(r["text"])
+                return events, "; ".join(msgs) or f"{name} returned isError with no message"
+        return events, None
+
+    @classmethod
+    def _exec(cls, code):
+        """Run Python in the CI session and return (stdout, stderr, exit_code, err_str_or_None)."""
+        events, err = cls._invoke("executeCode", {"code": code, "language": "python"})
+        if err:
+            return "", "", -1, err
+        stdout = stderr = ""
+        exit_code = 0
+        for ev in events:
+            sc = (ev.get("result") or {}).get("structuredContent") or {}
+            stdout += sc.get("stdout", "") or ""
+            stderr += sc.get("stderr", "") or ""
+            if sc.get("exitCode") is not None:
+                exit_code = sc["exitCode"]
+        return stdout, stderr, exit_code, None
+
+    @classmethod
+    def read_bytes(cls, path):
+        """Read a file from the sandbox. Returns (bytes_or_None, error_str_or_None).
+
+        Design note: CI's `readFiles` op only sees files placed via
+        `writeFiles` — it does NOT see files the sandbox's Python code
+        just wrote (matplotlib savefig, open().write(), pickle.dump,
+        python-pptx, pandas.to_csv etc). Those live in the sandbox's
+        real OS filesystem, reachable only from inside `executeCode`.
+
+        So we round-trip bytes through stdout: base64-encode in-sandbox,
+        print with sentinel markers, decode out here. Handles both
+        absolute and relative paths since this runs inside executeCode's
+        own cwd.
+        """
+        import base64 as _b64_
+        # Try multiple candidate paths — the model may have passed an
+        # absolute path like /tmp/chart.png, the sandbox cwd's relative
+        # form, or a normalized version. Let the sandbox pick the one
+        # that actually exists.
+        raw = path or ""
+        candidates = []
+        for c in [raw, cls._normalize(raw), _os.path.basename(raw)]:
+            if c and c not in candidates:
+                candidates.append(c)
+        code = (
+            "import base64 as _b, os as _o, sys as _s\\n"
+            "_cands = " + repr(candidates) + "\\n"
+            "_picked = next((p for p in _cands if _o.path.isfile(p)), None)\\n"
+            "if _picked is None:\\n"
+            "    print('__CI_FS_ERR__:not_found:' + repr(_cands))\\n"
+            "else:\\n"
+            "    _sz = _o.path.getsize(_picked)\\n"
+            "    with open(_picked,'rb') as _f: _data = _f.read()\\n"
+            "    _s.stdout.write('__CI_FS_BEGIN__' + _picked + '|' + str(_sz) + '|' + _b.b64encode(_data).decode() + '__CI_FS_END__')\\n"
+        )
+        stdout, stderr, exit_code, err = cls._exec(code)
+        if err:
+            return None, err
+        if "__CI_FS_ERR__:not_found" in stdout:
+            return None, f"file not found in CI sandbox; tried {candidates}"
+        import re as _re_
+        m = _re_.search(r"__CI_FS_BEGIN__(.*?)\\|(\\d+)\\|([A-Za-z0-9+/=]+)__CI_FS_END__", stdout, _re_.DOTALL)
+        if not m:
+            msg = stderr.strip() or stdout.strip()[:500] or "no sentinel in stdout"
+            return None, f"read_bytes exec returned no payload: {msg}"
+        try:
+            data = _b64_.b64decode(m.group(3))
+        except Exception as e:
+            return None, f"base64 decode failed: {e}"
+        expected = int(m.group(2))
+        if len(data) != expected:
+            return None, f"length mismatch: got {len(data)}, expected {expected}"
+        return data, None
+
+    @classmethod
+    def write_bytes(cls, path, data):
+        """Write data to the sandbox. Returns error_str_or_None (None on success).
+
+        Uses writeFiles (the documented upload path, which is what CI's
+        own filesystem view will see on later readFiles calls).
+        """
+        import base64 as _b64_
+        rel = cls._normalize(path)
+        if isinstance(data, (bytes, bytearray)):
+            payload = {"path": rel, "blob": _b64_.b64encode(bytes(data)).decode("ascii")}
+        else:
+            payload = {"path": rel, "text": str(data)}
+        _, err = cls._invoke("writeFiles", {"content": [payload]})
+        return err
+
+
 @_tool
 def run_command(command: str, language: str = "python") -> str:
     """Execute Python/JS/TS code or shell commands in a managed AgentCore sandbox.
+
+    File paths tip: any file you save here (e.g. matplotlib savefig,
+    pandas.to_csv, python-pptx) can later be passed to `upload_to_s3`
+    using the same path — `upload_to_s3` will fetch the bytes back out
+    of the sandbox for you. Absolute or relative paths both work.
 
     Args:
         command: The code or shell command to execute.
@@ -1039,64 +1203,6 @@ def run_command(command: str, language: str = "python") -> str:
         combined = (stdout + "\\n" + stderr).strip()
         return _json.dumps({"error": f"Exit code {exit_code}", "output": combined})
     return stdout.strip() if stdout.strip() else "(no output)"
-
-
-def _read_from_code_interpreter(path):
-    """Fetch a file from the Code Interpreter sandbox. Returns bytes or None.
-
-    run_command executes inside an AgentCore Code Interpreter container
-    that is filesystem-isolated from the sub-agent. Files the model just
-    generated (matplotlib pngs, python-pptx files, pandas csvs) live
-    there, not in the sub-agent's /tmp. `readFiles` is the documented
-    way to copy them out.
-    """
-    import base64 as _b64_
-    session_id = getattr(run_command, "_session_id", None)
-    if not session_id:
-        return None
-    ci_id = _os.environ.get("AGENT_STUDIO_CODE_INTERPRETER_ID")
-    if not ci_id:
-        return None
-    import boto3 as _boto3
-    client = _boto3.client("bedrock-agentcore", region_name=_REGION)
-    try:
-        resp = client.invoke_code_interpreter(
-            codeInterpreterIdentifier=ci_id,
-            sessionId=session_id,
-            name="readFiles",
-            arguments={"paths": [path]},
-        )
-    except Exception:
-        return None
-
-    # Walk the EventStream; first resource block with data wins. Content
-    # comes back as either `{blob: {data: <base64>, mimeType}}` or a
-    # `{text: ...}` block depending on whether CI considers the file
-    # binary or text.
-    for event in resp.get("stream", []):
-        result = event.get("result") or {}
-        for block in result.get("content", []) or []:
-            if "resource" in block:
-                r = block["resource"]
-                blob = r.get("blob") if isinstance(r, dict) else None
-                if blob and blob.get("data"):
-                    try:
-                        return _b64_.b64decode(blob["data"])
-                    except Exception:
-                        pass
-                text = r.get("text") if isinstance(r, dict) else None
-                if isinstance(text, str):
-                    return text.encode("utf-8")
-            if "blob" in block:
-                data = block["blob"].get("data")
-                if data:
-                    try:
-                        return _b64_.b64decode(data)
-                    except Exception:
-                        pass
-            if "text" in block and isinstance(block["text"], str):
-                return block["text"].encode("utf-8")
-    return None
 
 
 @_tool
@@ -1161,15 +1267,15 @@ def upload_to_s3(local_path: str, filename: str = "") -> str:
             return f"Upload failed: {e}"
 
     # Fallback: file was generated inside the Code Interpreter sandbox.
-    data = _read_from_code_interpreter(local_path)
-    if data is None:
+    data, err = _CodeInterpreterFS.read_bytes(local_path)
+    if err or data is None:
         return _json.dumps({
             "error": (
-                f"File not found: {local_path}. Checked the sub-agent's "
-                "filesystem and the Code Interpreter sandbox. Make sure "
-                "the file was actually written (check run_command output) "
-                "and that you're passing the exact path that was used in "
-                "the run_command code."
+                f"File not found: {local_path}. Tried the sub-agent's "
+                f"filesystem and the Code Interpreter sandbox ({err or 'no content'}). "
+                "Tip: save artifacts with a relative path inside run_command "
+                "(e.g. plt.savefig('chart.png'), not '/tmp/chart.png') and "
+                "pass the same path here."
             )
         })
     try:
