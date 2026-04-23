@@ -1,20 +1,17 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, Download, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useSessionTrace } from "../../hooks/useTraces";
-import { generateDownloadUrl } from "../../lib/s3-storage";
 import { formatDateTime } from "../../lib/date-format";
-import SpanTree from "./SpanTree";
 import ImageLightbox from "../ui/ImageLightbox";
+import S3DownloadButton from "../ui/S3DownloadButton";
 import { agentConfig } from "../../config";
 import type { RunDetail as RunDetailType, RunOutput } from "../../lib/runs-client";
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
 
 interface Props {
-  agentId: string;
   detail: RunDetailType;
   output: RunOutput | null;
   loading: boolean;
@@ -33,27 +30,8 @@ function stripS3Markers(text: string): string {
   return text.replace(/__S3_DOWNLOAD__:[^:]+:[^\s"}\]]+/g, "").trim();
 }
 
-export default function RunDetail({ agentId, detail, output, loading }: Props) {
+export default function RunDetail({ detail, output, loading }: Props) {
   const { t } = useTranslation();
-  const [showSpans, setShowSpans] = useState(false);
-  const { root: traceRoot, loading: traceLoading, pending: tracePending } = useSessionTrace(
-    showSpans ? agentId : null,
-    showSpans && detail.sessionId ? detail.sessionId : null
-  );
-
-  const handleDownload = async (key: string, filename: string) => {
-    try {
-      const blobUrl = await generateDownloadUrl(key);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      console.error("Download failed:", err);
-    }
-  };
-
 
   const promptTokens = detail.usage?.promptTokens != null ? Number(detail.usage.promptTokens) : null;
   const completionTokens = detail.usage?.completionTokens != null ? Number(detail.usage.completionTokens) : null;
@@ -140,15 +118,13 @@ export default function RunDetail({ agentId, detail, output, loading }: Props) {
               )}
               {files.length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  {files.map((artifact, idx) => (
-                    <button
-                      key={`file-${idx}`}
-                      onClick={() => handleDownload(artifact.key, artifact.filename)}
-                      className="flex items-center gap-2 px-3 py-2 rounded border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-sm"
-                    >
-                      <Download className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                      <span className="text-gray-800 dark:text-gray-200">{artifact.filename}</span>
-                    </button>
+                  {files.map((artifact) => (
+                    <S3DownloadButton
+                      key={artifact.key}
+                      s3Key={artifact.key}
+                      filename={artifact.filename}
+                      size="md"
+                    />
                   ))}
                 </div>
               )}
@@ -165,36 +141,6 @@ export default function RunDetail({ agentId, detail, output, loading }: Props) {
                 <ToolCallItem key={idx} tool={tool} />
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Span Tree */}
-        {detail.sessionId && (
-          <div>
-            <button
-              onClick={() => setShowSpans(!showSpans)}
-              className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 hover:text-gray-900 dark:hover:text-gray-100"
-            >
-              {showSpans ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-              {t("runs.spanTree") || "Span Tree"}
-            </button>
-            {showSpans && (
-              <>
-                {traceLoading && (
-                  <div className="flex items-center justify-center py-4">
-                    <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-                  </div>
-                )}
-                {tracePending && !traceLoading && (
-                  <div className="text-sm text-gray-500 dark:text-gray-400 italic py-4">
-                    {t("runs.spansPending") || "Spans are still being ingested..."}
-                  </div>
-                )}
-                {traceRoot && (
-                  <SpanTree root={traceRoot} />
-                )}
-              </>
-            )}
           </div>
         )}
 

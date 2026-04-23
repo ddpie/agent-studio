@@ -2,8 +2,11 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, FileText, Check, Image as ImageIcon } from "lucide-react";
 
+// tool-call <details> blocks and tool-rich-output divs are no longer written
+// into message.content — they live on message.toolCalls sidecar. Legacy
+// messages are cleaned in chat-store's v1→v2 migration, so this helper only
+// needs to handle agent-proposal code fences going forward.
 const stripNonContent = (s: string) => s
-  .replace(/<details class="tool-call">[\s\S]*?<\/details>/g, "")
   .replace(/```agent-proposal\n[\s\S]*?```/g, "")
   .replace(/\n{3,}/g, "\n\n")
   .trim();
@@ -39,17 +42,12 @@ export default function CopyButtons({ content, contentRef }: { content: string; 
   const copyAs = async (mode: "text" | "md" | "rich") => {
     if (mode === "text") {
       const text = stripNonContent(content)
-        .replace(/<div class="tool-rich-output">[\s\S]*?<\/div>/g, "\n[Chart]\n")
         .replace(/[#*`_~\[\]()>|\\-]/g, "")
         .replace(/\n{3,}/g, "\n\n")
         .trim();
       await navigator.clipboard.writeText(text);
     } else if (mode === "md") {
-      const md = stripNonContent(content)
-        .replace(/<div class="tool-rich-output">[\s\S]*?<\/div>/g, "\n\n[Chart]\n\n")
-        .replace(/\n{3,}/g, "\n\n")
-        .trim();
-      await navigator.clipboard.writeText(md);
+      await navigator.clipboard.writeText(stripNonContent(content));
     } else {
       if (!contentRef?.current) {
         await navigator.clipboard.writeText(content);
