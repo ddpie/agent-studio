@@ -66,7 +66,7 @@ async def invoke(payload, context):
             + skills_listing
             + "\\n\\nSkills come in a few flavors — check_capabilities() tells you which is which (type: prompt | scripted | assets-only):"
             + "\\n- prompt skills (just a SKILL.md): use load_skill(name) and follow the instructions yourself."
-            + "\\n- scripted skills (include .py/.sh): prefer run_skill_script(skill_name, script) — it stages the skill into the sandbox for you. Do NOT manually load_skill + run_command."
+            + "\\n- scripted skills (include .py/.sh): prefer run_skill_script(skill_name, script, args='...') — it stages the skill into the sandbox for you. Do NOT manually load_skill + run_command. Pass CLI flags via args= (shell-split). If unsure about flags, call with args='--help' first. Relative paths in args resolve against your current cwd by default; set cwd='skill' for scripts that read the skill's bundled assets."
             + "\\n- assets-only skills (SKILL.md + data files, no scripts): load_skill(name, file='path') to read individual files as needed."
             + "\\nBefore promising a file-generating task that depends on a specific skill, call check_capabilities() first. If a skill is missing or the wrong type, say so instead of trying and failing mid-turn."
         )
@@ -232,7 +232,7 @@ async def invoke(payload, context):
             + skills_listing
             + "\\n\\nSkills come in a few flavors — check_capabilities() tells you which is which (type: prompt | scripted | assets-only):"
             + "\\n- prompt skills (just a SKILL.md): use load_skill(name) and follow the instructions yourself."
-            + "\\n- scripted skills (include .py/.sh): prefer run_skill_script(skill_name, script) — it stages the skill into the sandbox for you. Do NOT manually load_skill + run_command."
+            + "\\n- scripted skills (include .py/.sh): prefer run_skill_script(skill_name, script, args='...') — it stages the skill into the sandbox for you. Do NOT manually load_skill + run_command. Pass CLI flags via args= (shell-split). If unsure about flags, call with args='--help' first. Relative paths in args resolve against your current cwd by default; set cwd='skill' for scripts that read the skill's bundled assets."
             + "\\n- assets-only skills (SKILL.md + data files, no scripts): load_skill(name, file='path') to read individual files as needed."
             + "\\nBefore promising a file-generating task that depends on a specific skill, call check_capabilities() first. If a skill is missing or the wrong type, say so instead of trying and failing mid-turn."
         )
@@ -1505,26 +1505,43 @@ def _stage_skill_into_ci(name: str):
 
 
 @_tool
-def run_skill_script(skill_name: str, script: str, args: str = "", language: str = "python") -> str:
+def run_skill_script(
+    skill_name: str,
+    script: str,
+    args: str = "",
+    cwd: str = "",
+    language: str = "python",
+) -> str:
     """Execute a script that ships with a skill inside Code Interpreter.
 
     Use this instead of manually `load_skill(..., file=...)` + `run_command`.
     The skill's files are copied into the sandbox once per session (cached),
-    then the script runs from the skill's directory so relative imports and
-    asset reads resolve naturally.
+    then the script runs as if the user invoked it from their cwd — so
+    relative paths in ``args`` resolve against the files they just created,
+    not against the skill's own directory.
 
     Scripts typically accept CLI arguments (--output, --theme, paths, etc).
     Pass them via ``args`` as a single shell-style string:
 
         run_skill_script("ppt-generator",
                          "ppt-master-assets/scripts/svg_to_pptx.py",
-                         args="./ppt_svgs/ --output result.pptx")
+                         args="./ppt_svgs --output result.pptx -f ppt169")
 
-    Package-aware execution: if ``script`` points at a file inside a Python
-    package (e.g. ``.../svg_to_pptx/__init__.py`` or
-    ``.../svg_to_pptx/pptx_cli.py``), the tool runs the package's module via
-    ``python -m`` so relative imports (``from .pptx_cli import main``) work.
-    Otherwise it executes the script as a top-level file.
+    CWD selection (``cwd`` parameter):
+        - ``""`` (default) — the CI session's current working directory,
+          typically where the user wrote their output files (e.g.
+          ``./ppt_svgs``). This is what most CLIs expect; a bare
+          ``ppt_svgs`` in ``args`` resolves against user files, not the
+          skill tree.
+        - ``"skill"`` — the skill's own directory. Use this for scripts
+          that read assets bundled with the skill via relative paths.
+        - any absolute path — explicit override.
+
+    Package-aware execution: if ``script`` points inside a Python package
+    (any ancestor has ``__init__.py``), the tool runs the package's module
+    via ``runpy.run_module`` so relative imports like
+    ``from .pptx_cli import main`` work. Otherwise it executes the script
+    as a top-level file. This is independent of ``cwd``.
 
     Args:
         skill_name: The skill to use (e.g. "ppt-generator"). Must be
@@ -1535,6 +1552,9 @@ def run_skill_script(skill_name: str, script: str, args: str = "", language: str
             ``ppt-master-assets/scripts/svg_to_pptx/pptx_cli.py``.
         args: CLI arguments passed to the script (space-separated, shell-
             parsed). Default empty.
+        cwd: Working directory for the script. ``""`` (default) = CI
+            session's current cwd, ``"skill"`` = skill directory, or an
+            absolute path.
         language: "python" (default) | "shell" — how to invoke the script.
 
     Returns:
@@ -1567,10 +1587,33 @@ def run_skill_script(skill_name: str, script: str, args: str = "", language: str
     except ValueError as e:
         return _tool_error(f"invalid args (shell parse failed): {e}")
 
+    # cwd resolution: "" = preserve the CI session's current cwd (usually
+    # where the user's output files live); "skill" = the skill's own
+    # directory; any other value = treated as an absolute path. An invalid
+    # relative string is rejected — ambiguous.
+    cwd_spec = (cwd or "").strip()
+    if cwd_spec == "":
+        resolved_cwd = None  # signal: "don't chdir"
+    elif cwd_spec == "skill":
+        resolved_cwd = remote_dir
+    elif cwd_spec.startswith("/"):
+        resolved_cwd = cwd_spec
+    else:
+        return _tool_error(
+            f"cwd must be '' (default user cwd), 'skill', or an absolute path — got {cwd_spec!r}"
+        )
+
     if language == "shell":
         # Preserve quoting when passing args through shell.
         quoted_args = " ".join(_shlex_.quote(a) for a in argv_extra)
-        cmd = f"cd {_shlex_.quote(remote_dir)} && bash {_shlex_.quote(rel)} {quoted_args}".rstrip()
+        script_abs = f"{remote_dir}/{rel}"
+        if resolved_cwd:
+            cmd = (
+                f"cd {_shlex_.quote(resolved_cwd)} && "
+                f"bash {_shlex_.quote(script_abs)} {quoted_args}"
+            ).rstrip()
+        else:
+            cmd = f"bash {_shlex_.quote(script_abs)} {quoted_args}".rstrip()
         return run_command(cmd, "shell")
 
     # Python path: if the script sits inside a Python package (i.e. its
@@ -1592,7 +1635,12 @@ def run_skill_script(skill_name: str, script: str, args: str = "", language: str
         f"_abs = _P({remote_dir!r})\\n"
         f"_target = (_abs / {target_rel!r}).resolve()\\n"
         f"_argv_extra = {argv_extra!r}\\n"
-        "os.chdir(str(_abs))\\n"
+        f"_cwd_override = {resolved_cwd!r}\\n"
+        "_saved_cwd = os.getcwd()\\n"
+        "_saved_path = list(sys.path)\\n"
+        "_saved_argv = list(sys.argv)\\n"
+        "if _cwd_override:\\n"
+        "    os.chdir(_cwd_override)\\n"
         "if not _target.is_file():\\n"
         "    raise FileNotFoundError(str(_target))\\n"
         "# Walk up collecting package directories (pytest pattern).\\n"
@@ -1606,8 +1654,6 @@ def run_skill_script(skill_name: str, script: str, args: str = "", language: str
         "        break\\n"
         "    _cur = _parent\\n"
         "_pkg_root = _cur\\n"
-        "_saved_path = list(sys.path)\\n"
-        "_saved_argv = list(sys.argv)\\n"
         "try:\\n"
         "    sys.argv = [str(_target)] + _argv_extra\\n"
         "    if _pkg_parts:\\n"
@@ -1624,8 +1670,13 @@ def run_skill_script(skill_name: str, script: str, args: str = "", language: str
         "            sys.path.insert(0, str(_target.parent))\\n"
         "        runpy.run_path(str(_target), run_name='__main__')\\n"
         "finally:\\n"
+        "    # Restore interpreter state so the next turn sees a clean\\n"
+        "    # slate. Essential for the persistent-kernel case: without\\n"
+        "    # this, each run_skill_script call would leave chdir / argv\\n"
+        "    # drift for the next cell.\\n"
         "    sys.path[:] = _saved_path\\n"
         "    sys.argv[:] = _saved_argv\\n"
+        "    os.chdir(_saved_cwd)\\n"
     )
     return run_command(code, "python")
 

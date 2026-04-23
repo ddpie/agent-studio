@@ -170,12 +170,15 @@ def test_run_skill_script_uses_absolute_path_resistant_to_cwd_drift(monkeypatch,
         ns["run_skill_script"]("ppt-generator", "scripts/render.py")
         ns["run_skill_script"]("ppt-generator", "scripts/render.py")
 
-    # Both exec calls should use the SAME absolute path (no drift/doubling)
-    exec_codes = [c["arguments"]["code"] for c in calls if c["name"] == "executeCode" and "runpy.run_path" in c.get("arguments", {}).get("code", "")]
+    # Both exec calls should embed the SAME absolute path (no drift/doubling).
+    # The emitted code uses run_module (package-aware branch) or run_path —
+    # either way the skill absolute path appears in the generated code.
+    exec_codes = [c["arguments"]["code"] for c in calls if c["name"] == "executeCode" and "runpy" in c.get("arguments", {}).get("code", "")]
     expected_abs = f"{SANDBOX_ROOT}/skills/ppt-generator"
+    assert exec_codes, "no runpy exec captured"
     for code in exec_codes:
         assert expected_abs in code, f"expected {expected_abs!r} in code, got:\n{code}"
-        # Critical: no doubled prefix
+        # Critical: no doubled prefix (the original drift symptom).
         assert f"{expected_abs}/skills/ppt-generator" not in code
 
 
@@ -226,6 +229,97 @@ def test_run_skill_script_passes_argv_and_handles_packages(monkeypatch, tmp_path
     assert "run_path" in code  # fallback present
     # pytest-style identifier check
     assert "isidentifier" in code
+
+
+def test_run_skill_script_cwd_default_preserves_user_cwd(monkeypatch, tmp_path):
+    """Default cwd=\"\" must NOT chdir into the skill directory — that
+    was the bug where a user's ``ppt_svgs`` argv path couldn't be found
+    because the script got chdir'd to skills/ppt-generator first."""
+    monkeypatch.setenv("AGENT_STUDIO_CODE_INTERPRETER_ID", "ci-test")
+    _seed_local_skill(tmp_path)
+
+    calls = []
+    ci = MagicMock()
+    ci.start_code_interpreter_session.return_value = {"sessionId": "sess-cwd"}
+
+    def fake_invoke(**kwargs):
+        calls.append(kwargs)
+        if kwargs["name"] == "writeFiles":
+            return {"stream": [{"result": {"content": []}}]}
+        return {"stream": [{"result": {"structuredContent": {"stdout": "ok\n", "stderr": "", "exitCode": 0}, "content": []}}]}
+
+    ci.invoke_code_interpreter.side_effect = fake_invoke
+
+    with patch("boto3.client", return_value=ci):
+        ns = _exec_builtin()
+        ns["_CACHE_ROOT"] = tmp_path
+        _install_manifest(ns, [{"id": "s-1", "name": "ppt-generator"}])
+        ns["_CACHED_SKILLS"].add("s-1")
+        # Default cwd — script should run without chdir into skill dir
+        ns["run_skill_script"]("ppt-generator", "scripts/render.py")
+
+    exec_calls = [c for c in calls if c["name"] == "executeCode" and "runpy" in c.get("arguments", {}).get("code", "")]
+    assert exec_calls
+    code = exec_calls[-1]["arguments"]["code"]
+    # _cwd_override is None (no override), and os.chdir is guarded by that
+    assert "_cwd_override = None" in code
+    # Saved cwd restore is still present to keep session clean between turns
+    assert "os.chdir(_saved_cwd)" in code
+
+
+def test_run_skill_script_cwd_skill_keyword(monkeypatch, tmp_path):
+    """cwd='skill' must chdir into the skill directory before running."""
+    monkeypatch.setenv("AGENT_STUDIO_CODE_INTERPRETER_ID", "ci-test")
+    _seed_local_skill(tmp_path)
+
+    calls = []
+    ci = MagicMock()
+    ci.start_code_interpreter_session.return_value = {"sessionId": "sess-skl"}
+
+    def fake_invoke(**kwargs):
+        calls.append(kwargs)
+        if kwargs["name"] == "writeFiles":
+            return {"stream": [{"result": {"content": []}}]}
+        return {"stream": [{"result": {"structuredContent": {"stdout": "ok\n", "stderr": "", "exitCode": 0}, "content": []}}]}
+
+    ci.invoke_code_interpreter.side_effect = fake_invoke
+
+    with patch("boto3.client", return_value=ci):
+        ns = _exec_builtin()
+        ns["_CACHE_ROOT"] = tmp_path
+        _install_manifest(ns, [{"id": "s-1", "name": "ppt-generator"}])
+        ns["_CACHED_SKILLS"].add("s-1")
+        ns["run_skill_script"]("ppt-generator", "scripts/render.py", cwd="skill")
+
+    exec_calls = [c for c in calls if c["name"] == "executeCode" and "runpy" in c.get("arguments", {}).get("code", "")]
+    assert exec_calls
+    code = exec_calls[-1]["arguments"]["code"]
+    # "skill" resolves to the skill's absolute staging dir
+    assert "_cwd_override = 'skills/ppt-generator'" in code
+
+
+def test_run_skill_script_cwd_rejects_relative(monkeypatch, tmp_path):
+    """Relative cwd strings (other than \"skill\") must be rejected."""
+    monkeypatch.setenv("AGENT_STUDIO_CODE_INTERPRETER_ID", "ci-test")
+    _seed_local_skill(tmp_path)
+
+    ci = MagicMock()
+    ci.start_code_interpreter_session.return_value = {"sessionId": "sess-bad"}
+    ci.invoke_code_interpreter.return_value = {
+        "stream": [{"result": {"structuredContent": {"stdout": "", "stderr": "", "exitCode": 0}, "content": []}}]
+    }
+
+    with patch("boto3.client", return_value=ci):
+        ns = _exec_builtin()
+        ns["_CACHE_ROOT"] = tmp_path
+        _install_manifest(ns, [{"id": "s-1", "name": "ppt-generator"}])
+        ns["_CACHED_SKILLS"].add("s-1")
+        result = ns["run_skill_script"](
+            "ppt-generator", "scripts/render.py", cwd="some/relative/dir"
+        )
+
+    assert isinstance(result, dict) and result["status"] == "error"
+    assert "absolute path" in result["content"][0]["text"]
 
 
 def test_run_skill_script_rejects_blank_args():
