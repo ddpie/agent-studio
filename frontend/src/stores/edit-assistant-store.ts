@@ -163,17 +163,51 @@ ${toolDefs ? `## Current Tool Code (source of truth)\n\`\`\`python\n${toolDefs}\
 
 ${(() => {
   const allSkills = (formContext.skills as Array<{ id: string; name: string; description: string; files: string[] }>) || [];
-  const editingSkillId = useAgentEditStore.getState().editingSkillId;
+  const editStore = useAgentEditStore.getState();
+  const editingSkillId = editStore.editingSkillId;
   const skills = editingSkillId ? allSkills.filter(s => s.id === editingSkillId) : allSkills;
   if (skills.length === 0) return "";
-  // Only metadata + file tree goes into the prompt. Skills can have
-  // hundreds of files (ppt-generator has 785); dumping contents would
-  // blow the budget. You have list_skill_files / read_skill_file tools —
-  // use them to pull only the files you need for the user's request.
+  const pendingFiles = editStore.pendingSkillFiles || {};
+  const originalFiles = editStore.originalSkillFiles || {};
+
+  // Surface dirty in-editor edits so the assistant doesn't read a stale
+  // S3 version via read_skill_file and then clobber unsaved work. A file
+  // is "dirty" when its pending content differs from the original we
+  // captured on first load. The assistant is told to treat these as the
+  // source of truth and NOT to call read_skill_file for them.
+  const MAX_DIRTY_BYTES = 20000;
+  const collectDirty = (skillId: string): Array<{ path: string; content: string; truncated: boolean }> => {
+    const pending = pendingFiles[skillId] || {};
+    const original = originalFiles[skillId] || {};
+    const out: Array<{ path: string; content: string; truncated: boolean }> = [];
+    for (const [path, content] of Object.entries(pending)) {
+      if (typeof content !== "string") continue;
+      if (original[path] === content) continue; // clean — same as S3 baseline
+      const truncated = content.length > MAX_DIRTY_BYTES;
+      out.push({
+        path,
+        content: truncated ? content.slice(0, MAX_DIRTY_BYTES) + `\n\n... [truncated ${content.length - MAX_DIRTY_BYTES} chars]` : content,
+        truncated,
+      });
+    }
+    return out;
+  };
+
+  const renderDirty = (skillId: string): string => {
+    const dirty = collectDirty(skillId);
+    if (dirty.length === 0) return "";
+    const blocks = dirty.map(({ path, content, truncated }) =>
+      `### ${path}${truncated ? " (truncated)" : ""}\n\`\`\`\n${content}\n\`\`\``
+    );
+    return `\n\n  **Unsaved edits in the editor (override S3 for these paths):**\n\n${blocks.join("\n\n")}`;
+  };
+
   return `## Bound Skills${editingSkillId ? " (currently editing)" : ""}
-${skills.map(s => `- ${s.name} (id=${s.id}): ${s.description}\n  files: ${s.files.join(", ")}`).join("\n")}
+${skills.map(s => `- ${s.name} (id=${s.id}): ${s.description}\n  files: ${s.files.join(", ")}${renderDirty(s.id)}`).join("\n")}
 
 Before rewriting or reviewing a skill file, use read_skill_file(skill_id, path) to fetch its content (and list_skill_files(skill_id) first if you need the full tree). Don't guess file content you haven't read. Pull only the files relevant to the ask — for "optimize SKILL.md", read SKILL.md plus any INDEX / layout / helper files that SKILL.md references.
+
+**Unsaved-edits rule:** If a file appears under "Unsaved edits in the editor" above, use that inline content as the source of truth — do NOT call read_skill_file for it. The S3 copy is stale compared to what the user is currently editing, and reading it would cause you to overwrite their in-progress changes.
 
 When the user asks to modify a skill file, write the new content with __field_value:
 
