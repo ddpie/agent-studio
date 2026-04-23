@@ -87,40 +87,6 @@ def test_check_capabilities_lists_skills_from_cache(monkeypatch, tmp_path):
     assert "gone" not in names  # deleted skills filtered out
 
 
-def test_check_capabilities_surfaces_requires_summary(monkeypatch, tmp_path):
-    """Skill frontmatter with requires: must be parsed and included so the
-    model can reason about whether to even attempt it."""
-    monkeypatch.delenv("AGENT_STUDIO_CODE_INTERPRETER_ID", raising=False)
-
-    (tmp_path / "index.json").write_text(json.dumps([{"id": "abc", "name": "ppt-generator"}]))
-    sdir = tmp_path / "abc"
-    sdir.mkdir()
-    (sdir / "SKILL.md").write_text(
-        '---\n'
-        'name: "ppt-generator"\n'
-        'description: "make ppt"\n'
-        'requires:\n'
-        '  - type: package\n'
-        '    name: python-pptx\n'
-        '  - type: asset\n'
-        '    path: assets/\n'
-        '---\n'
-        '# body\n'
-    )
-
-    ns = _exec_builtin()
-    ns["_CACHE_ROOT"] = tmp_path
-    ns["_CACHE_READY"] = True
-
-    out = ns["check_capabilities"]()
-    data = json.loads(out)
-    skill = data["skills"][0]
-    assert skill["name"] == "ppt-generator"
-    assert "requires" in skill
-    types_seen = {r["type"] for r in skill["requires"]}
-    assert types_seen == {"package", "asset"}
-
-
 def test_check_capabilities_probes_ci_when_session_exists(monkeypatch, tmp_path):
     """With a live CI session, the probe should roundtrip sys.version."""
     monkeypatch.setenv("AGENT_STUDIO_CODE_INTERPRETER_ID", "ci-test")

@@ -873,47 +873,6 @@ def get_skills_listing() -> str:
         return ""
 
 
-def _parse_requires_from_skill_md(skill_md_path) -> list | None:
-    """Parse the ``requires:`` list from a SKILL.md's YAML frontmatter.
-
-    Returns a compact summary [{"type": ..., "name": ...}, ...] that
-    check_capabilities can show to the model, or None if the file has no
-    requires field. Failures are swallowed — stale / malformed frontmatter
-    must never break preflight; the most we report is "we couldn't read it".
-    """
-    try:
-        text = skill_md_path.read_text(encoding="utf-8")
-    except Exception:
-        return None
-    if not text.startswith("---"):
-        return None
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return None
-    try:
-        import yaml as _yaml
-        meta = _yaml.safe_load(parts[1]) or {}
-    except Exception:
-        return None
-    if not isinstance(meta, dict):
-        return None
-    requires = meta.get("requires")
-    if not isinstance(requires, list):
-        return None
-    summary = []
-    for req in requires:
-        if not isinstance(req, dict):
-            continue
-        entry = {"type": req.get("type")}
-        # Preserve the discriminator for each requirement shape so the model
-        # can act on it (pip install pkg / read asset / switch runtime).
-        for k in ("name", "version", "path", "kind", "language"):
-            if k in req and req[k] is not None:
-                entry[k] = req[k]
-        summary.append(entry)
-    return summary
-
-
 def _read_local_or_s3(s3_key: str) -> str | None:
     """Read from local cache first, fallback to S3."""
     rel = s3_key[len("skills/"):] if s3_key.startswith("skills/") else s3_key
@@ -1575,28 +1534,21 @@ def check_capabilities() -> str:
             file_count = 0
             loadable = False
             entry_err = None
-            requires_summary = None
             if local_root and local_root.exists():
                 try:
                     file_count = sum(1 for p in local_root.rglob("*") if p.is_file())
-                    skill_md = local_root / "SKILL.md"
-                    loadable = skill_md.is_file()
-                    if loadable:
-                        requires_summary = _parse_requires_from_skill_md(skill_md)
+                    loadable = (local_root / "SKILL.md").is_file()
                 except Exception as e:
                     entry_err = str(e)
             else:
                 entry_err = "not in local cache"
-            entry = {
+            report["skills"].append({
                 "name": name,
                 "id": sid,
                 "loadable": loadable,
                 "file_count": file_count,
                 "error": entry_err,
-            }
-            if requires_summary is not None:
-                entry["requires"] = requires_summary
-            report["skills"].append(entry)
+            })
     except Exception as e:
         report["skills_error"] = str(e)
 
