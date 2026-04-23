@@ -189,7 +189,6 @@ def create_agent(
     # Read skills from staging config
     skills_config = staged.get("skills", []) if staging_key else []
     skills_data = []
-    skill_scripts = {}
 
     # Parse mcp_targets and validate against workspace policy
     mcp_targets_list = [t.strip() for t in mcp_targets.split(",") if t.strip()] if mcp_targets else []
@@ -204,17 +203,22 @@ def create_agent(
             return json.dumps({"error": f"MCP targets not allowed in this workspace: {denied}"})
         mcp_endpoints = _resolve_mcp_endpoints(mcp_targets_list)
 
+    # Skill files are NOT packaged into the deployment zip. They live at
+    # ``agents/{agent_id}/skills/{skill_id}/`` in S3 (written by the CRUD
+    # Lambda) and are fetched on demand by the sub-agent's load_skill /
+    # run_skill_script at runtime. That decouples skill revisions from
+    # agent redeploys — change a skill, all consuming agents see it on
+    # next invocation. We still need SKILL.md content in-hand to build
+    # the prompt's progressive-disclosure section.
     if skills_config:
         s3_client = boto3.client("s3", region_name=REGION)
         for skill_entry in skills_config:
             skill_id = skill_entry.get("id", "")
-            skill_name = skill_entry.get("name", "").replace(" ", "_").replace("-", "_")
             agent_name_for_path = staged.get("agent_id", agent_name) if staging_key else agent_name
 
             skill_md_content = ""
             try:
-                skill_prefix = f"agents/{agent_name_for_path}/skills/{skill_id}/"
-                md_key = f"{skill_prefix}SKILL.md"
+                md_key = f"agents/{agent_name_for_path}/skills/{skill_id}/SKILL.md"
                 md_obj = s3_client.get_object(Bucket=S3_BUCKET, Key=md_key)
                 skill_md_content = md_obj["Body"].read().decode("utf-8")
             except Exception as e:
@@ -226,24 +230,6 @@ def create_agent(
                 "description": skill_entry.get("description", ""),
                 "skill_md_content": skill_md_content,
             })
-
-            try:
-                resp = s3_client.list_objects_v2(
-                    Bucket=S3_BUCKET,
-                    Prefix=f"{skill_prefix}scripts/",
-                )
-                script_files = {}
-                for obj in resp.get("Contents", []):
-                    key = obj["Key"]
-                    filename = key.split("/")[-1]
-                    if filename:
-                        content = s3_client.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read().decode("utf-8")
-                        script_files[filename] = content
-                if script_files:
-                    skill_scripts[skill_name] = script_files
-            except Exception as e:
-                import sys
-                print(f"WARNING: Failed to read scripts for skill {skill_id}: {e}", file=sys.stderr)
 
     # Apply template if specified
     if template_id:
@@ -294,7 +280,7 @@ def create_agent(
     # Build, upload, deploy
     tier = permission_tier or DEFAULT_PERMISSION_TIER
     role_arn = PERMISSION_TIER_ROLES.get(tier, PERMISSION_TIER_ROLES[DEFAULT_PERMISSION_TIER])
-    package = build_deployment_package_v2(main_py, tools_py, prompt_txt, config_json, skill_scripts=skill_scripts)
+    package = build_deployment_package_v2(main_py, tools_py, prompt_txt, config_json)
     s3_key = upload_deployment(agent_name, package)
     result = create_runtime(agent_name, description, s3_key, role_arn)
 

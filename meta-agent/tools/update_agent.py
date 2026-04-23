@@ -125,7 +125,6 @@ def update_agent(
     # Read skills from staging config
     skills_config = staged.get("skills", []) if staging_key else []
     skills_data = []
-    skill_scripts = {}
 
     # Parse mcp_targets and validate against workspace policy
     mcp_targets_list = [t.strip() for t in mcp_targets.split(",") if t.strip()] if mcp_targets else []
@@ -140,16 +139,18 @@ def update_agent(
             return json.dumps({"error": f"MCP targets not allowed in this workspace: {denied}"})
         mcp_endpoints = _resolve_mcp_endpoints(mcp_targets_list)
 
+    # Skill files are fetched from S3 at sub-agent runtime (by load_skill /
+    # run_skill_script), not packaged into the deployment zip. We only
+    # need SKILL.md content here to build the prompt's progressive-
+    # disclosure section.
     if skills_config:
         s3_client = boto3.client("s3", region_name=REGION)
         for skill_entry in skills_config:
             skill_id = skill_entry.get("id", "")
-            skill_name = skill_entry.get("name", "").replace(" ", "_").replace("-", "_")
 
             skill_md_content = ""
             try:
-                skill_prefix = f"agents/{agent_id}/skills/{skill_id}/"
-                md_key = f"{skill_prefix}SKILL.md"
+                md_key = f"agents/{agent_id}/skills/{skill_id}/SKILL.md"
                 md_obj = s3_client.get_object(Bucket=S3_BUCKET, Key=md_key)
                 skill_md_content = md_obj["Body"].read().decode("utf-8")
             except Exception as e:
@@ -161,24 +162,6 @@ def update_agent(
                 "description": skill_entry.get("description", ""),
                 "skill_md_content": skill_md_content,
             })
-
-            try:
-                resp = s3_client.list_objects_v2(
-                    Bucket=S3_BUCKET,
-                    Prefix=f"{skill_prefix}scripts/",
-                )
-                script_files = {}
-                for obj in resp.get("Contents", []):
-                    key = obj["Key"]
-                    filename = key.split("/")[-1]
-                    if filename:
-                        content = s3_client.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read().decode("utf-8")
-                        script_files[filename] = content
-                if script_files:
-                    skill_scripts[skill_name] = script_files
-            except Exception as e:
-                import sys
-                print(f"WARNING: Failed to read scripts for skill {skill_id}: {e}", file=sys.stderr)
 
     # Permission is enforced by the CRUD Lambda (JWT + workspace RBAC)
     # Meta-Agent runs as a system service, no per-user ownership check here
@@ -284,7 +267,7 @@ def update_agent(
             return json.dumps({"error": "Code validation failed", "details": validation["errors"]})
 
         # Build and upload
-        package = build_deployment_package_v2(main_py, tools_py, prompt_txt, config_json, skill_scripts=skill_scripts)
+        package = build_deployment_package_v2(main_py, tools_py, prompt_txt, config_json)
         s3_key = upload_deployment(agent_id, package)
 
         # Update runtime in-place

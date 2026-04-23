@@ -51,6 +51,11 @@ def _shared_env_vars(agent_id: str = "") -> dict:
         env["AGENT_STUDIO_BROWSER_ID"] = br
 
     if agent_id:
+        # Dedicated var for skill S3 lookups (agents/{id}/skills/*). The
+        # sub-agent builtin_tools also derives this from OTEL_RESOURCE_
+        # ATTRIBUTES below, but explicit is more robust if the OTEL attr
+        # format ever changes.
+        env["AGENT_STUDIO_AGENT_ID"] = agent_id
         # Resource attributes + OTLP-logs headers link spans to the agent's
         # runtime log group so AgentCore's data plane routes them to aws/spans
         # via Transaction Search. cloud.resource_id is what CloudWatch uses
@@ -157,12 +162,14 @@ def build_deployment_package_v2(
     tools_py: str,
     prompt_txt: str,
     config_json: str,
-    skill_scripts: dict | None = None,
 ) -> bytes:
     """Build deployment zip with multi-file structure.
 
-    Files written: main.py, tools.py, prompt.txt, config.json
-    stream_utils.py is expected to be in the base zip already.
+    Files written: main.py, tools.py, prompt.txt, config.json,
+    stream_utils.py, builtin_tools.py. Skill files are NOT packaged —
+    they live at ``agents/{agent_id}/skills/`` in S3 and are fetched at
+    sub-agent runtime on first use. Changing a skill no longer requires
+    a sub-agent redeploy.
 
     Sub-agents use SUB_AGENT_BASE_DEPLOYMENT_KEY (fat zip with Playwright +
     strands-agents-tools for browser_use). Falls back to BASE_DEPLOYMENT_KEY
@@ -212,13 +219,6 @@ def build_deployment_package_v2(
             # Always inject latest builtin_tools.py
             if _LATEST_BUILTIN_TOOLS:
                 new_zip.writestr("builtin_tools.py", _LATEST_BUILTIN_TOOLS)
-
-            # Write skill scripts into subdirectories
-            if skill_scripts:
-                for skill_name, files in skill_scripts.items():
-                    for filepath, content in files.items():
-                        zip_path = f"skills/{skill_name}/scripts/{filepath}"
-                        new_zip.writestr(zip_path, content)
 
     return buf.getvalue()
 
@@ -273,7 +273,16 @@ def upload_deployment(agent_id_or_name: str, package: bytes) -> str:
 
 
 def create_runtime(agent_name: str, description: str, s3_key: str, role_arn: str = AGENT_ROLE_ARN) -> dict:
-    """Create an AgentCore Runtime. Returns {agent_id, agent_arn}."""
+    """Create an AgentCore Runtime. Returns {agent_id, agent_arn}.
+
+    AgentCore assigns ``agentRuntimeId`` during create, so we can't pass it
+    in the first call. Immediately after create we issue a second
+    update_agent_runtime with the agent_id-aware env (OTEL resource attrs
+    + AGENT_STUDIO_AGENT_ID for skill scoping). Without this step a
+    first-time-deployed sub-agent can't resolve its own skill S3 prefix
+    and check_capabilities / load_skill / run_skill_script all fail until
+    someone runs update_agent.
+    """
     control = boto3.client("bedrock-agentcore-control", region_name=REGION)
 
     resp = control.create_agent_runtime(
@@ -297,8 +306,36 @@ def create_runtime(agent_name: str, description: str, s3_key: str, role_arn: str
         environmentVariables=_shared_env_vars(),
     )
 
+    agent_id = resp["agentRuntimeId"]
+
+    # Second-pass update to inject the agent_id-aware env. Same artifact,
+    # just the env diff — this is cheap (no code rebuild, no redeploy-
+    # from-scratch).
+    try:
+        control.update_agent_runtime(
+            agentRuntimeId=agent_id,
+            roleArn=role_arn,
+            agentRuntimeArtifact={
+                "codeConfiguration": {
+                    "code": {"s3": {"bucket": S3_BUCKET, "prefix": s3_key}},
+                    "runtime": "PYTHON_3_10",
+                    "entryPoint": ["main.py"],
+                }
+            },
+            networkConfiguration={"networkMode": "PUBLIC"},
+            filesystemConfigurations=[{
+                "sessionStorage": {"mountPath": "/mnt/workspace"}
+            }],
+            environmentVariables=_shared_env_vars(agent_id=agent_id),
+        )
+    except Exception as e:
+        # Non-fatal — the agent exists, skills won't work until the next
+        # update_agent. Surface the diagnostic but don't roll back create.
+        import sys
+        print(f"WARNING: post-create env update failed for {agent_id}: {e}", file=sys.stderr)
+
     return {
-        "agent_id": resp["agentRuntimeId"],
+        "agent_id": agent_id,
         "agent_arn": resp["agentRuntimeArn"],
     }
 

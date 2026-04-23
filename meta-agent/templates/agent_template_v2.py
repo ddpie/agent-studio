@@ -64,9 +64,11 @@ async def invoke(payload, context):
         prompt += (
             "\\n\\n## Available Skills\\n"
             + skills_listing
-            + "\\n\\nUse load_skill(name) to load a skill\\'s full instructions when needed."
-            + "\\nTo run a script that ships with a skill, prefer run_skill_script(skill_name, script) — it stages the skill into the sandbox for you (no manual file copying)."
-            + "\\nBefore promising to generate a file via a skill (PPT, chart, report), call check_capabilities() to verify the skill and its runtime are actually available. If a skill is not loadable, say so instead of trying and failing mid-turn."
+            + "\\n\\nSkills come in a few flavors — check_capabilities() tells you which is which (type: prompt | scripted | assets-only):"
+            + "\\n- prompt skills (just a SKILL.md): use load_skill(name) and follow the instructions yourself."
+            + "\\n- scripted skills (include .py/.sh): prefer run_skill_script(skill_name, script) — it stages the skill into the sandbox for you. Do NOT manually load_skill + run_command."
+            + "\\n- assets-only skills (SKILL.md + data files, no scripts): load_skill(name, file='path') to read individual files as needed."
+            + "\\nBefore promising a file-generating task that depends on a specific skill, call check_capabilities() first. If a skill is missing or the wrong type, say so instead of trying and failing mid-turn."
         )
     prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), save them to /mnt/workspace/ (persistent across sessions) instead of /tmp/ (ephemeral). ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files. After uploading, the download button appears automatically — do NOT create markdown links like [filename](url) for downloads."
     prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
@@ -228,9 +230,11 @@ async def invoke(payload, context):
         prompt += (
             "\\n\\n## Available Skills\\n"
             + skills_listing
-            + "\\n\\nUse load_skill(name) to load a skill\\'s full instructions when needed."
-            + "\\nTo run a script that ships with a skill, prefer run_skill_script(skill_name, script) — it stages the skill into the sandbox for you (no manual file copying)."
-            + "\\nBefore promising to generate a file via a skill (PPT, chart, report), call check_capabilities() to verify the skill and its runtime are actually available. If a skill is not loadable, say so instead of trying and failing mid-turn."
+            + "\\n\\nSkills come in a few flavors — check_capabilities() tells you which is which (type: prompt | scripted | assets-only):"
+            + "\\n- prompt skills (just a SKILL.md): use load_skill(name) and follow the instructions yourself."
+            + "\\n- scripted skills (include .py/.sh): prefer run_skill_script(skill_name, script) — it stages the skill into the sandbox for you. Do NOT manually load_skill + run_command."
+            + "\\n- assets-only skills (SKILL.md + data files, no scripts): load_skill(name, file='path') to read individual files as needed."
+            + "\\nBefore promising a file-generating task that depends on a specific skill, call check_capabilities() first. If a skill is missing or the wrong type, say so instead of trying and failing mid-turn."
         )
     prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), save them to /mnt/workspace/ (persistent across sessions) instead of /tmp/ (ephemeral). ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files. After uploading, the download button appears automatically — do NOT create markdown links like [filename](url) for downloads."
     prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
@@ -784,9 +788,80 @@ _s3 = _boto3.client("s3", region_name=_REGION)
 # Per-invocation workspace id — main.py sets this before calling agent tools.
 _workspace_id = ""
 
-# Local cache directory — uses managed session storage if available, else /tmp
+# The sub-agent's own AgentCore runtime id — used as the S3 namespace for
+# skill lookups (``agents/{_AGENT_ID}/skills/``). AgentCore doesn't inject
+# a dedicated env var, but OTEL_RESOURCE_ATTRIBUTES carries it via the
+# ``service.name`` attribute that deploy.py attaches for tracing.
+# AGENT_STUDIO_AGENT_ID wins if set, then the OTEL attribute, else empty
+# (skill lookups short-circuit with an explicit error).
+_AGENT_ID = _os.environ.get("AGENT_STUDIO_AGENT_ID", "")
+if not _AGENT_ID:
+    for _kv in _os.environ.get("OTEL_RESOURCE_ATTRIBUTES", "").split(","):
+        if _kv.startswith("service.name="):
+            _AGENT_ID = _kv.split("=", 1)[1]
+            break
+
+# Local cache directory — uses managed session storage (persists across
+# warm invocations) if available, else a per-process tmp dir.
 _CACHE_ROOT = _Path("/mnt/workspace/skills") if _os.path.isdir("/mnt/workspace") else _Path("/tmp/skills_cache")
-_CACHE_READY = False
+# Per-process record of which skills have been materialized into the cache
+# this invocation. Skills are fetched on-demand (first call to load_skill
+# or run_skill_script) rather than up front, so cold-start isn't penalized
+# for skills the agent doesn't actually touch.
+_CACHED_SKILLS: set = set()
+# Cached copy of the sub-agent's own attached-skills manifest. Derived from
+# metadata.json under agents/{AGENT_ID}/, not the workspace-global skills
+# index — sub-agents only see skills explicitly attached to them.
+_SKILLS_MANIFEST: list | None = None
+
+
+def _agent_s3_prefix() -> str:
+    """Per-sub-agent S3 namespace for its skills.
+
+    Sub-agents don't read from the workspace-global ``skills/`` prefix —
+    instead each skill they attach is copied by the CRUD Lambda into
+    ``agents/{agent_id}/skills/{local_skill_id}/`` (with nested paths
+    preserved). Returns an empty string if the agent id isn't known yet,
+    which short-circuits all skill loading — caller should handle.
+    """
+    if not _AGENT_ID:
+        return ""
+    return f"agents/{_AGENT_ID}/skills/"
+
+
+def _load_skills_manifest() -> list:
+    """Read this agent's metadata.json to discover its attached skills.
+
+    Cached in-process for the life of the warm container. Every manifest
+    entry must have at least ``id`` (the local skill id used as the S3
+    prefix) and ``name``. ``description`` is optional but shown in the
+    prompt. Returns [] on any error — skills are a soft dependency.
+    """
+    global _SKILLS_MANIFEST
+    if _SKILLS_MANIFEST is not None:
+        return _SKILLS_MANIFEST
+    if not _AGENT_ID:
+        _SKILLS_MANIFEST = []
+        return _SKILLS_MANIFEST
+    try:
+        obj = _s3.get_object(Bucket=_S3_BUCKET, Key=f"agents/{_AGENT_ID}/metadata.json")
+        meta = _json.loads(obj["Body"].read().decode("utf-8"))
+        skills = meta.get("skills") or []
+        if not isinstance(skills, list):
+            skills = []
+        # Normalize: every entry must have id + name to be usable
+        _SKILLS_MANIFEST = [s for s in skills if isinstance(s, dict) and s.get("id") and s.get("name")]
+    except Exception:
+        _SKILLS_MANIFEST = []
+    return _SKILLS_MANIFEST
+
+
+def _find_skill_by_name(name: str) -> dict | None:
+    """Look up a skill in the sub-agent's manifest by its name field."""
+    for s in _load_skills_manifest():
+        if s.get("name") == name:
+            return s
+    return None
 
 
 def _download_skill_file(args):
@@ -800,112 +875,78 @@ def _download_skill_file(args):
         return False
 
 
-def ensure_skills_cached():
-    """Download all skills from S3 to local cache in parallel. Skips if already cached."""
-    global _CACHE_READY
-    if _CACHE_READY:
-        return
+def _ensure_skill_materialized(skill_id: str, skill_name: str | None = None) -> tuple[_Path | None, str | None]:
+    """Download the skill's S3 tree to the local cache on first touch.
 
-    # Check if index already cached (session storage persists across invocations)
-    index_path = _CACHE_ROOT / "index.json"
-    if index_path.exists():
-        _CACHE_READY = True
-        return
+    Cheap after the first call for the same skill — only lists S3 and
+    downloads missing files. Paths under the skill are preserved (nested
+    dirs kept intact so scripts can ``open('assets/foo.svg')``).
 
-    _CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+    Returns (local_root, error_or_None). local_root is the per-skill
+    directory in the local cache that a caller can chdir into.
+    """
+    prefix_root = _agent_s3_prefix()
+    if not prefix_root:
+        return None, "AGENT_STUDIO_AGENT_ID (OTEL_RESOURCE_ATTRIBUTES service.name) not set — cannot resolve skill location"
+    if not skill_id:
+        return None, "skill_id is required"
 
-    # Download index
-    try:
-        obj = _s3.get_object(Bucket=_S3_BUCKET, Key="skills/index.json")
-        index_data = obj["Body"].read().decode("utf-8")
-        index_path.write_text(index_data, encoding="utf-8")
-        skills = _json.loads(index_data)
-    except Exception:
-        _CACHE_READY = True
-        return
+    local_root = _CACHE_ROOT / skill_id
+    if skill_id in _CACHED_SKILLS:
+        return local_root, None
 
-    if not skills:
-        _CACHE_READY = True
-        return
-
-    # Collect all files to download
+    prefix = f"{prefix_root}{skill_id}/"
     download_tasks = []
-    for skill in skills:
-        sid = skill.get("id", "")
-        if not sid:
-            continue
-        prefix = f"skills/{sid}/"
-        try:
-            paginator = _s3.get_paginator("list_objects_v2")
-            for page in paginator.paginate(Bucket=_S3_BUCKET, Prefix=prefix):
-                for obj in page.get("Contents", []):
-                    key = obj["Key"]
-                    rel = key[len("skills/"):]  # e.g. "abc123/SKILL.md"
-                    local_path = _CACHE_ROOT / rel
-                    if not local_path.exists():
-                        download_tasks.append((key, local_path))
-        except Exception:
-            pass
+    try:
+        paginator = _s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=_S3_BUCKET, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                rel = key[len(prefix):]
+                if not rel:
+                    continue
+                local_path = local_root / rel
+                if not local_path.exists():
+                    download_tasks.append((key, local_path))
+    except Exception as e:
+        return None, f"list objects failed under {prefix}: {e}"
 
-    # Parallel download (up to 20 concurrent)
     if download_tasks:
+        local_root.mkdir(parents=True, exist_ok=True)
         with _ThreadPoolExecutor(max_workers=20) as pool:
-            list(pool.map(_download_skill_file, download_tasks))
+            results = list(pool.map(_download_skill_file, download_tasks))
+        if not all(results):
+            return None, f"some files failed to download ({sum(1 for r in results if not r)}/{len(results)})"
 
-    _CACHE_READY = True
+    # Even with zero download_tasks, the skill is "cached" (empty skill is
+    # legal — just SKILL.md) — as long as we reached here without error.
+    _CACHED_SKILLS.add(skill_id)
+    return local_root, None
+
+
+def ensure_skills_cached():
+    """Legacy alias kept for callers that expect it. No-op — skills are
+    now loaded on demand by _ensure_skill_materialized. Retained so
+    older skill-aware tools outside this module don't break.
+    """
+    return
 
 
 def get_skills_listing() -> str:
-    """Read skills index, return formatted listing for prompt injection."""
-    ensure_skills_cached()
-    index_path = _CACHE_ROOT / "index.json"
-    try:
-        if index_path.exists():
-            skills = _json.loads(index_path.read_text(encoding="utf-8"))
-        else:
-            obj = _s3.get_object(Bucket=_S3_BUCKET, Key="skills/index.json")
-            skills = _json.loads(obj["Body"].read().decode("utf-8"))
-        if not skills:
-            return ""
-        lines = [f"- {s['name']}: {s['description']}" for s in skills if not s.get("deleted")]
-        return "\\n".join(lines)
-    except Exception:
+    """Formatted listing of this agent's attached skills for prompt injection.
+
+    Reads the per-agent manifest (metadata.json), not the workspace-global
+    skill index — so sub-agents see exactly the skills they were deployed
+    with, no less and no more.
+    """
+    skills = _load_skills_manifest()
+    if not skills:
         return ""
-
-
-def _read_local_or_s3(s3_key: str) -> str | None:
-    """Read from local cache first, fallback to S3."""
-    rel = s3_key[len("skills/"):] if s3_key.startswith("skills/") else s3_key
-    local_path = _CACHE_ROOT / rel
-    if local_path.exists():
-        return local_path.read_text(encoding="utf-8")
-    try:
-        obj = _s3.get_object(Bucket=_S3_BUCKET, Key=s3_key)
-        content = obj["Body"].read().decode("utf-8")
-        # Cache for next time
-        local_path.parent.mkdir(parents=True, exist_ok=True)
-        local_path.write_text(content, encoding="utf-8")
-        return content
-    except Exception:
-        return None
-
-
-def _list_local_or_s3(prefix: str) -> list[str]:
-    """List files from local cache first, fallback to S3."""
-    # prefix like "skills/abc123/"
-    rel_dir = prefix[len("skills/"):] if prefix.startswith("skills/") else prefix
-    local_dir = _CACHE_ROOT / rel_dir
-    if local_dir.exists() and local_dir.is_dir():
-        files = []
-        for p in local_dir.rglob("*"):
-            if p.is_file():
-                files.append(str(p.relative_to(local_dir)))
-        return files
-    try:
-        resp = _s3.list_objects_v2(Bucket=_S3_BUCKET, Prefix=prefix, MaxKeys=500)
-        return [o["Key"][len(prefix):] for o in resp.get("Contents", []) if o["Key"] != prefix]
-    except Exception:
-        return []
+    lines = []
+    for s in skills:
+        desc = s.get("description") or ""
+        lines.append(f"- {s['name']}: {desc}" if desc else f"- {s['name']}")
+    return "\\n".join(lines)
 
 
 @_tool
@@ -920,49 +961,37 @@ def load_skill(name: str, file: str = "") -> str:
         file: Optional path to a specific file within the skill (e.g. "scripts/demo.py").
 
     Returns:
-        The skill content, or an error message.
+        The skill content, or an error tool-result.
     """
-    ensure_skills_cached()
-
-    # Read index to find skill_id by name
-    index_path = _CACHE_ROOT / "index.json"
-    try:
-        if index_path.exists():
-            skills = _json.loads(index_path.read_text(encoding="utf-8"))
-        else:
-            obj = _s3.get_object(Bucket=_S3_BUCKET, Key="skills/index.json")
-            skills = _json.loads(obj["Body"].read().decode("utf-8"))
-    except Exception as e:
-        return _tool_error(f"Failed to read skill index: {e}")
-
-    skill_id = None
-    for s in skills:
-        if s.get("name") == name:
-            skill_id = s.get("id")
-            break
-
-    if not skill_id:
-        available = [s.get("name", "") for s in skills if not s.get("deleted")]
+    entry = _find_skill_by_name(name)
+    if not entry:
+        available = [s.get("name", "") for s in _load_skills_manifest()]
         return _tool_error(
-            f"Skill '{name}' not found. Available: " + ", ".join(sorted(available))
+            f"Skill '{name}' not attached to this agent. "
+            f"Available: {', '.join(sorted(a for a in available if a)) or '(none)'}"
         )
 
-    prefix = f"skills/{skill_id}/"
+    skill_id = entry["id"]
+    local_root, err = _ensure_skill_materialized(skill_id, name)
+    if err or local_root is None:
+        return _tool_error(f"Failed to materialize skill '{name}': {err or 'unknown error'}")
 
-    # If a specific file is requested, read it
     if file:
-        content = _read_local_or_s3(prefix + file.lstrip("/"))
-        if content is None:
+        target = local_root / file.lstrip("/")
+        if not target.is_file():
             return _tool_error(f"File '{file}' not found in skill '{name}'")
-        return content
+        try:
+            return target.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            return _tool_error(f"File '{file}' in skill '{name}' is not UTF-8 text (likely binary — cannot load via load_skill)")
 
-    # Default: read SKILL.md + list all files
-    content = _read_local_or_s3(f"{prefix}SKILL.md")
-    if content is None:
-        return _tool_error(f"Failed to read skill SKILL.md for '{name}'")
+    skill_md = local_root / "SKILL.md"
+    if not skill_md.is_file():
+        return _tool_error(f"skill '{name}' has no SKILL.md")
+    content = skill_md.read_text(encoding="utf-8")
 
-    # List other files
-    all_files = _list_local_or_s3(prefix)
+    # List other files in this skill's tree
+    all_files = sorted(str(p.relative_to(local_root)) for p in local_root.rglob("*") if p.is_file())
     files = [f for f in all_files if f and f != "SKILL.md"]
     if files:
         content += "\\n\\n---\\n## Skill Files\\n"
@@ -1379,7 +1408,8 @@ def _stage_skill_into_ci(name: str):
 
     Returns (remote_dir: str|None, error: str|None). The remote dir is where
     scripts live inside the sandbox (relative to its cwd), e.g.
-    ``skills/ppt-generator``. Idempotent per (session, skill).
+    ``skills/ppt-generator``. Idempotent per (session, skill) — second
+    call for the same skill in the same CI session is a no-op lookup.
     """
     session_id = ci_fs.session_id()
     if not session_id:
@@ -1389,20 +1419,13 @@ def _stage_skill_into_ci(name: str):
     if cache_key in _STAGED_SKILLS:
         return _STAGED_SKILLS[cache_key], None
 
-    ensure_skills_cached()
-    index_path = _CACHE_ROOT / "index.json"
-    try:
-        skills = _json.loads(index_path.read_text(encoding="utf-8"))
-    except Exception as e:
-        return None, f"failed to read skill index: {e}"
+    entry = _find_skill_by_name(name)
+    if not entry:
+        return None, f"skill '{name}' not attached to this agent"
 
-    skill_id = next((s.get("id") for s in skills if s.get("name") == name and not s.get("deleted")), None)
-    if not skill_id:
-        return None, f"skill '{name}' not found"
-
-    local_root = _CACHE_ROOT / skill_id
-    if not local_root.exists():
-        return None, f"skill '{name}' has no local cache (cache root: {_CACHE_ROOT})"
+    local_root, err = _ensure_skill_materialized(entry["id"], name)
+    if err or local_root is None:
+        return None, f"failed to fetch skill files: {err or 'unknown error'}"
 
     pairs = []
     for p in local_root.rglob("*"):
@@ -1482,14 +1505,22 @@ def check_capabilities() -> str:
     Returns JSON with keys:
       - ``code_interpreter`` — {"ready": bool, "session_id": str|None,
         "python_version": str|None, "cwd": str|None, "error": str|None}
-      - ``skills`` — list of {"name", "id", "loadable", "file_count",
-        "error"} for every skill in the workspace index
-      - ``skills_cached`` — bool, whether the local cache is hydrated
+      - ``skills`` — list of {"name", "id", "description", "loadable",
+        "file_count", "materialized", "error"} for every skill attached
+        to this sub-agent. ``loadable`` is true when SKILL.md exists in
+        S3; ``materialized`` means the skill's files have been pulled
+        into the local cache this invocation.
+      - ``agent_id`` — the runtime id used to scope S3 skill lookups,
+        or null if the environment didn't expose it.
 
-    Does not raise and does not hit S3 beyond the skill index. Safe to call
-    multiple times; cheap after the first call.
+    Skills and CI runtime are probed independently. Safe to call
+    multiple times; cheap after the first call (local in-memory caches).
     """
-    report = {"code_interpreter": {"ready": False}, "skills": [], "skills_cached": _CACHE_READY}
+    report = {
+        "code_interpreter": {"ready": False},
+        "skills": [],
+        "agent_id": _AGENT_ID or None,
+    }
 
     ci_id = _os.environ.get("AGENT_STUDIO_CODE_INTERPRETER_ID")
     session_id = ci_fs.session_id()
@@ -1517,36 +1548,62 @@ def check_capabilities() -> str:
             except Exception as e:
                 report["code_interpreter"]["error"] = f"probe decode failed: {e}"
 
+    # Enumerate the sub-agent's attached skills from its manifest, then
+    # for each one probe the S3 tree to count declared files. Declared
+    # file counts reflect what IS available, whether or not the skill has
+    # been materialized to local cache this invocation — that distinction
+    # matters for preflight (we want to say "you have 783 files over
+    # there" before the first use, not after).
     try:
-        ensure_skills_cached()
-        report["skills_cached"] = _CACHE_READY
-        index_path = _CACHE_ROOT / "index.json"
-        if index_path.exists():
-            skills = _json.loads(index_path.read_text(encoding="utf-8"))
-        else:
-            skills = []
+        skills = _load_skills_manifest()
+        prefix_root = _agent_s3_prefix()
         for s in skills:
-            if s.get("deleted"):
-                continue
             sid = s.get("id", "")
             name = s.get("name", "")
-            local_root = _CACHE_ROOT / sid if sid else None
+            description = s.get("description", "")
+            entry_err = None
             file_count = 0
             loadable = False
-            entry_err = None
-            if local_root and local_root.exists():
+            if not prefix_root:
+                entry_err = "agent_id unknown (set AGENT_STUDIO_AGENT_ID or OTEL_RESOURCE_ATTRIBUTES)"
+            has_script = False
+            if sid and prefix_root:
                 try:
-                    file_count = sum(1 for p in local_root.rglob("*") if p.is_file())
-                    loadable = (local_root / "SKILL.md").is_file()
+                    paginator = _s3.get_paginator("list_objects_v2")
+                    skill_prefix = f"{prefix_root}{sid}/"
+                    for page in paginator.paginate(Bucket=_S3_BUCKET, Prefix=skill_prefix):
+                        for obj in page.get("Contents", []):
+                            key = obj["Key"]
+                            rel = key[len(skill_prefix):]
+                            if not rel:
+                                continue
+                            file_count += 1
+                            if rel == "SKILL.md":
+                                loadable = True
+                            elif rel.endswith(".py") or rel.endswith(".sh"):
+                                has_script = True
                 except Exception as e:
-                    entry_err = str(e)
+                    entry_err = f"list failed: {e}"
+            # "prompt" = SKILL.md only (instructions; use load_skill to read).
+            # "scripted" = has .py or .sh — run_skill_script works here.
+            # "assets-only" = other files but no scripts — load_skill(file=...)
+            # is the read path; run_skill_script will fail.
+            if not loadable:
+                skill_type = "unknown"
+            elif has_script:
+                skill_type = "scripted"
+            elif file_count <= 1:
+                skill_type = "prompt"
             else:
-                entry_err = "not in local cache"
+                skill_type = "assets-only"
             report["skills"].append({
                 "name": name,
                 "id": sid,
+                "description": description,
+                "type": skill_type,
                 "loadable": loadable,
                 "file_count": file_count,
+                "materialized": sid in _CACHED_SKILLS,
                 "error": entry_err,
             })
     except Exception as e:
