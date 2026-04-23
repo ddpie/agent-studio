@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router";
-import { useChatStore } from "../../stores/chat-store";
+import { useChatStore, useCurrentAgentChat } from "../../stores/chat-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { fetchAgentMetadataLight, type AgentMetadata } from "../../lib/agent-metadata";
 import { useUISettings } from "../../stores/ui-settings-store";
@@ -15,11 +15,18 @@ export default function ChatPanel() {
   const { t } = useTranslation();
   const { agentId } = useParams();
   const {
-    messages, isStreaming, statusText, sendMessage, cancelStreaming,
+    sendMessage, cancelStreaming,
     switchAgent, newSession, loadSession, deleteSession,
-    getAgentSessions, activeSessionId, selectedModelId, setSelectedModel: storeSetModel,
-    regenerateLastMessage, activeTool,
+    getAgentSessions, setSelectedModel: storeSetModel,
+    regenerateLastMessage,
   } = useChatStore();
+  // Read per-agent state keyed by the URL's agentId (not the store's
+  // currentAgentId), otherwise the 1-frame lag between URL change and
+  // switchAgent's useEffect causes stale state to leak across routes —
+  // e.g. the "calling load_skill" label flashing on another agent's page.
+  const {
+    messages, isStreaming, statusText, activeTool, activeSessionId, selectedModelId,
+  } = useCurrentAgentChat(agentId || null);
   const { agents, fetchAgents } = useAgentListStore();
   const agentName = agents.find(a => a.id === agentId)?.displayName || null;
   const selectedModel = selectedModelId || DEFAULT_MODEL_ID;

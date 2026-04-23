@@ -9,12 +9,13 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeKatex from "rehype-katex";
 import { useChatStore, type Message } from "../../stores/chat-store";
-import { generateDownloadUrl } from "../../lib/s3-storage";
 import { fetchSignedS3, buildAttachmentHint } from "../../lib/s3-utils";
 import { agentConfig } from "../../config";
 import ImageLightbox from "../ui/ImageLightbox";
 import CopyButtons from "./CopyButtons";
 import { mdComponents } from "./CodeBlock";
+import ToolCallDetails from "./ToolCallDetails";
+import S3DownloadList from "./S3DownloadList";
 
 const sanitizeSchema = {
   ...defaultSchema,
@@ -135,80 +136,40 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
             ))}
           </div>
         )}
-        {message.content ? (
-          <>
-          <div ref={contentDivRef} className={`prose prose-sm max-w-none ${isUser ? "prose-invert [&_*]:text-white" : "dark:prose-invert"}`}>
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeKatex]} components={mdComponents}>{
-              (() => {
-                let text = message.content;
-                if (message.attachments?.length) text = text.replace(/\n\n\[Attached file:[^\]]*\]/g, "").trim();
-                text = text.replace(/__S3_DOWNLOAD__:[^:]+:[^\s"}\]]+/g, "").trim();
-                return text;
-              })()
-            }</ReactMarkdown>
-            {showTypingIndicator && (
-              <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500 text-xs mt-2">
-                <Loader2 className="w-3 h-3 animate-spin" /> {t("chat.working")}
-              </span>
-            )}
-          </div>
-          {(() => {
-            const fullText = message.content || "";
-            const downloads = [...(fullText.matchAll(/__S3_DOWNLOAD__:([^:\s"}\]]+):([^\s"}\]]+)/g))];
-            if (downloads.length === 0) return null;
-            const seen = new Set<string>();
-            const unique = downloads.filter(([, key]) => {
-              if (seen.has(key)) return false;
-              seen.add(key);
-              return true;
-            });
-            const isImage = (name: string) =>
-              /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(name);
-            const images = unique.filter(([, , name]) => isImage(name));
-            const files = unique.filter(([, , name]) => !isImage(name));
+        {(() => {
+          const hasContent = !!message.content;
+          const hasTools = !!(message.toolCalls && message.toolCalls.length);
+          const hasDownloads = !!(message.s3Downloads && message.s3Downloads.length);
+          if (!hasContent && !hasTools && !hasDownloads) {
             return (
-              <>
-                {images.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {images.map(([, key, filename], i) => {
-                      const s3Url = `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/${key}`;
-                      return <ImageLightbox key={`img-${i}`} src={s3Url} alt={filename} />;
-                    })}
-                  </div>
-                )}
-                {files.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {files.map(([, key, filename], i) => (
-                      <button
-                        key={`file-${i}`}
-                        onClick={async () => {
-                          try {
-                            const url = await generateDownloadUrl(key);
-                            const a = document.createElement("a");
-                            a.href = url;
-                            a.download = filename;
-                            a.click();
-                          } catch (err) {
-                            console.error("Download failed:", err);
-                          }
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        {filename}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </>
+              <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500 text-sm">
+                <Loader2 className="w-3 h-3 animate-spin" /> {t("assistant.thinking")}
+              </span>
             );
-          })()}
-          </>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500 text-sm">
-            <Loader2 className="w-3 h-3 animate-spin" /> {t("assistant.thinking")}
-          </span>
-        )}
+          }
+          return (
+            <>
+              {hasContent && (
+                <div ref={contentDivRef} className={`prose prose-sm max-w-none ${isUser ? "prose-invert [&_*]:text-white" : "dark:prose-invert"}`}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeKatex]} components={mdComponents}>{
+                    (() => {
+                      let text = message.content;
+                      if (message.attachments?.length) text = text.replace(/\n\n\[Attached file:[^\]]*\]/g, "").trim();
+                      return text;
+                    })()
+                  }</ReactMarkdown>
+                  {showTypingIndicator && (
+                    <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500 text-xs mt-2">
+                      <Loader2 className="w-3 h-3 animate-spin" /> {t("chat.working")}
+                    </span>
+                  )}
+                </div>
+              )}
+              {hasTools && <ToolCallDetails calls={message.toolCalls!} />}
+              {hasDownloads && <S3DownloadList downloads={message.s3Downloads!} />}
+            </>
+          );
+        })()}
       </div>
     </div>
   );

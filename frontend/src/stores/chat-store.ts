@@ -1,14 +1,48 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { useShallow } from "zustand/react/shallow";
 import { invokeMetaAgent, invokeAgentById } from "../lib/agentcore-client";
 import i18next from "i18next";
+
+/**
+ * A structured record of one tool invocation inside an assistant turn.
+ *
+ * Kept as a sidecar field on Message (not inlined into `content`) so the
+ * model never sees a textual `<details class="tool-call">` block or the
+ * `__S3_DOWNLOAD__` marker in subsequent turns. Before this refactor the
+ * frontend injected that markdown into `message.content`, which then got
+ * replayed to the sub-agent as the assistant's own prior output and the
+ * model copied the format, hallucinating fake S3 keys.
+ */
+export interface ToolCallRecord {
+  id: string;
+  name: string;
+  input: string;
+  output: string;
+  /** True if output is an inline SVG chart/diagram — rendered specially. */
+  isSvg: boolean;
+}
+
+/** S3 object the sub-agent uploaded for the user to download. */
+export interface S3Download {
+  key: string;
+  filename: string;
+}
 
 export interface Message {
   id: string;
   role: "user" | "assistant" | "system";
+  /**
+   * Prose-only text. Must NOT contain tool-call `<details>` blocks or
+   * `__S3_DOWNLOAD__` markers — those live on `toolCalls` / `s3Downloads`.
+   */
   content: string;
   images?: string[];
   attachments?: Array<{ name: string; size: number; s3Key: string }>;
+  /** Tool invocations captured during the turn (streaming order). */
+  toolCalls?: ToolCallRecord[];
+  /** Files the sub-agent uploaded for download (deduped by key). */
+  s3Downloads?: S3Download[];
   timestamp: number;
 }
 
@@ -22,16 +56,24 @@ export interface ChatSession {
   updatedAt: number;
 }
 
+/**
+ * State is keyed per-agent so navigating away from a chat mid-stream no longer
+ * drops chunks. Each agent carries its own message list, streaming flag,
+ * active-tool indicator, AgentCore session id, and selected model. The UI
+ * selects the slice for `currentAgentId` via `useCurrentAgentChat()`.
+ */
 interface ChatState {
   currentAgentId: string | null;
   currentAgentName: string | null;
-  messages: Message[];
-  isStreaming: boolean;
-  statusText: string | null;
-  activeTool: string | null;
-  sessionId: string | undefined;
-  activeSessionId: string | null;
-  selectedModelId: string | null;
+
+  messagesByAgent: Record<string, Message[]>;
+  streamingByAgent: Record<string, boolean>;
+  statusByAgent: Record<string, string | null>;
+  activeToolByAgent: Record<string, string | null>;
+  sessionIdByAgent: Record<string, string | undefined>;
+  activeSessionByAgent: Record<string, string | null>;
+  selectedModelByAgent: Record<string, string | null>;
+
   sessions: ChatSession[];
   lastActiveSessionByAgent: Record<string, string>;
 
@@ -48,10 +90,14 @@ interface ChatState {
   getAgentSessions: () => ChatSession[];
 }
 
-// Module-level abort controller (not serializable, can't go in zustand persist)
-let _abortController: AbortController | null = null;
+/**
+ * AbortControllers are stored per-agent so the user can have two agents
+ * streaming concurrently without one cancelling the other. Held at module
+ * scope because AbortController is not serializable by zustand persist.
+ */
+const _abortControllersByAgent: Map<string, AbortController> = new Map();
 
-function agentKey(agentId: string | null): string {
+export function agentKey(agentId: string | null): string {
   return agentId || "meta";
 }
 
@@ -65,8 +111,7 @@ function deriveTitle(messages: Message[]): string {
 
 // Persist-side caps. Images are expected to be S3 URLs (~150 bytes) after the
 // ChatInput rewrite that refuses to send unuploaded images. These caps are a
-// defence-in-depth against accidental data-URL leakage (old sessions from
-// before the fix, future bugs, or Meta-Agent assistant messages).
+// defence-in-depth against accidental data-URL leakage.
 const MAX_ACTIVE_MESSAGES = 100;
 const MAX_SESSIONS = 30;
 const MAX_MESSAGES_PER_SESSION = 50;
@@ -78,8 +123,125 @@ function _stripDataUrlImages(msg: Message): Message {
   return { ...msg, images: safeImages.length > 0 ? safeImages : undefined };
 }
 
+/**
+ * v1/v2 → v3 migration of per-message content: prior versions stored
+ * tool-call `<details>` blocks, `tool-rich-output` divs, and
+ * `__S3_DOWNLOAD__` markers inline in `message.content`. The current
+ * version stores the same data on `toolCalls` / `s3Downloads` sidecars so
+ * the model can't echo the text format back as a hallucinated tool call.
+ * We can't faithfully reconstruct the original structured toolCalls from
+ * rendered markdown, so legacy messages just lose the tool-call affordance
+ * — the prose survives and `s3Downloads` is recovered from the marker list
+ * so old download buttons keep working (subject to the S3 object still
+ * existing; `S3DownloadList` falls back to "file no longer available").
+ */
+/** @internal exported for tests */
+export function _migrateLegacyMessage(msg: Message): Message {
+  if (typeof msg.content !== "string") return msg;
+  let text = msg.content;
+  const hasLegacy =
+    text.includes('<details class="tool-call">') ||
+    text.includes('<div class="tool-rich-output">') ||
+    text.includes("__S3_DOWNLOAD__:");
+  if (!hasLegacy) return msg;
+
+  const downloads: S3Download[] = [...(msg.s3Downloads || [])];
+  const seen = new Set(downloads.map((d) => d.key));
+  for (const m of text.matchAll(/__S3_DOWNLOAD__:([^:\s"}\]]+):([^\s"}\]]+)/g)) {
+    const key = m[1], filename = m[2];
+    if (!seen.has(key)) { seen.add(key); downloads.push({ key, filename }); }
+  }
+
+  text = text
+    .replace(/<details class="tool-call">[\s\S]*?<\/details>/g, "")
+    .replace(/<div class="tool-rich-output">[\s\S]*?<\/div>/g, "")
+    .replace(/__S3_DOWNLOAD__:[^\s"}\]]+/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return {
+    ...msg,
+    content: text,
+    s3Downloads: downloads.length > 0 ? downloads : msg.s3Downloads,
+  };
+}
+
+/**
+ * Persisted shape in v1/v2 used top-level `messages`, `sessionId`,
+ * `activeSessionId`, `selectedModelId`. v3 stores these per-agent.
+ * Move any v1/v2 top-level slice into the bucket for the agent that was
+ * current at persist time, preserving user's last in-progress context.
+ */
+interface LegacyPersistedState {
+  currentAgentId?: string | null;
+  messages?: Message[];
+  sessionId?: string;
+  activeSessionId?: string | null;
+  selectedModelId?: string | null;
+  sessions?: ChatSession[];
+  lastActiveSessionByAgent?: Record<string, string>;
+  messagesByAgent?: Record<string, Message[]>;
+  sessionIdByAgent?: Record<string, string | undefined>;
+  activeSessionByAgent?: Record<string, string | null>;
+  selectedModelByAgent?: Record<string, string | null>;
+}
+
+/** @internal exported for tests */
+export function _migrateToV3(persisted: LegacyPersistedState): Partial<ChatState> {
+  const key = agentKey(persisted.currentAgentId ?? null);
+
+  // v2-era migration: clean legacy inline markers out of every message.
+  const cleanMessages = (msgs: Message[] | undefined) =>
+    (msgs || []).map(_migrateLegacyMessage);
+
+  const sessions = (persisted.sessions || []).map((sess) => ({
+    ...sess,
+    messages: cleanMessages(sess.messages),
+  }));
+
+  const messagesByAgent: Record<string, Message[]> = {};
+  for (const [k, v] of Object.entries(persisted.messagesByAgent || {})) {
+    messagesByAgent[k] = cleanMessages(v);
+  }
+  // If persisted state still has the v1/v2 flat `messages`, park it under
+  // the agent that was current at persist time (falling back to "meta").
+  if (Array.isArray(persisted.messages) && persisted.messages.length > 0 && !messagesByAgent[key]) {
+    messagesByAgent[key] = cleanMessages(persisted.messages);
+  }
+
+  const sessionIdByAgent: Record<string, string | undefined> = { ...(persisted.sessionIdByAgent || {}) };
+  if (persisted.sessionId && !sessionIdByAgent[key]) sessionIdByAgent[key] = persisted.sessionId;
+
+  const activeSessionByAgent: Record<string, string | null> = { ...(persisted.activeSessionByAgent || {}) };
+  if (persisted.activeSessionId !== undefined && !(key in activeSessionByAgent)) {
+    activeSessionByAgent[key] = persisted.activeSessionId ?? null;
+  }
+
+  const selectedModelByAgent: Record<string, string | null> = { ...(persisted.selectedModelByAgent || {}) };
+  if (persisted.selectedModelId !== undefined && !(key in selectedModelByAgent)) {
+    selectedModelByAgent[key] = persisted.selectedModelId ?? null;
+  }
+
+  return {
+    currentAgentId: persisted.currentAgentId ?? null,
+    messagesByAgent,
+    sessionIdByAgent,
+    activeSessionByAgent,
+    selectedModelByAgent,
+    sessions,
+    lastActiveSessionByAgent: persisted.lastActiveSessionByAgent || {},
+  };
+}
+
 function _sanitizeForPersist(state: ChatState): Partial<ChatState> {
-  const trimmedMessages = state.messages.slice(-MAX_ACTIVE_MESSAGES).map(_stripDataUrlImages);
+  // Cap per-agent messages so one runaway conversation can't bloat
+  // localStorage. Same cap applied independently per agent; streaming
+  // state (streamingByAgent etc.) is deliberately not persisted.
+  const trimmedMessagesByAgent: Record<string, Message[]> = {};
+  for (const [k, msgs] of Object.entries(state.messagesByAgent)) {
+    const trimmed = msgs.slice(-MAX_ACTIVE_MESSAGES).map(_stripDataUrlImages);
+    if (trimmed.length > 0) trimmedMessagesByAgent[k] = trimmed;
+  }
   const trimmedSessions = [...state.sessions]
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, MAX_SESSIONS)
@@ -88,10 +250,10 @@ function _sanitizeForPersist(state: ChatState): Partial<ChatState> {
       messages: sess.messages.slice(-MAX_MESSAGES_PER_SESSION).map(_stripDataUrlImages),
     }));
   return {
-    messages: trimmedMessages,
-    sessionId: state.sessionId,
-    activeSessionId: state.activeSessionId,
-    selectedModelId: state.selectedModelId,
+    messagesByAgent: trimmedMessagesByAgent,
+    sessionIdByAgent: state.sessionIdByAgent,
+    activeSessionByAgent: state.activeSessionByAgent,
+    selectedModelByAgent: state.selectedModelByAgent,
     currentAgentId: state.currentAgentId,
     currentAgentName: state.currentAgentName,
     sessions: trimmedSessions,
@@ -99,21 +261,47 @@ function _sanitizeForPersist(state: ChatState): Partial<ChatState> {
   };
 }
 
-// Default values for every persisted/volatile field in ChatState. Used both
+// Default values for every persisted/volatile field. Used both
 // when constructing the store and when resetting it on workspace switch.
 const _chatInitialState = {
   currentAgentId: null,
   currentAgentName: null,
-  messages: [] as Message[],
-  isStreaming: false,
-  statusText: null,
-  activeTool: null,
-  sessionId: undefined,
-  activeSessionId: null,
-  selectedModelId: null,
+  messagesByAgent: {} as Record<string, Message[]>,
+  streamingByAgent: {} as Record<string, boolean>,
+  statusByAgent: {} as Record<string, string | null>,
+  activeToolByAgent: {} as Record<string, string | null>,
+  sessionIdByAgent: {} as Record<string, string | undefined>,
+  activeSessionByAgent: {} as Record<string, string | null>,
+  selectedModelByAgent: {} as Record<string, string | null>,
   sessions: [] as ChatSession[],
   lastActiveSessionByAgent: {} as Record<string, string>,
 };
+
+// ── Small helpers that mutate a per-agent bucket in an immutable way ────
+
+function setMessagesFor(
+  state: ChatState,
+  key: string,
+  updater: (msgs: Message[]) => Message[],
+): Partial<ChatState> {
+  const prev = state.messagesByAgent[key] || [];
+  return { messagesByAgent: { ...state.messagesByAgent, [key]: updater(prev) } };
+}
+
+function setFlagFor<K extends
+  | "streamingByAgent"
+  | "statusByAgent"
+  | "activeToolByAgent"
+  | "sessionIdByAgent"
+  | "activeSessionByAgent"
+  | "selectedModelByAgent">(
+  state: ChatState,
+  field: K,
+  key: string,
+  value: ChatState[K][string],
+): Partial<ChatState> {
+  return { [field]: { ...state[field], [key]: value } } as Partial<ChatState>;
+}
 
 export const useChatStore = create<ChatState>()(
   persist(
@@ -129,99 +317,118 @@ export const useChatStore = create<ChatState>()(
       },
 
       switchAgent: (agentId, agentName) => {
-        // Save current session first (may create a new session & update activeSessionId)
-        _saveCurrentSession(get(), set);
+        // Save whatever is live for the current agent before switching.
+        // Any in-flight stream for the previous agent keeps running and
+        // keeps writing into its own bucket — not cancelled.
+        const state = get();
+        _saveCurrentSession(state, set);
 
-        // Read fresh state AFTER save — state.activeSessionId may have changed
         const fresh = get();
         const currentKey = agentKey(fresh.currentAgentId);
-        if (fresh.activeSessionId) {
+        const activeId = fresh.activeSessionByAgent[currentKey] ?? null;
+        if (activeId) {
           set((s) => ({
-            lastActiveSessionByAgent: { ...s.lastActiveSessionByAgent, [currentKey]: fresh.activeSessionId! },
+            lastActiveSessionByAgent: { ...s.lastActiveSessionByAgent, [currentKey]: activeId },
           }));
         }
 
-        // Restore last active session for the target agent, or fall back to most recent
-        const key = agentKey(agentId);
+        // Resolve target agent's last session (for restoring UI state on
+        // first visit in this browser session). We do NOT overwrite
+        // messagesByAgent[targetKey] — the agent's live bucket is the
+        // source of truth; we only restore from sessions if the bucket
+        // is empty (e.g. on fresh page load).
+        const targetKey = agentKey(agentId);
         const updated = get();
-        const lastActiveId = updated.lastActiveSessionByAgent[key];
-        const lastActive = lastActiveId
-          ? updated.sessions.find((s) => s.id === lastActiveId)
-          : null;
-        const recent = lastActive || updated.sessions
-          .filter((s) => s.agentKey === key)
-          .sort((a, b) => b.updatedAt - a.updatedAt)[0];
-
-        if (recent) {
-          set({
-            currentAgentId: agentId,
-            currentAgentName: agentName,
-            messages: recent.messages,
-            activeSessionId: recent.id,
-            selectedModelId: recent.modelId || null,
-            sessionId: undefined,
-            statusText: null,
-            activeTool: null,
-          });
-        } else {
-          set({
-            currentAgentId: agentId,
-            currentAgentName: agentName,
-            messages: [],
-            sessionId: undefined,
-            activeSessionId: null,
-            selectedModelId: null,
-            statusText: null,
-            activeTool: null,
-          });
+        const bucketHasContent = (updated.messagesByAgent[targetKey] || []).length > 0;
+        if (!bucketHasContent) {
+          const lastActiveId = updated.lastActiveSessionByAgent[targetKey];
+          const lastActive = lastActiveId
+            ? updated.sessions.find((s) => s.id === lastActiveId)
+            : null;
+          const recent = lastActive || updated.sessions
+            .filter((s) => s.agentKey === targetKey)
+            .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+          if (recent) {
+            set((s) => ({
+              messagesByAgent: { ...s.messagesByAgent, [targetKey]: recent.messages },
+              activeSessionByAgent: { ...s.activeSessionByAgent, [targetKey]: recent.id },
+              selectedModelByAgent: { ...s.selectedModelByAgent, [targetKey]: recent.modelId || null },
+              sessionIdByAgent: { ...s.sessionIdByAgent, [targetKey]: undefined },
+            }));
+          }
         }
+
+        set({ currentAgentId: agentId, currentAgentName: agentName });
       },
 
       newSession: () => {
         const state = get();
+        const key = agentKey(state.currentAgentId);
         _saveCurrentSession(state, set);
-        set({
-          messages: [],
-          sessionId: undefined,
-          activeSessionId: null,
-          statusText: null,
-          activeTool: null,
-        });
+        set((s) => ({
+          ...setMessagesFor(s, key, () => []),
+          ...setFlagFor(s, "sessionIdByAgent", key, undefined),
+          ...setFlagFor(s, "activeSessionByAgent", key, null),
+          ...setFlagFor(s, "statusByAgent", key, null),
+          ...setFlagFor(s, "activeToolByAgent", key, null),
+        }));
       },
 
       loadSession: (sessionId: string) => {
         const state = get();
+        const key = agentKey(state.currentAgentId);
         _saveCurrentSession(state, set);
         const session = state.sessions.find((s) => s.id === sessionId);
         if (session) {
-          set({
-            messages: session.messages,
-            activeSessionId: session.id,
-            selectedModelId: session.modelId || null,
+          set((s) => ({
+            ...setMessagesFor(s, key, () => session.messages),
+            ...setFlagFor(s, "activeSessionByAgent", key, session.id),
+            ...setFlagFor(s, "selectedModelByAgent", key, session.modelId || null),
             // Drop the in-flight AgentCore sessionId — next sendMessage
-            // will mint a fresh one, so the loaded history starts a new
-            // server-side session (may be a different AgentCore container).
-            sessionId: undefined,
-            statusText: null,
-          });
+            // will mint a fresh one so loaded history starts a new
+            // server-side session (may be a different container).
+            ...setFlagFor(s, "sessionIdByAgent", key, undefined),
+            ...setFlagFor(s, "statusByAgent", key, null),
+          }));
         }
       },
 
       deleteSession: (sessionId: string) => {
+        const state = get();
+        const key = agentKey(state.currentAgentId);
+        const isActive = state.activeSessionByAgent[key] === sessionId;
         set((s) => ({
           sessions: s.sessions.filter((sess) => sess.id !== sessionId),
-          // If deleting the active session, clear messages
-          ...(s.activeSessionId === sessionId
-            ? { messages: [], activeSessionId: null, sessionId: undefined }
+          ...(isActive
+            ? {
+                ...setMessagesFor(s, key, () => []),
+                ...setFlagFor(s, "activeSessionByAgent", key, null),
+                ...setFlagFor(s, "sessionIdByAgent", key, undefined),
+              }
             : {}),
         }));
       },
 
-      setSelectedModel: (modelId: string) => set({ selectedModelId: modelId }),
+      setSelectedModel: (modelId: string) => {
+        const key = agentKey(get().currentAgentId);
+        set((s) => setFlagFor(s, "selectedModelByAgent", key, modelId));
+      },
 
       sendMessage: async (content: string, images?: string[], modelId?: string, attachments?: Array<{ name: string; size: number; s3Key: string }>) => {
-        _abortController = new AbortController();
-        const signal = _abortController.signal;
+        // Snapshot the agent at send time. All subsequent writes target
+        // this key — user may navigate away and the live
+        // `currentAgentId` may drift, but chunks must still land in the
+        // bucket of the agent that was queried.
+        const sendingAgentKey = agentKey(get().currentAgentId);
+        const sendingAgentId = get().currentAgentId;
+
+        // Per-agent abort controller so concurrent streams don't cancel
+        // each other. Abort any prior stream for this same agent first
+        // (defensive — UI disables the send button while streaming).
+        _abortControllersByAgent.get(sendingAgentKey)?.abort();
+        const controller = new AbortController();
+        _abortControllersByAgent.set(sendingAgentKey, controller);
+        const signal = controller.signal;
 
         const userMsg: Message = {
           id: crypto.randomUUID(),
@@ -239,44 +446,49 @@ export const useChatStore = create<ChatState>()(
           timestamp: Date.now(),
         };
 
-        // Reuse one AgentCore session id across turns within the same chat.
-        // Each turn still gets its own traceId, so the Runs tab groups them
-        // as one session with N turns (matches LangSmith/Langfuse UX). The
-        // `newSession` / `loadSession` / `clearMessages` actions reset this
-        // back to undefined so a fresh chat gets a fresh session id.
-        let turnSessionId = get().sessionId;
+        // Reuse one AgentCore session id across turns within the same
+        // chat for the same agent. Each turn still gets its own traceId,
+        // so the Runs tab groups them as one session with N turns.
+        // newSession / loadSession / clearMessages clear this so a fresh
+        // chat gets a fresh session id.
+        let turnSessionId = get().sessionIdByAgent[sendingAgentKey];
         if (!turnSessionId) {
           turnSessionId = crypto.randomUUID();
-          set({ sessionId: turnSessionId });
+          set((s) => setFlagFor(s, "sessionIdByAgent", sendingAgentKey, turnSessionId));
         }
 
         set((s) => ({
-          messages: [...s.messages, userMsg, assistantMsg],
-          isStreaming: true,
-          statusText: null,
+          ...setMessagesFor(s, sendingAgentKey, (msgs) => [...msgs, userMsg, assistantMsg]),
+          ...setFlagFor(s, "streamingByAgent", sendingAgentKey, true),
+          ...setFlagFor(s, "statusByAgent", sendingAgentKey, null),
         }));
 
         const onStatus = (status: string | null) => {
-          set({ statusText: status });
+          set((s) => setFlagFor(s, "statusByAgent", sendingAgentKey, status));
         };
 
         try {
-          const { currentAgentId } = get();
           let stream: AsyncGenerator<string>;
 
-          if (currentAgentId) {
-            const history = get().messages
-              .filter((m) => m.id !== assistantMsg.id && m.content && m.role !== "system")
-              .map(({ role, content }) => ({ role: role as "user" | "assistant", content }));
-            stream = invokeAgentById(currentAgentId, content, history, turnSessionId, onStatus, images, modelId);
+          // History snapshot from the sending agent's bucket, excluding
+          // the placeholder assistant message we just pushed.
+          const historyMsgs = (get().messagesByAgent[sendingAgentKey] || [])
+            .filter((m) => m.id !== assistantMsg.id && m.content && m.role !== "system")
+            .map(({ role, content }) => ({ role: role as "user" | "assistant", content }));
+
+          if (sendingAgentId) {
+            stream = invokeAgentById(sendingAgentId, content, historyMsgs, turnSessionId, onStatus, images, modelId);
           } else {
-            const history = get().messages
-              .filter((m) => m.id !== assistantMsg.id && m.content && m.role !== "system")
-              .map(({ role, content }) => ({ role: role as "user" | "assistant", content }));
-            stream = invokeMetaAgent(content, history, turnSessionId, onStatus, images, modelId);
+            stream = invokeMetaAgent(content, historyMsgs, turnSessionId, onStatus, images, modelId);
           }
 
-          // Batch chunks to reduce re-renders: accumulate text, flush every 80ms
+          // Batch chunks to reduce re-renders: accumulate text, flush every 50ms.
+          //
+          // Tool and download data never enter `message.content` — they flow
+          // into `message.toolCalls` and `message.s3Downloads` sidecars. This
+          // is what breaks the hallucination loop: on subsequent turns the
+          // content we replay to the model contains only prose, so there is
+          // no `<details>` / `__S3_DOWNLOAD__` format for it to mimic.
           let pendingText = "";
           let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -284,13 +496,9 @@ export const useChatStore = create<ChatState>()(
             if (!pendingText) return;
             const text = pendingText;
             pendingText = "";
-            set((s) => ({
-              messages: s.messages.map((m) =>
-                m.id === assistantMsg.id
-                  ? { ...m, content: m.content + text }
-                  : m
-              ),
-            }));
+            set((s) => setMessagesFor(s, sendingAgentKey, (msgs) =>
+              msgs.map((m) => m.id === assistantMsg.id ? { ...m, content: m.content + text } : m),
+            ));
           };
 
           const scheduleFlush = () => {
@@ -302,15 +510,52 @@ export const useChatStore = create<ChatState>()(
             }
           };
 
-          let toolBuffer = "";  // Buffer for incomplete tool markers across chunks
+          const appendToolCall = (call: ToolCallRecord) => {
+            set((s) => setMessagesFor(s, sendingAgentKey, (msgs) =>
+              msgs.map((m) => m.id === assistantMsg.id
+                ? { ...m, toolCalls: [...(m.toolCalls || []), call] }
+                : m,
+              ),
+            ));
+          };
+
+          const appendDownloads = (items: S3Download[]) => {
+            if (items.length === 0) return;
+            set((s) => setMessagesFor(s, sendingAgentKey, (msgs) =>
+              msgs.map((m) => {
+                if (m.id !== assistantMsg.id) return m;
+                const seen = new Set((m.s3Downloads || []).map((d) => d.key));
+                const next = [...(m.s3Downloads || [])];
+                for (const it of items) {
+                  if (!seen.has(it.key)) { seen.add(it.key); next.push(it); }
+                }
+                return { ...m, s3Downloads: next };
+              }),
+            ));
+          };
+
+          // Scan prose text for `__S3_DOWNLOAD__:key:filename` markers. Returns
+          // cleaned text (markers stripped) + any complete downloads found.
+          const downloadRe = /__S3_DOWNLOAD__:([^:\s"}\]]+):([^\s"}\]]+)/g;
+          const extractDownloads = (text: string): { clean: string; downloads: S3Download[] } => {
+            const downloads: S3Download[] = [];
+            const clean = text.replace(downloadRe, (_m, key: string, filename: string) => {
+              downloads.push({ key, filename });
+              return "";
+            });
+            return { clean, downloads };
+          };
+
+          let toolBuffer = "";    // Buffer for incomplete __tool JSON markers across chunks
+          let textCarry = "";     // Buffer for text that may contain a partial __S3_DOWNLOAD__ marker
 
           for await (const chunk of stream) {
             if (signal.aborted) break;
 
-            // Tool markers are JSON with __tool key. Buffer across chunks for split markers.
+            // 1. Extract complete __tool JSON markers from the buffer.
             const toolJsonRe = /\{"__tool"[^}]*\}/g;
             toolBuffer += chunk;
-            let remaining = "";
+            let textAfterTools = "";
             const markers: { type: string; name: string; input?: string; output?: string }[] = [];
 
             let jsonMatch: RegExpExecArray | null;
@@ -325,108 +570,164 @@ export const useChatStore = create<ChatState>()(
               lastMatchEnd = jsonMatch.index + jsonMatch[0].length;
             }
 
-            // Check if there's an incomplete marker at the end (starts with {"__tool but no closing })
+            // Hold back any incomplete trailing __tool marker.
             const lastOpenBrace = toolBuffer.lastIndexOf('{"__tool"');
             if (lastOpenBrace >= lastMatchEnd) {
-              // Incomplete marker — keep in buffer, emit text before it
-              remaining = toolBuffer.slice(0, lastOpenBrace).replace(toolJsonRe, "");
+              textAfterTools = toolBuffer.slice(0, lastOpenBrace).replace(toolJsonRe, "");
               toolBuffer = toolBuffer.slice(lastOpenBrace);
             } else {
-              // All markers matched — emit remaining text, clear buffer
-              remaining = toolBuffer.replace(toolJsonRe, "");
+              textAfterTools = toolBuffer.replace(toolJsonRe, "");
               toolBuffer = "";
             }
 
-            if (markers.length > 0) {
-              // Flush any pending text before inserting tool markers
-              flushPending();
+            // 2. Apply tool markers to the sidecar field.
+            for (const m of markers) {
+              if (m.type === "start") {
+                set((s) => setFlagFor(s, "activeToolByAgent", sendingAgentKey, m.name));
+              } else if (m.type === "result") {
+                let inp = "", out = "";
+                try { inp = m.input ? new TextDecoder().decode(Uint8Array.from(atob(m.input), c => c.charCodeAt(0))) : ""; } catch { inp = m.input || ""; }
+                try { out = m.output ? new TextDecoder().decode(Uint8Array.from(atob(m.output), c => c.charCodeAt(0))) : ""; } catch { out = m.output || ""; }
+                const isSvg = !!out && out.trimStart().startsWith("<svg");
+                appendToolCall({
+                  id: crypto.randomUUID(),
+                  name: m.name,
+                  input: inp,
+                  output: out,
+                  isSvg,
+                });
+                // upload_to_s3 (and friends) return `__S3_DOWNLOAD__:key:filename`
+                // inside tool output. The model often doesn't echo it back
+                // into prose, so the download button never appears if we
+                // only scan message.content. Extract here too.
+                const toolDownloads: S3Download[] = [];
+                for (const mt of out.matchAll(/__S3_DOWNLOAD__:([^:\s"}\]]+):([^\s"}\]]+)/g)) {
+                  toolDownloads.push({ key: mt[1], filename: mt[2] });
+                }
+                if (toolDownloads.length > 0) appendDownloads(toolDownloads);
+              } else if (m.type === "end") {
+                set((s) => setFlagFor(s, "activeToolByAgent", sendingAgentKey, null));
+              }
+            }
 
-              for (const m of markers) {
-                if (m.type === "start") {
-                  set({ activeTool: m.name });
-                } else if (m.type === "result") {
-                  let inp = "", out = "";
-                  try { inp = m.input ? new TextDecoder().decode(Uint8Array.from(atob(m.input), c => c.charCodeAt(0))) : ""; } catch { inp = m.input || ""; }
-                  try { out = m.output ? new TextDecoder().decode(Uint8Array.from(atob(m.output), c => c.charCodeAt(0))) : ""; } catch { out = m.output || ""; }
-                  let detailContent = `\n\n<details class="tool-call"><summary>Called <strong>${m.name}</strong></summary>\n\n`;
-                  if (inp) detailContent += `**Input:**\n\`\`\`json\n${inp}\n\`\`\`\n`;
-                  // Only render inline SVG (charts/diagrams). All other outputs use code blocks.
-                  const isSvg = out && out.trimStart().startsWith("<svg");
-                  if (out && !isSvg) {
-                    const maxDisplay = 2000;
-                    const truncated = out.length > maxDisplay ? out.slice(0, maxDisplay) + "\n... (truncated)" : out;
-                    const escaped = truncated.replace(/```/g, "\\`\\`\\`");
-                    detailContent += `**Output:**\n\`\`\`\n${escaped}\n\`\`\`\n`;
-                  } else if (isSvg) {
-                    detailContent += `**Output:** Chart rendered below.\n`;
-                  }
-                  detailContent += `\n</details>\n\n`;
-                  if (isSvg) {
-                    detailContent += `\n\n<div class="tool-rich-output">${out}</div>\n\n`;
-                  }
-                  set((s) => ({
-                    messages: s.messages.map((msg) =>
-                      msg.id === assistantMsg.id
-                        ? { ...msg, content: msg.content + detailContent }
-                        : msg
-                    ),
-                  }));
-                } else if (m.type === "end") {
-                  set({ activeTool: null });
+            // 3. Process prose text. A `__S3_DOWNLOAD__:key:filename` marker
+            //    may be split across chunk boundaries, either mid-prefix
+            //    ("__S3_DO" | "WNLOAD__:...") or mid-filename. Hold back
+            //    from the earliest position that could still be part of an
+            //    in-flight marker; emit everything before it.
+            textCarry += textAfterTools;
+            const MARKER = "__S3_DOWNLOAD__";
+            let holdFrom = -1;
+
+            // Case A: a complete `__S3_DOWNLOAD__` is present but the
+            // filename portion may still be streaming — hold the full
+            // marker until we see a terminator.
+            const lastFull = textCarry.lastIndexOf(MARKER);
+            if (lastFull >= 0 && !/[\s"}\]]/.test(textCarry.slice(lastFull + MARKER.length))) {
+              holdFrom = lastFull;
+            }
+
+            // Case B: only a prefix of the marker arrived at the tail
+            // (e.g. "__S3_DO"). Hold it.
+            if (holdFrom < 0) {
+              for (let len = MARKER.length - 1; len >= 2; len--) {
+                if (textCarry.endsWith(MARKER.slice(0, len))) {
+                  holdFrom = textCarry.length - len;
+                  break;
                 }
               }
             }
 
-            if (!remaining) continue;
+            let emittable: string;
+            if (holdFrom >= 0) {
+              emittable = textCarry.slice(0, holdFrom);
+              textCarry = textCarry.slice(holdFrom);
+            } else {
+              emittable = textCarry;
+              textCarry = "";
+            }
 
-            pendingText += remaining;
-            scheduleFlush();
+            if (emittable) {
+              const { clean, downloads } = extractDownloads(emittable);
+              if (downloads.length > 0) {
+                flushPending();
+                appendDownloads(downloads);
+              }
+              if (clean) {
+                pendingText += clean;
+                scheduleFlush();
+              }
+            }
           }
 
-          // Flush any remaining toolBuffer as plain text (partial marker that never completed)
+          // Drain any leftover buffers at end of stream.
           if (toolBuffer) {
-            pendingText += toolBuffer;
+            textCarry += toolBuffer;
             toolBuffer = "";
           }
+          if (textCarry) {
+            const { clean, downloads } = extractDownloads(textCarry);
+            if (downloads.length > 0) appendDownloads(downloads);
+            if (clean) pendingText += clean;
+            textCarry = "";
+          }
 
-          // Final flush
           if (flushTimer) clearTimeout(flushTimer);
           flushPending();
         } catch (err) {
           if (!signal.aborted) {
-            set((s) => ({
-              messages: s.messages.map((m) =>
-                m.id === assistantMsg.id
-                  ? { ...m, content: i18next.t("chat.errorPrefix", "Error") + `: ${err instanceof Error ? err.message : "Unknown error"}` }
-                  : m
+            set((s) => setMessagesFor(s, sendingAgentKey, (msgs) =>
+              msgs.map((m) => m.id === assistantMsg.id
+                ? { ...m, content: i18next.t("chat.errorPrefix", "Error") + `: ${err instanceof Error ? err.message : "Unknown error"}` }
+                : m,
               ),
-            }));
+            ));
           }
         } finally {
-          _abortController = null;
-          set({ isStreaming: false, statusText: null, activeTool: null });
+          if (_abortControllersByAgent.get(sendingAgentKey) === controller) {
+            _abortControllersByAgent.delete(sendingAgentKey);
+          }
+          set((s) => ({
+            ...setFlagFor(s, "streamingByAgent", sendingAgentKey, false),
+            ...setFlagFor(s, "statusByAgent", sendingAgentKey, null),
+            ...setFlagFor(s, "activeToolByAgent", sendingAgentKey, null),
+          }));
         }
       },
 
       clearMessages: () => {
         const state = get();
+        const key = agentKey(state.currentAgentId);
         _saveCurrentSession(state, set);
-        set({ messages: [], sessionId: undefined, activeSessionId: null, statusText: null });
+        set((s) => ({
+          ...setMessagesFor(s, key, () => []),
+          ...setFlagFor(s, "sessionIdByAgent", key, undefined),
+          ...setFlagFor(s, "activeSessionByAgent", key, null),
+          ...setFlagFor(s, "statusByAgent", key, null),
+        }));
       },
 
       cancelStreaming: () => {
-        if (_abortController) {
-          _abortController.abort();
-          _abortController = null;
+        // Cancel only the current agent's stream (the one the user is
+        // looking at). Other agents keep streaming.
+        const key = agentKey(get().currentAgentId);
+        const controller = _abortControllersByAgent.get(key);
+        if (controller) {
+          controller.abort();
+          _abortControllersByAgent.delete(key);
         }
-        set({ isStreaming: false, statusText: null });
+        set((s) => ({
+          ...setFlagFor(s, "streamingByAgent", key, false),
+          ...setFlagFor(s, "statusByAgent", key, null),
+        }));
       },
 
       regenerateLastMessage: async () => {
-        const { messages, isStreaming } = get();
-        if (isStreaming) return;
+        const state = get();
+        const key = agentKey(state.currentAgentId);
+        const messages = state.messagesByAgent[key] || [];
+        if (state.streamingByAgent[key]) return;
 
-        // Find the last user message
         const lastUserIdx = messages.findLastIndex((m) => m.role === "user");
         if (lastUserIdx === -1) return;
 
@@ -435,37 +736,39 @@ export const useChatStore = create<ChatState>()(
         const images = lastUserMsg.images;
         const attachments = lastUserMsg.attachments;
 
-        // Remove the last assistant message (and the user message to re-send)
         const trimmed = messages.slice(0, lastUserIdx);
-        set({ messages: trimmed });
+        set((s) => setMessagesFor(s, key, () => trimmed));
 
-        // Re-send using the current model
-        const modelId = get().selectedModelId || undefined;
+        const modelId = state.selectedModelByAgent[key] || undefined;
         await get().sendMessage(content, images, modelId, attachments);
       },
 
       editAndResend: async (messageId: string, newContent: string) => {
-        const { messages, isStreaming } = get();
-        if (isStreaming) return;
+        const state = get();
+        const key = agentKey(state.currentAgentId);
+        const messages = state.messagesByAgent[key] || [];
+        if (state.streamingByAgent[key]) return;
 
         const msgIdx = messages.findIndex((m) => m.id === messageId);
         if (msgIdx === -1) return;
 
-        // Truncate everything from this message onward
         const trimmed = messages.slice(0, msgIdx);
         const images = messages[msgIdx].images;
         const attachments = messages[msgIdx].attachments;
-        set({ messages: trimmed });
+        set((s) => setMessagesFor(s, key, () => trimmed));
 
-        const modelId = get().selectedModelId || undefined;
+        const modelId = state.selectedModelByAgent[key] || undefined;
         await get().sendMessage(newContent, images, modelId, attachments);
       },
     }),
     {
       name: "agent-studio-chat",
+      version: 3,
       partialize: (state) => _sanitizeForPersist(state),
-    }
-  )
+      migrate: (persisted, _fromVersion) =>
+        _migrateToV3((persisted || {}) as LegacyPersistedState) as ChatState,
+    },
+  ),
 );
 
 /**
@@ -480,13 +783,11 @@ export const useChatStore = create<ChatState>()(
  * `agent-studio-workspace-id` (identifies the workspace itself).
  */
 export function resetChatForWorkspaceSwitch(): void {
-  // Abort any in-flight stream before wiping state.
-  if (_abortController) {
-    try { _abortController.abort(); } catch { /* ignore */ }
-    _abortController = null;
+  // Abort every in-flight stream before wiping state.
+  for (const c of _abortControllersByAgent.values()) {
+    try { c.abort(); } catch { /* ignore */ }
   }
-  // Partial merge — keep action methods (switchAgent, sendMessage, etc.)
-  // intact while resetting data fields.
+  _abortControllersByAgent.clear();
   useChatStore.setState(_chatInitialState);
   try {
     useChatStore.persist.clearStorage();
@@ -495,40 +796,88 @@ export function resetChatForWorkspaceSwitch(): void {
   }
 }
 
-/** Save current messages as a session (if non-empty). */
+/**
+ * Save the current agent's message buffer as a session.
+ *
+ * Reads from `state.messagesByAgent[currentKey]` rather than a top-level
+ * `messages` field. No-op if the buffer is empty.
+ */
 function _saveCurrentSession(
   state: ChatState,
-  set: (partial: Partial<ChatState> | ((s: ChatState) => Partial<ChatState>)) => void
+  set: (partial: Partial<ChatState> | ((s: ChatState) => Partial<ChatState>)) => void,
 ) {
-  const msgs = state.messages.filter((m) => m.content);
+  const key = agentKey(state.currentAgentId);
+  const buffer = state.messagesByAgent[key] || [];
+  const msgs = buffer.filter(
+    (m) => m.content || m.toolCalls?.length || m.s3Downloads?.length,
+  );
   if (msgs.length === 0) return;
 
-  const key = agentKey(state.currentAgentId);
   const now = Date.now();
+  const activeId = state.activeSessionByAgent[key] ?? null;
+  const modelId = state.selectedModelByAgent[key] || undefined;
 
-  if (state.activeSessionId) {
-    // Update existing session
+  if (activeId) {
     set((s) => ({
       sessions: s.sessions.map((sess) =>
-        sess.id === state.activeSessionId
-          ? { ...sess, messages: msgs, title: deriveTitle(msgs), modelId: state.selectedModelId || undefined, updatedAt: now }
-          : sess
+        sess.id === activeId
+          ? { ...sess, messages: msgs, title: deriveTitle(msgs), modelId, updatedAt: now }
+          : sess,
       ),
     }));
   } else {
-    // Create new session
     const newSession: ChatSession = {
       id: crypto.randomUUID(),
       agentKey: key,
       title: deriveTitle(msgs),
       messages: msgs,
-      modelId: state.selectedModelId || undefined,
+      modelId,
       createdAt: now,
       updatedAt: now,
     };
     set((s) => ({
       sessions: [...s.sessions, newSession],
-      activeSessionId: newSession.id,
+      activeSessionByAgent: { ...s.activeSessionByAgent, [key]: newSession.id },
     }));
   }
+}
+
+// ── Selector hooks — preferred way for UI to read per-agent slices ──────
+
+/**
+ * Read-only view of the chat slice for a specific agent (or the current
+ * agent if not specified).
+ *
+ * Components that render a specific agent (e.g. ChatPanel reading `agentId`
+ * from the URL) should **always pass that id explicitly** — otherwise there
+ * is a 1-frame window during navigation where `currentAgentId` in the store
+ * lags the URL (because `switchAgent` runs in a useEffect after commit) and
+ * the selector briefly returns the previous agent's state. That produced
+ * the "calling load_skill" label flashing on the next agent's chat page.
+ */
+// Stable empty array reference so selectors returning "no messages" don't
+// yield a new `[]` each call (which would defeat shallow equality).
+const _EMPTY_MESSAGES: readonly Message[] = Object.freeze([]);
+
+export function useCurrentAgentChat(agentId?: string | null) {
+  // useShallow prevents an infinite render loop: zustand v5 compares
+  // selector output with Object.is by default, but this selector
+  // constructs a fresh object each call, so every unrelated store tick
+  // would re-render + re-create + re-render. useShallow switches the
+  // comparator to a shallow structural equality, returning the previous
+  // reference when no field actually changed.
+  return useChatStore(
+    useShallow((s) => {
+      const key = agentKey(agentId !== undefined ? agentId : s.currentAgentId);
+      return {
+        messages: s.messagesByAgent[key] || (_EMPTY_MESSAGES as Message[]),
+        isStreaming: !!s.streamingByAgent[key],
+        statusText: s.statusByAgent[key] ?? null,
+        activeTool: s.activeToolByAgent[key] ?? null,
+        sessionId: s.sessionIdByAgent[key],
+        activeSessionId: s.activeSessionByAgent[key] ?? null,
+        selectedModelId: s.selectedModelByAgent[key] ?? null,
+      };
+    }),
+  );
 }

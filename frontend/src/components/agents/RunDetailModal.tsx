@@ -75,7 +75,7 @@ export default function RunDetailModal({
             <div className="p-6 text-sm text-red-600 dark:text-red-400">{error.message}</div>
           )}
           {detail && (
-            <RunDetail agentId={agentId} detail={detail} output={output} loading={loading} />
+            <RunDetail detail={detail} output={output} loading={loading} />
           )}
         </div>
       </div>

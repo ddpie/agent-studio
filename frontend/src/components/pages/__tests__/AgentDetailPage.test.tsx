@@ -25,22 +25,11 @@ vi.mock("../../../lib/api-client", () => ({
   // Logs
   fetchAgentLogs: vi.fn().mockResolvedValue({ events: [], nextToken: null }),
 
-  // Traces
-  listTraces: vi.fn().mockResolvedValue([]),
-  getSessionTrace: vi.fn().mockResolvedValue(null),
   getSessionOutput: vi.fn().mockResolvedValue({
     sessionId: "s-1",
     output: "",
     hasOutput: false,
     metrics: { model: null, inputTokens: null, outputTokens: null, totalTokens: null, durationMs: null, status: "OK" },
-  }),
-  fetchTraceStats: vi.fn().mockResolvedValue({
-    range: "24h",
-    count: 0,
-    errorCount: 0,
-    errorRate: 0,
-    latencyMs: { p50: null, p90: null, p95: null, p99: null, avg: null },
-    timeseries: [],
   }),
 
   // Evaluations

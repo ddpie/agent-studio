@@ -494,43 +494,6 @@ export async function enableAgentEvaluations(
   );
 }
 
-// ── Traces (Sprint 2 F4) ──
-
-export interface TraceSummary {
-  sessionId: string;
-  traceId?: string;
-  firstEvent?: string;
-  spanCount: number;
-  model?: string | null;
-  totalTokens?: number | null;
-  durationMs?: number | null;
-  status?: string;
-}
-
-export interface TraceSpan {
-  spanId: string;
-  parentSpanId: string | null;
-  name: string;
-  startMs: number;
-  durationMs: number;
-  status: string;
-  children: TraceSpan[];
-}
-
-export async function listTraces(agentId: string): Promise<TraceSummary[]> {
-  const resp = await apiGet<{ sessions?: TraceSummary[] }>(
-    `/agents/${encodeURIComponent(agentId)}/traces`
-  );
-  return resp.sessions ?? [];
-}
-
-export async function getSessionTrace(agentId: string, sessionId: string): Promise<TraceSpan | null> {
-  const resp = await apiGet<{ root?: TraceSpan }>(
-    `/agents/${encodeURIComponent(agentId)}/traces/${encodeURIComponent(sessionId)}`
-  );
-  return resp?.root ?? null;
-}
-
 // ── Agent logs (inline CloudWatch viewer) ──
 
 export type LogLevel = "ALL" | "ERROR" | "WARN" | "INFO";
@@ -566,42 +529,6 @@ export async function fetchAgentLogs(
   if (params.cursor) qs.set("cursor", params.cursor);
   return apiGet<LogEventsPage>(
     `/agents/${encodeURIComponent(agentId)}/logs?${qs.toString()}`
-  );
-}
-
-// ── Trace stats (aggregate p50/p95/error rate) ──
-
-export type TraceStatsRange = "24h" | "7d";
-
-export interface TraceStatsBucket {
-  bucket: string;
-  count: number;
-  errors: number;
-  p95Ms: number | null;
-}
-
-export interface TraceStats {
-  range: TraceStatsRange;
-  count: number;
-  errorCount: number;
-  errorRate: number;
-  latencyMs: {
-    p50: number | null;
-    p90: number | null;
-    p95: number | null;
-    p99: number | null;
-    avg: number | null;
-  };
-  timeseries: TraceStatsBucket[];
-  bucketSeconds: number;
-}
-
-export async function fetchTraceStats(
-  agentId: string,
-  range: TraceStatsRange = "24h",
-): Promise<TraceStats> {
-  return apiGet<TraceStats>(
-    `/agents/${encodeURIComponent(agentId)}/traces/stats?range=${encodeURIComponent(range)}`
   );
 }
 
