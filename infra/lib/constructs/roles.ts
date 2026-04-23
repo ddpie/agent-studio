@@ -179,6 +179,23 @@ export class AgentCoreRoles extends Construct {
       ],
       resources: [`arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*`],
     }));
+    // CreateAgentRuntime also transparently provisions a WorkloadIdentity
+    // under workload-identity-directory/default/ so the runtime can call
+    // back to AgentCore-managed services (Identity Store etc). Missing this
+    // surfaces as: "not authorized to perform: CreateWorkloadIdentity on
+    // resource: workload-identity-directory/default/workload-identity/*".
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        "bedrock-agentcore:CreateWorkloadIdentity",
+        "bedrock-agentcore:GetWorkloadIdentity",
+        "bedrock-agentcore:UpdateWorkloadIdentity",
+        "bedrock-agentcore:DeleteWorkloadIdentity",
+        "bedrock-agentcore:ListWorkloadIdentities",
+      ],
+      resources: [
+        `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:workload-identity-directory/default/workload-identity/*`,
+      ],
+    }));
     metaAgentRole.addToPolicy(new iam.PolicyStatement({
       actions: ["iam:PassRole"],
       resources: [subAgentRole.roleArn, metaAgentRole.roleArn],
