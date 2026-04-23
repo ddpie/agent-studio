@@ -166,10 +166,17 @@ ${(() => {
   const editingSkillId = useAgentEditStore.getState().editingSkillId;
   const skills = editingSkillId ? allSkills.filter(s => s.id === editingSkillId) : allSkills;
   if (skills.length === 0) return "";
+  // Only metadata + file tree goes into the prompt. Skills can have
+  // hundreds of files (ppt-generator has 785); dumping contents would
+  // blow the budget. You have list_skill_files / read_skill_file tools —
+  // use them to pull only the files you need for the user's request.
   return `## Bound Skills${editingSkillId ? " (currently editing)" : ""}
-${skills.map(s => `- ${s.name}: ${s.description} (files: ${s.files.join(", ")})`).join("\n")}
+${skills.map(s => `- ${s.name} (id=${s.id}): ${s.description}\n  files: ${s.files.join(", ")}`).join("\n")}
 
-When the user asks to modify a skill file, use __field_value with the skill file path:
+Before rewriting or reviewing a skill file, use read_skill_file(skill_id, path) to fetch its content (and list_skill_files(skill_id) first if you need the full tree). Don't guess file content you haven't read. Pull only the files relevant to the ask — for "optimize SKILL.md", read SKILL.md plus any INDEX / layout / helper files that SKILL.md references.
+
+When the user asks to modify a skill file, write the new content with __field_value:
+
 \`\`\`\`__field_value:skill:{skillId}:{filePath}
 complete new file content
 \`\`\`\`
