@@ -50,6 +50,7 @@ from tools.list_skills import list_skills
 from tools.update_skill import update_skill
 from tools.delete_skill import delete_skill
 from tools.import_skill import import_skill
+from tools.validate_skill import validate_skill
 from tools.list_mcp_servers import list_mcp_servers
 from tools.list_mcp_target_tools import list_mcp_target_tools
 from tools.manage_secrets import set_agent_secrets, list_agent_secrets, delete_agent_secret
@@ -94,6 +95,7 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     - update_skill: Use when the user wants to modify an existing skill's name, description, or instructions.
     - delete_skill: Use when the user wants to remove a skill. ALWAYS confirm with user before deleting.
     - import_skill: Use when the user wants to import a skill from a URL or raw markdown content. Auto-wraps plain markdown with AgentSkills.io frontmatter.
+    - validate_skill: Use after creating or importing a skill to statically check its SKILL.md frontmatter and ``requires:`` block (declared assets, packages, runtime). Call this before telling the user the skill is ready to use.
     - list_tool_library: Use when selecting tools for a new agent — ALWAYS check built-in tools first.
     - get_tool_library_code: Use after list_tool_library to get the source code for built-in tools.
     - list_mcp_servers: Use when the user asks about available MCP tool servers from Gateway.
@@ -407,6 +409,7 @@ ALL_TOOLS = [
     update_skill,
     delete_skill,
     import_skill,
+    validate_skill,
     list_mcp_servers,
     list_mcp_target_tools,
     analyze_trace,
