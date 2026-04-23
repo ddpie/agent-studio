@@ -56,10 +56,16 @@ _A2A_KEYS_ENV_KEY = "AGENTS_TOOL_KEYS_JSON"
 _LINK_MARKER_START = "<!-- linked-agents:start -->"
 _LINK_MARKER_END = "<!-- linked-agents:end -->"
 
-# Mirrors lambda/shared/auth.py::ROLE_LEVEL — inlined because the lambda/shared
-# package is not importable from the meta-agent runtime.
+# Role constants come from tools._scope (single source of truth). Fall
+# back to local definitions only if _scope isn't importable — that shouldn't
+# happen in practice but protects test isolation.
 _WORKSPACES_TABLE = os.getenv("AGENT_STUDIO_WORKSPACES_TABLE", "agent-studio-workspaces")
-_ROLE_LEVEL = {"viewer": 0, "editor": 1, "admin": 2, "owner": 3}
+try:
+    from tools._scope import ROLE_VIEWER, ROLE_EDITOR, ROLE_ADMIN, ROLE_OWNER
+    _ROLE_LEVEL = {ROLE_VIEWER: 0, ROLE_EDITOR: 1, ROLE_ADMIN: 2, ROLE_OWNER: 3}
+except ImportError:  # pragma: no cover
+    ROLE_VIEWER, ROLE_EDITOR, ROLE_ADMIN, ROLE_OWNER = "viewer", "editor", "admin", "owner"
+    _ROLE_LEVEL = {ROLE_VIEWER: 0, ROLE_EDITOR: 1, ROLE_ADMIN: 2, ROLE_OWNER: 3}
 
 
 def _get_workspace_membership(workspace_id: str, user_id: str) -> dict | None:
@@ -382,7 +388,7 @@ def link_agent(source_agent_id: str, target_agent_id: str) -> str:
 
     # Editor+ role required: linking mutates secrets and redeploys source.
     member = _get_workspace_membership(src_ws, caller)
-    if not _has_min_role(member, "editor"):
+    if not _has_min_role(member, ROLE_EDITOR):
         return json.dumps({
             "error": "Permission denied: editor role or higher required to link agents",
             "workspace_id": src_ws,
@@ -499,7 +505,7 @@ def unlink_agent(source_agent_id: str, target_agent_id: str) -> str:
         return json.dumps({"error": "Source agent has no workspace"})
 
     member = _get_workspace_membership(src_ws, caller)
-    if not _has_min_role(member, "editor"):
+    if not _has_min_role(member, ROLE_EDITOR):
         return json.dumps({
             "error": "Permission denied: editor role or higher required to unlink agents",
             "workspace_id": src_ws,

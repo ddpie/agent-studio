@@ -7,6 +7,7 @@ import boto3
 from strands import tool
 
 from config import REGION, S3_BUCKET
+from tools._scope import ensure_agent_in_workspace, ROLE_VIEWER
 
 
 def _iso_utc(value) -> str:
@@ -32,6 +33,10 @@ def get_agent_detail(agent_id: str) -> str:
     Returns:
         JSON with full agent configuration.
     """
+    _record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_VIEWER)
+    if err:
+        return json.dumps(err)
+
     control = boto3.client("bedrock-agentcore-control", region_name=REGION)
     s3 = boto3.client("s3", region_name=REGION)
 
@@ -39,7 +44,7 @@ def get_agent_detail(agent_id: str) -> str:
     try:
         runtime = control.get_agent_runtime(agentRuntimeId=agent_id)
     except Exception as e:
-        return json.dumps({"error": f"Agent not found: {e}"})
+        return json.dumps({"error": f"Agent runtime lookup failed: {e}"})
 
     agent_name = runtime["agentRuntimeName"]
     result = {

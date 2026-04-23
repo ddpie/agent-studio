@@ -7,6 +7,7 @@ from strands import tool
 
 from config import REGION, S3_BUCKET, AGENTS_TABLE, AGENT_ROLE_ARN
 from deploy import delete_runtime, create_runtime, wait_for_ready
+from tools._scope import ensure_agent_in_workspace, ROLE_ADMIN, ROLE_OWNER
 
 
 @tool
@@ -19,17 +20,13 @@ def delete_agent(agent_id: str) -> str:
     Returns:
         JSON with archive status.
     """
-    caller = getattr(__import__('tools.delete_agent', fromlist=['_caller_id']), '_caller_id', 'unknown')
-    ddb = boto3.resource("dynamodb", region_name=REGION)
-    table = ddb.Table(AGENTS_TABLE)
-    record = table.get_item(Key={"agentId": agent_id}).get("Item")
-
-    if not record:
-        return json.dumps({"error": f"Agent {agent_id} not found in registry"})
-    if record.get("created_by") != caller:
-        return json.dumps({"error": f"Permission denied: agent owned by {record.get('created_by', 'unknown')}"})
+    record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_ADMIN)
+    if err:
+        return json.dumps(err)
     if record.get("status") == "archived":
         return json.dumps({"error": "Agent is already archived"})
+    ddb = boto3.resource("dynamodb", region_name=REGION)
+    table = ddb.Table(AGENTS_TABLE)
 
     # Delete the AgentCore runtime. Agents created via the in-app "new agent"
     # flow or cloned from the marketplace exist only as a DDB placeholder —
@@ -71,17 +68,13 @@ def restore_agent(agent_id: str) -> str:
     Returns:
         JSON with restore status.
     """
-    caller = getattr(__import__('tools.delete_agent', fromlist=['_caller_id']), '_caller_id', 'unknown')
-    ddb = boto3.resource("dynamodb", region_name=REGION)
-    table = ddb.Table(AGENTS_TABLE)
-    record = table.get_item(Key={"agentId": agent_id}).get("Item")
-
-    if not record:
-        return json.dumps({"error": f"Agent {agent_id} not found in registry"})
-    if record.get("created_by") != caller:
-        return json.dumps({"error": f"Permission denied: agent owned by {record.get('created_by', 'unknown')}"})
+    record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_ADMIN)
+    if err:
+        return json.dumps(err)
     if record.get("status") != "archived":
         return json.dumps({"error": "Agent is not archived, cannot restore"})
+    ddb = boto3.resource("dynamodb", region_name=REGION)
+    table = ddb.Table(AGENTS_TABLE)
 
     agent_name = record.get("agentName", agent_id)
 
@@ -148,17 +141,13 @@ def purge_agent(agent_id: str) -> str:
     Returns:
         JSON with purge status.
     """
-    caller = getattr(__import__('tools.delete_agent', fromlist=['_caller_id']), '_caller_id', 'unknown')
-    ddb = boto3.resource("dynamodb", region_name=REGION)
-    table = ddb.Table(AGENTS_TABLE)
-    record = table.get_item(Key={"agentId": agent_id}).get("Item")
-
-    if not record:
-        return json.dumps({"error": f"Agent {agent_id} not found in registry"})
-    if record.get("created_by") != caller:
-        return json.dumps({"error": f"Permission denied: agent owned by {record.get('created_by', 'unknown')}"})
+    record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_OWNER)
+    if err:
+        return json.dumps(err)
     if record.get("status") != "archived":
         return json.dumps({"error": "Only archived agents can be permanently deleted. Archive it first."})
+    ddb = boto3.resource("dynamodb", region_name=REGION)
+    table = ddb.Table(AGENTS_TABLE)
 
     agent_name = record.get("agentName", "")
 

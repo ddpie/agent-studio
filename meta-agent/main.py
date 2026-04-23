@@ -432,11 +432,18 @@ async def invoke(payload, context):
     caller_id = payload.get("caller_id", "unknown")
     workspace_id = payload.get("workspace_id", "")
 
-    # Make caller_id and workspace_id available to tools via module-level variable
+    # Make caller_id and workspace_id available to tools via module-level
+    # variables. Most tools now pull these from tools._scope instead of
+    # reading their own module's _caller_id (see _scope.ensure_agent_in_
+    # workspace / require_role), but the existing direct readers stay
+    # in place for backward compat.
+    import tools._scope as _scope
     import tools.create_agent as _ca
     import tools.update_agent as _ua
     import tools.delete_agent as _da
     import tools.manage_secrets as _ms
+    _scope._caller_id = caller_id
+    _scope._workspace_id = workspace_id
     _ca._caller_id = caller_id
     _ca._workspace_id = workspace_id
     _ua._caller_id = caller_id

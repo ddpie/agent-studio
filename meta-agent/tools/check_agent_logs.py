@@ -8,31 +8,27 @@ import boto3
 from strands import tool
 
 from config import REGION
+from tools._scope import ensure_agent_in_workspace, list_workspace_agents, ROLE_VIEWER
 
 
-def _resolve_agent_id(agent_id_or_name: str) -> tuple[str, str]:
-    """Resolve agent name to agent_id. Returns (agent_id, log_group)."""
-    control = boto3.client("bedrock-agentcore-control", region_name=REGION)
+def _resolve_agent_id(agent_id_or_name: str) -> str | None:
+    """Resolve a possibly-a-name to a concrete agent_id, scoped to the
+    caller's workspace.
 
-    # If it looks like a full runtime ID (contains dash + random chars), use directly
+    Returns the agent_id, or None if no match was found (the caller
+    reports the 'not found' error — this helper doesn't distinguish
+    wrong-name from wrong-workspace, since the listing it searches is
+    already workspace-scoped).
+    """
     if "-" in agent_id_or_name and len(agent_id_or_name) > 20:
-        log_group = f"/aws/bedrock-agentcore/runtimes/{agent_id_or_name}-DEFAULT"
-        return agent_id_or_name, log_group
-
-    # Otherwise try to find by listing runtimes
-    try:
-        resp = control.list_agent_runtimes(maxResults=50)
-        for rt in resp.get("agentRuntimeSummaries", []):
-            if rt["agentRuntimeName"] == agent_id_or_name:
-                rid = rt["agentRuntimeId"]
-                log_group = f"/aws/bedrock-agentcore/runtimes/{rid}-DEFAULT"
-                return rid, log_group
-    except Exception:
-        pass
-
-    # Fallback: assume it's an agent_id
-    log_group = f"/aws/bedrock-agentcore/runtimes/{agent_id_or_name}-DEFAULT"
-    return agent_id_or_name, log_group
+        return agent_id_or_name
+    for record in list_workspace_agents():
+        aid = record.get("agentId", "")
+        if aid == agent_id_or_name:
+            return aid
+        if record.get("name") == agent_id_or_name or record.get("agentName") == agent_id_or_name:
+            return aid
+    return None
 
 
 @tool
@@ -49,9 +45,15 @@ def check_agent_logs(agent_id: str, minutes: int = 30) -> str:
     Returns:
         Recent log entries as text, or error message if no logs found.
     """
-    logs_client = boto3.client("logs", region_name=REGION)
+    resolved_id = _resolve_agent_id(agent_id)
+    if not resolved_id:
+        return json.dumps({"error": f"Agent {agent_id} not found in this workspace."})
+    _record, err = ensure_agent_in_workspace(resolved_id, min_role=ROLE_VIEWER)
+    if err:
+        return json.dumps(err)
 
-    resolved_id, log_group = _resolve_agent_id(agent_id)
+    log_group = f"/aws/bedrock-agentcore/runtimes/{resolved_id}-DEFAULT"
+    logs_client = boto3.client("logs", region_name=REGION)
 
     end_time = int(time.time() * 1000)
     start_time = end_time - (minutes * 60 * 1000)
