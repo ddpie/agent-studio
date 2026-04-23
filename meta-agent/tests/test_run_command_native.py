@@ -52,6 +52,8 @@ def test_run_command_python_via_code_interpreter(monkeypatch):
 
 
 def test_run_command_returns_error_on_nonzero_exit(monkeypatch):
+    """Errors come back as Strands-native {status: error, content: [...]}
+    tool-results so the model sees is_error=true, not a success payload."""
     monkeypatch.setenv("AGENT_STUDIO_CODE_INTERPRETER_ID", "ci-test")
     data_mock = MagicMock()
     data_mock.start_code_interpreter_session.return_value = {"sessionId": "sess-1"}
@@ -61,12 +63,17 @@ def test_run_command_returns_error_on_nonzero_exit(monkeypatch):
     with patch("boto3.client", return_value=data_mock):
         ns = _exec_builtin(monkeypatch)
         result = ns["run_command"]("1/0", "python")
-    parsed = json.loads(result) if result.startswith("{") else {"output": result}
-    assert parsed.get("error") or "Exit code 1" in result
+    assert isinstance(result, dict)
+    assert result["status"] == "error"
+    text = result["content"][0]["text"]
+    assert "Exit code 1" in text
+    assert "boom" in text
 
 
 def test_run_command_returns_error_when_ci_id_missing(monkeypatch):
     monkeypatch.delenv("AGENT_STUDIO_CODE_INTERPRETER_ID", raising=False)
     ns = _exec_builtin(monkeypatch)
     result = ns["run_command"]("print(1)", "python")
-    assert "CODE_INTERPRETER_ID" in result or "not configured" in result.lower()
+    assert isinstance(result, dict)
+    assert result["status"] == "error"
+    assert "CODE_INTERPRETER_ID" in result["content"][0]["text"]

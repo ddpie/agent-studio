@@ -65,13 +65,15 @@ async def invoke(payload, context):
             "\\n\\n## Available Skills\\n"
             + skills_listing
             + "\\n\\nUse load_skill(name) to load a skill\\'s full instructions when needed."
+            + "\\nTo run a script that ships with a skill, prefer run_skill_script(skill_name, script) — it stages the skill into the sandbox for you (no manual file copying)."
+            + "\\nBefore promising to generate a file via a skill (PPT, chart, report), call check_capabilities() to verify the skill and its runtime are actually available. If a skill is not loadable, say so instead of trying and failing mid-turn."
         )
     prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), save them to /mnt/workspace/ (persistent across sessions) instead of /tmp/ (ephemeral). ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files. After uploading, the download button appears automatically — do NOT create markdown links like [filename](url) for downloads."
     prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
     agent = Agent(
         model=BedrockModel(model_id=model_id, max_tokens=_get_max_tokens(model_id)),
         system_prompt=prompt,
-        tools=_ALL_TOOLS + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use],
+        tools=_ALL_TOOLS + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use, _builtin.run_skill_script, _builtin.check_capabilities],
     )
     async for chunk in _stream_and_record(agent, payload):
         yield chunk
@@ -227,6 +229,8 @@ async def invoke(payload, context):
             "\\n\\n## Available Skills\\n"
             + skills_listing
             + "\\n\\nUse load_skill(name) to load a skill\\'s full instructions when needed."
+            + "\\nTo run a script that ships with a skill, prefer run_skill_script(skill_name, script) — it stages the skill into the sandbox for you (no manual file copying)."
+            + "\\nBefore promising to generate a file via a skill (PPT, chart, report), call check_capabilities() to verify the skill and its runtime are actually available. If a skill is not loadable, say so instead of trying and failing mid-turn."
         )
     prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), save them to /mnt/workspace/ (persistent across sessions) instead of /tmp/ (ephemeral). ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files. After uploading, the download button appears automatically — do NOT create markdown links like [filename](url) for downloads."
     prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
@@ -241,7 +245,7 @@ async def invoke(payload, context):
         agent = Agent(
             model=BedrockModel(model_id=model_id, max_tokens=_get_max_tokens(model_id)),
             system_prompt=prompt,
-            tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use],
+            tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use, _builtin.run_skill_script, _builtin.check_capabilities],
         )
         async for chunk in _stream_and_record(agent, payload):
             yield chunk
@@ -929,7 +933,7 @@ def load_skill(name: str, file: str = "") -> str:
             obj = _s3.get_object(Bucket=_S3_BUCKET, Key="skills/index.json")
             skills = _json.loads(obj["Body"].read().decode("utf-8"))
     except Exception as e:
-        return _json.dumps({"error": f"Failed to read skill index: {e}"})
+        return _tool_error(f"Failed to read skill index: {e}")
 
     skill_id = None
     for s in skills:
@@ -939,10 +943,9 @@ def load_skill(name: str, file: str = "") -> str:
 
     if not skill_id:
         available = [s.get("name", "") for s in skills if not s.get("deleted")]
-        return _json.dumps({
-            "error": f"Skill \\'{name}\\' not found.",
-            "available_skills": available,
-        })
+        return _tool_error(
+            f"Skill '{name}' not found. Available: " + ", ".join(sorted(available))
+        )
 
     prefix = f"skills/{skill_id}/"
 
@@ -950,13 +953,13 @@ def load_skill(name: str, file: str = "") -> str:
     if file:
         content = _read_local_or_s3(prefix + file.lstrip("/"))
         if content is None:
-            return _json.dumps({"error": f"File \\'{file}\\' not found in skill \\'{name}\\'"})
+            return _tool_error(f"File '{file}' not found in skill '{name}'")
         return content
 
     # Default: read SKILL.md + list all files
     content = _read_local_or_s3(f"{prefix}SKILL.md")
     if content is None:
-        return _json.dumps({"error": f"Failed to read skill SKILL.md"})
+        return _tool_error(f"Failed to read skill SKILL.md for '{name}'")
 
     # List other files
     all_files = _list_local_or_s3(prefix)
@@ -977,15 +980,18 @@ def load_skill(name: str, file: str = "") -> str:
     return content
 
 
-class _CodeInterpreterFS:
-    """Typed access to the Code Interpreter sandbox filesystem.
+class ci_fs:
+    """Shared helper for crossing the Code Interpreter sandbox boundary.
+
+    Public API — used by upload_to_s3, run_skill_script, check_capabilities,
+    and any future tool that has to move data in or out of the CI session.
 
     The CI sandbox runs in a separate container from the sub-agent, so
     the two filesystems are unrelated. Worse, even *inside* the sandbox
     there are two separate file views:
 
       - writeFiles / readFiles ops see a managed virtual FS used for
-        uploads. `readFiles` reject absolute paths and cannot see files
+        uploads. `readFiles` rejects absolute paths and cannot see files
         that the sandbox's own Python process wrote.
       - executeCode / executeCommand see the real OS filesystem (cwd
         `/opt/amazon/genesis1p-tools/var` at time of writing). Anything
@@ -994,9 +1000,11 @@ class _CodeInterpreterFS:
 
     So `read_bytes` round-trips bytes through `executeCode` stdout (base64
     + sentinels). `write_bytes` keeps using writeFiles since uploads into
-    the sandbox are what that op was built for.
+    the sandbox are what that op was built for. `sync_from_local` batches
+    many writes into a single writeFiles call so skill staging is one
+    round-trip instead of N.
 
-    Returns (value, error) tuples consistently; None error means success.
+    Every method returns `(value, error)` — `error is None` means success.
     """
 
     @staticmethod
@@ -1135,6 +1143,81 @@ class _CodeInterpreterFS:
         _, err = cls._invoke("writeFiles", {"content": [payload]})
         return err
 
+    @classmethod
+    def is_file(cls, path):
+        """Return (exists: bool, error: str|None). Checks the sandbox OS FS."""
+        if not path:
+            return False, "empty path"
+        raw = path or ""
+        candidates = []
+        for c in [raw, cls._normalize(raw), _os.path.basename(raw)]:
+            if c and c not in candidates:
+                candidates.append(c)
+        code = (
+            "import os as _o, sys as _s\\n"
+            "_cands = " + repr(candidates) + "\\n"
+            "_hit = next((p for p in _cands if _o.path.isfile(p)), '')\\n"
+            "_s.stdout.write('__CI_FS_HIT__' + _hit + '__CI_FS_END__')\\n"
+        )
+        stdout, _stderr, _exit, err = cls._exec(code)
+        if err:
+            return False, err
+        import re as _re_
+        m = _re_.search(r"__CI_FS_HIT__(.*?)__CI_FS_END__", stdout)
+        if not m:
+            return False, "no sentinel in stdout"
+        return bool(m.group(1)), None
+
+    @classmethod
+    def sync_from_local(cls, files, remote_base):
+        """Copy a list of (local_path, remote_rel_path) pairs into the sandbox.
+
+        Batches up to 20 small payloads per writeFiles call — exceeds that
+        and the managed API starts rejecting with payload-too-large. Callers
+        that need to sync a full skill directory should chunk accordingly.
+
+        Returns (count_uploaded, error_str_or_None).
+        """
+        import base64 as _b64_
+        base = (remote_base or "").strip("/")
+        content = []
+        count = 0
+        for local_path, rel in files:
+            try:
+                with open(local_path, "rb") as fh:
+                    raw = fh.read()
+            except Exception as e:
+                return count, f"read {local_path}: {e}"
+            remote_rel = (base + "/" + rel.lstrip("/")).lstrip("/") if base else rel.lstrip("/")
+            content.append({
+                "path": cls._normalize(remote_rel),
+                "blob": _b64_.b64encode(raw).decode("ascii"),
+            })
+            count += 1
+            if len(content) >= 20:
+                _, err = cls._invoke("writeFiles", {"content": content})
+                if err:
+                    return count, err
+                content = []
+        if content:
+            _, err = cls._invoke("writeFiles", {"content": content})
+            if err:
+                return count, err
+        return count, None
+
+    @classmethod
+    def session_id(cls):
+        """Current Code Interpreter session id, or None if not yet started."""
+        return getattr(run_command, "_session_id", None)
+
+
+def _tool_error(message: str) -> dict:
+    """Strands-native error result — sets is_error on the assistant-visible
+    content block so the model treats it as a failed tool call instead of
+    misreading a JSON-stringified error as successful output.
+    """
+    return {"status": "error", "content": [{"text": str(message)}]}
+
 
 @_tool
 def run_command(command: str, language: str = "python") -> str:
@@ -1150,13 +1233,13 @@ def run_command(command: str, language: str = "python") -> str:
         language: "python" | "javascript" | "typescript" | "shell". Default: python.
 
     Returns:
-        stdout on success, or JSON { "error": ..., "output": ... } on failure.
+        stdout on success, or an error tool-result (is_error=true) on failure.
     """
     import boto3 as _boto3
 
     ci_id = _os.environ.get("AGENT_STUDIO_CODE_INTERPRETER_ID")
     if not ci_id:
-        return _json.dumps({"error": "AGENT_STUDIO_CODE_INTERPRETER_ID not configured"})
+        return _tool_error("AGENT_STUDIO_CODE_INTERPRETER_ID not configured")
 
     region = _os.environ.get("AGENT_STUDIO_REGION", _REGION)
     client = _boto3.client("bedrock-agentcore", region_name=region)
@@ -1171,7 +1254,7 @@ def run_command(command: str, language: str = "python") -> str:
             )["sessionId"]
             run_command._session_id = session_id
         except Exception as e:
-            return _json.dumps({"error": f"Failed to start code interpreter session: {e}"})
+            return _tool_error(f"Failed to start code interpreter session: {e}")
 
     op = "executeCode"
     args = {"code": command, "language": language if language != "shell" else "python"}
@@ -1187,7 +1270,7 @@ def run_command(command: str, language: str = "python") -> str:
             arguments=args,
         )
     except Exception as e:
-        return _json.dumps({"error": f"invoke_code_interpreter failed: {e}"})
+        return _tool_error(f"invoke_code_interpreter failed: {e}")
 
     stdout, stderr, exit_code = "", "", 0
     for event in resp.get("stream", []):
@@ -1201,7 +1284,7 @@ def run_command(command: str, language: str = "python") -> str:
 
     if exit_code and exit_code != 0:
         combined = (stdout + "\\n" + stderr).strip()
-        return _json.dumps({"error": f"Exit code {exit_code}", "output": combined})
+        return _tool_error(f"Exit code {exit_code}: {combined}")
     return stdout.strip() if stdout.strip() else "(no output)"
 
 
@@ -1264,25 +1347,212 @@ def upload_to_s3(local_path: str, filename: str = "") -> str:
             _s3.upload_file(local_path, _S3_BUCKET, s3_key, ExtraArgs=extra_args)
             return f"File uploaded successfully. Include this download link in your response:\\n__S3_DOWNLOAD__:{s3_key}:{fname}"
         except Exception as e:
-            return f"Upload failed: {e}"
+            return _tool_error(f"Upload failed: {e}")
 
     # Fallback: file was generated inside the Code Interpreter sandbox.
-    data, err = _CodeInterpreterFS.read_bytes(local_path)
+    data, err = ci_fs.read_bytes(local_path)
     if err or data is None:
-        return _json.dumps({
-            "error": (
-                f"File not found: {local_path}. Tried the sub-agent's "
-                f"filesystem and the Code Interpreter sandbox ({err or 'no content'}). "
-                "Tip: save artifacts with a relative path inside run_command "
-                "(e.g. plt.savefig('chart.png'), not '/tmp/chart.png') and "
-                "pass the same path here."
-            )
-        })
+        return _tool_error(
+            f"File not found: {local_path}. Tried the sub-agent's "
+            f"filesystem and the Code Interpreter sandbox ({err or 'no content'}). "
+            "Tip: save artifacts with a relative path inside run_command "
+            "(e.g. plt.savefig('chart.png'), not '/tmp/chart.png') and "
+            "pass the same path here."
+        )
     try:
         _s3.put_object(Bucket=_S3_BUCKET, Key=s3_key, Body=data, **extra_args)
         return f"File uploaded successfully. Include this download link in your response:\\n__S3_DOWNLOAD__:{s3_key}:{fname}"
     except Exception as e:
-        return f"Upload failed: {e}"
+        return _tool_error(f"Upload failed: {e}")
+
+
+# Per-session bookkeeping for run_skill_script — maps (session_id, skill_name)
+# to the remote directory we've already seeded. Skill staging is not free
+# (S3 reads + writeFiles round-trips scale with file count), so we only do
+# it once per CI session per skill.
+_STAGED_SKILLS: dict = {}
+_CI_SKILL_ROOT = "skills"  # remote layout: {_CI_SKILL_ROOT}/{name}/...
+
+
+def _stage_skill_into_ci(name: str):
+    """Copy a skill's files into the active Code Interpreter session.
+
+    Returns (remote_dir: str|None, error: str|None). The remote dir is where
+    scripts live inside the sandbox (relative to its cwd), e.g.
+    ``skills/ppt-generator``. Idempotent per (session, skill).
+    """
+    session_id = ci_fs.session_id()
+    if not session_id:
+        return None, "no active Code Interpreter session — call run_command first"
+
+    cache_key = (session_id, name)
+    if cache_key in _STAGED_SKILLS:
+        return _STAGED_SKILLS[cache_key], None
+
+    ensure_skills_cached()
+    index_path = _CACHE_ROOT / "index.json"
+    try:
+        skills = _json.loads(index_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        return None, f"failed to read skill index: {e}"
+
+    skill_id = next((s.get("id") for s in skills if s.get("name") == name and not s.get("deleted")), None)
+    if not skill_id:
+        return None, f"skill '{name}' not found"
+
+    local_root = _CACHE_ROOT / skill_id
+    if not local_root.exists():
+        return None, f"skill '{name}' has no local cache (cache root: {_CACHE_ROOT})"
+
+    pairs = []
+    for p in local_root.rglob("*"):
+        if p.is_file():
+            pairs.append((str(p), str(p.relative_to(local_root))))
+    if not pairs:
+        return None, f"skill '{name}' has no files"
+
+    remote_dir = f"{_CI_SKILL_ROOT}/{name}"
+    count, err = ci_fs.sync_from_local(pairs, remote_dir)
+    if err:
+        return None, f"sync {count}/{len(pairs)} files then failed: {err}"
+
+    _STAGED_SKILLS[cache_key] = remote_dir
+    return remote_dir, None
+
+
+@_tool
+def run_skill_script(skill_name: str, script: str, language: str = "python") -> str:
+    """Execute a script that ships with a skill inside Code Interpreter.
+
+    Use this instead of manually `load_skill(..., file=...)` + constructing
+    `run_command` calls. The skill's files are copied into the sandbox once
+    per session (cached), then the script runs from its own directory so
+    relative imports / asset reads work naturally.
+
+    Args:
+        skill_name: The skill to use (e.g. "ppt-generator"). Must be loaded
+            via load_skill first or visible in the Available Skills list.
+        script: Path to the script inside the skill (e.g. "scripts/render.py"
+            or "svg_to_pptx.py"). Relative to the skill's root.
+        language: "python" (default) | "shell" — how to invoke the script.
+
+    Returns:
+        The script's stdout, or an error tool-result (is_error=true).
+    """
+    if not skill_name or not isinstance(skill_name, str):
+        return _tool_error("skill_name is required")
+    if not script or not isinstance(script, str):
+        return _tool_error("script path is required")
+
+    # Force a session to exist before staging.
+    if not ci_fs.session_id():
+        boot = run_command("pass", "python")
+        if isinstance(boot, dict) and boot.get("status") == "error":
+            return boot
+
+    remote_dir, err = _stage_skill_into_ci(skill_name)
+    if err:
+        return _tool_error(f"Failed to stage skill '{skill_name}': {err}")
+
+    rel = script.lstrip("/")
+    remote_script = f"{remote_dir}/{rel}"
+
+    if language == "shell":
+        cmd = f"cd {remote_dir} && bash {rel}"
+        return run_command(cmd, "shell")
+
+    # Python: run the script from the skill's directory so relative reads
+    # (open('assets/foo.svg'), importlib, etc.) resolve against the skill.
+    code = (
+        "import os, runpy, sys\\n"
+        f"os.chdir({remote_dir!r})\\n"
+        f"sys.path.insert(0, {remote_dir!r})\\n"
+        f"runpy.run_path({remote_script!r}, run_name='__main__')\\n"
+    )
+    return run_command(code, "python")
+
+
+@_tool
+def check_capabilities() -> str:
+    """Preflight probe — returns a structured JSON snapshot of what this
+    sub-agent can actually do right now. Call this before promising the user
+    a file-generating skill so you don't commit to something that will fail
+    mid-turn (missing CI session, missing skill assets, uninstalled deps).
+
+    Returns JSON with keys:
+      - ``code_interpreter`` — {"ready": bool, "session_id": str|None,
+        "python_version": str|None, "cwd": str|None, "error": str|None}
+      - ``skills`` — list of {"name", "id", "loadable", "file_count",
+        "error"} for every skill in the workspace index
+      - ``skills_cached`` — bool, whether the local cache is hydrated
+
+    Does not raise and does not hit S3 beyond the skill index. Safe to call
+    multiple times; cheap after the first call.
+    """
+    report = {"code_interpreter": {"ready": False}, "skills": [], "skills_cached": _CACHE_READY}
+
+    ci_id = _os.environ.get("AGENT_STUDIO_CODE_INTERPRETER_ID")
+    session_id = ci_fs.session_id()
+    if not ci_id:
+        report["code_interpreter"]["error"] = "AGENT_STUDIO_CODE_INTERPRETER_ID not configured"
+    elif not session_id:
+        report["code_interpreter"]["error"] = "no active session yet (call run_command once to start one)"
+    else:
+        probe = (
+            "import sys, os, json\\n"
+            "print(json.dumps({'python': sys.version.split()[0], 'cwd': os.getcwd()}))\\n"
+        )
+        stdout, _stderr, exit_code, err = ci_fs._exec(probe)
+        if err or exit_code:
+            report["code_interpreter"]["error"] = err or f"probe exit {exit_code}"
+        else:
+            try:
+                meta = _json.loads(stdout.strip().splitlines()[-1])
+                report["code_interpreter"].update({
+                    "ready": True,
+                    "session_id": session_id,
+                    "python_version": meta.get("python"),
+                    "cwd": meta.get("cwd"),
+                })
+            except Exception as e:
+                report["code_interpreter"]["error"] = f"probe decode failed: {e}"
+
+    try:
+        ensure_skills_cached()
+        report["skills_cached"] = _CACHE_READY
+        index_path = _CACHE_ROOT / "index.json"
+        if index_path.exists():
+            skills = _json.loads(index_path.read_text(encoding="utf-8"))
+        else:
+            skills = []
+        for s in skills:
+            if s.get("deleted"):
+                continue
+            sid = s.get("id", "")
+            name = s.get("name", "")
+            local_root = _CACHE_ROOT / sid if sid else None
+            file_count = 0
+            loadable = False
+            entry_err = None
+            if local_root and local_root.exists():
+                try:
+                    file_count = sum(1 for p in local_root.rglob("*") if p.is_file())
+                    loadable = (local_root / "SKILL.md").is_file()
+                except Exception as e:
+                    entry_err = str(e)
+            else:
+                entry_err = "not in local cache"
+            report["skills"].append({
+                "name": name,
+                "id": sid,
+                "loadable": loadable,
+                "file_count": file_count,
+                "error": entry_err,
+            })
+    except Exception as e:
+        report["skills_error"] = str(e)
+
+    return _json.dumps(report, ensure_ascii=False, indent=2)
 
 
 # Per-invocation limits for read_document
