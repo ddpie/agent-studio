@@ -304,9 +304,20 @@ def update_agent(
     else:
         final_tools_def_for_meta = final_tools_def or existing_metadata.get("tool_definitions", "")
 
-    deployed_skill_hashes = {}
-    for skill_entry in skills_config:
-        deployed_skill_hashes[skill_entry["id"]] = skill_entry.get("contentHash", "")
+    # Preserve skills across "no-op" updates: if the caller didn't pass a
+    # staging_key (typical of "just redeploy to pick up new builtin_tools"),
+    # skills_config is empty but the agent still has its skills attached.
+    # Empty-overwrite on that path would silently strip the skills manifest
+    # and break load_skill / run_skill_script / check_capabilities at
+    # runtime.
+    if skills_config:
+        final_skills = skills_config
+        deployed_skill_hashes = {
+            s["id"]: s.get("contentHash", "") for s in skills_config
+        }
+    else:
+        final_skills = existing_metadata.get("skills", [])
+        deployed_skill_hashes = existing_metadata.get("deployedSkillHashes", {})
 
     metadata = {
         "agent_id": agent_id,
@@ -321,7 +332,7 @@ def update_agent(
         "template_id": final_template,
         "tools": [t.strip() for t in final_tools_names.split(",") if t.strip()],
         "supports_images": supports_images or existing_metadata.get("supports_images", False),
-        "skills": skills_config,
+        "skills": final_skills,
         "deployedSkillHashes": deployed_skill_hashes,
         "mcp_targets": mcp_targets_list,
         # Preserve fields managed by companion tools (link_agent etc.)
