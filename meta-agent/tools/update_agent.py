@@ -8,7 +8,7 @@ import boto3
 from strands import tool
 
 from config import MODEL_ID, REGION, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE, SUB_AGENT_ROLE_ARN
-from deploy import build_deployment_package_v2, upload_deployment, wait_for_ready, validate_agent_files, build_skill_prompt_section, _shared_env_vars
+from deploy import build_deployment_package_v2, upload_deployment, validate_agent_files, build_skill_prompt_section, _shared_env_vars
 from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_template_prompt, BASE_GUIDELINES
 from tools_library.registry import get_tool_code_by_func_name as _get_builtin_code
@@ -76,6 +76,13 @@ def update_agent(
     The agent ID and ARN remain unchanged. Only provide fields you want to update.
     If only metadata fields change (description, welcome_message, suggestions, display_name),
     the agent will NOT be redeployed — only S3 metadata is updated (instant).
+
+    Redeploys return immediately with ``status: "UPDATING"`` — the tool does
+    NOT block until the new runtime is READY. The update was successfully
+    queued with AgentCore at that point; call ``get_agent_detail(agent_id)``
+    to confirm the runtime is READY before invoking it. (Blocking here can
+    exceed CloudFront's 60s origin idle timeout and surface as a spurious
+    network error.)
 
     Args:
         agent_id: The agent runtime ID to update.
@@ -294,7 +301,13 @@ def update_agent(
             environmentVariables=_shared_env_vars(agent_id=agent_id),
         )
 
-        status = wait_for_ready(agent_id)
+        # Don't block on READY — update_agent_runtime is already queued at
+        # this point, and a ~60-120s wait blows past CloudFront's 60s origin
+        # idle timeout (the SSE stream stays quiet) so the client sees a
+        # spurious "network error" even though the deploy is fine. Return
+        # UPDATING immediately; the caller can poll get_agent_detail to
+        # confirm READY.
+        status = "UPDATING"
 
     # Always update metadata
     suggestion_list = [s.strip() for s in final_suggestions.split("|") if s.strip()]
@@ -370,10 +383,17 @@ def update_agent(
         ExpressionAttributeValues=expr_values,
     )
 
-    return json.dumps({
+    result = {
         "agent_id": agent_id,
         "agent_name": agent_name,
         "status": status,
         "action": "redeployed" if needs_redeploy else "metadata_updated",
         "needs_redeploy": needs_redeploy,
-    }, indent=2)
+    }
+    if needs_redeploy:
+        result["hint"] = (
+            "Runtime is UPDATING in the background. Use get_agent_detail "
+            f"(agent_id='{agent_id}') to check when status becomes READY "
+            "before invoking the agent."
+        )
+    return json.dumps(result, indent=2)
