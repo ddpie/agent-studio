@@ -15,9 +15,10 @@ from config import REGION, S3_BUCKET
 def _parse_frontmatter(content: str) -> dict | None:
     """Parse YAML frontmatter from SKILL.md content. Returns dict or None.
 
-    Uses ``yaml.safe_load`` so list/dict values (notably ``requires:``)
-    survive parsing. Old string-only parser silently flattened lists to
-    their string repr, which broke any downstream ``requires:`` handling.
+    Uses ``yaml.safe_load`` so list/dict values survive parsing (the old
+    line-by-line parser silently flattened everything to strings, which
+    broke any nested structure such as ``requires:`` lists from other
+    skill-format dialects).
     """
     if not content.startswith("---"):
         return None
