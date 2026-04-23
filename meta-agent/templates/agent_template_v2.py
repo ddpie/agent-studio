@@ -70,7 +70,7 @@ async def invoke(payload, context):
             + "\\n- assets-only skills (SKILL.md + data files, no scripts): load_skill(name, file='path') to read individual files as needed."
             + "\\nBefore promising a file-generating task that depends on a specific skill, call check_capabilities() first. If a skill is missing or the wrong type, say so instead of trying and failing mid-turn."
         )
-    prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), save them to /mnt/workspace/ (persistent across sessions) instead of /tmp/ (ephemeral). ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files. After uploading, the download button appears automatically — do NOT create markdown links like [filename](url) for downloads."
+    prompt += "\\n\\n## File Sharing\\nFiles you generate via run_command / run_skill_script live inside the Code Interpreter sandbox, NOT on your own filesystem. /mnt/workspace/ is the sub-agent's session storage — it does NOT exist inside the CI sandbox, so passing `--output /mnt/workspace/foo.pptx` to a script will fail with PermissionError. Save outputs to a relative path (e.g. `output.pptx`) or /tmp/ inside the sandbox, then call upload_to_s3(local_path) with the SAME path — it automatically reads from the sandbox when the file isn't local. Never tell the user you cannot send files. The download button appears automatically after upload — do NOT create markdown links like [filename](url) for downloads."
     prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
     agent = Agent(
         model=BedrockModel(model_id=model_id, max_tokens=_get_max_tokens(model_id)),
@@ -236,7 +236,7 @@ async def invoke(payload, context):
             + "\\n- assets-only skills (SKILL.md + data files, no scripts): load_skill(name, file='path') to read individual files as needed."
             + "\\nBefore promising a file-generating task that depends on a specific skill, call check_capabilities() first. If a skill is missing or the wrong type, say so instead of trying and failing mid-turn."
         )
-    prompt += "\\n\\n## File Sharing\\nWhen you generate files (PPTX, PDF, CSV, images, etc.), save them to /mnt/workspace/ (persistent across sessions) instead of /tmp/ (ephemeral). ALWAYS use upload_to_s3(local_path) to make them downloadable. Never tell the user you cannot send files. After uploading, the download button appears automatically — do NOT create markdown links like [filename](url) for downloads."
+    prompt += "\\n\\n## File Sharing\\nFiles you generate via run_command / run_skill_script live inside the Code Interpreter sandbox, NOT on your own filesystem. /mnt/workspace/ is the sub-agent's session storage — it does NOT exist inside the CI sandbox, so passing `--output /mnt/workspace/foo.pptx` to a script will fail with PermissionError. Save outputs to a relative path (e.g. `output.pptx`) or /tmp/ inside the sandbox, then call upload_to_s3(local_path) with the SAME path — it automatically reads from the sandbox when the file isn't local. Never tell the user you cannot send files. The download button appears automatically after upload — do NOT create markdown links like [filename](url) for downloads."
     prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
     with contextlib.ExitStack() as stack:
         mcp_tools = []
@@ -1331,10 +1331,14 @@ def run_command(command: str, language: str = "python") -> str:
 def upload_to_s3(local_path: str, filename: str = "") -> str:
     """Upload a file to S3 for user download. Use this after generating files (e.g. PPTX, PDF, CSV, PNG).
 
-    Accepts both sub-agent local paths (e.g. /mnt/workspace/out.pptx) and
-    Code Interpreter sandbox paths (e.g. /tmp/chart.png created inside a
-    run_command call). The file is stored permanently and a download link
-    appears automatically in the chat UI.
+    Accepts both sub-agent local paths and Code Interpreter sandbox paths
+    (e.g. a relative ``output.pptx`` or ``/tmp/chart.png`` created inside a
+    run_command / run_skill_script call). The sub-agent's /mnt/workspace/
+    session storage is NOT mounted inside the CI sandbox, so do not pass
+    ``/mnt/workspace/...`` as the output path of a CI-executed script —
+    scripts should write a relative path or /tmp/ path inside the sandbox.
+    The file is stored permanently and a download link appears automatically
+    in the chat UI.
 
     Args:
         local_path: Absolute path to the file. Local filesystem checked
