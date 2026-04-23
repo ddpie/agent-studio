@@ -13,18 +13,24 @@ from config import REGION, S3_BUCKET
 
 
 def _parse_frontmatter(content: str) -> dict | None:
-    """Parse YAML frontmatter from SKILL.md content. Returns dict or None."""
+    """Parse YAML frontmatter from SKILL.md content. Returns dict or None.
+
+    Uses ``yaml.safe_load`` so list/dict values (notably ``requires:``)
+    survive parsing. Old string-only parser silently flattened lists to
+    their string repr, which broke any downstream ``requires:`` handling.
+    """
     if not content.startswith("---"):
         return None
     parts = content.split("---", 2)
     if len(parts) < 3:
         return None
-    meta = {}
-    for line in parts[1].strip().split("\n"):
-        line = line.strip()
-        if ":" in line:
-            key, val = line.split(":", 1)
-            meta[key.strip()] = val.strip().strip('"').strip("'")
+    try:
+        import yaml
+        meta = yaml.safe_load(parts[1]) or {}
+    except Exception:
+        return None
+    if not isinstance(meta, dict):
+        return None
     return meta if meta.get("name") else None
 
 
