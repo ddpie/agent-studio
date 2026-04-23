@@ -179,6 +179,55 @@ def test_run_skill_script_uses_absolute_path_resistant_to_cwd_drift(monkeypatch,
         assert f"{expected_abs}/skills/ppt-generator" not in code
 
 
+def test_run_skill_script_passes_argv_and_handles_packages(monkeypatch, tmp_path):
+    """argv must reach the script, and package-aware code path must fire
+    for scripts inside a Python package (relative imports need run_module)."""
+    monkeypatch.setenv("AGENT_STUDIO_CODE_INTERPRETER_ID", "ci-test")
+    _seed_local_skill(tmp_path)
+
+    calls = []
+    ci = MagicMock()
+    ci.start_code_interpreter_session.return_value = {"sessionId": "sess-pkg"}
+
+    def fake_invoke(**kwargs):
+        calls.append(kwargs)
+        name = kwargs["name"]
+        if name == "writeFiles":
+            return {"stream": [{"result": {"content": []}}]}
+        if "__CI_ANCHOR__" in kwargs.get("arguments", {}).get("code", ""):
+            return {"stream": [{"result": {"structuredContent": {
+                "stdout": "__CI_ANCHOR__/sandbox__CI_ANCHOR_END__",
+                "stderr": "", "exitCode": 0,
+            }, "content": []}}]}
+        return {"stream": [{"result": {"structuredContent": {"stdout": "ok\n", "stderr": "", "exitCode": 0}, "content": []}}]}
+
+    ci.invoke_code_interpreter.side_effect = fake_invoke
+
+    with patch("boto3.client", return_value=ci):
+        ns = _exec_builtin()
+        ns["_CACHE_ROOT"] = tmp_path
+        _install_manifest(ns, [{"id": "s-1", "name": "ppt-generator"}])
+        ns["_CACHED_SKILLS"].add("s-1")
+        ns["run_skill_script"](
+            "ppt-generator",
+            "scripts/render.py",
+            args="--output out.pptx --theme dark_warm",
+        )
+
+    exec_calls = [c for c in calls if c["name"] == "executeCode" and "runpy" in c.get("arguments", {}).get("code", "")]
+    assert exec_calls, "no runpy exec call recorded"
+    code = exec_calls[-1]["arguments"]["code"]
+    # argv must be wired into the script
+    assert "--output" in code
+    assert "out.pptx" in code
+    assert "dark_warm" in code
+    # Package detection walking happens
+    assert "run_module" in code
+    assert "run_path" in code  # fallback present
+    # pytest-style identifier check
+    assert "isidentifier" in code
+
+
 def test_run_skill_script_rejects_blank_args():
     ns = _exec_builtin()
     result = ns["run_skill_script"]("", "scripts/x.py")

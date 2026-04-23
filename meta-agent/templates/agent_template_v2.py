@@ -1505,19 +1505,36 @@ def _stage_skill_into_ci(name: str):
 
 
 @_tool
-def run_skill_script(skill_name: str, script: str, language: str = "python") -> str:
+def run_skill_script(skill_name: str, script: str, args: str = "", language: str = "python") -> str:
     """Execute a script that ships with a skill inside Code Interpreter.
 
-    Use this instead of manually `load_skill(..., file=...)` + constructing
-    `run_command` calls. The skill's files are copied into the sandbox once
-    per session (cached), then the script runs from its own directory so
-    relative imports / asset reads work naturally.
+    Use this instead of manually `load_skill(..., file=...)` + `run_command`.
+    The skill's files are copied into the sandbox once per session (cached),
+    then the script runs from the skill's directory so relative imports and
+    asset reads resolve naturally.
+
+    Scripts typically accept CLI arguments (--output, --theme, paths, etc).
+    Pass them via ``args`` as a single shell-style string:
+
+        run_skill_script("ppt-generator",
+                         "ppt-master-assets/scripts/svg_to_pptx.py",
+                         args="./ppt_svgs/ --output result.pptx")
+
+    Package-aware execution: if ``script`` points at a file inside a Python
+    package (e.g. ``.../svg_to_pptx/__init__.py`` or
+    ``.../svg_to_pptx/pptx_cli.py``), the tool runs the package's module via
+    ``python -m`` so relative imports (``from .pptx_cli import main``) work.
+    Otherwise it executes the script as a top-level file.
 
     Args:
-        skill_name: The skill to use (e.g. "ppt-generator"). Must be loaded
-            via load_skill first or visible in the Available Skills list.
-        script: Path to the script inside the skill (e.g. "scripts/render.py"
-            or "svg_to_pptx.py"). Relative to the skill's root.
+        skill_name: The skill to use (e.g. "ppt-generator"). Must be
+            attached to this sub-agent.
+        script: Path to the script inside the skill. Examples:
+            ``scripts/render.py``, ``ppt-master-assets/scripts/svg_to_pptx.py``,
+            or a package module like
+            ``ppt-master-assets/scripts/svg_to_pptx/pptx_cli.py``.
+        args: CLI arguments passed to the script (space-separated, shell-
+            parsed). Default empty.
         language: "python" (default) | "shell" — how to invoke the script.
 
     Returns:
@@ -1544,20 +1561,71 @@ def run_skill_script(skill_name: str, script: str, language: str = "python") -> 
     # persistent-kernel cwd-drift bug — see E2B/Modal/Jupyter convention
     # of never trusting os.getcwd() across turns.
 
+    import shlex as _shlex_
+    try:
+        argv_extra = _shlex_.split(args) if args else []
+    except ValueError as e:
+        return _tool_error(f"invalid args (shell parse failed): {e}")
+
     if language == "shell":
-        cmd = f"cd {remote_dir} && bash {rel}"
+        # Preserve quoting when passing args through shell.
+        quoted_args = " ".join(_shlex_.quote(a) for a in argv_extra)
+        cmd = f"cd {_shlex_.quote(remote_dir)} && bash {_shlex_.quote(rel)} {quoted_args}".rstrip()
         return run_command(cmd, "shell")
 
-    # Python: chdir+sys.path insert so relative imports/asset reads inside
-    # the script resolve against its own directory. Safe to repeat across
-    # turns because _abs is absolute, not derived from the drifting cwd.
+    # Python path: if the script sits inside a Python package (i.e. its
+    # directory, or any ancestor up to the skill root, contains __init__.py),
+    # use runpy.run_module so relative imports like ``from .sibling import x``
+    # resolve against the package. Otherwise fall back to run_path for plain
+    # top-level scripts.
+    #
+    # Matches the pytest-style package detection: walk up while each dir
+    # has __init__.py AND is a valid Python identifier; parent of the top-
+    # level package goes on sys.path; __init__.py resolves to the bare
+    # package name; __main__.py runs via the package name.
+    target_rel = rel
+    # Emit a script that performs the detection + dispatch inside the sandbox.
+    # Using pathlib since it's stdlib and simplifies the path math.
     code = (
+        "from pathlib import Path as _P\\n"
         "import os, runpy, sys\\n"
-        f"_abs = {remote_dir!r}\\n"
-        "os.chdir(_abs)\\n"
-        "if _abs not in sys.path:\\n"
-        "    sys.path.insert(0, _abs)\\n"
-        f"runpy.run_path(os.path.join(_abs, {rel!r}), run_name='__main__')\\n"
+        f"_abs = _P({remote_dir!r})\\n"
+        f"_target = (_abs / {target_rel!r}).resolve()\\n"
+        f"_argv_extra = {argv_extra!r}\\n"
+        "os.chdir(str(_abs))\\n"
+        "if not _target.is_file():\\n"
+        "    raise FileNotFoundError(str(_target))\\n"
+        "# Walk up collecting package directories (pytest pattern).\\n"
+        "_pkg_parts = []\\n"
+        "_cur = _target.parent\\n"
+        "_leaf = _target.stem if _target.name != '__init__.py' else None\\n"
+        "while (_cur / '__init__.py').is_file() and _cur.name.isidentifier():\\n"
+        "    _pkg_parts.insert(0, _cur.name)\\n"
+        "    _parent = _cur.parent\\n"
+        "    if _parent == _cur:\\n"
+        "        break\\n"
+        "    _cur = _parent\\n"
+        "_pkg_root = _cur\\n"
+        "_saved_path = list(sys.path)\\n"
+        "_saved_argv = list(sys.argv)\\n"
+        "try:\\n"
+        "    sys.argv = [str(_target)] + _argv_extra\\n"
+        "    if _pkg_parts:\\n"
+        "        if str(_pkg_root) not in sys.path:\\n"
+        "            sys.path.insert(0, str(_pkg_root))\\n"
+        "        # __init__.py → bare package; __main__.py → package; else module.\\n"
+        "        if _leaf in (None, '__main__'):\\n"
+        "            _mod = '.'.join(_pkg_parts)\\n"
+        "        else:\\n"
+        "            _mod = '.'.join(_pkg_parts + [_leaf])\\n"
+        "        runpy.run_module(_mod, run_name='__main__', alter_sys=True)\\n"
+        "    else:\\n"
+        "        if str(_target.parent) not in sys.path:\\n"
+        "            sys.path.insert(0, str(_target.parent))\\n"
+        "        runpy.run_path(str(_target), run_name='__main__')\\n"
+        "finally:\\n"
+        "    sys.path[:] = _saved_path\\n"
+        "    sys.argv[:] = _saved_argv\\n"
     )
     return run_command(code, "python")
 
