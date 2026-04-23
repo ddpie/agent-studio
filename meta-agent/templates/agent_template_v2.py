@@ -1405,21 +1405,69 @@ def upload_to_s3(local_path: str, filename: str = "") -> str:
         return _tool_error(f"Upload failed: {e}")
 
 
-# Per-session bookkeeping for run_skill_script — maps (session_id, skill_name)
-# to the remote directory we've already seeded. Skill staging is not free
-# (S3 reads + writeFiles round-trips scale with file count), so we only do
-# it once per CI session per skill.
+# Per-session bookkeeping for run_skill_script. Maps (session_id, skill_name)
+# to the *absolute* remote directory. Skill staging is not free — S3 reads +
+# writeFiles round-trips scale with file count — so we only do it once per
+# CI session per skill.
 _STAGED_SKILLS: dict = {}
+# Per-session record of the CI sandbox's workdir anchor (the absolute path
+# where writeFiles drops relative uploads). Probed once per session by
+# asking the sandbox for ``os.getcwd()`` before any user code has run.
+# Writing absolute paths to _STAGED_SKILLS avoids the classic "persistent
+# kernel cwd drift" bug documented across Jupyter/IPython, E2B, Modal,
+# and papermill: a second ``os.chdir('skills/foo')`` after the first chdir
+# lands in ``skills/foo/skills/foo`` (doesn't exist) because cwd persists
+# across turns. The fix is to anchor once, then never re-chdir relative.
+_SESSION_ANCHORS: dict = {}
 _CI_SKILL_ROOT = "skills"  # remote layout: {_CI_SKILL_ROOT}/{name}/...
+
+
+def _ci_sandbox_anchor() -> str:
+    """Return the absolute path the CI sandbox treats as cwd at session boot.
+
+    Probes once per CI session, caches per session. Falls back to the empty
+    string (caller treats absent anchor as "use relative path and hope" —
+    less robust, but covers the path before any run_command has started a
+    session). Idempotent and cheap after first call.
+    """
+    session_id = ci_fs.session_id()
+    if not session_id:
+        return ""
+    cached = _SESSION_ANCHORS.get(session_id)
+    if cached is not None:
+        return cached
+    # Probe: print absolute cwd + a sentinel. We can't rely on user code
+    # not having chdir'd yet, so run this from the sandbox-provided `/`
+    # and ask for a stable reference (``pwd`` of /tmp's parent isn't
+    # reliable — use os.path.realpath of the session's default HOME).
+    probe = (
+        "import os, sys\\n"
+        # Try AgentCore's documented workspace anchor first, then HOME,
+        # then fall back to current cwd (if the session hasn't drifted
+        # yet this is correct).
+        "for _c in ('/opt/amazon/genesis1p-tools/var', os.environ.get('HOME',''), os.getcwd()):\\n"
+        "    if _c and os.path.isdir(_c):\\n"
+        "        sys.stdout.write('__CI_ANCHOR__' + os.path.abspath(_c) + '__CI_ANCHOR_END__')\\n"
+        "        break\\n"
+    )
+    stdout, _stderr, _exit, err = ci_fs._exec(probe)
+    anchor = ""
+    if not err:
+        import re as _re_
+        m = _re_.search(r"__CI_ANCHOR__(.*?)__CI_ANCHOR_END__", stdout)
+        if m:
+            anchor = m.group(1).strip()
+    _SESSION_ANCHORS[session_id] = anchor
+    return anchor
 
 
 def _stage_skill_into_ci(name: str):
     """Copy a skill's files into the active Code Interpreter session.
 
-    Returns (remote_dir: str|None, error: str|None). The remote dir is where
-    scripts live inside the sandbox (relative to its cwd), e.g.
-    ``skills/ppt-generator``. Idempotent per (session, skill) — second
-    call for the same skill in the same CI session is a no-op lookup.
+    Returns (abs_remote_dir: str|None, error: str|None). The abs_remote_dir
+    is a sandbox-absolute path (e.g. ``/opt/amazon/.../var/skills/ppt-
+    generator``), resolved against the session anchor so repeat invocations
+    don't suffer from cwd drift. Idempotent per (session, skill).
     """
     session_id = ci_fs.session_id()
     if not session_id:
@@ -1444,13 +1492,16 @@ def _stage_skill_into_ci(name: str):
     if not pairs:
         return None, f"skill '{name}' has no files"
 
-    remote_dir = f"{_CI_SKILL_ROOT}/{name}"
-    count, err = ci_fs.sync_from_local(pairs, remote_dir)
+    rel_remote = f"{_CI_SKILL_ROOT}/{name}"
+    count, err = ci_fs.sync_from_local(pairs, rel_remote)
     if err:
         return None, f"sync {count}/{len(pairs)} files then failed: {err}"
 
-    _STAGED_SKILLS[cache_key] = remote_dir
-    return remote_dir, None
+    anchor = _ci_sandbox_anchor()
+    abs_remote = f"{anchor}/{rel_remote}" if anchor else rel_remote
+
+    _STAGED_SKILLS[cache_key] = abs_remote
+    return abs_remote, None
 
 
 @_tool
@@ -1488,19 +1539,25 @@ def run_skill_script(skill_name: str, script: str, language: str = "python") -> 
         return _tool_error(f"Failed to stage skill '{skill_name}': {err}")
 
     rel = script.lstrip("/")
-    remote_script = f"{remote_dir}/{rel}"
+    # remote_dir is already absolute (anchored via _ci_sandbox_anchor in
+    # _stage_skill_into_ci). Using absolute everywhere avoids the classic
+    # persistent-kernel cwd-drift bug — see E2B/Modal/Jupyter convention
+    # of never trusting os.getcwd() across turns.
 
     if language == "shell":
         cmd = f"cd {remote_dir} && bash {rel}"
         return run_command(cmd, "shell")
 
-    # Python: run the script from the skill's directory so relative reads
-    # (open('assets/foo.svg'), importlib, etc.) resolve against the skill.
+    # Python: chdir+sys.path insert so relative imports/asset reads inside
+    # the script resolve against its own directory. Safe to repeat across
+    # turns because _abs is absolute, not derived from the drifting cwd.
     code = (
         "import os, runpy, sys\\n"
-        f"os.chdir({remote_dir!r})\\n"
-        f"sys.path.insert(0, {remote_dir!r})\\n"
-        f"runpy.run_path({remote_script!r}, run_name='__main__')\\n"
+        f"_abs = {remote_dir!r}\\n"
+        "os.chdir(_abs)\\n"
+        "if _abs not in sys.path:\\n"
+        "    sys.path.insert(0, _abs)\\n"
+        f"runpy.run_path(os.path.join(_abs, {rel!r}), run_name='__main__')\\n"
     )
     return run_command(code, "python")
 
