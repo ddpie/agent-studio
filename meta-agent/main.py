@@ -50,6 +50,7 @@ from tools.list_skills import list_skills
 from tools.update_skill import update_skill
 from tools.delete_skill import delete_skill
 from tools.import_skill import import_skill
+from tools.read_skill_file import list_skill_files, read_skill_file
 from tools.list_mcp_servers import list_mcp_servers
 from tools.list_mcp_target_tools import list_mcp_target_tools
 from tools.manage_secrets import set_agent_secrets, list_agent_secrets, delete_agent_secret
@@ -91,6 +92,8 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     **Skills & Tools:**
     - create_skill: Use when the user wants to create a reusable skill (AgentSkills.io SKILL.md format).
     - list_skills: Use when the user asks what skills are available.
+    - list_skill_files: Use when you need to know what files live inside a skill. Returns a tree with sizes. Call this FIRST before trying to read files whose names you don't already know.
+    - read_skill_file: Use when you need to read a specific file from a skill (e.g. the edit-assistant wants to optimize SKILL.md or a helper script). Pair with list_skill_files — read only the files you actually need, don't pull the whole tree.
     - update_skill: Use when the user wants to modify an existing skill's name, description, or instructions.
     - delete_skill: Use when the user wants to remove a skill. ALWAYS confirm with user before deleting.
     - import_skill: Use when the user wants to import a skill from a URL or raw markdown content. Auto-wraps plain markdown with AgentSkills.io frontmatter.
@@ -404,6 +407,8 @@ ALL_TOOLS = [
     check_agent_logs,
     create_skill,
     list_skills,
+    list_skill_files,
+    read_skill_file,
     update_skill,
     delete_skill,
     import_skill,
