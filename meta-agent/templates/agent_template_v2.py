@@ -1205,6 +1205,14 @@ class ci_fs:
         and the managed API starts rejecting with payload-too-large. Callers
         that need to sync a full skill directory should chunk accordingly.
 
+        Text vs blob: AgentCore Code Interpreter's ``writeFiles`` silently
+        stores ``blob`` fields as the literal base64 string instead of
+        decoding them (empirically verified 2026-04-23 — contrary to the
+        bedrock_agentcore SDK's own reference). So files that decode as
+        UTF-8 text are sent via ``text`` and only true binaries fall back
+        to ``blob``. Skills are mostly .py / .md / .svg — all text — so
+        this path is the common one.
+
         Returns (count_uploaded, error_str_or_None).
         """
         import base64 as _b64_
@@ -1218,10 +1226,12 @@ class ci_fs:
             except Exception as e:
                 return count, f"read {local_path}: {e}"
             remote_rel = (base + "/" + rel.lstrip("/")).lstrip("/") if base else rel.lstrip("/")
-            content.append({
-                "path": cls._normalize(remote_rel),
-                "blob": _b64_.b64encode(raw).decode("ascii"),
-            })
+            entry = {"path": cls._normalize(remote_rel)}
+            try:
+                entry["text"] = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                entry["blob"] = _b64_.b64encode(raw).decode("ascii")
+            content.append(entry)
             count += 1
             if len(content) >= 20:
                 _, err = cls._invoke("writeFiles", {"content": content})
