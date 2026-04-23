@@ -5,7 +5,8 @@ import json
 import boto3
 from strands import tool
 
-from config import REGION, AGENTS_TABLE
+from config import REGION
+from tools._scope import ensure_agent_in_workspace, ROLE_EDITOR, ROLE_ADMIN
 
 
 @tool
@@ -22,12 +23,9 @@ def set_agent_secrets(agent_id: str, secrets: str) -> str:
     Returns:
         JSON with status.
     """
-    caller = getattr(__import__('tools.manage_secrets', fromlist=['_caller_id']), '_caller_id', 'unknown')
-    ddb = boto3.resource("dynamodb", region_name=REGION)
-    table = ddb.Table(AGENTS_TABLE)
-    record = table.get_item(Key={"agentId": agent_id}).get("Item")
-    if record and record.get("owner") != caller:
-        return json.dumps({"error": "Permission denied"})
+    _record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_ADMIN)
+    if err:
+        return json.dumps(err)
 
     try:
         new_secrets = json.loads(secrets)
@@ -61,12 +59,9 @@ def list_agent_secrets(agent_id: str) -> str:
     Returns:
         JSON with secret key names.
     """
-    caller = getattr(__import__('tools.manage_secrets', fromlist=['_caller_id']), '_caller_id', 'unknown')
-    ddb = boto3.resource("dynamodb", region_name=REGION)
-    table = ddb.Table(AGENTS_TABLE)
-    record = table.get_item(Key={"agentId": agent_id}).get("Item")
-    if record and record.get("owner") != caller:
-        return json.dumps({"error": "Permission denied"})
+    _record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_EDITOR)
+    if err:
+        return json.dumps(err)
 
     sm = boto3.client("secretsmanager", region_name=REGION)
     secret_name = f"agent-studio/{agent_id}"
@@ -90,12 +85,9 @@ def delete_agent_secret(agent_id: str, key: str) -> str:
     Returns:
         JSON with status.
     """
-    caller = getattr(__import__('tools.manage_secrets', fromlist=['_caller_id']), '_caller_id', 'unknown')
-    ddb = boto3.resource("dynamodb", region_name=REGION)
-    table = ddb.Table(AGENTS_TABLE)
-    record = table.get_item(Key={"agentId": agent_id}).get("Item")
-    if record and record.get("owner") != caller:
-        return json.dumps({"error": "Permission denied"})
+    _record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_ADMIN)
+    if err:
+        return json.dumps(err)
 
     sm = boto3.client("secretsmanager", region_name=REGION)
     secret_name = f"agent-studio/{agent_id}"

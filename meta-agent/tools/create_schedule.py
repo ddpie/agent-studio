@@ -6,6 +6,7 @@ import boto3
 from strands import tool
 
 from config import REGION, ACCOUNT_ID, SCHEDULER_TARGET_ROLE_ARN
+from tools._scope import ensure_agent_in_workspace, ROLE_EDITOR
 
 
 @tool
@@ -26,6 +27,10 @@ def create_schedule(
     Returns:
         JSON with schedule_arn and status.
     """
+    _record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_EDITOR)
+    if err:
+        return json.dumps(err)
+
     scheduler = boto3.client("scheduler", region_name=REGION)
 
     agent_arn = f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:runtime/{agent_id}"

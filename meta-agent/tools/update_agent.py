@@ -163,13 +163,16 @@ def update_agent(
                 "skill_md_content": skill_md_content,
             })
 
-    # Permission is enforced by the CRUD Lambda (JWT + workspace RBAC)
-    # Meta-Agent runs as a system service, no per-user ownership check here
+    # Scope to the caller's workspace and require editor-or-higher role.
+    # (The old comment here claimed CRUD Lambda would enforce this, but
+    # Meta-Agent calls update_agent via Strands tools — NOT through the
+    # CRUD HTTP API — so this is the only enforcement point.)
+    from tools._scope import ensure_agent_in_workspace, ROLE_EDITOR
+    record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_EDITOR)
+    if err:
+        return json.dumps(err)
     ddb = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(AGENTS_TABLE)
-    record = table.get_item(Key={"agentId": agent_id}).get("Item")
-    if not record:
-        return json.dumps({"error": f"Agent {agent_id} not found"})
 
     # Read existing metadata
     existing_metadata = {}
