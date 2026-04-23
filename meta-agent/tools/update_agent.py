@@ -77,12 +77,16 @@ def update_agent(
     If only metadata fields change (description, welcome_message, suggestions, display_name),
     the agent will NOT be redeployed — only S3 metadata is updated (instant).
 
-    Redeploys return immediately with ``status: "UPDATING"`` — the tool does
-    NOT block until the new runtime is READY. The update was successfully
-    queued with AgentCore at that point; call ``get_agent_detail(agent_id)``
-    to confirm the runtime is READY before invoking it. (Blocking here can
-    exceed CloudFront's 60s origin idle timeout and surface as a spurious
-    network error.)
+    Redeploys return immediately with ``status: "QUEUED"``. The zip
+    reassembly + S3 upload + update_agent_runtime API call all run in a
+    background thread — synchronous execution takes 40-80s and exceeds
+    CloudFront's 60s origin idle timeout (the SSE stream goes silent the
+    whole time), so the client sees a spurious "network error" even though
+    the deploy succeeds. After a successful QUEUED, call
+    ``get_agent_detail(agent_id)`` and check ``status`` — it will be
+    UPDATING while the new runtime provisions and READY once it's live.
+    Typical end-to-end is under 2 minutes; if it's still UPDATING after
+    that, use ``check_agent_logs`` to investigate.
 
     Args:
         agent_id: The agent runtime ID to update.
@@ -228,6 +232,8 @@ def update_agent(
         needs_redeploy = True
 
     status = "metadata_only"
+    # Captured for the background redeploy thread and the final metadata write.
+    tools_py = None
 
     if needs_redeploy:
         # Apply template if specified
@@ -271,43 +277,51 @@ def update_agent(
             config_data["mcp_targets"] = mcp_targets_list
         config_json = json.dumps(config_data, indent=2, ensure_ascii=False)
 
-        # Validate each file independently
+        # Validate BEFORE detaching so the caller gets synchronous feedback
+        # on bad input — this is fast and doesn't need backgrounding.
         validation = validate_agent_files(main_py, tools_py, prompt_txt, config_json)
         if not validation["valid"]:
             return json.dumps({"error": "Code validation failed", "details": validation["errors"]})
 
-        # Build and upload
-        package = build_deployment_package_v2(main_py, tools_py, prompt_txt, config_json)
-        s3_key = upload_deployment(agent_id, package)
+        # The heavy work — zip reassembly (~100MB base zip + source overlay),
+        # S3 upload, and update_agent_runtime — takes 40-80s and blocks the
+        # SSE stream the whole time, which busts CloudFront's 60s origin
+        # idle timeout and shows the user a spurious "network error". Detach
+        # it into a background thread; the tool call returns immediately and
+        # the caller polls get_agent_detail to observe READY.
+        import threading
 
-        # Update runtime in-place
-        control = boto3.client("bedrock-agentcore-control", region_name=REGION)
-        control.update_agent_runtime(
-            agentRuntimeId=agent_id,
-            roleArn=SUB_AGENT_ROLE_ARN,
-            agentRuntimeArtifact={
-                "codeConfiguration": {
-                    "code": {"s3": {"bucket": S3_BUCKET, "prefix": s3_key}},
-                    "runtime": "PYTHON_3_10",
-                    "entryPoint": ["main.py"],
-                }
-            },
-            networkConfiguration={"networkMode": "PUBLIC"},
-            filesystemConfigurations=[{
-                "sessionStorage": {
-                    "mountPath": "/mnt/workspace"
-                }
-            }],
-            environmentVariables=_shared_env_vars(agent_id=agent_id),
-        )
+        def _do_redeploy():
+            try:
+                package = build_deployment_package_v2(main_py, tools_py, prompt_txt, config_json)
+                s3_key = upload_deployment(agent_id, package)
+                control = boto3.client("bedrock-agentcore-control", region_name=REGION)
+                control.update_agent_runtime(
+                    agentRuntimeId=agent_id,
+                    roleArn=SUB_AGENT_ROLE_ARN,
+                    agentRuntimeArtifact={
+                        "codeConfiguration": {
+                            "code": {"s3": {"bucket": S3_BUCKET, "prefix": s3_key}},
+                            "runtime": "PYTHON_3_10",
+                            "entryPoint": ["main.py"],
+                        }
+                    },
+                    networkConfiguration={"networkMode": "PUBLIC"},
+                    filesystemConfigurations=[{
+                        "sessionStorage": {"mountPath": "/mnt/workspace"}
+                    }],
+                    environmentVariables=_shared_env_vars(agent_id=agent_id),
+                )
+            except Exception as _e:
+                # Background failures are only observable via CloudWatch —
+                # the tool call has already returned. Surface the stack trace
+                # in the runtime log group so it's greppable.
+                import traceback, sys as _sys
+                print(f"update_agent background redeploy failed for {agent_id}: {_e}", file=_sys.stderr)
+                traceback.print_exc(file=_sys.stderr)
 
-        # Don't block on READY — update_agent_runtime is already queued at
-        # this point, and a ~60-120s wait blows past CloudFront's 60s origin
-        # idle timeout (the SSE stream stays quiet) so the client sees a
-        # spurious "network error" even though the deploy is fine. Return
-        # UPDATING immediately; the caller can poll get_agent_detail to
-        # confirm READY.
-        status = "UPDATING"
+        threading.Thread(target=_do_redeploy, name=f"redeploy-{agent_id}", daemon=True).start()
+        status = "QUEUED"
 
     # Always update metadata
     suggestion_list = [s.strip() for s in final_suggestions.split("|") if s.strip()]
@@ -392,8 +406,10 @@ def update_agent(
     }
     if needs_redeploy:
         result["hint"] = (
-            "Runtime is UPDATING in the background. Use get_agent_detail "
-            f"(agent_id='{agent_id}') to check when status becomes READY "
-            "before invoking the agent."
+            "Redeploy is running in the background (zip build + S3 upload + "
+            "update_agent_runtime). Runtime status will transition "
+            "READY → UPDATING → READY. Poll get_agent_detail"
+            f"(agent_id='{agent_id}') every ~20s until status is READY before "
+            "invoking the agent — typical wait is under 2 minutes."
         )
     return json.dumps(result, indent=2)
