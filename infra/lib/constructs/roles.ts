@@ -182,8 +182,14 @@ export class AgentCoreRoles extends Construct {
     // CreateAgentRuntime also transparently provisions a WorkloadIdentity
     // under workload-identity-directory/default/ so the runtime can call
     // back to AgentCore-managed services (Identity Store etc). Missing this
-    // surfaces as: "not authorized to perform: CreateWorkloadIdentity on
-    // resource: workload-identity-directory/default/workload-identity/*".
+    // surfaces as: "not authorized to perform: CreateWorkloadIdentity".
+    //
+    // The IAM authz actually checks against TWO distinct resource ARNs:
+    //   - the directory itself  (.../workload-identity-directory/default)
+    //   - the workload identity (.../workload-identity-directory/default/workload-identity/*)
+    // The directory-level ARN is what CreateWorkloadIdentity's first authz
+    // check sees; the per-identity ARN is what Get/Update/Delete check.
+    // Grant both so there's no partial-permission pothole during create.
     metaAgentRole.addToPolicy(new iam.PolicyStatement({
       actions: [
         "bedrock-agentcore:CreateWorkloadIdentity",
@@ -193,6 +199,7 @@ export class AgentCoreRoles extends Construct {
         "bedrock-agentcore:ListWorkloadIdentities",
       ],
       resources: [
+        `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:workload-identity-directory/default`,
         `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:workload-identity-directory/default/workload-identity/*`,
       ],
     }));
