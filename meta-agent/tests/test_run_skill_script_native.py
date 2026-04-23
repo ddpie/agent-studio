@@ -133,6 +133,52 @@ def test_run_skill_script_caches_staging_per_session(monkeypatch, tmp_path):
     assert staged_once == staged_twice, "skill should stage once per session"
 
 
+def test_run_skill_script_uses_absolute_path_resistant_to_cwd_drift(monkeypatch, tmp_path):
+    """Repeat invocations must use absolute paths — not relative ones that
+    accumulate when the CI session's cwd drifts (the classic persistent
+    Jupyter-kernel bug that produces paths like
+    ``.../skills/foo/skills/foo/...``)."""
+    monkeypatch.setenv("AGENT_STUDIO_CODE_INTERPRETER_ID", "ci-test")
+    _seed_local_skill(tmp_path)
+
+    calls = []
+    ci = MagicMock()
+    ci.start_code_interpreter_session.return_value = {"sessionId": "sess-drift"}
+    SANDBOX_ROOT = "/opt/amazon/genesis1p-tools/var"
+
+    def fake_invoke(**kwargs):
+        calls.append(kwargs)
+        name = kwargs["name"]
+        if name == "writeFiles":
+            return {"stream": [{"result": {"content": []}}]}
+        # anchor probe returns the sandbox root
+        code = kwargs.get("arguments", {}).get("code", "")
+        if "__CI_ANCHOR__" in code:
+            return {"stream": [{"result": {"structuredContent": {
+                "stdout": f"__CI_ANCHOR__{SANDBOX_ROOT}__CI_ANCHOR_END__",
+                "stderr": "", "exitCode": 0,
+            }, "content": []}}]}
+        return {"stream": [{"result": {"structuredContent": {"stdout": "ok\n", "stderr": "", "exitCode": 0}, "content": []}}]}
+
+    ci.invoke_code_interpreter.side_effect = fake_invoke
+
+    with patch("boto3.client", return_value=ci):
+        ns = _exec_builtin()
+        ns["_CACHE_ROOT"] = tmp_path
+        _install_manifest(ns, [{"id": "s-1", "name": "ppt-generator"}])
+        ns["_CACHED_SKILLS"].add("s-1")
+        ns["run_skill_script"]("ppt-generator", "scripts/render.py")
+        ns["run_skill_script"]("ppt-generator", "scripts/render.py")
+
+    # Both exec calls should use the SAME absolute path (no drift/doubling)
+    exec_codes = [c["arguments"]["code"] for c in calls if c["name"] == "executeCode" and "runpy.run_path" in c.get("arguments", {}).get("code", "")]
+    expected_abs = f"{SANDBOX_ROOT}/skills/ppt-generator"
+    for code in exec_codes:
+        assert expected_abs in code, f"expected {expected_abs!r} in code, got:\n{code}"
+        # Critical: no doubled prefix
+        assert f"{expected_abs}/skills/ppt-generator" not in code
+
+
 def test_run_skill_script_rejects_blank_args():
     ns = _exec_builtin()
     result = ns["run_skill_script"]("", "scripts/x.py")
