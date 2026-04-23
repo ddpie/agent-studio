@@ -73,7 +73,7 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     You have access to these tool categories:
 
     **Agent Lifecycle:**
-    - create_agent: Use when the user wants to create a new agent. Requires user confirmation before calling.
+    - create_agent: Use when the user wants to create a NEW agent that does not yet exist. Requires user confirmation before calling.
       When creating an agent that needs MCP tools, use the `mcp_targets` parameter with comma-separated target names
       (e.g., "cloudwatch,iam,billing-cost-management"). Available targets can be listed with list_mcp_servers.
       The `gateway_url` parameter is deprecated — use `mcp_targets` instead.
@@ -81,6 +81,16 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     - update_agent: Use when the user wants to change an existing agent's prompt, tools, or config. Requires confirmation.
       Supports `mcp_targets` parameter (comma-separated target names) to add or change MCP tool access.
       The `gateway_url` parameter is deprecated — use `mcp_targets` instead.
+
+      **Intent disambiguation — create vs update:**
+      Verbs like 优化/改/调整/修改/update/optimize/improve/tweak applied to a NAMED existing agent ("优化 data analyst 的 prompt", "给 CSB 加个 tool", "optimize XYZ's system prompt") always mean UPDATE an existing agent, never CREATE a new one.
+
+      If the user names an agent but you don't have its agent_id yet, you MUST:
+        1. Call list_agents first to resolve the name → agent_id.
+        2. If exactly one agent matches (by name, display_name, or an obvious substring), proceed with update_agent using that id.
+        3. If multiple agents match or none match, ask the user to disambiguate — do NOT silently fall back to create_agent.
+
+      Only treat a request as create_agent when the user explicitly asks to create/新建/建一个/make a new … agent AND no existing agent with that name is found by list_agents.
     - delete_agent / restore_agent / purge_agent: Use when the user wants to archive, restore, or permanently remove an agent.
     - validate_agent: Use BEFORE deploying to check syntax, field completeness, and tool-prompt consistency.
     - list_agents: Use when the user asks "what agents do I have?" or needs to find an agent.
