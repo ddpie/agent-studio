@@ -25,6 +25,33 @@ function detectSource(url: string): "clawhub" | "github-dir" | "github-file" | "
   return "raw";
 }
 
+/** True for obvious noise (caches, VCS metadata, OS cruft, build artifacts).
+ *
+ * Earlier versions naively skipped any path with a basename starting with
+ * ``__``, which silently stripped legitimate Python package markers
+ * (``__init__.py``, ``__main__.py``) and broke every scripted skill whose
+ * code was organized as a Python package — callers saw ``cannot import
+ * name 'X' from partially initialized module`` at runtime because the
+ * thin wrapper ``svg_to_pptx.py`` resolved ``from svg_to_pptx import main``
+ * to itself instead of the package that was never written to S3.
+ *
+ * Mirrors meta-agent/tools/import_skill._should_skip_path so the frontend
+ * and backend import paths don't disagree on what a "noise" file is.
+ */
+function shouldSkipPath(relPath: string): boolean {
+  if (!relPath) return true;
+  if (relPath.startsWith(".")) return true;
+  const parts = relPath.replace(/\\/g, "/").split("/");
+  const noiseDirs = new Set([
+    "__pycache__", "__MACOSX", ".git", ".github", ".idea", "node_modules",
+  ]);
+  if (parts.some(p => noiseDirs.has(p))) return true;
+  const leaf = parts[parts.length - 1];
+  if (leaf.endsWith(".pyc") || leaf.endsWith(".pyo")) return true;
+  if (leaf === ".DS_Store") return true;
+  return false;
+}
+
 /** Fetch ClawHub skill as zip → extract files */
 async function fetchClawHub(url: string, onProgress?: ProgressFn): Promise<Record<string, string>> {
   const match = url.match(/(?:clawhub\.ai|claw-hub\.net)\/([^/?#]+\/[^/?#]+)/);
@@ -44,7 +71,7 @@ async function fetchClawHub(url: string, onProgress?: ProgressFn): Promise<Recor
     if (!path || path.endsWith("/")) continue;
     const parts = path.split("/");
     const relPath = parts.length > 1 ? parts.slice(1).join("/") : path;
-    if (!relPath || relPath.startsWith(".") || relPath.startsWith("__")) continue;
+    if (shouldSkipPath(relPath)) continue;
     try {
       files[relPath] = new TextDecoder().decode(data);
     } catch { /* skip binary */ }
@@ -81,8 +108,8 @@ async function fetchGitHubDir(url: string, onProgress?: ProgressFn): Promise<Rec
   const fileEntries = treeData.tree.filter(item => {
     if (item.type !== "blob") return false;
     if (basePath && !item.path.startsWith(basePath + "/")) return false;
-    const name = item.path.split("/").pop() || "";
-    if (name.startsWith(".") || name.startsWith("__")) return false;
+    const relPath = basePath ? item.path.slice(basePath.length + 1) : item.path;
+    if (shouldSkipPath(relPath)) return false;
     return true;
   });
 
