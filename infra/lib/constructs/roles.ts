@@ -166,6 +166,16 @@ export class AgentCoreRoles extends Construct {
         "bedrock-agentcore:CreateAgentRuntime",
         "bedrock-agentcore:UpdateAgentRuntime",
         "bedrock-agentcore:DeleteAgentRuntime",
+        // CreateAgentRuntime implicitly provisions a DEFAULT endpoint, which
+        // the control plane attributes back to the caller — so the Meta-Agent
+        // needs the Endpoint actions too, or every create fails with
+        // "not authorized to perform: CreateAgentRuntimeEndpoint". The CRUD
+        // Lambda has these for the same reason (see constructs/api.ts).
+        "bedrock-agentcore:CreateAgentRuntimeEndpoint",
+        "bedrock-agentcore:UpdateAgentRuntimeEndpoint",
+        "bedrock-agentcore:DeleteAgentRuntimeEndpoint",
+        "bedrock-agentcore:GetAgentRuntimeEndpoint",
+        "bedrock-agentcore:ListAgentRuntimeEndpoints",
       ],
       resources: [`arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*`],
     }));
