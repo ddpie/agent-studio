@@ -12,6 +12,29 @@ from strands import tool
 from config import REGION, S3_BUCKET
 
 
+def _should_skip_path(rel_path: str) -> bool:
+    """True if the path is obvious noise (caches, VCS metadata, OS cruft).
+
+    Earlier versions skipped ANY path whose basename started with ``__``,
+    which filtered out legitimate Python package markers like
+    ``__init__.py`` and broke every scripted skill that organized its
+    code as a package. Explicitly list the paths we want to drop.
+    """
+    if not rel_path or rel_path.startswith("."):
+        return True
+    # Split on both separators so '/foo/__pycache__/bar.pyc' matches on Windows zips too.
+    parts = rel_path.replace("\\", "/").split("/")
+    _NOISE_DIRS = {"__pycache__", "__MACOSX", ".git", ".github", ".idea", "node_modules"}
+    if any(p in _NOISE_DIRS for p in parts):
+        return True
+    leaf = parts[-1]
+    if leaf.endswith((".pyc", ".pyo")):
+        return True
+    if leaf == ".DS_Store":
+        return True
+    return False
+
+
 def _parse_frontmatter(content: str) -> dict | None:
     """Parse YAML frontmatter from SKILL.md content. Returns dict or None.
 
@@ -85,7 +108,7 @@ def _fetch_clawhub(url: str) -> dict[str, str]:
             if len(parts) == 2 and parts[0] and not parts[0].startswith("."):
                 # Check if this is a common prefix
                 name = parts[1] if parts[1] else parts[0]
-            if not name or name.startswith(".") or name.startswith("__"):
+            if not name or _should_skip_path(name):
                 continue
             try:
                 content = zf.read(info.filename).decode("utf-8")
@@ -124,7 +147,7 @@ def _fetch_github_dir_recursive(items: list, files: dict, owner: str, repo: str,
             # Compute relative path from base
             full_path = item["path"]
             rel_path = full_path[len(base_path):].lstrip("/") if base_path else full_path
-            if rel_path.startswith(".") or rel_path.startswith("__"):
+            if _should_skip_path(rel_path):
                 continue
             try:
                 content = _http_get(item["download_url"])
