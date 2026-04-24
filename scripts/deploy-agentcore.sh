@@ -169,10 +169,35 @@ for _k in (
     "AGENT_STUDIO_BROWSER_ID",
     "AGENT_STUDIO_CLOUDFRONT_DOMAIN",
     "AGENT_STUDIO_A2A_INVOKE_URL",
+    # Kiro backend — required for the kiro_adapter entrypoint.
+    # AGENT_STUDIO_KIRO_API_KEY is mapped to KIRO_API_KEY below, which is
+    # what kiro-cli-chat itself reads. AGENT_STUDIO_KIRO_MODEL is optional
+    # (defaults inside main.py).
+    "AGENT_STUDIO_KIRO_MODEL",
 ):
     _v = os.environ.get(_k, "")
     if _v:
         env_vars[_k] = _v
+
+# Kiro expects KIRO_API_KEY in the subprocess environment. Pipe it from the
+# caller's AGENT_STUDIO_KIRO_API_KEY so deploy-all.sh and the CDK stack don't
+# have to special-case a Kiro-specific variable name.
+_kiro_key = os.environ.get("AGENT_STUDIO_KIRO_API_KEY", "")
+if _kiro_key:
+    env_vars["KIRO_API_KEY"] = _kiro_key
+else:
+    print(
+        "  WARNING: AGENT_STUDIO_KIRO_API_KEY is empty; Meta-Agent will fail "
+        "at first invoke with 'KIRO_API_KEY is not set'.",
+        file=sys.stderr,
+    )
+
+# /mnt/kiro is where AgentCore mounts per-runtimeSessionId persistent storage
+# for the Meta-Agent pod. ensure_kiro_home() writes the custom agent config
+# and Kiro's own sessions/cli/ files into this mount, so turn N can
+# session/load whatever turn N-1 persisted. AgentCore accepts max 1
+# filesystemConfigurations entry.
+_filesystem_configs = [{"sessionStorage": {"mountPath": "/mnt/kiro"}}]
 
 if mode == "update":
     s3_key = f"agents/{agent_id}/deployment.zip"
@@ -188,6 +213,10 @@ if mode == "update":
                 "entryPoint": ["main.py"],
             }
         },
+        # UpdateAgentRuntime treats omitted fields as "clear". We explicitly
+        # re-send the sessionStorage mount every update so the Kiro backend
+        # doesn't lose its /mnt/kiro on prompt or code bumps.
+        filesystemConfigurations=_filesystem_configs,
         environmentVariables=env_vars,
     )
     print(f"  Update triggered for {agent_id}", file=sys.stderr)
@@ -206,9 +235,7 @@ else:
         },
         networkConfiguration={"networkMode": "PUBLIC"},
         protocolConfiguration={"serverProtocol": "HTTP"},
-        filesystemConfigurations=[{
-            "sessionStorage": {"mountPath": "/mnt/workspace"}
-        }],
+        filesystemConfigurations=_filesystem_configs,
         environmentVariables=env_vars,
     )
     agent_id = resp["agentRuntimeId"]
