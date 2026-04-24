@@ -529,11 +529,46 @@ async def invoke(payload, context):
 
     # Stream with tool-use markers (input/output are base64-encoded to avoid nested JSON issues)
     import base64 as _b64
+    import asyncio as _asyncio
+    import time as _time
     current_tool = None
     tool_input_buf = ""
     tool_use_id_map = {}  # toolUseId -> tool_name
+
+    # Keep-alive pump: CloudFront in front of the runtime has a 60s origin
+    # idle timeout. Strands's `stream_async` does NOT yield outward while
+    # the LLM is in the middle of emitting tool_use JSON arguments (only
+    # `current_tool_use` events with an accumulating `input` come through,
+    # which we don't re-emit except on tool name change). Long tool calls
+    # where the LLM generates ~10KB of Chinese prompt text as part of
+    # update_agent arguments routinely produce 120-180s silent stretches;
+    # CloudFront trips idle timeout, the SSE stream dies, and the user
+    # sees "网络错误" even though the agent is fine. We emit a 4-byte
+    # keep-alive marker every 30s to keep the origin stream alive.
+    _last_yield = _time.monotonic()
+    KEEPALIVE = json.dumps({"__keepalive": True})
+    KEEPALIVE_INTERVAL = 30.0
+
+    async def _next_event_with_keepalive(stream_iter):
+        """Yield events from stream_iter, injecting __keepalive sentinels
+        whenever the upstream is silent for KEEPALIVE_INTERVAL seconds."""
+        ait = stream_iter.__aiter__()
+        while True:
+            try:
+                item = await _asyncio.wait_for(ait.__anext__(), timeout=KEEPALIVE_INTERVAL)
+            except _asyncio.TimeoutError:
+                yield {"__keepalive__": True}
+                continue
+            except StopAsyncIteration:
+                return
+            yield item
+
     stream = agent.stream_async(input_data)
-    async for event in stream:
+    async for event in _next_event_with_keepalive(stream):
+        if event.get("__keepalive__"):
+            yield KEEPALIVE
+            _last_yield = _time.monotonic()
+            continue
         if "current_tool_use" in event:
             tool_info = event["current_tool_use"]
             tool_name = tool_info.get("name", "")

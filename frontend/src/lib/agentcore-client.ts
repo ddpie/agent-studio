@@ -179,7 +179,13 @@ async function* parseSSEStream(response: Response): AsyncGenerator<string> {
           if (content.startsWith('"') && content.endsWith('"')) {
             content = JSON.parse(content);
           }
-          if (content) yield content;
+          if (!content) continue;
+          // Keep-alive sentinel emitted by Meta-Agent runtime every 30s to
+          // prevent CloudFront's 60s origin idle timeout during long
+          // tool_use argument generation. Drop silently — it carries no
+          // user-visible content.
+          if (content.includes('"__keepalive"')) continue;
+          yield content;
         }
       }
     }
