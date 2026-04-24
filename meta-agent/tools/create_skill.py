@@ -1,35 +1,36 @@
-"""create_skill — Create a Skill in OpenClaw/AgentSkills compatible format."""
+"""create_skill — Create a Skill in OpenClaw/AgentSkills compatible format.
+
+Writes to both:
+  - ``s3://{bucket}/skills/{skill_id}/SKILL.md`` (and optional ``script.py``)
+  - ``agent-studio-skills`` DynamoDB row with ``workspace_id`` set
+
+The DDB row is what every downstream consumer (``list_skills``,
+``read_skill_file``, ``sync_agent_skill``, Lambda CRUD ``GET /skills``)
+queries by ``workspace-index`` to enforce cross-tenant isolation. Skipping
+the DDB write — as earlier versions did — produced skills that were
+invisible to their own workspace's list while their S3 files stayed
+publicly addressable in the shared ``skills/`` prefix, so any caller with
+the id could read/edit/delete them regardless of workspace.
+"""
 
 import json
 import textwrap
+import uuid
+from datetime import datetime, timezone
 
 import boto3
 from strands import tool
 
 from config import REGION, S3_BUCKET
+from tools._scope import (
+    ROLE_EDITOR,
+    current_caller,
+    current_workspace,
+    require_role,
+)
 
 
-def _update_skill_index(s3_client, new_entry: dict):
-    """Read index.json, append new entry, write back."""
-    index = []
-    try:
-        obj = s3_client.get_object(Bucket=S3_BUCKET, Key="skills/index.json")
-        index = json.loads(obj["Body"].read().decode("utf-8"))
-    except s3_client.exceptions.NoSuchKey:
-        pass
-    except Exception:
-        pass
-
-    # Remove existing entry with same id (for idempotency)
-    index = [e for e in index if e.get("id") != new_entry["id"]]
-    index.append(new_entry)
-
-    s3_client.put_object(
-        Bucket=S3_BUCKET,
-        Key="skills/index.json",
-        Body=json.dumps(index, indent=2, ensure_ascii=False).encode("utf-8"),
-        ContentType="application/json",
-    )
+_SKILLS_TABLE = "agent-studio-skills"
 
 
 @tool
@@ -56,11 +57,18 @@ def create_skill(
     Returns:
         JSON with skill_id, s3_path, and status.
     """
-    import uuid
+    deny = require_role(ROLE_EDITOR)
+    if deny:
+        return json.dumps(deny)
+
+    if skill_type not in ("prompt", "script"):
+        return json.dumps({"error": "skill_type must be 'prompt' or 'script'."})
+
+    ws_id = current_workspace()
+    caller = current_caller() or "unknown"
 
     skill_id = str(uuid.uuid4())[:8]
 
-    # Build SKILL.md content
     frontmatter = textwrap.dedent(f"""\
         ---
         name: "{skill_name}"
@@ -73,13 +81,11 @@ def create_skill(
     """)
 
     body = f"# {skill_name}\n\n{instructions}"
-
     if input_params:
         body += f"\n\n## Input Parameters\n{input_params}"
 
     skill_md = frontmatter + "\n" + body
 
-    # Upload to S3
     s3 = boto3.client("s3", region_name=REGION)
     s3_prefix = f"skills/{skill_id}"
 
@@ -90,7 +96,6 @@ def create_skill(
         ContentType="text/markdown",
     )
 
-    # Upload script if provided
     if skill_type == "script" and script_code:
         s3.put_object(
             Bucket=S3_BUCKET,
@@ -99,18 +104,38 @@ def create_skill(
             ContentType="text/x-python",
         )
 
-    # Update index.json
-    _update_skill_index(s3, {
-        "id": skill_id,
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    # Schema mirrors lambda/crud/skills.py::create_skill so the two write
+    # paths stay interchangeable and list_skills / GSI queries don't need
+    # to care which created the row.
+    item = {
+        "skillId": skill_id,
+        "workspace_id": ws_id,
         "name": skill_name,
         "description": description,
-    })
+        "type": skill_type,
+        # Script skills need manual approval before they can be attached to
+        # agents; prompt skills are inert text and don't.
+        "approved": skill_type != "script",
+        "visibility": "private",
+        "tags": [],
+        "deleted": False,
+        "source": source,
+        "created_by": caller,
+        "created_at": now,
+        "updated_at": now,
+    }
+    try:
+        boto3.resource("dynamodb", region_name=REGION).Table(_SKILLS_TABLE).put_item(Item=item)
+    except Exception as e:
+        return json.dumps({"error": f"Skill metadata write failed: {e}"})
 
     result = {
         "skill_id": skill_id,
         "skill_name": skill_name,
         "type": skill_type,
         "s3_path": f"s3://{S3_BUCKET}/{s3_prefix}/",
+        "workspace_id": ws_id,
         "status": "created",
     }
 
