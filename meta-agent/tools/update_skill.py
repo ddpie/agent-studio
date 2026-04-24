@@ -34,7 +34,12 @@ def update_skill(
     description: str = "",
     instructions: str = "",
 ) -> str:
-    """Update an existing skill. Only provided fields are changed.
+    """Update a skill's SKILL.md — name, description, or body text.
+
+    This tool rewrites ONLY the SKILL.md frontmatter and body. Other
+    files in the skill (script.py, scripts/*.py, bundled assets) are
+    NOT touched. To fix a bug in script.py or any non-SKILL.md file,
+    use ``write_skill_file(skill_id, path, content)`` instead.
 
     Args:
         skill_id: The skill ID to update.
