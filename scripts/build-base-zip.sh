@@ -88,12 +88,17 @@ for p in m.get('packages', []):
   echo "$extracted_dir"
 }
 
-# Copy Kiro binaries from the cache into a stage directory under ./kiro-bin/.
+# Copy the Kiro CLI chat binary from the cache into a stage directory under
+# ./kiro-bin/.
 #
-# kiro-cli is a thin dispatcher; `kiro-cli acp` internally exec's kiro-cli-chat.
-# Both binaries are required. kiro-cli-term (the pty wrapper used in TUI mode)
-# is omitted by default to save ~74MB — ACP runs headless and does not need it.
-# Set KIRO_BUNDLE_TERM=1 to include it if a deployment ever needs pty mode.
+# Only kiro-cli-chat is bundled. The kiro-cli dispatcher (~102MB) is omitted
+# because `kiro-cli-chat acp` accepts the same subcommand and responds
+# identically — verified by sending initialize JSON-RPC to both binaries.
+# kiro-cli-term (pty wrapper, ~74MB) is also omitted; ACP runs headless.
+#
+# Set KIRO_BUNDLE_DISPATCHER=1 to include kiro-cli as well (e.g. for local
+# debugging where you want the `kiro-cli <subcommand>` UX). Set
+# KIRO_BUNDLE_TERM=1 to include the pty binary.
 install_kiro_into_stage() {
   local stage_dir="$1"
   local cache_extract_dir="$2"
@@ -102,8 +107,10 @@ install_kiro_into_stage() {
   local dst_dir="${stage_dir}/kiro-bin"
   mkdir -p "$dst_dir"
 
-  cp "${src_bin}/kiro-cli"      "${dst_dir}/kiro-cli"
   cp "${src_bin}/kiro-cli-chat" "${dst_dir}/kiro-cli-chat"
+  if [[ "${KIRO_BUNDLE_DISPATCHER:-0}" == "1" ]]; then
+    cp "${src_bin}/kiro-cli" "${dst_dir}/kiro-cli"
+  fi
   if [[ "${KIRO_BUNDLE_TERM:-0}" == "1" && -f "${src_bin}/kiro-cli-term" ]]; then
     cp "${src_bin}/kiro-cli-term" "${dst_dir}/kiro-cli-term"
   fi
