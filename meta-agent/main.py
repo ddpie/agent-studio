@@ -220,6 +220,224 @@ _KIRO_BINARY = str(Path(__file__).resolve().parent / "kiro-bin" / "kiro-cli-chat
 # budget. _ensure_kiro_binary_ready() does it lazily on the first invoke.
 _kiro_binary_ready = False
 
+# One-shot diagnostic flag for _probe_kiro_binary().
+_kiro_probed = False
+
+
+def _probe_kiro_binary() -> None:
+    """Run kiro-cli-chat --version under several stdio configurations.
+
+    Isolates 'Bad file descriptor (os error 9)' under `kiro-cli-chat acp`
+    on AgentCore. Probe 1 uses sync subprocess.run (same as asyncio uses
+    under the hood); probes 2-N use asyncio to match the actual code path.
+    Runs once per container on first invoke.
+    """
+    import subprocess as _subp
+    import asyncio as _asyncio
+
+    env = {**_os.environ, "KIRO_API_KEY": _KIRO_API_KEY,
+           "XDG_DATA_HOME": "/tmp/kiro-xdg-probe",
+           "HOME": "/tmp/kiro-home-probe"}
+
+    # --- Sync subprocess.run with --version
+    try:
+        r = _subp.run(
+            [_KIRO_BINARY, "--version"],
+            stdin=_subp.PIPE, stdout=_subp.PIPE, stderr=_subp.PIPE,
+            timeout=10, env=env,
+        )
+        _boot_log.info(f"probe sync-version: exit={r.returncode} stdout={r.stdout[:120]!r} stderr={r.stderr[:120]!r}")
+    except Exception as e:  # noqa: BLE001
+        _boot_log.warning(f"probe sync-version raised {type(e).__name__}: {e}")
+
+    # --- Sync subprocess.run with `acp` — does subcommand itself crash?
+    try:
+        r = _subp.run(
+            [_KIRO_BINARY, "acp", "--agent", "nonexistent"],
+            input=b"",  # close stdin immediately — acp server should error cleanly
+            stdout=_subp.PIPE, stderr=_subp.PIPE,
+            timeout=10, env=env,
+        )
+        _boot_log.info(f"probe sync-acp-badagent: exit={r.returncode} stdout={r.stdout[:200]!r} stderr={r.stderr[:300]!r}")
+    except Exception as e:  # noqa: BLE001
+        _boot_log.warning(f"probe sync-acp-badagent raised {type(e).__name__}: {e}")
+
+    # --- Async subprocess with --version — matches how we spawn in acp_client
+    async def _async_version():
+        p = await _asyncio.create_subprocess_exec(
+            _KIRO_BINARY, "--version",
+            stdin=_asyncio.subprocess.PIPE,
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.PIPE,
+            env=env,
+        )
+        try:
+            out, err = await _asyncio.wait_for(p.communicate(), timeout=10)
+            return p.returncode, out, err
+        except _asyncio.TimeoutError:
+            p.kill(); await p.wait()
+            raise
+    try:
+        rc, out, err = _asyncio.get_event_loop().run_until_complete(_async_version())
+        _boot_log.info(f"probe async-version: exit={rc} stdout={out[:120]!r} stderr={err[:200]!r}")
+    except RuntimeError:
+        # "cannot be called from a running event loop" — schedule on it
+        try:
+            loop = _asyncio.new_event_loop()
+            rc, out, err = loop.run_until_complete(_async_version())
+            loop.close()
+            _boot_log.info(f"probe async-version (new-loop): exit={rc} stdout={out[:120]!r} stderr={err[:200]!r}")
+        except Exception as e:  # noqa: BLE001
+            _boot_log.warning(f"probe async-version (new-loop) raised {type(e).__name__}: {e}")
+    except Exception as e:  # noqa: BLE001
+        _boot_log.warning(f"probe async-version raised {type(e).__name__}: {e}")
+
+
+async def _probe_kiro_async() -> None:
+    """Async-subprocess variant of the kiro probe.
+
+    Sync subprocess.run succeeds on AgentCore for both --version and
+    `acp --agent nonexistent`. The failure only surfaces with
+    asyncio.create_subprocess_exec + ACP handshake, so we want to isolate
+    whether it is: (a) asyncio vs sync, (b) ACP with real agent name, or
+    (c) the JSON-RPC writes we send on stdin.
+    """
+    import asyncio as _a
+    env = {**_os.environ, "KIRO_API_KEY": _KIRO_API_KEY,
+           "XDG_DATA_HOME": "/tmp/kiro-xdg-probe",
+           "HOME": "/tmp/kiro-home-probe"}
+
+    # a) async + --version
+    try:
+        p = await _a.create_subprocess_exec(
+            _KIRO_BINARY, "--version",
+            stdin=_a.subprocess.PIPE, stdout=_a.subprocess.PIPE, stderr=_a.subprocess.PIPE,
+            env=env,
+        )
+        out, err = await _a.wait_for(p.communicate(), timeout=10)
+        _boot_log.info(f"probe async-version: exit={p.returncode} stdout={out[:120]!r} stderr={err[:200]!r}")
+    except Exception as e:  # noqa: BLE001
+        _boot_log.warning(f"probe async-version raised {type(e).__name__}: {e}")
+
+    # b) async + acp subcommand but stdin closed immediately
+    try:
+        p = await _a.create_subprocess_exec(
+            _KIRO_BINARY, "acp", "--agent", "nonexistent",
+            stdin=_a.subprocess.PIPE, stdout=_a.subprocess.PIPE, stderr=_a.subprocess.PIPE,
+            env=env,
+        )
+        p.stdin.close()
+        out, err = await _a.wait_for(p.communicate(), timeout=10)
+        _boot_log.info(f"probe async-acp-stdin-closed: exit={p.returncode} stdout={out[:200]!r} stderr={err[:300]!r}")
+    except Exception as e:  # noqa: BLE001
+        _boot_log.warning(f"probe async-acp-stdin-closed raised {type(e).__name__}: {e}")
+
+    # Use the *real* HOME/XDG so agents/meta-agent.json actually resolves.
+    # (ensure_kiro_home was just called by the outer invoke, so /mnt/kiro
+    # is populated.)
+    real_env = {**_os.environ, "KIRO_API_KEY": _KIRO_API_KEY,
+                "XDG_DATA_HOME": "/tmp/kiro-xdg",
+                "HOME": "/mnt/kiro"}
+
+    async def _run_init_probe(label: str, agent_name: str, cfg_dir: str) -> None:
+        try:
+            p = await _a.create_subprocess_exec(
+                _KIRO_BINARY, "acp", "--agent", agent_name, "--trust-all-tools",
+                stdin=_a.subprocess.PIPE, stdout=_a.subprocess.PIPE, stderr=_a.subprocess.PIPE,
+                env={**real_env, "HOME": cfg_dir},
+            )
+            p.stdin.write(b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{}}}\n')
+            await p.stdin.drain()
+            try:
+                line = await _a.wait_for(p.stdout.readline(), timeout=8)
+                _boot_log.info(f"probe {label}: first-line={line[:300]!r}")
+            except _a.TimeoutError:
+                _boot_log.info(f"probe {label}: no line in 8s")
+            p.stdin.close()
+            try:
+                out, err = await _a.wait_for(p.communicate(), timeout=5)
+                _boot_log.info(f"probe {label}: exit={p.returncode} stderr={err[:400]!r}")
+            except _a.TimeoutError:
+                p.kill(); await p.wait()
+                _boot_log.info(f"probe {label}: killed after stdin close")
+        except Exception as e:  # noqa: BLE001
+            _boot_log.warning(f"probe {label} raised {type(e).__name__}: {e}")
+
+    # c) async + acp + real meta-agent config (with MCP server declared)
+    await _run_init_probe("acp-real-meta", "meta-agent", "/mnt/kiro")
+
+    # d) async + acp + a minimal agent config without MCP (isolates whether
+    # MCP connection is the trigger)
+    try:
+        minimal = "/tmp/kiro-probe-minimal"
+        import json as _jsonm
+        _os.makedirs(f"{minimal}/.kiro/agents", exist_ok=True)
+        with open(f"{minimal}/.kiro/agents/mini.json", "w") as f:
+            _jsonm.dump({
+                "name": "mini",
+                "description": "",
+                "prompt": "You are test.",
+                "mcpServers": {},
+                "tools": [],
+                "toolAliases": {},
+                "allowedTools": [],
+                "resources": [],
+                "hooks": {},
+                "toolsSettings": {},
+                "includeMcpJson": False,
+                "model": "claude-haiku-4.5"
+            }, f)
+        await _run_init_probe("acp-minimal-noMcp", "mini", minimal)
+    except Exception as e:  # noqa: BLE001
+        _boot_log.warning(f"probe acp-minimal setup failed: {e}")
+
+    # e) async + acp + config with only STDIO MCP (python dummy server).
+    # Isolates whether HTTP MCP specifically is the trigger.
+    try:
+        stdio_cfg = "/tmp/kiro-probe-stdio-mcp"
+        _os.makedirs(f"{stdio_cfg}/.kiro/agents", exist_ok=True)
+        import json as _jsonm
+        with open(f"{stdio_cfg}/.kiro/agents/stdio.json", "w") as f:
+            _jsonm.dump({
+                "name": "stdio",
+                "description": "",
+                "prompt": "You are test.",
+                "mcpServers": {
+                    "echo": {
+                        "command": "/bin/cat",
+                        "args": [],
+                        "env": {}
+                    }
+                },
+                "tools": [],
+                "toolAliases": {},
+                "allowedTools": [],
+                "resources": [],
+                "hooks": {},
+                "toolsSettings": {},
+                "includeMcpJson": False,
+                "model": "claude-haiku-4.5"
+            }, f)
+        await _run_init_probe("acp-stdio-mcp", "stdio", stdio_cfg)
+    except Exception as e:  # noqa: BLE001
+        _boot_log.warning(f"probe acp-stdio-mcp setup failed: {e}")
+
+    # f) Can Kiro even connect to our MCP HTTP server from within AgentCore?
+    # Use curl via subprocess to see if loopback HTTP works at all.
+    try:
+        import subprocess as _subp
+        r = _subp.run(
+            ["curl", "-sS", "-o", "/dev/null", "-w", "%{http_code}",
+             "-X", "POST", "-H", "Content-Type: application/json",
+             "-H", "Accept: application/json, text/event-stream",
+             "--data", '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}',
+             "http://127.0.0.1:8765/mcp"],
+            capture_output=True, text=True, timeout=5,
+        )
+        _boot_log.info(f"probe curl-local-mcp: http_status={r.stdout!r} stderr={r.stderr[:200]!r}")
+    except Exception as e:  # noqa: BLE001
+        _boot_log.warning(f"probe curl-local-mcp raised {type(e).__name__}: {e}")
+
 
 def _ensure_kiro_binary_ready() -> None:
     """Ensure kiro-cli-chat is executable and launchable.
@@ -391,6 +609,14 @@ async def invoke(payload, context):
     # chmod kiro binary on first invoke rather than at import — see
     # _ensure_kiro_binary_ready for rationale.
     _ensure_kiro_binary_ready()
+
+    # One-shot diagnostic: try several stdio configs against `kiro-cli-chat
+    # --version`. Remove once the EBADF-on-AgentCore root cause is known.
+    global _kiro_probed
+    if not _kiro_probed:
+        _kiro_probed = True
+        _probe_kiro_binary()
+        await _probe_kiro_async()
 
     apply_scope(caller_id, workspace_id)
     await _ensure_mcp_started()
