@@ -51,6 +51,8 @@ from tools.update_skill import update_skill
 from tools.delete_skill import delete_skill
 from tools.import_skill import import_skill
 from tools.read_skill_file import list_skill_files, read_skill_file
+from tools.sync_agent_skill import sync_agent_skill
+from tools.attach_agent_skill import attach_agent_skill
 from tools.list_mcp_servers import list_mcp_servers
 from tools.list_mcp_target_tools import list_mcp_target_tools
 from tools.manage_secrets import set_agent_secrets, list_agent_secrets, delete_agent_secret
@@ -107,6 +109,8 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     - update_skill: Use when the user wants to modify an existing skill's name, description, or instructions.
     - delete_skill: Use when the user wants to remove a skill. ALWAYS confirm with user before deleting.
     - import_skill: Use when the user wants to import a skill from a URL or raw markdown content. Auto-wraps plain markdown with AgentSkills.io frontmatter.
+    - sync_agent_skill: Use when an agent has a library skill attached but its copy is stale (user says things like "把 agent 里的 X skill 更新到最新"/"the ppt-generator on DataAnalyst is old, refresh it"). Re-copies files from the current library version, rewrites the agent's skill manifest, and redeploys. Pass new_source_skill_id when the original library skill was deleted and you need to rebind to a replacement.
+    - attach_agent_skill: Use when the user wants to add a library skill to an agent that doesn't have it yet ("给 X agent 加上 Y skill"/"add ppt-generator to DataAnalyst"). Copies files from the library into the agent's private space, appends to the skills manifest, and redeploys. Refuses if the skill name is already attached — in that case use sync_agent_skill.
     - list_tool_library: Use when selecting tools for a new agent — ALWAYS check built-in tools first.
     - get_tool_library_code: Use after list_tool_library to get the source code for built-in tools.
     - list_mcp_servers: Use when the user asks about available MCP tool servers from Gateway.
@@ -422,6 +426,8 @@ ALL_TOOLS = [
     update_skill,
     delete_skill,
     import_skill,
+    sync_agent_skill,
+    attach_agent_skill,
     list_mcp_servers,
     list_mcp_target_tools,
     analyze_trace,
