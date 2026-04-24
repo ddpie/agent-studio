@@ -25,12 +25,15 @@ ACP sessions are serial by nature — one prompt in flight at a time — so
 the event queue has one logical consumer. If that invariant ever needs to
 relax, replace the queue with per-call queues keyed by request id.
 
-Stderr merging
---------------
+Stderr handling
+---------------
 kiro-cli-chat occasionally writes non-JSON log lines (setup banners,
-telemetry pings). We merge stderr into stdout and drop any line that
-doesn't start with '{'. Verified in the EC2 probe that this does not
-drop any real JSON-RPC frames.
+telemetry pings) to stderr. We redirect stderr to a tempfile, then
+drain the file after the process exits and forward each non-empty line
+to our logger. That surfaces crash messages in CloudWatch without
+racing a reader task during shutdown. The stdout demultiplexer still
+drops non-JSON lines defensively, since old Kiro builds interleaved
+the two streams.
 """
 
 from __future__ import annotations
@@ -98,7 +101,6 @@ class KiroACPClient:
 
         self._proc: asyncio.subprocess.Process | None = None
         self._reader_task: asyncio.Task[None] | None = None
-        self._stderr_task: asyncio.Task[None] | None = None
         self._next_id = 1
         self._pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
         # Unbounded; Kiro fires a handful of notifications per turn, never
@@ -122,12 +124,11 @@ class KiroACPClient:
         if self._trust_all_tools:
             args.append("--trust-all-tools")
 
-        # Route kiro-cli-chat stderr to a real file descriptor (not an
-        # asyncio pipe). On AgentCore, piping kiro's stderr through
-        # asyncio triggered "Bad file descriptor (os error 9)" at
-        # startup; a plain on-disk file matches what a TTY-like fd would
-        # look like and avoids that. We read the file back after the
-        # process exits to expose crashes in CloudWatch.
+        # Route kiro-cli-chat stderr to a real file descriptor. We read it
+        # back after the process exits and ship each line to our logger so
+        # crashes and warnings show up in CloudWatch. An asyncio pipe
+        # would also work, but a file lets us drain the buffer without
+        # racing a reader task during shutdown.
         import tempfile as _tempfile
         self._stderr_file = _tempfile.NamedTemporaryFile(
             mode="wb+", prefix="kiro-cli-stderr-", delete=False
@@ -164,15 +165,13 @@ class KiroACPClient:
                 fut.set_exception(exc)
         self._pending.clear()
 
-        for task_attr in ("_reader_task", "_stderr_task"):
-            task = getattr(self, task_attr, None)
-            if task:
-                task.cancel()
-                try:
-                    await task
-                except (asyncio.CancelledError, Exception):
-                    pass
-                setattr(self, task_attr, None)
+        if self._reader_task:
+            self._reader_task.cancel()
+            try:
+                await self._reader_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._reader_task = None
 
         if self._proc and self._proc.returncode is None:
             try:
@@ -206,6 +205,27 @@ class KiroACPClient:
             except Exception as e:  # noqa: BLE001
                 log.warning("failed to flush kiro stderr file: %s", e)
             self._stderr_file = None
+
+        # The MCP stdio subprocess writes its own diagnostic log to
+        # /tmp/mcp-stdio-<pid>.log. Tail whatever is there so a failure
+        # inside the MCP server (import error, auth config, etc.) shows
+        # up in the same CloudWatch stream. Best-effort; ignore missing
+        # or empty files.
+        import glob as _glob
+        import os as _os_mod
+        try:
+            for path in sorted(_glob.glob("/tmp/mcp-stdio-*.log")):
+                try:
+                    with open(path, "rb") as f:
+                        data = f.read()
+                    for line in data.decode("utf-8", errors="replace").splitlines():
+                        if line.strip():
+                            log.warning("mcp-stdio[%s]: %s", path, line[:500])
+                    _os_mod.unlink(path)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("failed to tail %s: %s", path, e)
+        except Exception:
+            pass
 
     # ---- verbs ------------------------------------------------------------
 
@@ -387,23 +407,6 @@ class KiroACPClient:
                 err.get("data"),
             )
         return resp
-
-    async def _stderr_reader(self) -> None:
-        """Forward kiro-cli-chat stderr to our logger.
-
-        Runs in parallel with _reader, which handles stdout. Every line
-        from Kiro's stderr lands in CloudWatch at warning level so auth
-        failures, sqlite errors, crash messages etc. are visible.
-        """
-        assert self._proc is not None and self._proc.stderr is not None
-        stderr = self._proc.stderr
-        while True:
-            raw = await stderr.readline()
-            if not raw:
-                return
-            line = raw.decode("utf-8", errors="replace").rstrip()
-            if line:
-                log.warning("kiro-cli stderr: %s", line[:500])
 
     async def _reader(self) -> None:
         """Demultiplex stdout lines into pending-responses vs events."""
