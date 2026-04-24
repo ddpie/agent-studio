@@ -59,6 +59,11 @@ import os
 import shutil
 from pathlib import Path
 
+
+def _os_env_get(key: str, default: str) -> str:
+    """Small helper so the agent config literal stays readable."""
+    return os.environ.get(key, default)
+
 # AgentCore's sessionStorage mount point. Must match the `mountPath` passed
 # in `filesystemConfigurations` on CreateAgentRuntime / UpdateAgentRuntime.
 # Regex constraint: /mnt/<exactly-one-subdir>.
@@ -67,7 +72,9 @@ KIRO_HOME_DEFAULT = "/mnt/kiro"
 # Built-in Kiro tools exposed to the Meta-Agent. Keep this minimal — each
 # built-in is an extra side-effect path outside the sanctioned 34-tool MCP
 # surface.
-KIRO_BUILTIN_TOOLS = ["web_search", "web_fetch", "subagent", "todo_list"]
+# TEMPORARILY disabled while we debug AgentCore spawn issues — see if the
+# MCP-only config works first, then add built-ins back.
+KIRO_BUILTIN_TOOLS: list[str] = []
 
 # MCP server name registered in the custom agent config. Must match
 # MCP_SERVER_NAME in mcp_server.py.
@@ -83,32 +90,41 @@ _SESSION_UUID_FILENAME = "kiro_session.txt"
 
 
 def ensure_kiro_home(
-    mcp_host: str,
-    mcp_port: int,
     system_prompt_src: str,
+    meta_agent_dir: str,
+    caller_id: str,
+    workspace_id: str,
     model_id: str = DEFAULT_MODEL,
     home_root: str = KIRO_HOME_DEFAULT,
+    python_executable: str | None = None,
 ) -> str | None:
     """Populate the Kiro HOME mount, idempotently.
 
-    Writes/overwrites the custom agent config, the MCP URL, and the prompt
-    file on every call (cheap, and lets prompt/tool bumps take effect
-    without a container restart). Leaves existing sessions/cli/ untouched.
+    Writes/overwrites the custom agent config and the prompt file on every
+    call (cheap, and lets prompt bumps take effect without a container
+    restart). Leaves existing sessions/cli/ untouched.
 
     Args:
-        mcp_host: Loopback host the local MCP server is listening on.
-        mcp_port: Loopback port for the local MCP server.
         system_prompt_src: Absolute path to the source system-prompt markdown
-            inside the deployment zip (meta-agent/prompts/meta-agent.md).
+            (meta-agent/prompts/meta-agent.md in the deployment zip).
+        meta_agent_dir: Absolute path to the meta-agent package root, so the
+            MCP subprocess can put it on sys.path via PYTHONPATH.
+        caller_id: Per-invocation user identity, injected into the MCP
+            subprocess env so tool ownership checks see the right user.
+        workspace_id: Per-invocation workspace identity, same purpose.
         model_id: Kiro model id to pin.
-        home_root: Absolute path to use as $HOME for kiro-cli-chat. Defaults
-            to the AgentCore sessionStorage mount point.
+        home_root: Absolute path to use as $HOME for kiro-cli-chat.
+        python_executable: Python interpreter to spawn the MCP subprocess
+            with. Defaults to the current interpreter.
 
     Returns:
         The previously-saved kiro session uuid if present (meaning this is
         a follow-up turn and the caller should `session/load` it); None if
         no uuid is saved yet (first turn → caller should `session/new`).
     """
+    import sys as _sys
+    python_executable = python_executable or _sys.executable
+
     home_path = Path(home_root)
     agents_dir = home_path / ".kiro" / "agents"
     sessions_dir = home_path / ".kiro" / "sessions" / "cli"
@@ -125,16 +141,57 @@ def ensure_kiro_home(
     prompt_dst = prompts_dir / "meta-agent.md"
     shutil.copyfile(system_prompt_src, prompt_dst)
 
-    # Custom agent config. Schema from agent_config.json.example plus the
-    # live `_kiro.dev/commands/available` probe on kiro-cli-chat 2.0.0.
+    # Inline the prompt text. Kiro supports `file://` prompts, but on
+    # AgentCore we observed agents with `file://` prompts failing at ACP
+    # startup (Bad file descriptor) where an identically-shaped config
+    # with an inline string prompt worked. Inlining costs ~20KB per
+    # agent-config write; the file is still around for diffing.
+    try:
+        prompt_inline = prompt_dst.read_text(encoding="utf-8")
+    except OSError:
+        prompt_inline = "You are Agent Studio — a Meta-Agent that orchestrates AI agents."
+
+    # Custom agent config. Uses stdio MCP transport — Kiro spawns our MCP
+    # server as a subprocess with the given command/args/env and talks
+    # JSON-RPC over the pipes. HTTP transport would be simpler but
+    # AgentCore's sandbox blocks loopback TCP (see mcp_server.py header).
     agent_config = {
         "name": META_AGENT_NAME,
         "description": "Agent Studio Meta-Agent (Kiro-backed)",
-        "prompt": f"file://{prompt_dst}",
+        "prompt": prompt_inline,
         "mcpServers": {
             MCP_SERVER_NAME: {
-                "type": "http",
-                "url": f"http://{mcp_host}:{mcp_port}/mcp",
+                "command": python_executable,
+                "args": ["-u", "-m", "kiro_adapter.mcp_stdio_server"],
+                "env": {
+                    # Put meta-agent/ on sys.path so `kiro_adapter` and
+                    # `tools` imports resolve regardless of Kiro's cwd.
+                    "PYTHONPATH": meta_agent_dir,
+                    # Also need the base dependency layer (boto3, mcp, etc.)
+                    # and the AWS envs that tools/*.py read at import time.
+                    # Inherit the parent process's full env: Kiro preserves
+                    # keys listed in our "env" dict but also merges the
+                    # existing env by default, so we repeat the critical
+                    # ones to be explicit.
+                    "AGENT_STUDIO_REGION": _os_env_get("AGENT_STUDIO_REGION", ""),
+                    "AGENT_STUDIO_ACCOUNT_ID": _os_env_get("AGENT_STUDIO_ACCOUNT_ID", ""),
+                    "AGENT_STUDIO_S3_BUCKET": _os_env_get("AGENT_STUDIO_S3_BUCKET", ""),
+                    "AGENT_STUDIO_MCP_GATEWAY_ID": _os_env_get("AGENT_STUDIO_MCP_GATEWAY_ID", ""),
+                    "AGENT_STUDIO_CODE_INTERPRETER_ID": _os_env_get("AGENT_STUDIO_CODE_INTERPRETER_ID", ""),
+                    "AGENT_STUDIO_BROWSER_ID": _os_env_get("AGENT_STUDIO_BROWSER_ID", ""),
+                    # Scope for tool ownership checks, picked up by
+                    # mcp_stdio_server -> apply_scope at startup.
+                    "AGENT_STUDIO_CALLER_ID": caller_id,
+                    "AGENT_STUDIO_WORKSPACE_ID": workspace_id,
+                    # Keep telemetry off in the subprocess — the parent
+                    # already emits spans; double instrumentation just
+                    # doubles the log volume.
+                    "AGENT_OBSERVABILITY_ENABLED": "false",
+                    # Forward the runtime PATH so `python3` resolves; we
+                    # don't yet know whether Kiro passes PATH through by
+                    # default.
+                    "PATH": _os_env_get("PATH", "/usr/bin:/bin"),
+                },
             }
         },
         # Merge built-ins with the full MCP tool surface. "@<server>" with no
