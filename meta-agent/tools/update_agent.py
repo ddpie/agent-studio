@@ -375,6 +375,28 @@ def update_agent(
         ContentType="application/json",
     )
 
+    # Also mirror system_prompt and tool_definitions to their standalone S3
+    # files. The frontend detail page reads them from ``system_prompt.txt`` /
+    # ``tool_definitions.py`` (see frontend/src/lib/agent-metadata.ts
+    # fetchAgentMetadata) rather than from metadata.json, so skipping this
+    # write makes every Meta-Agent redeploy look like a no-op in the UI even
+    # though the runtime zip is new. These two files are what the in-UI
+    # single-file editor also reads/writes via the CRUD Lambda; keeping them
+    # in sync means the UI and the Runtime agree on what's deployed.
+    if needs_redeploy:
+        s3.put_object(
+            Bucket=S3_BUCKET,
+            Key=f"agents/{agent_id}/system_prompt.txt",
+            Body=final_prompt.encode("utf-8"),
+            ContentType="text/plain; charset=utf-8",
+        )
+        s3.put_object(
+            Bucket=S3_BUCKET,
+            Key=f"agents/{agent_id}/tool_definitions.py",
+            Body=final_tools_def_for_meta.encode("utf-8"),
+            ContentType="text/x-python; charset=utf-8",
+        )
+
     # Update DynamoDB — sync all frontend-visible fields
     update_expr_parts = [
         "display_name = :dn",
