@@ -236,11 +236,21 @@ def update_agent(
     tools_py = None
 
     if needs_redeploy:
-        # Apply template if specified
-        if final_template:
-            base_prompt = get_template_prompt(final_template)
-            final_prompt = base_prompt + "\n\n## Specific Instructions\n" + final_prompt
-        elif BASE_GUIDELINES not in final_prompt:
+        # Do NOT re-prepend the template base prompt here. That concatenation
+        # belongs in create_agent (where user input is just the "specific
+        # instructions" layered onto a template). For updates, ``system_prompt``
+        # is already the full, final prompt the user wants — either edited
+        # in the UI, or rewritten wholesale by Meta-Agent. Re-applying the
+        # template would:
+        #   1) shove the user's actual prompt under "## Specific Instructions"
+        #      so the template directives dominate at the top of context,
+        #   2) compound on every subsequent update (template gets prepended
+        #      each time, giving the user the strong but misleading
+        #      impression that "nothing changed" because the first 6KB is
+        #      always the same English template boilerplate).
+        # BASE_GUIDELINES is still appended if it's missing, so persisted
+        # updates don't drift away from the core guardrails.
+        if not final_template and BASE_GUIDELINES not in final_prompt:
             final_prompt = final_prompt + "\n" + BASE_GUIDELINES
 
         # Build tool_names list
