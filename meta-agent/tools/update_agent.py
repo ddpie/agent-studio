@@ -154,25 +154,39 @@ def update_agent(
     # run_skill_script), not packaged into the deployment zip. We only
     # need SKILL.md content here to build the prompt's progressive-
     # disclosure section.
-    if skills_config:
-        s3_client = boto3.client("s3", region_name=REGION)
-        for skill_entry in skills_config:
-            skill_id = skill_entry.get("id", "")
+    #
+    # When Meta-Agent calls update_agent with no staging_key (e.g. "just
+    # change the system_prompt"), skills_config is empty — but that does
+    # NOT mean the agent has no skills. We must fall back to the skills
+    # already recorded in metadata.json, otherwise the rebuilt zip ends
+    # up without the skill prompt section and the runtime silently loses
+    # the skill hints even though metadata.json still lists the skills.
+    s3_client = boto3.client("s3", region_name=REGION)
+    skills_for_prompt = skills_config if skills_config else []
+    if not skills_for_prompt:
+        try:
+            _md_obj = s3_client.get_object(Bucket=S3_BUCKET, Key=f"agents/{agent_id}/metadata.json")
+            _md = json.loads(_md_obj["Body"].read().decode("utf-8"))
+            skills_for_prompt = _md.get("skills", []) or []
+        except Exception:
+            skills_for_prompt = []
 
-            skill_md_content = ""
-            try:
-                md_key = f"agents/{agent_id}/skills/{skill_id}/SKILL.md"
-                md_obj = s3_client.get_object(Bucket=S3_BUCKET, Key=md_key)
-                skill_md_content = md_obj["Body"].read().decode("utf-8")
-            except Exception as e:
-                import sys
-                print(f"WARNING: Failed to read SKILL.md for skill {skill_id}: {e}", file=sys.stderr)
+    for skill_entry in skills_for_prompt:
+        skill_id = skill_entry.get("id", "")
+        skill_md_content = ""
+        try:
+            md_key = f"agents/{agent_id}/skills/{skill_id}/SKILL.md"
+            md_obj = s3_client.get_object(Bucket=S3_BUCKET, Key=md_key)
+            skill_md_content = md_obj["Body"].read().decode("utf-8")
+        except Exception as e:
+            import sys
+            print(f"WARNING: Failed to read SKILL.md for skill {skill_id}: {e}", file=sys.stderr)
 
-            skills_data.append({
-                "name": skill_entry.get("name", skill_id),
-                "description": skill_entry.get("description", ""),
-                "skill_md_content": skill_md_content,
-            })
+        skills_data.append({
+            "name": skill_entry.get("name", skill_id),
+            "description": skill_entry.get("description", ""),
+            "skill_md_content": skill_md_content,
+        })
 
     # Scope to the caller's workspace and require editor-or-higher role.
     # (The old comment here claimed CRUD Lambda would enforce this, but
