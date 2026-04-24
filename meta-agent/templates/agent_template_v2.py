@@ -8,77 +8,11 @@ Instead of assembling everything into a single main.py, we now generate:
 - stream_utils.py: shared streaming helpers (lives in base zip)
 """
 
-# ── Secret hydration (shared between templates) ───────────────────────────
-# Rendered verbatim into main.py. The Meta-Agent deploy step (deploy.py::
-# _shared_env_vars) collects this agent's Secrets Manager ARNs under the
-# agent-studio/{ws}/{agent}/* prefix and sets AGENT_STUDIO_SECRET_ARNS to
-# a comma-separated list. At cold start we fetch each one in parallel
-# and inject into os.environ so downstream skill scripts can read them
-# with os.environ.get(KEY) the same way they would locally.
-#
-# Design notes:
-#   - Sub-agent IAM is scoped to agent-studio/* via roles.ts; fetching
-#     any other ARN would fail. The ARN list itself isn't sensitive.
-#   - GetSecretValue is called once per ARN at startup — no in-process
-#     caching needed since the process is long-lived relative to a
-#     typical secret rotation; callers can re-invoke the runtime to pick
-#     up rotations (same semantics as env-var injection).
-#   - Failures are logged but NON-fatal: a missing or expired secret
-#     shouldn't block the entire agent from starting. Tools that actually
-#     need the secret will get None from os.environ.get and report their
-#     own error — which is a better experience than a cold-start crash.
-_SECRET_HYDRATE_CODE = '''
-def _hydrate_secrets_from_arns():
-    arn_csv = _os.environ.get("AGENT_STUDIO_SECRET_ARNS", "")
-    if not arn_csv:
-        return 0
-    arns = [a.strip() for a in arn_csv.split(",") if a.strip()]
-    if not arns:
-        return 0
-    try:
-        import boto3 as _boto3
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-    except ImportError:
-        return 0
-    import re as _re
-    try:
-        _sm = _boto3.client("secretsmanager", region_name=_os.environ.get("AGENT_STUDIO_REGION", "us-east-1"))
-    except Exception as exc:
-        # Missing creds, resolver misconfig, etc. Hydrate is best-effort —
-        # skip rather than kill cold start; tools will surface their own
-        # errors when they read a missing env var.
-        import sys as _sys
-        print(f"secret hydrate: secretsmanager client init failed: {exc}", file=_sys.stderr)
-        return 0
-    # Secrets Manager appends a 6-alphanumeric random suffix to ARNs
-    # (e.g. agent-studio/ws/agent/FOO-aBc123). Our validator rejects
-    # hyphens in key names, so stripping the trailing "-[A-Za-z0-9]{6}"
-    # recovers the original KEY. GetSecretValue uses the full ARN
-    # directly — the CreateSecret docs caution that SecretId=<name> can
-    # hit the wrong version after a rotation.
-    _SUFFIX_RE = _re.compile(r"-[A-Za-z0-9]{6}$")
-    def _fetch(arn):
-        last = arn.rsplit("/", 1)[-1]
-        key_name = _SUFFIX_RE.sub("", last)
-        try:
-            resp = _sm.get_secret_value(SecretId=arn)
-            return key_name, resp.get("SecretString", "")
-        except Exception as exc:
-            import sys as _sys
-            print(f"secret hydrate failed for {arn}: {exc}", file=_sys.stderr)
-            return key_name, None
-    loaded = 0
-    # N is small (< 20 typical per agent); thread pool size caps the
-    # cold-start parallelism so we don't create a fat connection pool
-    # that outlives the bootstrap.
-    with ThreadPoolExecutor(max_workers=min(8, len(arns))) as pool:
-        for fut in as_completed([pool.submit(_fetch, a) for a in arns]):
-            k, v = fut.result()
-            if k and v is not None and k not in _os.environ:
-                _os.environ[k] = v
-                loaded += 1
-    return loaded
-'''
+# Secret hydration lives in builtin_tools.py (not main.py) so the
+# forwarding helper (_secret_env_prefix_for_ci) is in the same module
+# as run_command, which is the gate for every Code Interpreter call.
+# main.py simply calls _builtin._hydrate_secrets_from_arns() at startup
+# after its OTEL bootstrap.
 
 
 # ── main.py template (no MCP) ──────────────────────────────────────────────
@@ -93,8 +27,14 @@ if _os.environ.get("AGENT_OBSERVABILITY_ENABLED", "").lower() == "true":
     except Exception as _e:
         import sys as _sys
         print(f"OTEL auto-instrumentation disabled: {_e}", file=_sys.stderr)
-''' + _SECRET_HYDRATE_CODE + '''
-_hydrate_secrets_from_arns()
+
+# Hydrate secrets from Secrets Manager into os.environ BEFORE the
+# agent starts. builtin_tools owns the logic so its CI-forwarding
+# helper can see the same key list — otherwise run_command inside
+# builtin_tools wouldn't know which env vars need to cross the
+# sandbox boundary.
+import builtin_tools as _builtin_bootstrap
+_builtin_bootstrap._hydrate_secrets_from_arns()
 
 import json
 from pathlib import Path
@@ -171,8 +111,14 @@ if _os.environ.get("AGENT_OBSERVABILITY_ENABLED", "").lower() == "true":
     except Exception as _e:
         import sys as _sys
         print(f"OTEL auto-instrumentation disabled: {_e}", file=_sys.stderr)
-''' + _SECRET_HYDRATE_CODE + '''
-_hydrate_secrets_from_arns()
+
+# Hydrate secrets from Secrets Manager into os.environ BEFORE the
+# agent starts. builtin_tools owns the logic so its CI-forwarding
+# helper can see the same key list — otherwise run_command inside
+# builtin_tools wouldn't know which env vars need to cross the
+# sandbox boundary.
+import builtin_tools as _builtin_bootstrap
+_builtin_bootstrap._hydrate_secrets_from_arns()
 
 import json
 import contextlib
@@ -865,6 +811,102 @@ _s3 = _boto3.client("s3", region_name=_REGION)
 # Per-invocation workspace id — main.py sets this before calling agent tools.
 _workspace_id = ""
 
+# Populated by _hydrate_secrets_from_arns() at startup: names of env
+# vars that carry user-provided secrets and must be forwarded when we
+# cross the Code Interpreter sandbox boundary. Skill scripts run inside
+# the CI container — which has its own os.environ — so without this
+# forwarding, os.environ.get("TOKEN") would always return empty there
+# even though the sub-agent itself has the value. The list is explicit
+# (rather than sniffing for "TOKEN"/"KEY" name patterns) so new skills
+# needing new secrets require zero template changes: user saves the
+# secret in the UI, redeploys, cold-start registers the key, and every
+# CI call auto-forwards it.
+_SECRET_ENV_KEYS = []
+
+
+def _hydrate_secrets_from_arns():
+    """Fetch per-agent secrets from AWS Secrets Manager at cold start.
+
+    Reads the comma-separated ARN list from AGENT_STUDIO_SECRET_ARNS
+    (assembled at deploy time by deploy.py::_shared_env_vars), fetches
+    each SecretString in parallel under the sub-agent's own IAM role
+    (scoped to agent-studio/*), and injects KEY=value pairs into
+    os.environ. Records successfully-loaded keys in _SECRET_ENV_KEYS
+    for later CI forwarding.
+
+    Failures are non-fatal — a missing or expired secret shouldn't
+    kill the agent at boot; tools that actually need the value will
+    surface their own error when they read an empty env var.
+    """
+    arn_csv = _os.environ.get("AGENT_STUDIO_SECRET_ARNS", "")
+    if not arn_csv:
+        return 0
+    arns = [a.strip() for a in arn_csv.split(",") if a.strip()]
+    if not arns:
+        return 0
+    try:
+        from concurrent.futures import ThreadPoolExecutor as _TPE
+        from concurrent.futures import as_completed as _as_completed
+    except ImportError:
+        return 0
+    import re as _re
+    try:
+        _sm = _boto3.client("secretsmanager", region_name=_REGION)
+    except Exception as exc:
+        import sys as _sys
+        print(f"secret hydrate: secretsmanager client init failed: {exc}", file=_sys.stderr)
+        return 0
+    # Secrets Manager appends a 6-alphanumeric random suffix to ARNs
+    # (agent-studio/ws/agent/FOO-aBc123). The CreateSecret validator
+    # rejects hyphens in key names, so stripping the trailing
+    # "-[A-Za-z0-9]{6}" recovers the original KEY.
+    _SUFFIX_RE = _re.compile(r"-[A-Za-z0-9]{6}$")
+    def _fetch(arn):
+        last = arn.rsplit("/", 1)[-1]
+        key_name = _SUFFIX_RE.sub("", last)
+        try:
+            resp = _sm.get_secret_value(SecretId=arn)
+            return key_name, resp.get("SecretString", "")
+        except Exception as exc:
+            import sys as _sys
+            print(f"secret hydrate failed for {arn}: {exc}", file=_sys.stderr)
+            return key_name, None
+    loaded = 0
+    with _TPE(max_workers=min(8, len(arns))) as pool:
+        for fut in _as_completed([pool.submit(_fetch, a) for a in arns]):
+            k, v = fut.result()
+            if k and v is not None and k not in _os.environ:
+                _os.environ[k] = v
+                if k not in _SECRET_ENV_KEYS:
+                    _SECRET_ENV_KEYS.append(k)
+                loaded += 1
+    return loaded
+
+
+def _secret_env_prefix_for_ci():
+    """Build a Python snippet that reinjects hydrated secrets into
+    os.environ inside the Code Interpreter sandbox.
+
+    Prepended by run_command to every executeCode invocation. Idempotent:
+    re-running the same session costs only the setdefault no-op, so we
+    don't track per-session warm state. Uses repr() for quote-safety.
+    setdefault (not assignment) means an already-set sandbox env value
+    wins — we'd rather defer to the sandbox than trample a user who
+    explicitly set an override.
+    """
+    if not _SECRET_ENV_KEYS:
+        return ""
+    lines = []
+    for k in _SECRET_ENV_KEYS:
+        v = _os.environ.get(k)
+        if not isinstance(v, str) or not v:
+            continue
+        lines.append(f"_os.environ.setdefault({k!r}, {v!r})")
+    if not lines:
+        return ""
+    return "import os as _os\\n" + "\\n".join(lines) + "\\n"
+
+
 # The sub-agent's own AgentCore runtime id — used as the S3 namespace for
 # skill lookups (``agents/{_AGENT_ID}/skills/``). AgentCore doesn't inject
 # a dedicated env var, but OTEL_RESOURCE_ATTRIBUTES carries it via the
@@ -1372,11 +1414,35 @@ def run_command(command: str, language: str = "python") -> str:
         except Exception as e:
             return _tool_error(f"Failed to start code interpreter session: {e}")
 
-    op = "executeCode"
-    args = {"code": command, "language": language if language != "shell" else "python"}
+    # Forward hydrated secrets into the CI sandbox. Skill scripts
+    # (feishu, slack, jira, whatever) call os.environ.get(KEY) expecting
+    # to see what the user saved in Agent Secrets. The sandbox runs in a
+    # separate container with its own env, so without this prefix every
+    # script would trip over empty credentials even though the sub-agent
+    # itself has them. Works for any key hydrated at cold start — new
+    # skills that need new secrets require zero code changes here, just
+    # save+redeploy in the UI.
+    secret_prefix = _secret_env_prefix_for_ci()
     if language == "shell":
         op = "executeCommand"
+        # For shell: translate the injected env into `export KEY='val'`
+        # statements at the front of the command string. We don't reuse
+        # the Python prefix because the sandbox's executeCommand runs
+        # under /bin/bash, not Python.
+        if _SECRET_ENV_KEYS:
+            import shlex as _shlex
+            exports = []
+            for k in _SECRET_ENV_KEYS:
+                v = _os.environ.get(k)
+                if isinstance(v, str) and v:
+                    exports.append(f"export {k}={_shlex.quote(v)}")
+            if exports:
+                command = "; ".join(exports) + "; " + command
         args = {"command": command}
+    else:
+        op = "executeCode"
+        prefixed = (secret_prefix + command) if secret_prefix else command
+        args = {"code": prefixed, "language": language}
 
     try:
         resp = client.invoke_code_interpreter(
