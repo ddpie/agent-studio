@@ -131,6 +131,21 @@ export class AgentCoreRoles extends Construct {
     });
     baselineStatements.forEach((s) => subAgentRole.addToPolicy(s));
     subAgentDataStatements.forEach((s) => subAgentRole.addToPolicy(s));
+    // Sub-agents read their own secrets at cold start via the ARN list
+    // passed by the Meta-Agent's deploy.py in AGENT_STUDIO_SECRET_ARNS.
+    // Scope to the agent-studio/ prefix; NO ListSecrets (not resource-
+    // scopable — Meta-Agent does the enumeration under its own role).
+    // DescribeSecret is required by aws-secretsmanager-caching for its
+    // rotation metadata check.
+    subAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret",
+      ],
+      resources: [
+        `arn:aws:secretsmanager:${props.region}:${props.accountId}:secret:agent-studio/*`,
+      ],
+    }));
 
     // ─── Meta-Agent Role ───
     const metaAgentRole = new iam.Role(this, "MetaAgentRole", {
@@ -209,6 +224,29 @@ export class AgentCoreRoles extends Construct {
       conditions: {
         StringEquals: { "iam:PassedToService": "bedrock-agentcore.amazonaws.com" },
       },
+    }));
+    // Meta-Agent reads/writes per-agent secrets for:
+    //   - manage_secrets tools (set/list/delete under agent-studio/{ws}/{agent}/{key})
+    //   - link_agent linked A2A keys blob (same prefix)
+    //   - deploy.py assembling AGENT_STUDIO_SECRET_ARNS for sub-agent runtime
+    // ListSecrets cannot be resource-scoped; it's needed to enumerate
+    // which per-key secrets exist for an agent at deploy time.
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:UpdateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:DescribeSecret",
+      ],
+      resources: [
+        `arn:aws:secretsmanager:${props.region}:${props.accountId}:secret:agent-studio/*`,
+      ],
+    }));
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["secretsmanager:ListSecrets"],
+      resources: ["*"],
     }));
 
     this.subAgentRoleArn = subAgentRole.roleArn;
