@@ -248,6 +248,15 @@ def update_agent(
     status = "metadata_only"
     # Captured for the background redeploy thread and the final metadata write.
     tools_py = None
+    # tool_names_list is built inside the redeploy branch (because that's
+    # where a new tool_names value can arrive), but the metadata-write
+    # tail below checks ``if tool_names_list`` unconditionally — leaving
+    # this unset when only description / display_name changed crashed
+    # update_agent with ``local variable 'tool_names_list' referenced
+    # before assignment``. Surfaced by the sync_agent_skill redeploy
+    # hand-off on 2026-04-24; there's no need to rewrite DDB tool_names
+    # on a metadata-only update, so default to empty-and-skip.
+    tool_names_list: list[str] = []
 
     if needs_redeploy:
         # Do NOT re-prepend the template base prompt here. That concatenation
