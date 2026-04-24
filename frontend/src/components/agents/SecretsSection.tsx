@@ -83,10 +83,22 @@ function SecretsSection({ agentId }: { agentId: string }) {
       toast.error(t("secrets.errors.valueLength"));
       return;
     }
+    // Capture before the write so the success toast can tell the user
+    // whether a redeploy is needed. The ARN list passed to the sub-agent
+    // runtime is computed at deploy time — adding a NEW key doesn't take
+    // effect until the agent is redeployed (rebuilding AGENT_STUDIO_
+    // SECRET_ARNS). Overwriting an EXISTING key's value doesn't need
+    // a redeploy: the ARN is unchanged, the sub-agent's next cold start
+    // fetches the new value from Secrets Manager automatically.
+    const isNewKey = !existingKeys.has(key);
     setSavingKey(key);
     try {
       await putAgentSecret(agentId, key, value);
-      toast.success(t("secrets.created", { name: key }));
+      if (isNewKey) {
+        toast.success(t("secrets.createdRedeployHint", { name: key }));
+      } else {
+        toast.success(t("secrets.updated", { name: key }));
+      }
       removeDraftRow(idx);
       refresh();
     } catch (err) {
@@ -104,11 +116,15 @@ function SecretsSection({ agentId }: { agentId: string }) {
     );
     if (valid.length === 0) return;
     setSaving(true);
+    // Count how many of the pending writes are NEW keys vs overwrites so
+    // the summary toast can tell the user whether a redeploy is needed.
+    let newCount = 0;
     try {
       for (let i = drafts.length - 1; i >= 0; i--) {
         const r = drafts[i];
         const key = r.key.trim().toUpperCase();
         if (!KEY_RE.test(key) || !r.value) continue;
+        if (!existingKeys.has(key)) newCount += 1;
         try {
           await putAgentSecret(agentId, key, r.value);
         } catch (err) {
@@ -116,7 +132,14 @@ function SecretsSection({ agentId }: { agentId: string }) {
           continue;
         }
       }
-      toast.success(t("secrets.savedN", { count: valid.length }));
+      if (newCount > 0) {
+        toast.success(t("secrets.savedNRedeployHint", {
+          count: valid.length,
+          newCount,
+        }));
+      } else {
+        toast.success(t("secrets.savedN", { count: valid.length }));
+      }
       setDrafts([]);
       refresh();
     } finally {
