@@ -23,7 +23,18 @@ KIRO_CACHE_DIR="${BASE_DIR}/.kiro-cache"
 KIRO_CHANNEL="${KIRO_CHANNEL:-stable}"
 KIRO_ARCH="${KIRO_ARCH:-aarch64}"
 KIRO_BASE_URL="https://prod.download.cli.kiro.dev"
-KIRO_ZIP_NAME="kirocli-${KIRO_ARCH}-linux.zip"
+# Default to the musl (static libc) build to dodge glibc compatibility
+# issues. AgentCore Runtime's AL2023 base ships glibc 2.34, which matches
+# Kiro's minimum glibc — but we saw intermittent EBADF errors on startup
+# against that glibc-linked build. The musl build statically links its
+# own libc so runtime host libc version doesn't matter.
+# Set KIRO_LIBC=gnu to switch back to the glibc build.
+KIRO_LIBC="${KIRO_LIBC:-musl}"
+if [[ "$KIRO_LIBC" == "musl" ]]; then
+  KIRO_ZIP_NAME="kirocli-${KIRO_ARCH}-linux-musl.zip"
+else
+  KIRO_ZIP_NAME="kirocli-${KIRO_ARCH}-linux.zip"
+fi
 
 # Resolve the latest Kiro CLI package, verify sha256, and extract to a cache
 # directory. Reuses the cache on subsequent runs when the sha matches.

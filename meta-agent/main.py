@@ -30,13 +30,33 @@ and ignore images for now; reinstate once the core path is verified.
 # imported so that auto-instrumentation can monkey-patch them. See the
 # comment on the legacy path for the full rationale.
 import os as _os
+import sys as _sys
+import time as _time
+import logging as _boot_logging
+
+_t_boot_start = _time.monotonic()
+_boot_log = _boot_logging.getLogger("meta_agent.boot")
+_boot_log.setLevel(_boot_logging.INFO)
+if not _boot_log.handlers:
+    _h = _boot_logging.StreamHandler()
+    _h.setFormatter(_boot_logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    _boot_log.addHandler(_h)
+
+def _log_phase(label: str) -> None:
+    # Use Python logging (not print) because AgentCore's log pipeline hooks
+    # the root logger via the OTEL distro. print() to stderr was being
+    # silently dropped during cold start.
+    _boot_log.info(f"[init+{_time.monotonic()-_t_boot_start:5.2f}s] {label}")
+
+_log_phase("boot start")
+
 if _os.environ.get("AGENT_OBSERVABILITY_ENABLED", "").lower() == "true":
     try:
         from opentelemetry.instrumentation.auto_instrumentation import initialize as _otel_init  # type: ignore
         _otel_init()
     except Exception as _e:  # noqa: BLE001
-        import sys as _sys
-        print(f"OTEL auto-instrumentation disabled: {_e}", file=_sys.stderr)
+        _boot_log.warning(f"OTEL auto-instrumentation disabled: {_e}")
+_log_phase("OTEL bootstrap done")
 
 import asyncio
 import json
@@ -47,21 +67,24 @@ import time
 from pathlib import Path
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
+_log_phase("bedrock_agentcore imported")
 
 # Tool imports: every @tool function the Meta-Agent exposes. We do not
 # instantiate a Strands Agent anymore, but we still need these callables
 # so mcp_server.py can register them, and so tools._scope._caller_id
 # plumbing keeps working unchanged.
 from tools.create_agent import create_agent, list_prompt_templates
+_log_phase("create_agent imported")
 
 # Auto-publish tool catalog on startup (kept from the legacy path — the
 # catalog is consumed by sub-agents, not the Meta-Agent itself).
 try:
     from tools_library.registry import upload_tool_catalog
     _catalog_count = upload_tool_catalog()
-    print(f"Tool catalog published: {_catalog_count} tools")
+    _boot_log.info(f"Tool catalog published: {_catalog_count} tools")
 except Exception as _e:
-    print(f"Warning: Failed to publish tool catalog: {_e}")
+    _boot_log.warning(f"Failed to publish tool catalog: {_e}")
+_log_phase("tool catalog published")
 
 from tools.list_agents import list_agents
 from tools.delete_agent import delete_agent, restore_agent, purge_agent
@@ -88,6 +111,8 @@ from tools.validate_agent import validate_agent
 from tools.preview_code import preview_assembled_code
 from tools.link_agent import link_agent, unlink_agent
 
+_log_phase("all tools imported")
+
 from kiro_adapter.acp_client import ACPError, KiroACPClient
 from kiro_adapter.kiro_home import (
     DEFAULT_MODEL as KIRO_DEFAULT_MODEL,
@@ -106,6 +131,35 @@ from kiro_adapter.mcp_server import (
     serve_forever,
 )
 from kiro_adapter.sse_mapper import ACPToSSEMapper, keepalive
+_log_phase("kiro_adapter imported")
+
+# One-time OS fingerprint so we know what kind of container kiro-cli-chat
+# is being run on. Printed once at module import; useful when we see
+# binary compatibility errors (glibc vs musl, EBADF on unexpected kernels).
+try:
+    import platform as _platform
+    import subprocess as _subprocess_diag
+    _os_release = ""
+    try:
+        with open("/etc/os-release") as _f:
+            _os_release = _f.read().strip().replace("\n", " | ")
+    except Exception:
+        pass
+    _ldd_v = ""
+    try:
+        _r = _subprocess_diag.run(
+            ["ldd", "--version"], capture_output=True, text=True, timeout=3
+        )
+        _ldd_v = (_r.stdout or _r.stderr or "").splitlines()[0] if _r.stdout or _r.stderr else ""
+    except Exception as _e:
+        _ldd_v = f"(ldd failed: {_e})"
+    _boot_log.info(
+        f"runtime fingerprint: platform={_platform.platform()} "
+        f"machine={_platform.machine()} libc={_platform.libc_ver()} "
+        f"ldd='{_ldd_v}' os_release='{_os_release[:200]}'"
+    )
+except Exception as _e:
+    _boot_log.warning(f"runtime fingerprint skipped: {_e}")
 
 log = logging.getLogger("meta_agent")
 
@@ -154,6 +208,63 @@ ALL_TOOLS = [
 # ships alongside main.py under kiro-bin/. Locate it relative to this file
 # rather than hard-coding /var/runtime or similar.
 _KIRO_BINARY = str(Path(__file__).resolve().parent / "kiro-bin" / "kiro-cli-chat")
+
+# AgentCore's zip extractor (like Lambda's) does not preserve the execute
+# bit from the archive. kiro-cli-chat lives in the zip with 0o755, but on
+# disk after extraction it ends up 0o644, which makes
+# create_subprocess_exec('.../kiro-cli-chat') fail with EACCES. We re-apply
+# +x at import time. Idempotent and cheap (one stat + chmod if needed).
+# NOTE: chmod of the 102MB kiro-cli-chat binary moved out of module-import
+# path. On AgentCore's overlay filesystem the first stat/chmod of a freshly-
+# extracted 100MB+ file can take 20+ seconds, pushing us past the 30s init
+# budget. _ensure_kiro_binary_ready() does it lazily on the first invoke.
+_kiro_binary_ready = False
+
+
+def _ensure_kiro_binary_ready() -> None:
+    """Ensure kiro-cli-chat is executable and launchable.
+
+    AgentCore Runtime extracts the deployment zip to /var/task read-only.
+    We measured two failure modes:
+      - First deploy: execute bit (0o111) appeared to be missing at runtime
+        even though the zip records 0o755.
+      - Second deploy: chmod raises 'Operation not permitted' because
+        /var/task is read-only.
+    Fix: if the binary isn't already executable where it sits, copy it to
+    /tmp (writable) and repoint _KIRO_BINARY at the copy. If it IS already
+    executable we keep the /var/task path and skip the ~100MB copy.
+    """
+    global _kiro_binary_ready, _KIRO_BINARY
+    if _kiro_binary_ready:
+        return
+    try:
+        st = _os.stat(_KIRO_BINARY)
+        _boot_log.info(
+            f"kiro binary stat: path={_KIRO_BINARY} size={st.st_size} "
+            f"mode={oct(st.st_mode & 0o777)} uid={st.st_uid} gid={st.st_gid}"
+        )
+        if st.st_mode & 0o111:
+            # Already executable in-place, nothing to do.
+            _kiro_binary_ready = True
+            return
+        # Not executable; try chmod first (cheap if it works), fall back to
+        # copying to a writable tmp location.
+        try:
+            _os.chmod(_KIRO_BINARY, st.st_mode | 0o111)
+            _boot_log.info("kiro binary: chmod +x succeeded in place")
+        except (PermissionError, OSError) as e:
+            _boot_log.info(
+                f"kiro binary: in-place chmod failed ({e}); copying to /tmp"
+            )
+            import shutil as _shutil
+            dst = "/tmp/kiro-cli-chat"
+            _shutil.copyfile(_KIRO_BINARY, dst)
+            _os.chmod(dst, 0o755)
+            _KIRO_BINARY = dst
+            _boot_log.info(f"kiro binary: copied and chmodded at {dst}")
+    except FileNotFoundError:
+        _boot_log.error(f"kiro binary missing at {_KIRO_BINARY}")
+    _kiro_binary_ready = True
 
 # The AgentCore sessionStorage mount point. Must match `mountPath` in
 # deploy-agentcore.sh's filesystemConfigurations. We also accept an override
@@ -277,6 +388,10 @@ async def invoke(payload, context):
         yield json.dumps({"__error": err})
         return
 
+    # chmod kiro binary on first invoke rather than at import — see
+    # _ensure_kiro_binary_ready for rationale.
+    _ensure_kiro_binary_ready()
+
     apply_scope(caller_id, workspace_id)
     await _ensure_mcp_started()
 
@@ -297,6 +412,14 @@ async def invoke(payload, context):
         api_key=_KIRO_API_KEY,
         agent_name="meta-agent",
         trust_all_tools=True,
+        # Kiro stores its SQLite DB and downloaded runtime assets (bun,
+        # tui.js) under $XDG_DATA_HOME (defaulting to $HOME/.local/share).
+        # On /mnt/kiro (NFS-backed sessionStorage) SQLite file locks are
+        # unreliable — observed as "Failed to open database: database is
+        # locked" on the second turn. Redirect XDG_DATA_HOME to local /tmp
+        # so SQLite lives on ext4, while ~/.kiro/sessions/cli/ (pure
+        # append-only JSONL files, no locks) stays on the persistent mount.
+        extra_env={"XDG_DATA_HOME": "/tmp/kiro-xdg"},
     )
     mapper = ACPToSSEMapper()
 
