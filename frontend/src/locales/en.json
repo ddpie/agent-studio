@@ -842,9 +842,21 @@
     "confirmDelete": "Delete secret {{name}}? This cannot be undone.",
     "created": "Secret {{name}} saved",
     "deleted": "Secret {{name}} deleted",
+    "addSecret": "Add secret",
+    "saveSecrets": "Save",
+    "overwriteAll": "Save (overwrites existing)",
+    "savedN": "{{count}} secret saved",
+    "savedN_other": "{{count}} secrets saved",
+    "saveFailed": "Failed to save secret",
+    "keyPlaceholder": "MY_API_KEY",
+    "valuePlaceholder": "secret value",
+    "hide": "Hide",
+    "show": "Show",
+    "readOnlyHint": "You don't have permission to manage secrets in this workspace.",
     "errors": {
       "keyFormat": "Key must match [A-Z0-9_] and be 1-64 characters.",
-      "valueLength": "Value must be 4096 characters or less."
+      "valueLength": "Value must be 4096 characters or less.",
+      "valueRequired": "Value is required."
     }
   },
   "reviewChanges": {

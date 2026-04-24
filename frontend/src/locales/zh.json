@@ -842,9 +842,21 @@
     "confirmDelete": "确认删除密钥 {{name}}？此操作不可恢复。",
     "created": "已保存密钥 {{name}}",
     "deleted": "已删除密钥 {{name}}",
+    "addSecret": "添加密钥",
+    "saveSecrets": "保存",
+    "overwriteAll": "保存（覆盖已有）",
+    "savedN": "已保存 {{count}} 个密钥",
+    "savedN_other": "已保存 {{count}} 个密钥",
+    "saveFailed": "保存密钥失败",
+    "keyPlaceholder": "MY_API_KEY",
+    "valuePlaceholder": "密钥值",
+    "hide": "隐藏",
+    "show": "显示",
+    "readOnlyHint": "当前账号无权管理此工作区的密钥。",
     "errors": {
       "keyFormat": "键只能包含大写字母、数字和下划线，长度 1-64。",
-      "valueLength": "值不能超过 4096 个字符。"
+      "valueLength": "值不能超过 4096 个字符。",
+      "valueRequired": "值不能为空。"
     }
   },
   "reviewChanges": {
