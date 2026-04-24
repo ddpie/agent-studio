@@ -1,4 +1,23 @@
-"""manage_secrets — Store and retrieve agent secrets via AWS Secrets Manager."""
+"""manage_secrets — Store and retrieve agent secrets via AWS Secrets Manager.
+
+Path layout (one Secret per key, matches lambda/crud/secrets.py exactly):
+
+    agent-studio/{workspace_id}/{agent_id}/{KEY_NAME}
+
+This is the same layout the UI writes through the CRUD Lambda, so a secret
+saved via the Secrets tab in the edit page and a secret saved by
+Meta-Agent land in the same bucket. Previously this module wrote a single
+JSON blob at ``agent-studio/{agent_id}`` — cross-surface inconsistency
+that made list_agent_secrets return empty after the UI had written keys
+and vice versa, plus broke the IAM resource scoping which uses the
+per-key ARN pattern.
+
+Tool responses never echo secret values — only key names + status. A
+returned value would end up in the Meta-Agent's conversation context and
+leak into transcripts / telemetry / model logs. Use the UI or the CRUD
+API if a human needs to read back a plaintext secret (and they usually
+shouldn't).
+"""
 
 import json
 
@@ -6,99 +25,168 @@ import boto3
 from strands import tool
 
 from config import REGION
-from tools._scope import ensure_agent_in_workspace, ROLE_EDITOR, ROLE_ADMIN
+from tools._scope import ensure_agent_in_workspace, ROLE_ADMIN, ROLE_EDITOR
+
+
+_SECRET_KEY_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
+
+
+def _secret_path(workspace_id: str, agent_id: str, key: str = "") -> str:
+    base = f"agent-studio/{workspace_id}/{agent_id}"
+    return f"{base}/{key}" if key else base
+
+
+def _validate_key(key: str) -> str:
+    """Return an error string if ``key`` is invalid, else empty string.
+
+    Mirrors lambda/shared/validators.py::validate_secret_key so the two
+    write surfaces accept exactly the same set of keys — otherwise a key
+    the UI rejects could slip in via Meta-Agent and later fail when the
+    UI tries to list or overwrite it.
+    """
+    if not key:
+        return "key is required"
+    if len(key) > 64:
+        return "key must be 64 characters or less"
+    if any(c not in _SECRET_KEY_CHARS for c in key):
+        return "key must match [A-Z0-9_]"
+    return ""
+
+
+def _put_one(sm, secret_name: str, value: str) -> None:
+    """Put-or-create a single-key secret."""
+    try:
+        sm.put_secret_value(SecretId=secret_name, SecretString=value)
+    except sm.exceptions.ResourceNotFoundException:
+        sm.create_secret(Name=secret_name, SecretString=value)
 
 
 @tool
 def set_agent_secrets(agent_id: str, secrets: str) -> str:
-    """Store secrets for an agent in AWS Secrets Manager.
+    """Store one or more secret key/value pairs for an agent.
 
-    Secrets are stored as a JSON object under the name agent-studio/{agentId}.
-    Existing secrets are merged (new keys added, existing keys updated).
+    Each key becomes its own Secrets Manager entry under
+    ``agent-studio/{workspace_id}/{agent_id}/{KEY}``. Existing keys are
+    overwritten, other keys under the agent's prefix are left alone —
+    this matches the per-key UI behavior where one save doesn't wipe
+    siblings.
 
     Args:
-        agent_id: The agent runtime ID.
-        secrets: JSON string of key-value pairs (e.g., '{"API_KEY": "xxx", "APP_SECRET": "yyy"}').
+        agent_id: The agent runtime ID. The agent must belong to the
+            caller's workspace; cross-workspace writes are refused.
+        secrets: JSON string of key-value pairs, e.g.
+            ``'{"FEISHU_USER_ACCESS_TOKEN": "u-...", "API_KEY": "..."}'``.
+            Keys must match ``[A-Z0-9_]`` and be 1–64 chars.
 
     Returns:
-        JSON with status.
+        JSON with ``status`` and list of ``saved`` key names. Never
+        includes values.
     """
-    _record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_ADMIN)
+    record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_ADMIN)
     if err:
         return json.dumps(err)
 
     try:
-        new_secrets = json.loads(secrets)
+        payload = json.loads(secrets)
     except json.JSONDecodeError:
         return json.dumps({"error": "Invalid JSON for secrets"})
+    if not isinstance(payload, dict) or not payload:
+        return json.dumps({"error": "secrets must be a non-empty JSON object"})
 
+    workspace_id = record.get("workspace_id", "")
     sm = boto3.client("secretsmanager", region_name=REGION)
-    secret_name = f"agent-studio/{agent_id}"
 
-    # Try to update existing, or create new
-    try:
-        existing = sm.get_secret_value(SecretId=secret_name)
-        current = json.loads(existing["SecretString"])
-        current.update(new_secrets)
-        sm.update_secret(SecretId=secret_name, SecretString=json.dumps(current))
-    except sm.exceptions.ResourceNotFoundException:
-        sm.create_secret(Name=secret_name, SecretString=json.dumps(new_secrets))
+    saved: list[str] = []
+    errors: list[dict] = []
+    for key, value in payload.items():
+        key_err = _validate_key(key)
+        if key_err:
+            errors.append({"key": key, "error": key_err})
+            continue
+        if not isinstance(value, str) or not value:
+            errors.append({"key": key, "error": "value must be a non-empty string"})
+            continue
+        if len(value) > 4096:
+            errors.append({"key": key, "error": "value exceeds 4096 chars"})
+            continue
+        try:
+            _put_one(sm, _secret_path(workspace_id, agent_id, key), value)
+            saved.append(key)
+        except Exception as e:
+            errors.append({"key": key, "error": str(e)})
 
-    # Mask values in response
-    masked = {k: "***" for k in new_secrets}
-    return json.dumps({"status": "saved", "secret_name": secret_name, "keys": masked})
+    return json.dumps({
+        "status": "saved" if saved and not errors else ("partial" if saved else "failed"),
+        "agent_id": agent_id,
+        "workspace_id": workspace_id,
+        "saved": saved,
+        "errors": errors,
+    })
 
 
 @tool
 def list_agent_secrets(agent_id: str) -> str:
-    """List secret key names (not values) for an agent.
+    """List secret key names for an agent. Values are never returned.
 
     Args:
         agent_id: The agent runtime ID.
 
     Returns:
-        JSON with secret key names.
+        JSON with ``agent_id`` and ``keys`` (list of key name strings).
     """
-    _record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_EDITOR)
+    record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_EDITOR)
     if err:
         return json.dumps(err)
 
+    workspace_id = record.get("workspace_id", "")
+    prefix = _secret_path(workspace_id, agent_id) + "/"
     sm = boto3.client("secretsmanager", region_name=REGION)
-    secret_name = f"agent-studio/{agent_id}"
 
+    keys: list[str] = []
     try:
-        existing = sm.get_secret_value(SecretId=secret_name)
-        keys = list(json.loads(existing["SecretString"]).keys())
-        return json.dumps({"agent_id": agent_id, "keys": keys})
-    except sm.exceptions.ResourceNotFoundException:
-        return json.dumps({"agent_id": agent_id, "keys": []})
+        paginator = sm.get_paginator("list_secrets")
+        for page in paginator.paginate(Filters=[{"Key": "name", "Values": [prefix]}]):
+            for secret in page.get("SecretList", []):
+                name = secret.get("Name", "")
+                if name.startswith(prefix):
+                    k = name[len(prefix):]
+                    if k and "/" not in k:
+                        keys.append(k)
+    except Exception as e:
+        return json.dumps({"error": f"list_secrets failed: {e}"})
+
+    keys.sort()
+    return json.dumps({"agent_id": agent_id, "keys": keys})
 
 
 @tool
 def delete_agent_secret(agent_id: str, key: str) -> str:
-    """Delete a specific secret key for an agent.
+    """Delete a single secret key for an agent.
 
     Args:
         agent_id: The agent runtime ID.
-        key: The secret key to delete.
+        key: The secret key to delete (must match [A-Z0-9_]).
 
     Returns:
         JSON with status.
     """
-    _record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_ADMIN)
+    record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_ADMIN)
     if err:
         return json.dumps(err)
 
+    key_err = _validate_key(key)
+    if key_err:
+        return json.dumps({"error": key_err})
+
+    workspace_id = record.get("workspace_id", "")
     sm = boto3.client("secretsmanager", region_name=REGION)
-    secret_name = f"agent-studio/{agent_id}"
+    secret_name = _secret_path(workspace_id, agent_id, key)
 
     try:
-        existing = sm.get_secret_value(SecretId=secret_name)
-        current = json.loads(existing["SecretString"])
-        if key in current:
-            del current[key]
-            sm.update_secret(SecretId=secret_name, SecretString=json.dumps(current))
-            return json.dumps({"status": "deleted", "key": key})
-        return json.dumps({"error": f"Key '{key}' not found"})
+        sm.delete_secret(SecretId=secret_name, ForceDeleteWithoutRecovery=True)
     except sm.exceptions.ResourceNotFoundException:
-        return json.dumps({"error": "No secrets found for this agent"})
+        return json.dumps({"error": f"Secret '{key}' not found for this agent"})
+    except Exception as e:
+        return json.dumps({"error": f"delete failed: {e}"})
+
+    return json.dumps({"status": "deleted", "agent_id": agent_id, "key": key})

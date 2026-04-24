@@ -161,68 +161,73 @@ def _revoke_a2a_key(key_hash: str) -> None:
         pass
 
 
-def _update_linked_keys_secret(source_agent_id: str, target_agent_id: str, plaintext: str) -> tuple[str, dict]:
-    """Merge {target_agent_id: plaintext} into the source agent's secret bundle.
+def _linked_keys_secret_path(workspace_id: str, source_agent_id: str) -> str:
+    """Per-key Secret path that holds the JSON map of linked A2A keys.
 
-    Returns (json_blob, updated_map). The JSON blob is what gets surfaced as
-    the `AGENTS_TOOL_KEYS_JSON` env var on the source runtime.
+    Shares the ``agent-studio/{ws}/{agent}/{KEY}`` layout used by the UI
+    and ``manage_secrets`` so a single IAM policy + a single hydrate path
+    covers both user-set secrets and linked-agent keys.
+    """
+    return f"agent-studio/{workspace_id}/{source_agent_id}/{_A2A_KEYS_ENV_KEY}"
+
+
+def _read_linked_keys_map(sm, workspace_id: str, source_agent_id: str) -> dict:
+    try:
+        existing = sm.get_secret_value(
+            SecretId=_linked_keys_secret_path(workspace_id, source_agent_id)
+        )
+    except sm.exceptions.ResourceNotFoundException:
+        return {}
+    except Exception:
+        return {}
+    try:
+        loaded = json.loads(existing.get("SecretString", "{}"))
+    except Exception:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _put_linked_keys_blob(sm, workspace_id: str, source_agent_id: str, keys_blob: str) -> None:
+    secret_name = _linked_keys_secret_path(workspace_id, source_agent_id)
+    try:
+        sm.put_secret_value(SecretId=secret_name, SecretString=keys_blob)
+    except sm.exceptions.ResourceNotFoundException:
+        sm.create_secret(Name=secret_name, SecretString=keys_blob)
+
+
+def _update_linked_keys_secret(
+    source_agent_id: str,
+    target_agent_id: str,
+    plaintext: str,
+    workspace_id: str,
+) -> tuple[str, dict]:
+    """Merge {target_agent_id: plaintext} into the linked-keys JSON blob.
+
+    Returns (json_blob, updated_map). The JSON blob is surfaced as the
+    ``AGENTS_TOOL_KEYS_JSON`` env var on the source runtime (written into
+    metadata.extra_env_vars by the caller).
     """
     sm = boto3.client("secretsmanager", region_name=REGION)
-    secret_name = f"agent-studio/{source_agent_id}"
-    current: dict = {}
-    try:
-        existing = sm.get_secret_value(SecretId=secret_name)
-        current = json.loads(existing["SecretString"])
-    except sm.exceptions.ResourceNotFoundException:
-        current = {}
-    except Exception:
-        current = {}
-
-    keys_map: dict = {}
-    raw = current.get(_A2A_KEYS_ENV_KEY, "")
-    if isinstance(raw, str) and raw.strip():
-        try:
-            keys_map = json.loads(raw)
-        except Exception:
-            keys_map = {}
-    if not isinstance(keys_map, dict):
-        keys_map = {}
-
+    keys_map = _read_linked_keys_map(sm, workspace_id, source_agent_id)
     keys_map[target_agent_id] = plaintext
     keys_blob = json.dumps(keys_map, ensure_ascii=False)
-    current[_A2A_KEYS_ENV_KEY] = keys_blob
-
-    try:
-        sm.update_secret(SecretId=secret_name, SecretString=json.dumps(current))
-    except sm.exceptions.ResourceNotFoundException:
-        sm.create_secret(Name=secret_name, SecretString=json.dumps(current))
+    _put_linked_keys_blob(sm, workspace_id, source_agent_id, keys_blob)
     return keys_blob, keys_map
 
 
-def _remove_linked_key_from_secret(source_agent_id: str, target_agent_id: str) -> tuple[str, dict]:
+def _remove_linked_key_from_secret(
+    source_agent_id: str,
+    target_agent_id: str,
+    workspace_id: str,
+) -> tuple[str, dict]:
     sm = boto3.client("secretsmanager", region_name=REGION)
-    secret_name = f"agent-studio/{source_agent_id}"
-    try:
-        existing = sm.get_secret_value(SecretId=secret_name)
-        current = json.loads(existing["SecretString"])
-    except sm.exceptions.ResourceNotFoundException:
+    keys_map = _read_linked_keys_map(sm, workspace_id, source_agent_id)
+    if not keys_map:
         return "{}", {}
-    except Exception:
-        return "{}", {}
-
-    raw = current.get(_A2A_KEYS_ENV_KEY, "")
-    try:
-        keys_map = json.loads(raw) if isinstance(raw, str) and raw.strip() else {}
-    except Exception:
-        keys_map = {}
-    if not isinstance(keys_map, dict):
-        keys_map = {}
     keys_map.pop(target_agent_id, None)
     keys_blob = json.dumps(keys_map, ensure_ascii=False)
-    current[_A2A_KEYS_ENV_KEY] = keys_blob
-
     try:
-        sm.update_secret(SecretId=secret_name, SecretString=json.dumps(current))
+        _put_linked_keys_blob(sm, workspace_id, source_agent_id, keys_blob)
     except Exception:
         pass
     return keys_blob, keys_map
@@ -406,8 +411,12 @@ def link_agent(source_agent_id: str, target_agent_id: str) -> str:
         workspace_id=tgt_ws,
     )
 
-    # 2. Merge into source's secrets.
-    keys_blob, keys_map = _update_linked_keys_secret(source_agent_id, target_agent_id, plaintext)
+    # 2. Merge into source's secrets. Keyed by the source agent's workspace
+    #    (which is the same as src_ws by construction since cross-workspace
+    #    linking was rejected above).
+    keys_blob, keys_map = _update_linked_keys_secret(
+        source_agent_id, target_agent_id, plaintext, src_ws,
+    )
 
     # 3. Update source metadata — tools, prompt fragment, linked_agents list, env vars.
     meta = _load_metadata(source_agent_id)
@@ -522,7 +531,9 @@ def unlink_agent(source_agent_id: str, target_agent_id: str) -> str:
     # indirectly, so we fall back to wiping it from the secret bundle which
     # makes the key effectively unusable to the source).
     # If the link entry recorded an apiKeyHash we'd revoke it here.
-    remaining_blob, remaining_map = _remove_linked_key_from_secret(source_agent_id, target_agent_id)
+    remaining_blob, remaining_map = _remove_linked_key_from_secret(
+        source_agent_id, target_agent_id, src_ws,
+    )
 
     remaining_linked = [l for l in (meta.get("linked_agents") or []) if l.get("agent_id") != target_agent_id]
     meta["linked_agents"] = remaining_linked
