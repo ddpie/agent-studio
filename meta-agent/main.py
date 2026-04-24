@@ -51,6 +51,7 @@ from tools.update_skill import update_skill
 from tools.delete_skill import delete_skill
 from tools.import_skill import import_skill
 from tools.read_skill_file import list_skill_files, read_skill_file
+from tools.write_skill_file import write_skill_file, delete_skill_file as delete_skill_file_in_skill
 from tools.sync_agent_skill import sync_agent_skill
 from tools.attach_agent_skill import attach_agent_skill
 from tools.list_mcp_servers import list_mcp_servers
@@ -106,7 +107,9 @@ SYSTEM_PROMPT = textwrap.dedent("""\
     - list_skills: Use when the user asks what skills are available.
     - list_skill_files: Use when you need to know what files live inside a skill. Returns a tree with sizes. Call this FIRST before trying to read files whose names you don't already know.
     - read_skill_file: Use when you need to read a specific file from a skill (e.g. the edit-assistant wants to optimize SKILL.md or a helper script). Pair with list_skill_files — read only the files you actually need, don't pull the whole tree.
-    - update_skill: Use when the user wants to modify an existing skill's name, description, or instructions.
+    - write_skill_file: Use to REPLACE a single file inside an existing skill (e.g. fix a bug in script.py, update a prompts/template.md, add a new helper). Send the FULL new content — no diff/patch mode. This is the ONLY way to edit files other than SKILL.md; update_skill rewrites just the SKILL.md body and leaves scripts and assets untouched. After writing script.py for a scripted skill attached to an agent, call sync_agent_skill so attached agents pick up the new code.
+    - delete_skill_file: Use to remove a single file from a skill (pruning obsolete scripts or assets). Cannot delete SKILL.md — use delete_skill to remove the whole skill instead.
+    - update_skill: Use when the user wants to modify a skill's **SKILL.md** (name, description, or body text). DO NOT use this to change script.py or other files — it rewrites only SKILL.md. For script fixes use write_skill_file.
     - delete_skill: Use when the user wants to remove a skill. ALWAYS confirm with user before deleting.
     - import_skill: Use when the user wants to import a skill from a URL or raw markdown content. Auto-wraps plain markdown with AgentSkills.io frontmatter.
     - sync_agent_skill: Use when an agent has a library skill attached but its copy is stale (user says things like "把 agent 里的 X skill 更新到最新"/"the ppt-generator on DataAnalyst is old, refresh it"). Re-copies files from the current library version, rewrites the agent's skill manifest, and redeploys. Pass new_source_skill_id when the original library skill was deleted and you need to rebind to a replacement.
@@ -423,6 +426,8 @@ ALL_TOOLS = [
     list_skills,
     list_skill_files,
     read_skill_file,
+    write_skill_file,
+    delete_skill_file_in_skill,
     update_skill,
     delete_skill,
     import_skill,
