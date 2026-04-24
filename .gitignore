@@ -76,3 +76,4 @@ base/deployment.zip
 base/staged/
 base/sub-agent-deployment.zip
 base/staged-*/
+base/.kiro-cache/
