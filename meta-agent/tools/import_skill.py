@@ -1,15 +1,65 @@
-"""import_skill — Import a skill from URL (ClawHub, GitHub, raw) or raw content."""
+"""import_skill — Import a skill from URL (ClawHub, GitHub, raw) or raw content.
+
+Writes go to both S3 (files under ``skills/{skill_id}/``) and the
+``agent-studio-skills`` DDB table with ``workspace_id`` set — same shape
+as create_skill, so every downstream lookup (list_skills, read_skill_file,
+sync_agent_skill) finds imported skills without a separate code path.
+"""
 
 import io
 import json
 import re
 import uuid
 import zipfile
+from datetime import datetime, timezone
 
 import boto3
 from strands import tool
 
 from config import REGION, S3_BUCKET
+from tools._scope import (
+    ROLE_EDITOR,
+    current_caller,
+    current_workspace,
+    require_role,
+)
+
+
+_SKILLS_TABLE = "agent-studio-skills"
+
+
+def _put_skill_metadata(
+    skill_id: str,
+    name: str,
+    description: str,
+    skill_type: str,
+    source: str,
+    workspace_id: str,
+    caller: str,
+) -> None:
+    """Write the DDB row so list_skills / sync_agent_skill can see it.
+
+    Mirrors create_skill's item shape exactly; imported skills default to
+    unapproved when they contain scripts so they can't be attached to an
+    agent until an admin has reviewed the code.
+    """
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    item = {
+        "skillId": skill_id,
+        "workspace_id": workspace_id,
+        "name": name,
+        "description": description,
+        "type": skill_type,
+        "approved": skill_type != "script",
+        "visibility": "private",
+        "tags": [],
+        "deleted": False,
+        "source": source,
+        "created_by": caller,
+        "created_at": now,
+        "updated_at": now,
+    }
+    boto3.resource("dynamodb", region_name=REGION).Table(_SKILLS_TABLE).put_item(Item=item)
 
 
 def _should_skip_path(rel_path: str) -> bool:
@@ -196,24 +246,6 @@ def _write_skill_files(s3, skill_id: str, files: dict[str, str]) -> list[str]:
     return sorted(written)
 
 
-def _update_skill_index(s3_client, new_entry: dict):
-    """Read index.json, append/update entry, write back."""
-    index = []
-    try:
-        obj = s3_client.get_object(Bucket=S3_BUCKET, Key="skills/index.json")
-        index = json.loads(obj["Body"].read().decode("utf-8"))
-    except Exception:
-        pass
-    index = [e for e in index if e.get("id") != new_entry["id"]]
-    index.append(new_entry)
-    s3_client.put_object(
-        Bucket=S3_BUCKET,
-        Key="skills/index.json",
-        Body=json.dumps(index, indent=2, ensure_ascii=False).encode("utf-8"),
-        ContentType="application/json",
-    )
-
-
 @tool
 def import_skill(
     content: str = "",
@@ -241,6 +273,13 @@ def import_skill(
     Returns:
         JSON with skill_id, name, files_count, and status.
     """
+    deny = require_role(ROLE_EDITOR)
+    if deny:
+        return json.dumps(deny)
+
+    ws_id = current_workspace()
+    caller = current_caller() or "unknown"
+
     files: dict[str, str] = {}
     source_type = "content"
 
@@ -294,12 +333,25 @@ def import_skill(
 
         extra_files = _write_skill_files(s3, skill_id, files)
 
-        _update_skill_index(s3, {
-            "id": skill_id,
-            "name": skill_name,
-            "description": skill_desc,
-            "files": extra_files,
-        })
+        # If the imported package ships any .py files, treat it as a
+        # script skill so it starts out unapproved — safer default for
+        # third-party code pulled from ClawHub / GitHub.
+        skill_type = (
+            (meta.get("type") if meta else None)
+            or ("script" if any(p.endswith(".py") for p in files) else "prompt")
+        )
+        try:
+            _put_skill_metadata(
+                skill_id=skill_id,
+                name=skill_name,
+                description=skill_desc,
+                skill_type=skill_type,
+                source=source_type,
+                workspace_id=ws_id,
+                caller=caller,
+            )
+        except Exception as e:
+            return json.dumps({"error": f"Skill metadata write failed: {e}"})
 
         return json.dumps({
             "skill_id": skill_id,
@@ -308,6 +360,7 @@ def import_skill(
             "source": source_type,
             "files_count": len(files),
             "files": sorted(files.keys()),
+            "workspace_id": ws_id,
             "status": "imported",
         }, indent=2)
 
@@ -340,11 +393,19 @@ def import_skill(
         ContentType="text/markdown",
     )
 
-    _update_skill_index(s3, {
-        "id": skill_id,
-        "name": skill_name,
-        "description": skill_desc,
-    })
+    skill_type = (meta.get("type") if meta else None) or "prompt"
+    try:
+        _put_skill_metadata(
+            skill_id=skill_id,
+            name=skill_name,
+            description=skill_desc,
+            skill_type=skill_type,
+            source=source_type,
+            workspace_id=ws_id,
+            caller=caller,
+        )
+    except Exception as e:
+        return json.dumps({"error": f"Skill metadata write failed: {e}"})
 
     return json.dumps({
         "skill_id": skill_id,
@@ -354,5 +415,6 @@ def import_skill(
         "files_count": 1,
         "files": ["SKILL.md"],
         "had_frontmatter": meta is not None,
+        "workspace_id": ws_id,
         "status": "imported",
     }, indent=2)

@@ -1,11 +1,30 @@
-"""update_skill — Update an existing skill's SKILL.md and index."""
+"""update_skill — Update an existing skill's SKILL.md and DDB metadata.
+
+Verifies the skill's DDB row belongs to the caller's workspace before
+touching S3. Returning the generic "not found in this workspace" error
+for cross-workspace skills mirrors ensure_agent_in_workspace — it avoids
+leaking whether the id exists elsewhere.
+"""
 
 import json
+from datetime import datetime, timezone
 
 import boto3
 from strands import tool
 
 from config import REGION, S3_BUCKET
+from tools._scope import ROLE_EDITOR, current_workspace, require_role
+
+
+_SKILLS_TABLE = "agent-studio-skills"
+
+
+def _get_skill(skill_id: str) -> dict | None:
+    ddb = boto3.resource("dynamodb", region_name=REGION)
+    try:
+        return ddb.Table(_SKILLS_TABLE).get_item(Key={"skillId": skill_id}).get("Item")
+    except Exception:
+        return None
 
 
 @tool
@@ -26,18 +45,31 @@ def update_skill(
     Returns:
         JSON with status and updated fields.
     """
+    deny = require_role(ROLE_EDITOR)
+    if deny:
+        return json.dumps(deny)
+
+    ws_id = current_workspace()
+    existing = _get_skill(skill_id)
+    if not existing or existing.get("workspace_id") != ws_id or existing.get("deleted"):
+        return json.dumps({"error": f"Skill {skill_id} not found in this workspace."})
+
     s3 = boto3.client("s3", region_name=REGION)
     skill_key = f"skills/{skill_id}/SKILL.md"
 
-    # Read existing SKILL.md
+    # Pull existing SKILL.md so we can rewrite only the frontmatter fields
+    # the caller passed without losing the body or metadata we don't own
+    # here (e.g. type, source, emoji).
     try:
         obj = s3.get_object(Bucket=S3_BUCKET, Key=skill_key)
         content = obj["Body"].read().decode("utf-8")
     except Exception as e:
-        return json.dumps({"error": f"Skill not found: {e}"})
+        return json.dumps({"error": f"Skill file not found: {e}"})
 
-    # Parse existing frontmatter
-    existing_name, existing_desc, existing_type, existing_source = skill_id, "", "prompt", "natural-language"
+    existing_name = existing.get("name", skill_id)
+    existing_desc = existing.get("description", "")
+    existing_type = existing.get("type", "prompt")
+    existing_source = existing.get("source", "natural-language")
     body = content
     if content.startswith("---"):
         parts = content.split("---", 2)
@@ -45,21 +77,19 @@ def update_skill(
             for line in parts[1].strip().split("\n"):
                 line = line.strip()
                 if line.startswith("name:"):
-                    existing_name = line.split(":", 1)[1].strip().strip('"')
+                    existing_name = line.split(":", 1)[1].strip().strip('"') or existing_name
                 elif line.startswith("description:"):
-                    existing_desc = line.split(":", 1)[1].strip().strip('"')
+                    existing_desc = line.split(":", 1)[1].strip().strip('"') or existing_desc
                 elif line.startswith("type:"):
-                    existing_type = line.split(":", 1)[1].strip().strip('"')
+                    existing_type = line.split(":", 1)[1].strip().strip('"') or existing_type
                 elif line.startswith("source:"):
-                    existing_source = line.split(":", 1)[1].strip().strip('"')
+                    existing_source = line.split(":", 1)[1].strip().strip('"') or existing_source
             body = parts[2].strip()
 
-    # Apply updates
     final_name = skill_name or existing_name
     final_desc = description or existing_desc
     final_body = instructions if instructions else body
 
-    # Rebuild SKILL.md
     skill_md = f"""---
 name: "{final_name}"
 description: "{final_desc}"
@@ -71,7 +101,6 @@ user-invocable: true
 {final_body}
 """
 
-    # Upload
     s3.put_object(
         Bucket=S3_BUCKET,
         Key=skill_key,
@@ -79,31 +108,36 @@ user-invocable: true
         ContentType="text/markdown",
     )
 
-    # Update index.json
-    index = []
-    try:
-        obj = s3.get_object(Bucket=S3_BUCKET, Key="skills/index.json")
-        index = json.loads(obj["Body"].read().decode("utf-8"))
-    except Exception:
-        pass
+    updated_fields: list[str] = []
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    update_parts = ["updated_at = :now"]
+    expr_names: dict[str, str] = {}
+    expr_values: dict[str, object] = {":now": now, ":ws": ws_id}
 
-    index = [e for e in index if e.get("id") != skill_id]
-    index.append({"id": skill_id, "name": final_name, "description": final_desc})
-
-    s3.put_object(
-        Bucket=S3_BUCKET,
-        Key="skills/index.json",
-        Body=json.dumps(index, indent=2, ensure_ascii=False).encode("utf-8"),
-        ContentType="application/json",
-    )
-
-    updated_fields = []
     if skill_name:
+        update_parts.append("#n = :name")
+        expr_names["#n"] = "name"
+        expr_values[":name"] = final_name
         updated_fields.append("name")
     if description:
+        update_parts.append("description = :desc")
+        expr_values[":desc"] = final_desc
         updated_fields.append("description")
     if instructions:
         updated_fields.append("instructions")
+
+    try:
+        kwargs = {
+            "Key": {"skillId": skill_id},
+            "UpdateExpression": "SET " + ", ".join(update_parts),
+            "ExpressionAttributeValues": expr_values,
+            "ConditionExpression": "attribute_exists(skillId) AND workspace_id = :ws",
+        }
+        if expr_names:
+            kwargs["ExpressionAttributeNames"] = expr_names
+        boto3.resource("dynamodb", region_name=REGION).Table(_SKILLS_TABLE).update_item(**kwargs)
+    except Exception as e:
+        return json.dumps({"error": f"Skill metadata update failed: {e}"})
 
     return json.dumps({
         "skill_id": skill_id,
