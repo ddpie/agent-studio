@@ -8,7 +8,51 @@ import os
 import time
 import zipfile
 
-from config import REGION, ACCOUNT_ID, S3_BUCKET, AGENT_ROLE_ARN, BASE_DEPLOYMENT_KEY, SUB_AGENT_BASE_DEPLOYMENT_KEY
+from config import REGION, ACCOUNT_ID, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE, BASE_DEPLOYMENT_KEY, SUB_AGENT_BASE_DEPLOYMENT_KEY
+
+
+def _agent_workspace_id(agent_id: str) -> str:
+    """Look up the agent's workspace_id from DynamoDB.
+
+    Used to build the Secrets Manager prefix so sub-agents hydrate only
+    their own workspace's secrets. Falls back to empty string on miss so
+    the caller can skip the secret injection gracefully (no workspace →
+    no secrets to fetch, not an error).
+    """
+    try:
+        ddb = boto3.resource("dynamodb", region_name=REGION)
+        item = ddb.Table(AGENTS_TABLE).get_item(Key={"agentId": agent_id}).get("Item")
+        return item.get("workspace_id", "") if item else ""
+    except Exception:
+        return ""
+
+
+def _collect_secret_arns(workspace_id: str, agent_id: str) -> list[str]:
+    """List per-key secret ARNs under ``agent-studio/{ws}/{agent}/*``.
+
+    The ARN list is passed into the sub-agent runtime as a non-sensitive
+    env var (``AGENT_STUDIO_SECRET_ARNS``). The sub-agent then calls
+    GetSecretValue on each ARN explicitly — avoiding the need for
+    ListSecrets at runtime (which can't be IAM-resource-scoped).
+    """
+    if not workspace_id or not agent_id:
+        return []
+    prefix = f"agent-studio/{workspace_id}/{agent_id}/"
+    arns: list[str] = []
+    try:
+        sm = boto3.client("secretsmanager", region_name=REGION)
+        paginator = sm.get_paginator("list_secrets")
+        for page in paginator.paginate(Filters=[{"Key": "name", "Values": [prefix]}]):
+            for s in page.get("SecretList", []):
+                name = s.get("Name", "")
+                arn = s.get("ARN", "")
+                # list_secrets' Name filter is a prefix match — but its
+                # docs describe it as "contains", so defensively re-check.
+                if name.startswith(prefix) and arn:
+                    arns.append(arn)
+    except Exception:
+        return []
+    return arns
 
 
 def _shared_env_vars(agent_id: str = "") -> dict:
@@ -81,6 +125,19 @@ def _shared_env_vars(agent_id: str = "") -> dict:
                         env[k] = v
         except Exception:
             pass
+
+        # Pass the per-agent secret ARN list as a non-sensitive env var;
+        # sub-agent template hydrates the actual values at cold start via
+        # its own IAM role scoped to agent-studio/*. We enumerate secrets
+        # here (under the Meta-Agent role, which has ListSecrets) so the
+        # sub-agent role doesn't need it. Secrets added after this deploy
+        # won't appear until the next update_agent — acceptable; rotation
+        # of an *existing* secret's value works without redeploy since the
+        # ARN stays the same.
+        workspace_id = _agent_workspace_id(agent_id)
+        secret_arns = _collect_secret_arns(workspace_id, agent_id)
+        if secret_arns:
+            env["AGENT_STUDIO_SECRET_ARNS"] = ",".join(secret_arns)
     return env
 
 # Always inject the latest stream_utils.py into deployment packages

@@ -8,6 +8,79 @@ Instead of assembling everything into a single main.py, we now generate:
 - stream_utils.py: shared streaming helpers (lives in base zip)
 """
 
+# ── Secret hydration (shared between templates) ───────────────────────────
+# Rendered verbatim into main.py. The Meta-Agent deploy step (deploy.py::
+# _shared_env_vars) collects this agent's Secrets Manager ARNs under the
+# agent-studio/{ws}/{agent}/* prefix and sets AGENT_STUDIO_SECRET_ARNS to
+# a comma-separated list. At cold start we fetch each one in parallel
+# and inject into os.environ so downstream skill scripts can read them
+# with os.environ.get(KEY) the same way they would locally.
+#
+# Design notes:
+#   - Sub-agent IAM is scoped to agent-studio/* via roles.ts; fetching
+#     any other ARN would fail. The ARN list itself isn't sensitive.
+#   - GetSecretValue is called once per ARN at startup — no in-process
+#     caching needed since the process is long-lived relative to a
+#     typical secret rotation; callers can re-invoke the runtime to pick
+#     up rotations (same semantics as env-var injection).
+#   - Failures are logged but NON-fatal: a missing or expired secret
+#     shouldn't block the entire agent from starting. Tools that actually
+#     need the secret will get None from os.environ.get and report their
+#     own error — which is a better experience than a cold-start crash.
+_SECRET_HYDRATE_CODE = '''
+def _hydrate_secrets_from_arns():
+    arn_csv = _os.environ.get("AGENT_STUDIO_SECRET_ARNS", "")
+    if not arn_csv:
+        return 0
+    arns = [a.strip() for a in arn_csv.split(",") if a.strip()]
+    if not arns:
+        return 0
+    try:
+        import boto3 as _boto3
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+    except ImportError:
+        return 0
+    import re as _re
+    try:
+        _sm = _boto3.client("secretsmanager", region_name=_os.environ.get("AGENT_STUDIO_REGION", "us-east-1"))
+    except Exception as exc:
+        # Missing creds, resolver misconfig, etc. Hydrate is best-effort —
+        # skip rather than kill cold start; tools will surface their own
+        # errors when they read a missing env var.
+        import sys as _sys
+        print(f"secret hydrate: secretsmanager client init failed: {exc}", file=_sys.stderr)
+        return 0
+    # Secrets Manager appends a 6-alphanumeric random suffix to ARNs
+    # (e.g. agent-studio/ws/agent/FOO-aBc123). Our validator rejects
+    # hyphens in key names, so stripping the trailing "-[A-Za-z0-9]{6}"
+    # recovers the original KEY. GetSecretValue uses the full ARN
+    # directly — the CreateSecret docs caution that SecretId=<name> can
+    # hit the wrong version after a rotation.
+    _SUFFIX_RE = _re.compile(r"-[A-Za-z0-9]{6}$")
+    def _fetch(arn):
+        last = arn.rsplit("/", 1)[-1]
+        key_name = _SUFFIX_RE.sub("", last)
+        try:
+            resp = _sm.get_secret_value(SecretId=arn)
+            return key_name, resp.get("SecretString", "")
+        except Exception as exc:
+            import sys as _sys
+            print(f"secret hydrate failed for {arn}: {exc}", file=_sys.stderr)
+            return key_name, None
+    loaded = 0
+    # N is small (< 20 typical per agent); thread pool size caps the
+    # cold-start parallelism so we don't create a fat connection pool
+    # that outlives the bootstrap.
+    with ThreadPoolExecutor(max_workers=min(8, len(arns))) as pool:
+        for fut in as_completed([pool.submit(_fetch, a) for a in arns]):
+            k, v = fut.result()
+            if k and v is not None and k not in _os.environ:
+                _os.environ[k] = v
+                loaded += 1
+    return loaded
+'''
+
+
 # ── main.py template (no MCP) ──────────────────────────────────────────────
 MAIN_PY_TEMPLATE = '''\
 # OTEL bootstrap must run before strands / boto3 imports so that
@@ -20,6 +93,8 @@ if _os.environ.get("AGENT_OBSERVABILITY_ENABLED", "").lower() == "true":
     except Exception as _e:
         import sys as _sys
         print(f"OTEL auto-instrumentation disabled: {_e}", file=_sys.stderr)
+''' + _SECRET_HYDRATE_CODE + '''
+_hydrate_secrets_from_arns()
 
 import json
 from pathlib import Path
@@ -96,6 +171,8 @@ if _os.environ.get("AGENT_OBSERVABILITY_ENABLED", "").lower() == "true":
     except Exception as _e:
         import sys as _sys
         print(f"OTEL auto-instrumentation disabled: {_e}", file=_sys.stderr)
+''' + _SECRET_HYDRATE_CODE + '''
+_hydrate_secrets_from_arns()
 
 import json
 import contextlib
