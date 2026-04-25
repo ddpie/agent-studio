@@ -46,7 +46,10 @@ export default function WorkspaceSwitcher() {
       setOpen(false);
       await refreshWorkspaces();
       // Switch into the newly created workspace (triggers hard reload).
-      setWorkspaceId(ws.workspaceId);
+      // Await setWorkspaceId so the chat-store's localStorage clear (which
+      // it schedules via dynamic import) finishes before the reload, else
+      // the old workspace's chat history leaks across.
+      await setWorkspaceId(ws.workspaceId);
       const nextHash = demoteHashForWorkspaceSwitch(window.location.hash);
       if (nextHash !== window.location.hash) {
         window.location.hash = nextHash;

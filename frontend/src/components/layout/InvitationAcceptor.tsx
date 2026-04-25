@@ -65,7 +65,10 @@ export default function InvitationAcceptor() {
     setBusy(true);
     try {
       const result = await acceptInvitation(token);
-      setWorkspaceId(result.workspaceId);
+      // Await so the chat-store localStorage clear finishes before the
+      // reload — otherwise the previous workspace's chat history survives
+      // into the newly-joined workspace.
+      await setWorkspaceId(result.workspaceId);
       toast.success(t("workspace.invite.acceptSuccess"));
       clearInviteFromUrl();
       // Refresh the list + reload so the newly-joined workspace is selected.
