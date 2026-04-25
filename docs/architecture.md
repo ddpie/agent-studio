@@ -22,7 +22,7 @@ graph LR
 
     subgraph AgentCore["AWS Bedrock AgentCore"]
         Meta[Meta-Agent Runtime<br/>Kiro CLI + ACP<br/>+ stdio MCP tools]
-        Sub[Agent Runtimes<br/>Strands · 每个 agent 一个容器]
+        Agents[Agent Runtimes<br/>Strands · 每个 agent 一个容器]
     end
 
     subgraph Outbound["Agent 依赖"]
@@ -36,7 +36,7 @@ graph LR
     subgraph Data[数据]
         DDB[(DynamoDB<br/>workspaces · agents · skills · tools)]
         S3[(S3<br/>部署包 · 产物)]
-        Secrets[(Secrets Manager<br/>每 agent 一把密钥<br/>+ 每 workspace 一把 Kiro key)]
+        Secrets[(Secrets Manager<br/>per-agent keys · per-workspace Kiro key)]
     end
 
     subgraph Observability[可观测性]
@@ -61,27 +61,28 @@ graph LR
     API -.管理定时.-> EB
     API -.管理评估配置.-> Eval
     Invoke -->|InvokeAgentRuntime| Meta
-    Invoke -->|InvokeAgentRuntime| Sub
+    Invoke -->|InvokeAgentRuntime| Agents
     A2A --> Meta
-    A2A --> Sub
+    A2A --> Agents
 
-    Meta -.生成代码 · 打包 · 部署.-> Sub
+    Meta -.生成代码 · 打包 · 部署.-> Agents
     Meta --- DDB
     Meta --- S3
-    Meta -.Kiro API Key + /usage.-> Kiro
+    Meta -->|ACP| Kiro
+    Meta -.-> |/usage| Kiro
 
-    Sub --> Bedrock
-    Sub --> Skills
-    Sub --> Tools
-    Sub --> MCP
-    Sub --- DDB
-    Sub --- S3
+    Agents --> Bedrock
+    Agents --> Skills
+    Agents --> Tools
+    Agents --> MCP
+    Agents --- DDB
+    Agents --- S3
 
-    EB -.cron 触发.-> Sub
+    EB -.cron 触发.-> Agents
 
     Meta -.OTEL.-> Spans
-    Sub -.OTEL.-> Spans
-    Sub -.stdout.-> RuntimeLogs
+    Agents -.OTEL.-> Spans
+    Agents -.stdout.-> RuntimeLogs
     Spans --> Eval
     Eval --> EvalLogs
 ```
@@ -221,7 +222,7 @@ graph LR
 
     subgraph AgentCore["AWS Bedrock AgentCore"]
         Meta[Meta-Agent Runtime<br/>Kiro CLI + ACP<br/>+ stdio MCP tools]
-        Sub[Agent Runtimes<br/>Strands · per-agent container]
+        Agents[Agent Runtimes<br/>Strands · per-agent container]
     end
 
     subgraph Outbound["Agent dependencies"]
@@ -235,7 +236,7 @@ graph LR
     subgraph Data
         DDB[(DynamoDB<br/>workspaces · agents · skills · tools)]
         S3[(S3<br/>deployment zips · artifacts)]
-        Secrets[(Secrets Manager<br/>per-agent API keys<br/>+ per-workspace Kiro key)]
+        Secrets[(Secrets Manager<br/>per-agent keys · per-workspace Kiro key)]
     end
 
     subgraph Observability
@@ -260,27 +261,28 @@ graph LR
     API -.manage schedules.-> EB
     API -.manage eval configs.-> Eval
     Invoke -->|InvokeAgentRuntime| Meta
-    Invoke -->|InvokeAgentRuntime| Sub
+    Invoke -->|InvokeAgentRuntime| Agents
     A2A --> Meta
-    A2A --> Sub
+    A2A --> Agents
 
-    Meta -.codegen · zip · deploy.-> Sub
+    Meta -.codegen · zip · deploy.-> Agents
     Meta --- DDB
     Meta --- S3
-    Meta -.Kiro API key + /usage.-> Kiro
+    Meta -->|ACP| Kiro
+    Meta -.-> |/usage| Kiro
 
-    Sub --> Bedrock
-    Sub --> Skills
-    Sub --> Tools
-    Sub --> MCP
-    Sub --- DDB
-    Sub --- S3
+    Agents --> Bedrock
+    Agents --> Skills
+    Agents --> Tools
+    Agents --> MCP
+    Agents --- DDB
+    Agents --- S3
 
-    EB -.cron fire.-> Sub
+    EB -.cron fire.-> Agents
 
     Meta -.OTEL.-> Spans
-    Sub -.OTEL.-> Spans
-    Sub -.stdout.-> RuntimeLogs
+    Agents -.OTEL.-> Spans
+    Agents -.stdout.-> RuntimeLogs
     Spans --> Eval
     Eval --> EvalLogs
 ```

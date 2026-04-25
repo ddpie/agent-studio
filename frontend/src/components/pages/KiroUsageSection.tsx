@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Activity, RefreshCw, ExternalLink } from "lucide-react";
+import { Activity, RefreshCw, ExternalLink, Info } from "lucide-react";
 import { getKiroUsage, type KiroUsageInfo } from "../../lib/api-client";
 
 // Localized mapping of runtime error codes to user-friendly messages.
@@ -69,7 +69,7 @@ export default function KiroUsageSection() {
 
   return (
     <div className="rounded-md border border-gray-200 dark:border-gray-800 p-4">
-      <div className="flex items-center justify-between gap-2 mb-3">
+      <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-gray-500 dark:text-gray-400" />
           <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -87,6 +87,15 @@ export default function KiroUsageSection() {
           {t("kiroUsage.refresh", "Refresh")}
         </button>
       </div>
+      <p className="flex items-start gap-1.5 text-[11px] text-gray-500 dark:text-gray-400 mb-3 leading-relaxed">
+        <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
+        <span>
+          {t(
+            "kiroUsage.subscriptionScope",
+            "Shows the total credits used on this Kiro subscription — including any usage from the Kiro IDE or CLI tied to the same account, not just calls made through Agent Studio.",
+          )}
+        </span>
+      </p>
 
       {loading && !data && (
         <div className="text-[11px] text-gray-400">{t("common.loading")}</div>
