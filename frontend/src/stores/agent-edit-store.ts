@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { fetchAgentMetadata, type AgentMetadata, type AgentSkillEntry } from "../lib/agent-metadata";
 import { extractToolsFromDeployment } from "../lib/tool-extractor";
-import { fetchTools, deleteAgentSkillFiles } from "../lib/api-client";
+import { fetchTools, deleteAgentSkillFiles, fetchAgentSkillFilesBulk } from "../lib/api-client";
 import { createDebouncedSaver, loadDraftWithMeta, clearDraft } from "../lib/draft-autosave";
 
 /**
@@ -53,10 +53,11 @@ interface AgentEditState {
   pendingSkillFiles: Record<string, Record<string, string>>;
   originalSkillFiles: Record<string, Record<string, string>>;
   editingSkillId: string | null;
-  // Timestamp of a draft just restored from localStorage. AgentEditForm
+  // Information about a draft just restored from localStorage. AgentEditForm
   // reads this in an effect to fire a "Restored from Xm ago" toast and
-  // then resets it via clearRestoredNotice.
-  restoredDraftTs: number | null;
+  // then resets it via clearRestoredNotice. Bound to agentId so a rapid
+  // A→B switch can't fire A's toast while B is on screen.
+  restoredDraft: { agentId: string; ts: number } | null;
 
   loadAgent: (agentId: string, agentName: string) => Promise<void>;
   openNewWithData: (data: Partial<AgentMetadata>) => void;
@@ -120,9 +121,9 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   pendingSkillFiles: {},
   originalSkillFiles: {},
   editingSkillId: null,
-  restoredDraftTs: null,
+  restoredDraft: null,
 
-  clearRestoredNotice: () => set({ restoredDraftTs: null }),
+  clearRestoredNotice: () => set({ restoredDraft: null }),
 
   hasChanges: () => {
     const { formData, originalData, pendingSkillFiles, originalSkillFiles } = get();
@@ -135,7 +136,7 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   },
 
   loadAgent: async (agentId, agentName) => {
-    set({ agentId: agentId, agentName: agentName, loading: true, formData: null, pendingSkillFiles: {}, originalSkillFiles: {}, editingSkillId: null, restoredDraftTs: null });
+    set({ agentId: agentId, agentName: agentName, loading: true, formData: null, pendingSkillFiles: {}, originalSkillFiles: {}, editingSkillId: null, restoredDraft: null });
 
     // API 已经整合了 DDB + S3 数据，不需要 fallback
     let metadata = await fetchAgentMetadata(agentId);
@@ -178,22 +179,41 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     const meta = loadDraftWithMeta<AgentDraft>(draftKeyFor(agentId));
     if (meta && meta.data.formData) {
       const freshOriginal: Partial<AgentMetadata> = JSON.parse(JSON.stringify(data));
-      // Leave originalSkillFiles empty: initSkillFiles repopulates it from
-      // the server the first time the user opens each skill after restore,
-      // so the per-skill diff rebases against current server content instead
-      // of the stale snapshot from the draft.
+      const pending = meta.data.pendingSkillFiles || {};
+      // Eagerly fetch current server copies for every skill that has
+      // pending edits, so `originalSkillFiles` is an accurate baseline
+      // for the dirty check AND the diff view. Without this the user
+      // sees every pending file as "added from empty" and a subsequent
+      // save would blindly push the full draft content, overwriting any
+      // concurrent server-side changes the user didn't touch.
+      //
+      // Runs in parallel and tolerates per-skill failures — a missing
+      // fetch just leaves that skill's baseline empty, which is the same
+      // as the pre-fix behaviour.
+      const skillIds = Object.keys(pending);
+      const freshOriginalFiles: Record<string, Record<string, string>> = {};
+      if (skillIds.length > 0 && !agentId.startsWith("draft-")) {
+        const results = await Promise.all(
+          skillIds.map((sid) =>
+            fetchAgentSkillFilesBulk(agentId, sid)
+              .then((files) => [sid, files] as const)
+              .catch(() => [sid, {}] as const),
+          ),
+        );
+        for (const [sid, files] of results) freshOriginalFiles[sid] = files;
+      }
       set({
         formData: meta.data.formData,
         originalData: freshOriginal,
-        pendingSkillFiles: meta.data.pendingSkillFiles || {},
-        originalSkillFiles: {},
+        pendingSkillFiles: pending,
+        originalSkillFiles: freshOriginalFiles,
         loading: false,
-        restoredDraftTs: meta.ts,
+        restoredDraft: { agentId, ts: meta.ts },
       });
       return;
     }
 
-    set({ formData: data, originalData: JSON.parse(JSON.stringify(data)), loading: false, restoredDraftTs: null });
+    set({ formData: data, originalData: JSON.parse(JSON.stringify(data)), loading: false, restoredDraft: null });
   },
 
   openNewWithData: (data: Partial<AgentMetadata>) => {

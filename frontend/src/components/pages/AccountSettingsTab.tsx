@@ -9,6 +9,7 @@ import {
 import { User, KeyRound, LogOut, Mail, Loader2 } from "lucide-react";
 import { toast } from "../../lib/toast";
 import ConfirmDialog from "../ui/ConfirmDialog";
+import { clearUserScopedLocalData } from "../../lib/api-client";
 
 /**
  * Password policy mirrors infra/lib/constructs/auth.ts:
@@ -115,6 +116,12 @@ export default function AccountSettingsTab() {
     setSignOutAllOpen(false);
     setSigningOutAll(true);
     try {
+      // Wipe chat history + drafts BEFORE Amplify kills the session. The
+      // Authenticator-wrapped signOut in App.tsx does this automatically,
+      // but "Sign out of all devices" bypasses that wrapper by calling the
+      // bare Amplify API — so re-run the cleanup inline to avoid leaving
+      // tool code / agent prompts readable on a shared browser.
+      await clearUserScopedLocalData();
       // Amplify v6: `global: true` revokes all of this user's refresh tokens across devices.
       await signOut({ global: true });
       toast.success(t("settings.account.signedOutAll"));

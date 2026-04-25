@@ -25,7 +25,7 @@ export default function AgentEditForm() {
     agentId, agentName, formData, loading, saving,
     loadAgent, updateField, setSaving, markSaved, getChangedFields,
     setEditingSkillId, pendingSkillFiles, originalSkillFiles,
-    restoredDraftTs, clearRestoredNotice,
+    restoredDraft, clearRestoredNotice,
   } = useAgentEditStore();
   const { agents, fetchAgents } = useAgentListStore();
   const { panelOpen, openPanel } = useEditAssistantStore();
@@ -66,15 +66,18 @@ export default function AgentEditForm() {
     return () => window.removeEventListener("open-skill-diff", handler);
   }, []);
 
-  // Surface a one-off toast when loadAgent restores a draft. The store
-  // flags the capture timestamp via restoredDraftTs; this effect fires
-  // the toast exactly once per restore, then resets the flag.
+  // Surface a one-off toast when loadAgent restores a draft. The flag
+  // carries the agentId it was captured for — if the user has already
+  // switched to a different agent by the time this effect runs (race
+  // between set() and navigation), drop the toast instead of mis-
+  // attributing it to the new agent.
   useEffect(() => {
-    if (restoredDraftTs) {
-      toast.info(t("common.draftRestored", { when: formatDraftAge(restoredDraftTs, t) }));
-      clearRestoredNotice();
+    if (!restoredDraft) return;
+    if (restoredDraft.agentId === agentId) {
+      toast.info(t("common.draftRestored", { when: formatDraftAge(restoredDraft.ts, t) }));
     }
-  }, [restoredDraftTs, clearRestoredNotice, t]);
+    clearRestoredNotice();
+  }, [restoredDraft, agentId, clearRestoredNotice, t]);
 
   // Load agent data when route param changes
   useEffect(() => {
