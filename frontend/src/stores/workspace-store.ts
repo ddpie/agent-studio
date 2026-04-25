@@ -23,7 +23,7 @@ interface WorkspaceState {
   loaded: boolean;
   loadCurrentWorkspace: () => Promise<void>;
   refreshWorkspaces: () => Promise<void>;
-  switchWorkspace: (wsId: string) => void;
+  switchWorkspace: (wsId: string) => Promise<void>;
 }
 
 function canonicaliseRole(role: string | undefined): WorkspaceRole {
@@ -89,10 +89,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       // ignore — keep existing state
     }
   },
-  switchWorkspace: (wsId: string) => {
+  switchWorkspace: async (wsId: string) => {
     const target = get().workspaces.find((w) => w.workspaceId === wsId);
     if (!target) return;
-    setWorkspaceId(wsId);
+    // setWorkspaceId schedules a fire-and-forget async clear of the chat
+    // store's localStorage (it dynamic-imports chat-store to avoid a static
+    // cycle). We must await that microtask before reloading, otherwise the
+    // reload races ahead and the previous workspace's chat history survives
+    // into the new workspace.
+    await setWorkspaceId(wsId);
     // Demote workspace-scoped detail routes (e.g. /agents/edit/<id>) to their
     // list-view ancestor so we don't land on a 404 in the target ws. Set the
     // hash first, then force a full reload — assigning the same URL is a
