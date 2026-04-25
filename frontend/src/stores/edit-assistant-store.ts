@@ -334,7 +334,7 @@ You may be tempted to take shortcuts. Recognize these:
 - "I'll rewrite the whole prompt to make it better" — in Mode A and C, ONLY append. Do NOT restructure.
 
 ## Skills
-Sub-agents now support skills (AgentSkills.io format). Skills are loaded dynamically at runtime via load_skill(name).
+Agents now support skills (AgentSkills.io format). Skills are loaded dynamically at runtime via load_skill(name).
 When optimizing a system prompt (Mode B), mention that the agent can use load_skill to access specialized instructions.
 - Keep tool code concise — clear docstrings, type hints, error handling.
 - Valid fields: name, display_name, description, system_prompt, tool_definitions, welcome_message, suggestions, template_id, supports_images

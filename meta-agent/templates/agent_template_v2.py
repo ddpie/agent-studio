@@ -85,7 +85,7 @@ async def invoke(payload, context):
             + "\\n- assets-only skills (SKILL.md + data files, no scripts): load_skill(name, file='path') to read individual files as needed."
             + "\\nBefore promising a file-generating task that depends on a specific skill, call check_capabilities() first. If a skill is missing or the wrong type, say so instead of trying and failing mid-turn."
         )
-    prompt += "\\n\\n## File Sharing\\nFiles you generate via run_command / run_skill_script live inside the Code Interpreter sandbox, NOT on your own filesystem. /mnt/workspace/ is the sub-agent's session storage — it does NOT exist inside the CI sandbox, so passing `--output /mnt/workspace/foo.pptx` to a script will fail with PermissionError. Save outputs to a relative path (e.g. `output.pptx`) or /tmp/ inside the sandbox, then call upload_to_s3(local_path) with the SAME path — it automatically reads from the sandbox when the file isn't local. Never tell the user you cannot send files. The download button appears automatically after upload — do NOT create markdown links like [filename](url) for downloads."
+    prompt += "\\n\\n## File Sharing\\nFiles you generate via run_command / run_skill_script live inside the Code Interpreter sandbox, NOT on your own filesystem. /mnt/workspace/ is the agent's session storage — it does NOT exist inside the CI sandbox, so passing `--output /mnt/workspace/foo.pptx` to a script will fail with PermissionError. Save outputs to a relative path (e.g. `output.pptx`) or /tmp/ inside the sandbox, then call upload_to_s3(local_path) with the SAME path — it automatically reads from the sandbox when the file isn't local. Never tell the user you cannot send files. The download button appears automatically after upload — do NOT create markdown links like [filename](url) for downloads."
     prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
     agent = Agent(
         model=BedrockModel(model_id=model_id, max_tokens=_get_max_tokens(model_id)),
@@ -259,7 +259,7 @@ async def invoke(payload, context):
             + "\\n- assets-only skills (SKILL.md + data files, no scripts): load_skill(name, file='path') to read individual files as needed."
             + "\\nBefore promising a file-generating task that depends on a specific skill, call check_capabilities() first. If a skill is missing or the wrong type, say so instead of trying and failing mid-turn."
         )
-    prompt += "\\n\\n## File Sharing\\nFiles you generate via run_command / run_skill_script live inside the Code Interpreter sandbox, NOT on your own filesystem. /mnt/workspace/ is the sub-agent's session storage — it does NOT exist inside the CI sandbox, so passing `--output /mnt/workspace/foo.pptx` to a script will fail with PermissionError. Save outputs to a relative path (e.g. `output.pptx`) or /tmp/ inside the sandbox, then call upload_to_s3(local_path) with the SAME path — it automatically reads from the sandbox when the file isn't local. Never tell the user you cannot send files. The download button appears automatically after upload — do NOT create markdown links like [filename](url) for downloads."
+    prompt += "\\n\\n## File Sharing\\nFiles you generate via run_command / run_skill_script live inside the Code Interpreter sandbox, NOT on your own filesystem. /mnt/workspace/ is the agent's session storage — it does NOT exist inside the CI sandbox, so passing `--output /mnt/workspace/foo.pptx` to a script will fail with PermissionError. Save outputs to a relative path (e.g. `output.pptx`) or /tmp/ inside the sandbox, then call upload_to_s3(local_path) with the SAME path — it automatically reads from the sandbox when the file isn't local. Never tell the user you cannot send files. The download button appears automatically after upload — do NOT create markdown links like [filename](url) for downloads."
     prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
     with contextlib.ExitStack() as stack:
         mcp_tools = []
@@ -283,7 +283,7 @@ if __name__ == "__main__":
 
 # ── stream_utils.py (shared, lives in base zip) ────────────────────────────
 STREAM_UTILS_CODE = '''\
-"""Shared streaming utilities for Agent Studio sub-agents."""
+"""Shared streaming utilities for Agent Studio agents."""
 
 import json as _json
 import base64 as _b64
@@ -783,9 +783,9 @@ async def _stream_and_record(agent, payload):
 # ── tools.py header ─────────────────────────────────────────────────────────
 TOOLS_PY_HEADER = "from strands import tool\n\n"
 
-# ── builtin_tools.py (injected into every sub-agent zip) ──────────────────
+# ── builtin_tools.py (injected into every agent zip) ──────────────────
 BUILTIN_TOOLS_CODE = '''\
-"""Built-in tools for Agent Studio sub-agents — skill loading with local cache."""
+"""Built-in tools for Agent Studio agents — skill loading with local cache."""
 
 import json as _json
 import os as _os
@@ -816,7 +816,7 @@ _workspace_id = ""
 # cross the Code Interpreter sandbox boundary. Skill scripts run inside
 # the CI container — which has its own os.environ — so without this
 # forwarding, os.environ.get("TOKEN") would always return empty there
-# even though the sub-agent itself has the value. The list is explicit
+# even though the agent itself has the value. The list is explicit
 # (rather than sniffing for "TOKEN"/"KEY" name patterns) so new skills
 # needing new secrets require zero template changes: user saves the
 # secret in the UI, redeploys, cold-start registers the key, and every
@@ -829,7 +829,7 @@ def _hydrate_secrets_from_arns():
 
     Reads the comma-separated ARN list from AGENT_STUDIO_SECRET_ARNS
     (assembled at deploy time by deploy.py::_shared_env_vars), fetches
-    each SecretString in parallel under the sub-agent's own IAM role
+    each SecretString in parallel under the agent's own IAM role
     (scoped to agent-studio/*), and injects KEY=value pairs into
     os.environ. Records successfully-loaded keys in _SECRET_ENV_KEYS
     for later CI forwarding.
@@ -907,7 +907,7 @@ def _secret_env_prefix_for_ci():
     return "import os as _os\\n" + "\\n".join(lines) + "\\n"
 
 
-# The sub-agent's own AgentCore runtime id — used as the S3 namespace for
+# The agent's own AgentCore runtime id — used as the S3 namespace for
 # skill lookups (``agents/{_AGENT_ID}/skills/``). AgentCore doesn't inject
 # a dedicated env var, but OTEL_RESOURCE_ATTRIBUTES carries it via the
 # ``service.name`` attribute that deploy.py attaches for tracing.
@@ -928,16 +928,16 @@ _CACHE_ROOT = _Path("/mnt/workspace/skills") if _os.path.isdir("/mnt/workspace")
 # or run_skill_script) rather than up front, so cold-start isn't penalized
 # for skills the agent doesn't actually touch.
 _CACHED_SKILLS: set = set()
-# Cached copy of the sub-agent's own attached-skills manifest. Derived from
+# Cached copy of the agent's own attached-skills manifest. Derived from
 # metadata.json under agents/{AGENT_ID}/, not the workspace-global skills
-# index — sub-agents only see skills explicitly attached to them.
+# index — agents only see skills explicitly attached to them.
 _SKILLS_MANIFEST: list | None = None
 
 
 def _agent_s3_prefix() -> str:
-    """Per-sub-agent S3 namespace for its skills.
+    """Per-agent S3 namespace for its skills.
 
-    Sub-agents don't read from the workspace-global ``skills/`` prefix —
+    Agents don't read from the workspace-global ``skills/`` prefix —
     instead each skill they attach is copied by the CRUD Lambda into
     ``agents/{agent_id}/skills/{local_skill_id}/`` (with nested paths
     preserved). Returns an empty string if the agent id isn't known yet,
@@ -976,7 +976,7 @@ def _load_skills_manifest() -> list:
 
 
 def _find_skill_by_name(name: str) -> dict | None:
-    """Look up a skill in the sub-agent's manifest by its name field."""
+    """Look up a skill in the agent's manifest by its name field."""
     for s in _load_skills_manifest():
         if s.get("name") == name:
             return s
@@ -1055,7 +1055,7 @@ def get_skills_listing() -> str:
     """Formatted listing of this agent's attached skills for prompt injection.
 
     Reads the per-agent manifest (metadata.json), not the workspace-global
-    skill index — so sub-agents see exactly the skills they were deployed
+    skill index — so agents see exactly the skills they were deployed
     with, no less and no more.
     """
     skills = _load_skills_manifest()
@@ -1134,7 +1134,7 @@ class ci_fs:
     Public API — used by upload_to_s3, run_skill_script, check_capabilities,
     and any future tool that has to move data in or out of the CI session.
 
-    The CI sandbox runs in a separate container from the sub-agent, so
+    The CI sandbox runs in a separate container from the agent, so
     the two filesystems are unrelated. Worse, even *inside* the sandbox
     there are two separate file views:
 
@@ -1418,7 +1418,7 @@ def run_command(command: str, language: str = "python") -> str:
     # (feishu, slack, jira, whatever) call os.environ.get(KEY) expecting
     # to see what the user saved in Agent Secrets. The sandbox runs in a
     # separate container with its own env, so without this prefix every
-    # script would trip over empty credentials even though the sub-agent
+    # script would trip over empty credentials even though the agent
     # itself has them. Works for any key hydrated at cold start — new
     # skills that need new secrets require zero code changes here, just
     # save+redeploy in the UI.
@@ -1474,9 +1474,9 @@ def run_command(command: str, language: str = "python") -> str:
 def upload_to_s3(local_path: str, filename: str = "") -> str:
     """Upload a file to S3 for user download. Use this after generating files (e.g. PPTX, PDF, CSV, PNG).
 
-    Accepts both sub-agent local paths and Code Interpreter sandbox paths
+    Accepts both agent local paths and Code Interpreter sandbox paths
     (e.g. a relative ``output.pptx`` or ``/tmp/chart.png`` created inside a
-    run_command / run_skill_script call). The sub-agent's /mnt/workspace/
+    run_command / run_skill_script call). The agent's /mnt/workspace/
     session storage is NOT mounted inside the CI sandbox, so do not pass
     ``/mnt/workspace/...`` as the output path of a CI-executed script —
     scripts should write a relative path or /tmp/ path inside the sandbox.
@@ -1527,7 +1527,7 @@ def upload_to_s3(local_path: str, filename: str = "") -> str:
         disposition = f"attachment; filename=\\"{ascii_fallback}\\"; filename*=UTF-8''{quoted}"
     extra_args = {"ContentType": content_type, "ContentDisposition": disposition}
 
-    # Fast path: file is on the sub-agent's local filesystem
+    # Fast path: file is on the agent's local filesystem
     if _os2.path.isfile(local_path):
         try:
             _s3.upload_file(local_path, _S3_BUCKET, s3_key, ExtraArgs=extra_args)
@@ -1539,7 +1539,7 @@ def upload_to_s3(local_path: str, filename: str = "") -> str:
     data, err = ci_fs.read_bytes(local_path)
     if err or data is None:
         return _tool_error(
-            f"File not found: {local_path}. Tried the sub-agent's "
+            f"File not found: {local_path}. Tried the agent's "
             f"filesystem and the Code Interpreter sandbox ({err or 'no content'}). "
             "Tip: save artifacts with a relative path inside run_command "
             "(e.g. plt.savefig('chart.png'), not '/tmp/chart.png') and "
@@ -1692,7 +1692,7 @@ def run_skill_script(
 
     Args:
         skill_name: The skill to use (e.g. "ppt-generator"). Must be
-            attached to this sub-agent.
+            attached to this agent.
         script: Path to the script inside the skill. Examples:
             ``scripts/render.py``, ``ppt-master-assets/scripts/svg_to_pptx.py``,
             or a package module like
@@ -1831,7 +1831,7 @@ def run_skill_script(
 @_tool
 def check_capabilities() -> str:
     """Preflight probe — returns a structured JSON snapshot of what this
-    sub-agent can actually do right now. Call this before promising the user
+    agent can actually do right now. Call this before promising the user
     a file-generating skill so you don't commit to something that will fail
     mid-turn (missing CI session, missing skill assets, uninstalled deps).
 
@@ -1840,7 +1840,7 @@ def check_capabilities() -> str:
         "python_version": str|None, "cwd": str|None, "error": str|None}
       - ``skills`` — list of {"name", "id", "description", "loadable",
         "file_count", "materialized", "error"} for every skill attached
-        to this sub-agent. ``loadable`` is true when SKILL.md exists in
+        to this agent. ``loadable`` is true when SKILL.md exists in
         S3; ``materialized`` means the skill's files have been pulled
         into the local cache this invocation.
       - ``agent_id`` — the runtime id used to scope S3 skill lookups,
@@ -1881,7 +1881,7 @@ def check_capabilities() -> str:
             except Exception as e:
                 report["code_interpreter"]["error"] = f"probe decode failed: {e}"
 
-    # Enumerate the sub-agent's attached skills from its manifest, then
+    # Enumerate the agent's attached skills from its manifest, then
     # for each one probe the S3 tree to count declared files. Declared
     # file counts reflect what IS available, whether or not the skill has
     # been materialized to local cache this invocation — that distinction
@@ -1972,7 +1972,7 @@ def read_document(file_key: str) -> str:
     * ``uploads/attachments/<sessionId>/...`` — chat attachments uploaded from the UI
       (the session ID is an unguessable identifier produced client-side).
 
-    Any other prefix (including other workspaces) is rejected. Sub-agents
+    Any other prefix (including other workspaces) is rejected. Agents
     cannot fetch S3 over HTTPS (bucket rejects anonymous GETs); always
     use this tool to read user-attached files.
 
@@ -2087,7 +2087,7 @@ def read_document(file_key: str) -> str:
             try:
                 from pypdf import PdfReader  # type: ignore
             except ImportError:
-                return "Error: pypdf is not installed in the sub-agent runtime."
+                return "Error: pypdf is not installed in the agent runtime."
             try:
                 reader = PdfReader(_io.BytesIO(data))
             except Exception as e:
@@ -2109,7 +2109,7 @@ def read_document(file_key: str) -> str:
             try:
                 from openpyxl import load_workbook  # type: ignore
             except ImportError:
-                return "Error: openpyxl is not installed in the sub-agent runtime."
+                return "Error: openpyxl is not installed in the agent runtime."
             try:
                 wb = load_workbook(filename=_io.BytesIO(data), data_only=True, read_only=True)
             except Exception as e:
@@ -2129,7 +2129,7 @@ def read_document(file_key: str) -> str:
         try:
             import pandas as _pd  # type: ignore
         except ImportError:
-            return "Error: pandas is not installed in the sub-agent runtime."
+            return "Error: pandas is not installed in the agent runtime."
         import io as _io
         sep = "\\t" if kind == "tsv" else ","
         try:

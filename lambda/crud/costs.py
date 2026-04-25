@@ -211,6 +211,7 @@ def _agent_ids_for_workspace(workspace_id: str) -> list[dict]:
                 "agentId": it.get("agentId", ""),
                 "name": it.get("display_name") or it.get("name") or it.get("agentId", ""),
                 "model_id": it.get("model_id") or it.get("default_model_id") or "",
+                "status": it.get("status") or "active",
             })
     except ClientError as e:
         code = e.response.get("Error", {}).get("Code")
@@ -225,6 +226,7 @@ def _agent_ids_for_workspace(workspace_id: str) -> list[dict]:
                     "agentId": it.get("agentId", ""),
                     "name": it.get("display_name") or it.get("name") or it.get("agentId", ""),
                     "model_id": it.get("model_id") or it.get("default_model_id") or "",
+                    "status": it.get("status") or "active",
                 })
         else:
             raise
@@ -378,6 +380,7 @@ def workspace_costs(wsId: str):
             "agentId": rid,
             "name": info["name"],
             "modelId": info["model_id"],
+            "status": info.get("status", "active"),
             "calls": calls,
             "inputTokens": in_tok,
             "outputTokens": out_tok,
@@ -397,6 +400,7 @@ def workspace_costs(wsId: str):
             "agentId": rid,
             "name": info["name"],
             "modelId": info["model_id"],
+            "status": info.get("status", "active"),
             "calls": 0,
             "inputTokens": 0,
             "outputTokens": 0,

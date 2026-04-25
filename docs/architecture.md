@@ -22,7 +22,7 @@ graph LR
 
     subgraph AgentCore["AWS Bedrock AgentCore"]
         Meta[Meta-Agent Runtime<br/>Kiro CLI + ACP<br/>+ stdio MCP tools]
-        Sub[Sub-Agent Runtimes<br/>Strands · 每个 agent 一个容器]
+        Sub[Agent Runtimes<br/>Strands · 每个 agent 一个容器]
     end
 
     subgraph Outbound["Agent 依赖"]
@@ -98,7 +98,7 @@ graph LR
 ## 组件
 
 ### Meta-Agent（Kiro-backed）
-推理后端是 Kiro CLI。AgentCore 容器启动后，`main.py` 跑 `kiro-cli-chat acp --agent meta-agent` 子进程，用 ACP 协议驱动对话。33 个 `@tool` 函数（agent / skill / MCP / schedule / secret / preview / link 等）通过 **stdio MCP subprocess** 暴露给 Kiro，进程内直接调用，不经网络。详细胶水层见 `meta-agent/kiro_adapter/`。
+推理后端是 Kiro CLI。AgentCore 容器启动后，`main.py` 跑 `kiro-cli-chat acp --agent meta-agent` 子进程，用 ACP 协议驱动对话。Meta-Agent 的全部 `@tool` 函数（agent / skill / MCP / schedule / secret / preview / link 等）通过 **stdio MCP subprocess** 暴露给 Kiro，进程内直接调用，不经网络。详细胶水层见 `meta-agent/kiro_adapter/`。
 
 Per-invocation 流水线：
 
@@ -115,7 +115,7 @@ Entrypoint 之外还暴露两个短路 action：
 | `list_models` | 跑 `kiro-cli-chat chat --list-models`，返回动态模型列表给前端 picker（chat header + 3 个 AI 助手侧栏共享）|
 | `get_usage` | 跑 `kiro-cli-chat chat "/usage"` 解析 TUI 输出，返回结构化 credits / limit / reset date / tier / overage；前端 Workspace Settings 的 Kiro Credits 卡片消费 |
 
-创建 sub-agent 流程：
+创建 Agent 流程：
 1. 用户："帮我做个 code reviewer agent"
 2. Meta-Agent 写 `main.py` / `tools.py` / `prompt.txt` / `config.json`
 3. 下载 `s3://bucket/base/deployment.zip`，注入生成文件
@@ -135,8 +135,8 @@ Entrypoint 之外还暴露两个短路 action：
 
 CRUD Lambda 在 `infra/lib/constructs/api.ts` 里对 `bedrock-agentcore:InvokeAgentRuntime` 的 Resource 用字面 Meta-Agent runtime ARN（无通配），Action 仅此一条。
 
-### Sub-Agents
-每个用户创建的 agent 对应一个 AgentCore Runtime。Python 3.10 Strands Agent，包含：
+### Agents
+每个用户创建的 Agent 对应一个 AgentCore Runtime。Python 3.10 Strands Agent，包含：
 - 用户编写的 tool（`@tool` 装饰函数，存 DynamoDB，部署时组装）
 - 用户编写的 skill（AgentSkills.io 格式，存 S3，运行时经 `load_skill` 按需加载）
 - 捆绑内置 tool：`upload_to_s3`、`run_command`（Code Interpreter）、`fetch_webpage`（Browser）、`read_document`、`web_search` 等
@@ -154,14 +154,14 @@ CRUD 生命周期：
 ### Scheduler
 EventBridge Scheduler 调用 AWS SDK Universal Target `aws-sdk:bedrockagentcore:invokeAgentRuntime`。关键坑：`RuntimeSessionId` 必须是 `Target.Input` 的顶层字段（不能只放在 `Payload` 里），否则调用会静默失败。Session id 形如 `sched-{suffix}-<aws.scheduler.scheduled-time>`，UI 里 Recent Runs 可按 session 前缀过滤 span。
 
-"Run now" 创建一个 `at(now+5s)` 的一次性定时任务，触发后自删 —— 和真正 cron 走同一套代码，但 <1s 返回（避免冷启动偏重的 agent 把 Lambda 打 timeout）。
+"Run now" 创建一个 `at(now+5s)` 的一次性定时任务，触发后自删 —— 和真正 cron 走同一套代码，但 <1s 返回（避免冷启动偏重的 Agent 把 Lambda 打 timeout）。
 
 ### 可观测数据流
 
 ```
-sub-agent 进程
+Agent 进程
     ├── Strands Agent → OTEL tracer → aws/spans log group
-    │       └── 按 agent 的 service.name + session.id 属性
+    │       └── 按 Agent 的 service.name + session.id 属性
     │       └── gen_ai.* 属性：模型、输入/输出 token、延迟
     └── stdout（业务输出）→ runtime log group
             └── 流名：runtime-logs-<sessionId>-<uuid>
@@ -221,7 +221,7 @@ graph LR
 
     subgraph AgentCore["AWS Bedrock AgentCore"]
         Meta[Meta-Agent Runtime<br/>Kiro CLI + ACP<br/>+ stdio MCP tools]
-        Sub[Sub-Agent Runtimes<br/>Strands · per-agent container]
+        Sub[Agent Runtimes<br/>Strands · per-agent container]
     end
 
     subgraph Outbound["Agent dependencies"]
@@ -299,7 +299,7 @@ graph LR
 ### Meta-Agent (Kiro-backed)
 The reasoning backend is the Kiro CLI. When the AgentCore container
 boots, `main.py` spawns `kiro-cli-chat acp --agent meta-agent` and
-drives it over ACP. The Meta-Agent's 33 `@tool` functions (agent /
+drives it over ACP. All of the Meta-Agent's `@tool` functions (agent /
 skill / MCP / schedule / secret / preview / link, …) are exposed to
 Kiro via a **stdio MCP subprocess** — in-process calls, no network
 hop. The glue layer lives in `meta-agent/kiro_adapter/`.
@@ -329,7 +329,7 @@ control-plane actions:
 | `list_models` | Runs `kiro-cli-chat chat --list-models`, returns the live model catalog for the frontend picker (shared by the chat header and all three AI-assistant sidebars). |
 | `get_usage` | Runs `kiro-cli-chat chat "/usage"`, parses the TUI output, returns structured credits / limit / reset date / tier / overage. Consumed by the Kiro Credits card in Workspace Settings. |
 
-Creating a sub-agent:
+Creating an agent:
 1. User: "make me a code reviewer agent"
 2. Meta-Agent writes `main.py` / `tools.py` / `prompt.txt` / `config.json`
 3. Downloads `s3://bucket/base/deployment.zip`, injects generated files
@@ -354,7 +354,7 @@ In `infra/lib/constructs/api.ts`, the CRUD Lambda's statement for
 runtime ARN as its Resource (no wildcards), and that is the only
 Action granted on that statement.
 
-### Sub-Agents
+### Agents
 One AgentCore Runtime per user-created agent. Python 3.10 Strands
 Agent with:
 - User-authored tools (`@tool`-decorated functions, stored in DynamoDB, assembled at deploy)
@@ -393,7 +393,7 @@ after firing — identical code path to real cron, but returns in <1 s
 ### Observability data flow
 
 ```
-sub-agent process
+Agent process
     ├── Strands Agent → OTEL tracer → aws/spans log group
     │       └── per-agent service.name + session.id attributes
     │       └── gen_ai.* attrs: model, input/output tokens, latency

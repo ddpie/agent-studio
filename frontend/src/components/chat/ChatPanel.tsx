@@ -33,13 +33,13 @@ export default function ChatPanel() {
   const { agents, fetchAgents } = useAgentListStore();
   const agentName = agents.find(a => a.id === agentId)?.displayName || null;
   // Meta-Agent runs on Kiro (expects Kiro-native model ids like
-  // "claude-opus-4.6"). Sub-agents run on Bedrock (expects inference-
+  // "claude-opus-4.6"). Agents run on Bedrock (expects inference-
   // profile ids like "us.anthropic.claude-opus-4-7"). Without branching
   // the default, a first-time visitor to Meta-Agent ends up sending a
   // Bedrock id to Kiro, which either fails or silently falls back.
   const defaultModel = agentId ? DEFAULT_MODEL_ID : DEFAULT_KIRO_MODEL_ID;
   const selectedModel = selectedModelId || defaultModel;
-  // Only fetch kiro key status on the Meta-Agent route. Sub-agent chats
+  // Only fetch kiro key status on the Meta-Agent route. Agent chats
   // don't use Kiro so the banner would be a distraction.
   const kiroKey = useKiroKeyStatus();
   const showKiroBanner = !agentId && kiroKey && !kiroKey.configured;

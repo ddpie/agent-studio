@@ -101,7 +101,7 @@
     "tab": "Evaluations",
     "subtitle": "Automatic LLM-as-Judge scores for recent sessions",
     "emptyTitle": "No evaluations yet",
-    "emptyHint": "Scores appear a few minutes after your sub-agent answers a user. Ensure the workspace's evaluation config is ACTIVE.",
+    "emptyHint": "Scores appear a few minutes after your agent answers a user. Ensure the workspace's evaluation config is ACTIVE.",
     "evaluator": "Evaluator",
     "latestScore": "Latest score",
     "mean": "7-day mean",
@@ -754,6 +754,7 @@
     "empty": "No usage in this range.",
     "loadError": "Could not load usage",
     "callsShort": "calls",
+    "archivedBadge": "archived",
     "range": {
       "24h": "24h",
       "7d": "7d",

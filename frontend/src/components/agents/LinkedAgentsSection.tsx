@@ -1,5 +1,5 @@
 /**
- * LinkedAgentsSection — UI for wiring one sub-agent up to call another via A2A.
+ * LinkedAgentsSection — UI for wiring one agent up to call another via A2A.
  *
  * Backed by the Meta-Agent `link_agent` / `unlink_agent` tools. We invoke the
  * Meta-Agent through the standard chat streaming flow (same pattern as

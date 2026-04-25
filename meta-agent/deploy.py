@@ -14,7 +14,7 @@ from config import REGION, ACCOUNT_ID, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE, 
 def _agent_workspace_id(agent_id: str) -> str:
     """Look up the agent's workspace_id from DynamoDB.
 
-    Used to build the Secrets Manager prefix so sub-agents hydrate only
+    Used to build the Secrets Manager prefix so agents hydrate only
     their own workspace's secrets. Falls back to empty string on miss so
     the caller can skip the secret injection gracefully (no workspace →
     no secrets to fetch, not an error).
@@ -30,8 +30,8 @@ def _agent_workspace_id(agent_id: str) -> str:
 def _collect_secret_arns(workspace_id: str, agent_id: str) -> list[str]:
     """List per-key secret ARNs under ``agent-studio/{ws}/{agent}/*``.
 
-    The ARN list is passed into the sub-agent runtime as a non-sensitive
-    env var (``AGENT_STUDIO_SECRET_ARNS``). The sub-agent then calls
+    The ARN list is passed into the agent runtime as a non-sensitive
+    env var (``AGENT_STUDIO_SECRET_ARNS``). The agent then calls
     GetSecretValue on each ARN explicitly — avoiding the need for
     ListSecrets at runtime (which can't be IAM-resource-scoped).
     """
@@ -56,7 +56,7 @@ def _collect_secret_arns(workspace_id: str, agent_id: str) -> list[str]:
 
 
 def _shared_env_vars(agent_id: str = "") -> dict:
-    """Environment variables forwarded to every sub-agent runtime.
+    """Environment variables forwarded to every agent runtime.
 
     When agent_id is provided, also merges any per-agent `extra_env_vars`
     stored in the agent's metadata.json (written by link_agent / unlink_agent).
@@ -96,7 +96,7 @@ def _shared_env_vars(agent_id: str = "") -> dict:
 
     if agent_id:
         # Dedicated var for skill S3 lookups (agents/{id}/skills/*). The
-        # sub-agent builtin_tools also derives this from OTEL_RESOURCE_
+        # agent builtin_tools also derives this from OTEL_RESOURCE_
         # ATTRIBUTES below, but explicit is more robust if the OTEL attr
         # format ever changes.
         env["AGENT_STUDIO_AGENT_ID"] = agent_id
@@ -127,10 +127,10 @@ def _shared_env_vars(agent_id: str = "") -> dict:
             pass
 
         # Pass the per-agent secret ARN list as a non-sensitive env var;
-        # sub-agent template hydrates the actual values at cold start via
+        # agent template hydrates the actual values at cold start via
         # its own IAM role scoped to agent-studio/*. We enumerate secrets
         # here (under the Meta-Agent role, which has ListSecrets) so the
-        # sub-agent role doesn't need it. Secrets added after this deploy
+        # agent role doesn't need it. Secrets added after this deploy
         # won't appear until the next update_agent — acceptable; rotation
         # of an *existing* secret's value works without redeploy since the
         # ARN stays the same.
@@ -225,10 +225,10 @@ def build_deployment_package_v2(
     Files written: main.py, tools.py, prompt.txt, config.json,
     stream_utils.py, builtin_tools.py. Skill files are NOT packaged —
     they live at ``agents/{agent_id}/skills/`` in S3 and are fetched at
-    sub-agent runtime on first use. Changing a skill no longer requires
-    a sub-agent redeploy.
+    agent runtime on first use. Changing a skill no longer requires
+    a agent redeploy.
 
-    Sub-agents use SUB_AGENT_BASE_DEPLOYMENT_KEY (fat zip with Playwright +
+    Agents use SUB_AGENT_BASE_DEPLOYMENT_KEY (fat zip with Playwright +
     strands-agents-tools for browser_use). Falls back to BASE_DEPLOYMENT_KEY
     if the fat zip is missing (e.g. in early dev environments).
     """
@@ -256,10 +256,10 @@ def build_deployment_package_v2(
                     continue  # Skip old template-specific modules
                 # Defensive: base zip occasionally gets polluted with
                 # meta-agent's own tools/ package (historical deploy-all.sh
-                # drift). That would shadow the sub-agent's top-level
+                # drift). That would shadow the agent's top-level
                 # tools.py via Python's package-over-module import rule —
                 # every @tool in tools.py becomes "not found". Drop any
-                # top-level tools/ tree; the sub-agent only needs its own
+                # top-level tools/ tree; the agent only needs its own
                 # tools.py (added below).
                 if item == "tools/" or item.startswith("tools/"):
                     continue
@@ -336,7 +336,7 @@ def create_runtime(agent_name: str, description: str, s3_key: str, role_arn: str
     in the first call. Immediately after create we issue a second
     update_agent_runtime with the agent_id-aware env (OTEL resource attrs
     + AGENT_STUDIO_AGENT_ID for skill scoping). Without this step a
-    first-time-deployed sub-agent can't resolve its own skill S3 prefix
+    first-time-deployed agent can't resolve its own skill S3 prefix
     and check_capabilities / load_skill / run_skill_script all fail until
     someone runs update_agent.
     """

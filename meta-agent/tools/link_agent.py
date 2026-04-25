@@ -1,6 +1,6 @@
-"""link_agent / unlink_agent — wire a source sub-agent up to call a target peer via A2A.
+"""link_agent / unlink_agent — wire a source agent up to call a target peer via A2A.
 
-Linking a sub-agent A to peer B does the following, atomically from the
+Linking a agent A to peer B does the following, atomically from the
 caller's perspective:
 
   1. Validates both agents exist in the same workspace and the caller has
@@ -284,7 +284,7 @@ def _save_metadata(agent_id: str, meta: dict) -> None:
 
 
 def _redeploy_source(source_id: str, meta: dict) -> str:
-    """Rebuild + redeploy the source sub-agent runtime with updated tools/prompt/env."""
+    """Rebuild + redeploy the source agent runtime with updated tools/prompt/env."""
     tool_names_list = meta.get("tools") or []
     custom_code = meta.get("tool_definitions") or ""
     defined = set(re.findall(r"@tool\s*\ndef\s+(\w+)\s*\(", custom_code)) if custom_code.strip() else set()
@@ -351,7 +351,7 @@ def _redeploy_source(source_id: str, meta: dict) -> str:
 
 @tool
 def link_agent(source_agent_id: str, target_agent_id: str) -> str:
-    """Link a source sub-agent so it can call another sub-agent as a tool via A2A.
+    """Link a source agent so it can call another agent as a tool via A2A.
 
     After linking, the source agent gains a `call_agent(agent_id, prompt)` tool
     and its system prompt learns that the target exists. Both agents must live

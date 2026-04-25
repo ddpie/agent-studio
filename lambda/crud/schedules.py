@@ -17,7 +17,7 @@ payload. Injecting the schedule name + a deterministic session_id
 context attribute) gives us a way to correlate a specific fire with
 the OTEL span stream in `aws/spans`, powering the recent-runs view.
 
-The scheduler target role is reused from the sub-agent readonly tier
+The scheduler target role is reused from the agent readonly tier
 (mirrors meta-agent/tools/create_schedule.py); redeploying a dedicated
 scheduler role is deferred to infra.
 """
@@ -55,7 +55,7 @@ _RATE_RE = re.compile(r"^rate\(\s*\d+\s+(minute|minutes|hour|hours|day|days)\s*\
 _ACCOUNT_ID = os.environ.get("AGENT_STUDIO_ACCOUNT_ID", "")
 _AGENTCORE_REGION = os.environ.get("AGENTCORE_REGION", REGION)
 # Target role the scheduler assumes. Must have a trust policy for
-# scheduler.amazonaws.com. Falls back to the sub-agent readonly role
+# scheduler.amazonaws.com. Falls back to the agent readonly role
 # name (matches meta-agent/tools/create_schedule.py). Ops note: if the
 # fallback role lacks `scheduler.amazonaws.com` in its trust policy,
 # create_schedule will fail at AWS — surfacing as a 500 here.
@@ -269,7 +269,7 @@ def create_schedule(wsId: str, agentId: str):
     # "2026-04-19T10:30:00Z"). We bake it into a deterministic
     # session_id so the recent-runs view can filter spans by session
     # prefix without a separate lookup table. `__schedule_name` is a
-    # belt-and-braces tag: the sub-agent can also echo it into spans
+    # belt-and-braces tag: the agent can also echo it into spans
     # if we later want server-side filtering.
     # AgentCore requires runtimeSessionId >= 33 chars. Using the schedule's
     # full name + fire time keeps it deterministic and well above the bound.
@@ -660,7 +660,7 @@ def list_schedule_executions(wsId: str, agentId: str, name: str):
         return bad_request("invalid schedule name")
 
     suffix = name[len(prefix):]
-    # Sub-agent bakes session_id = sched-<suffix>-<scheduled-time> when
+    # Agent bakes session_id = sched-<suffix>-<scheduled-time> when
     # the scheduler fires. Fall back to matching `__schedule_name`
     # embedded in the prompt attribute so older records are still
     # surfaced (best-effort — exact fields depend on span shape).
@@ -713,7 +713,7 @@ def list_schedule_executions(wsId: str, agentId: str, name: str):
             pass
         return []
 
-    # Prefer the sub-agent-tagged `agent_studio.session_id` (correct
+    # Prefer the agent-tagged `agent_studio.session_id` (correct
     # across warm-container reuse) with fallback to AgentCore's managed
     # `attributes.session.id` so older runs still show up.
     primary_q = f"""

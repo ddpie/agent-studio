@@ -13,7 +13,7 @@ import { useRuntimeStatus } from "../../hooks/useRuntimeStatus";
 import useMetaAgentStatus from "../../hooks/useMetaAgentStatus";
 
 // Map AgentCore runtime status → the same "active | non-active" split
-// StatusBadge uses for sub-agents. AgentRuntimeStatus accepts freeform
+// StatusBadge uses for agents. AgentRuntimeStatus accepts freeform
 // strings; anything other than READY shows yellow.
 function metaStatusColor(status: string | undefined): string {
   switch (status) {
@@ -86,7 +86,7 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
   if (collapsed) {
     return (
       <div className="flex flex-col items-center h-full py-3 gap-2">
-        {/* Meta-Agent icon — mirrors the sub-agent dot indicator. */}
+        {/* Meta-Agent icon — mirrors the agent dot indicator. */}
         <div className="relative">
           <button
             onClick={() => handleSwitch("/agents")}

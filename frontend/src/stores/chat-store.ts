@@ -11,7 +11,7 @@ import i18next from "i18next";
  * model never sees a textual `<details class="tool-call">` block or the
  * `__S3_DOWNLOAD__` marker in subsequent turns. Before this refactor the
  * frontend injected that markdown into `message.content`, which then got
- * replayed to the sub-agent as the assistant's own prior output and the
+ * replayed to the agent as the assistant's own prior output and the
  * model copied the format, hallucinating fake S3 keys.
  */
 export interface ToolCallRecord {
@@ -23,7 +23,7 @@ export interface ToolCallRecord {
   isSvg: boolean;
 }
 
-/** S3 object the sub-agent uploaded for the user to download. */
+/** S3 object the agent uploaded for the user to download. */
 export interface S3Download {
   key: string;
   filename: string;
@@ -62,7 +62,7 @@ export interface Message {
    * setting off — both fall back to `content + toolCalls` stacked.
    */
   blocks?: MessageBlock[];
-  /** Files the sub-agent uploaded for download (deduped by key). */
+  /** Files the agent uploaded for download (deduped by key). */
   s3Downloads?: S3Download[];
   timestamp: number;
 }

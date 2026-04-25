@@ -10,9 +10,9 @@ import {
   type A2aKeyCreated,
 } from "../lib/api-client";
 
-export type A2aKeyKind = "sub-agent" | "meta-agent";
+export type A2aKeyKind = "agent" | "meta-agent";
 
-export function useA2aKeys(agentId: string | null, kind: A2aKeyKind = "sub-agent") {
+export function useA2aKeys(agentId: string | null, kind: A2aKeyKind = "agent") {
   const [keys, setKeys] = useState<A2aKey[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
@@ -22,7 +22,7 @@ export function useA2aKeys(agentId: string | null, kind: A2aKeyKind = "sub-agent
   useEffect(() => () => { mountedRef.current = false; }, []);
 
   useEffect(() => {
-    if (kind === "sub-agent" && !agentId) return;
+    if (kind === "agent" && !agentId) return;
     let cancelled = false;
     setLoading(true);
     const loader = kind === "meta-agent" ? listMetaA2aKeys() : listA2aKeys(agentId!);

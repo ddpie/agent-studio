@@ -116,7 +116,7 @@ export default function ToolCallDetails({ calls }: { calls: ToolCallRecord[] }) 
 
 /**
  * Render tool-emitted SVG. We inject via dangerouslySetInnerHTML because the
- * upstream tool is trusted (same-origin sub-agent inside our account) and the
+ * upstream tool is trusted (same-origin agent inside our account) and the
  * SVG is rendered inside a contained block — not exposed to cross-message
  * script injection since every ChatMessage wraps its own isolated DOM.
  */

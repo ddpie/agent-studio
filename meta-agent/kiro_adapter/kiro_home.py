@@ -270,7 +270,7 @@ def ensure_kiro_home(
         "AGENT_STUDIO_WORKSPACE_ID": workspace_id,
         # Creator's UI language ("zh" / "en"). create_agent/update_agent
         # use this to choose the BASE_GUIDELINES variant that gets
-        # appended to the new sub-agent's system_prompt. Empty string
+        # appended to the new agent's system_prompt. Empty string
         # is fine — downstream defaults to English.
         "AGENT_STUDIO_CREATOR_LANGUAGE": creator_language or "",
         # Keep telemetry off in the subprocess — the parent already emits

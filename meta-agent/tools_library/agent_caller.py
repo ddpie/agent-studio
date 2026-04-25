@@ -1,10 +1,10 @@
-"""agent_caller — call another Agent Studio sub-agent as a tool, via the A2A proxy.
+"""agent_caller — call another Agent Studio agent as a tool, via the A2A proxy.
 
 The A2A proxy lambda is a streaming Node.js function fronted by CloudFront at
 `/a2a/*`. It accepts JSON-RPC 2.0 `message/send` and `message/stream` methods
 at `POST /a2a/agents/{agentId}` with `Authorization: Bearer <a2a-api-key>`.
 
-Sub-agents that have been linked to peers via the Meta-Agent `link_agent` tool
+Agents that have been linked to peers via the Meta-Agent `link_agent` tool
 get two things injected by the Meta-Agent:
 
   - Env var `A2A_INVOKE_URL` — the CloudFront base URL (e.g.
@@ -19,7 +19,7 @@ caller agent wants a single concatenated string back.
 TOOL_META = {
     "id": "agent_caller",
     "name": "Call Agent",
-    "description": "Invoke a linked Agent Studio sub-agent via the A2A protocol and return its response as plain text",
+    "description": "Invoke a linked Agent Studio agent via the A2A protocol and return its response as plain text",
     "category": "agents",
 }
 
@@ -28,7 +28,7 @@ TOOL_NAMES = "call_agent"
 TOOL_CODE = '''
 @tool
 def call_agent(agent_id: str, prompt: str, session_id: str = "") -> str:
-    """Send a prompt to another Agent Studio sub-agent linked to this one and return its reply.
+    """Send a prompt to another Agent Studio agent linked to this one and return its reply.
 
     Use this when the user's question is better handled by a specialised agent that
     has been linked to you via the Meta-Agent `link_agent` tool. The list of
@@ -37,7 +37,7 @@ def call_agent(agent_id: str, prompt: str, session_id: str = "") -> str:
     instead of calling.
 
     Args:
-        agent_id: The target sub-agent's runtime id (as described in your system prompt).
+        agent_id: The target agent's runtime id (as described in your system prompt).
         prompt: The message to send to the target agent. Be concrete — this is a fresh conversation for the callee.
         session_id: Optional A2A contextId. Leave empty to start a new session; pass back the same id to continue.
 

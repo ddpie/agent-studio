@@ -165,7 +165,7 @@ def update_agent(
             return json.dumps({"error": f"MCP targets not allowed in this workspace: {denied}"})
         mcp_endpoints = _resolve_mcp_endpoints(mcp_targets_list)
 
-    # Skill files are fetched from S3 at sub-agent runtime (by load_skill /
+    # Skill files are fetched from S3 at agent runtime (by load_skill /
     # run_skill_script), not packaged into the deployment zip. We only
     # need SKILL.md content here to build the prompt's progressive-
     # disclosure section.
@@ -282,7 +282,7 @@ def update_agent(
         # updates — if the exact bytes are already in the prompt from a
         # previous deploy we skip. Language is picked from the creator's
         # UI locale (set in tools._scope from the invoke payload). When
-        # older sub-agents (pre-bilingual split) already have the English
+        # older agents (pre-bilingual split) already have the English
         # variant embedded, the containment check keeps them stable.
         from tools._scope import current_creator_language
         guidelines = get_base_guidelines(current_creator_language())

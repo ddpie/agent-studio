@@ -1,10 +1,10 @@
-"""Baseline behavioral guidelines injected into every sub-agent.
+"""Baseline behavioral guidelines injected into every agent.
 
 Historical note: this module used to carry five opinionated "prompt
 templates" (general / expert / customer_service / data_analyst /
 creative_writer). Each template was monolingual English and was
 unconditionally prepended to the user's `system_prompt` with a
-`## Specific Instructions` boundary — producing sub-agents whose final
+`## Specific Instructions` boundary — producing agents whose final
 prompt was half English (the template) and half whatever language the
 user actually wrote in.
 
@@ -13,11 +13,11 @@ themselves added little that a competent Meta-Agent-authored prompt
 doesn't already cover. So the templates are gone. What remains is the
 minimal cross-cutting BASE_GUIDELINES — behavioral rules (error
 handling, tool-usage discipline, language-matching, etc.) that every
-sub-agent benefits from regardless of domain. We now keep a zh and en
+agent benefits from regardless of domain. We now keep a zh and en
 variant and pick at compose time based on the creator's UI language.
 
 `TOOL_USAGE_GUIDE` is similarly bilingual — consumed only when the
-sub-agent actually has tools attached.
+agent actually has tools attached.
 
 API: `get_base_guidelines(lang)` / `get_tool_usage_guide(lang)`. The
 five retired templates and their `get_template_*` helpers have been
@@ -202,7 +202,7 @@ def _pick_lang(lang: str | None) -> str:
 def get_base_guidelines(lang: str | None = None) -> str:
     """Return the BASE_GUIDELINES body for the caller's UI language.
 
-    Passed through at sub-agent build time by create_agent / update_agent.
+    Passed through at agent build time by create_agent / update_agent.
     """
     return _BASE_GUIDELINES_ZH if _pick_lang(lang) == "zh" else _BASE_GUIDELINES_EN
 
@@ -210,7 +210,7 @@ def get_base_guidelines(lang: str | None = None) -> str:
 def get_tool_usage_guide(lang: str | None = None) -> str:
     """Return the TOOL_USAGE_GUIDE body for the caller's UI language.
 
-    Only appended when the sub-agent actually has tools defined.
+    Only appended when the agent actually has tools defined.
     """
     return _TOOL_USAGE_GUIDE_ZH if _pick_lang(lang) == "zh" else _TOOL_USAGE_GUIDE_EN
 

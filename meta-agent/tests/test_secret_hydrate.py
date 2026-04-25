@@ -2,7 +2,7 @@
 embedded in agent_template_v2.BUILTIN_TOOLS_CODE.
 
 Both _hydrate_secrets_from_arns() and _secret_env_prefix_for_ci() are
-rendered as strings inside the template so sub-agent zips stay
+rendered as strings inside the template so agent zips stay
 single-file. We extract them via AST and exec into a controlled
 namespace with a fake boto3, then assert:
 
@@ -14,7 +14,7 @@ namespace with a fake boto3, then assert:
 
 Why not pull the functions into a standalone importable module? The
 template is flattened into builtin_tools.py at deploy time; the
-sub-agent runtime doesn't have access to the Meta-Agent's package
+agent runtime doesn't have access to the Meta-Agent's package
 layout. Embedding keeps runtime single-file; we parse the same string
 the deploy step writes.
 """
@@ -181,7 +181,7 @@ def test_hydrate_single_failure_is_nonfatal():
 
 
 def test_hydrate_does_not_overwrite_existing_env():
-    # If a key is already in os.environ (e.g. set by the sub-agent's
+    # If a key is already in os.environ (e.g. set by the agent's
     # deployment env-vars), hydrate must NOT stomp it. This guarantees
     # that explicit env config wins over Secrets Manager, which matches
     # standard 12-factor layering (explicit > defaults).

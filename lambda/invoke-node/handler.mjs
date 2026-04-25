@@ -248,7 +248,7 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
     model_id: body.model_id,
   };
   // workspace_id is required by both meta-agent (for workspace-scoped tool calls)
-  // and sub-agents (for read_document's caller-workspace allowlist).
+  // and agents (for read_document's caller-workspace allowlist).
   payload.workspace_id = route.wsId;
   if (route.type === "meta-agent") {
     payload.caller_id = auth.userId;
@@ -317,7 +317,7 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
 
   // Force OTEL span sampling by supplying a W3C traceparent with the
   // `sampled` flag (01). AgentCore seeds its tracer from the inbound
-  // context; without this the sub-agent runs with `trace_sampled=False`
+  // context; without this the agent runs with `trace_sampled=False`
   // and zero spans land in aws/spans — the Traces tab would look empty
   // for interactive chats even though the runtime ran fine. EventBridge
   // Scheduler already injects a sampled trace, which is why scheduled

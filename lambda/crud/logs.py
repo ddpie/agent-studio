@@ -1,6 +1,6 @@
 """Agent runtime log viewer — inline CloudWatch Logs surface.
 
-Wraps `logs:FilterLogEvents` on the sub-agent runtime log group so users
+Wraps `logs:FilterLogEvents` on the agent runtime log group so users
 without AWS Console access can browse/search recent logs from the agent
 detail page. Deep-link to CloudWatch is preserved as a power-user escape
 hatch in the UI, but the main flow lives in-app.

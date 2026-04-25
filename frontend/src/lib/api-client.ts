@@ -1282,6 +1282,7 @@ export interface CostAgentRow {
   agentId: string;
   name: string;
   modelId: string;
+  status?: string;
   calls: number;
   inputTokens: number;
   outputTokens: number;

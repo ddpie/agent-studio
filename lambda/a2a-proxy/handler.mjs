@@ -93,7 +93,7 @@ async function buildPublicCardForAgent(agentId, event) {
     description: resp.Item.description || "",
     version: runtimeVersion,
     a2aBaseUrl,
-    kind: "sub-agent",
+    kind: "agent",
   });
 }
 
@@ -105,7 +105,7 @@ function buildPublicCardForMeta(event) {
   return buildPublicAgentCard({
     name: "Agent Studio Meta-Agent",
     runtimeId,
-    description: "Orchestrator agent that creates, updates and deploys Agent Studio sub-agents.",
+    description: "Orchestrator agent that creates, updates and deploys Agent Studio agents.",
     version: "1",
     a2aBaseUrl,
     kind: "meta-agent",
@@ -221,7 +221,7 @@ async function collectStreamText(agentResp) {
 }
 
 /**
- * Our sub-agents emit mixed streams: plain text lines plus JSON markers
+ * Our agents emit mixed streams: plain text lines plus JSON markers
  * with `__tool` fields. Translate either into a neutral chunk shape that
  * internalChunkToA2AEvent can map to A2A events.
  */
