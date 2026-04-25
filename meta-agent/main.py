@@ -123,102 +123,11 @@ from tools.link_agent import link_agent, unlink_agent
 _log_phase("all tools imported")
 
 
-async def _probe_stdio_mcp_spawn() -> None:
-    """Temporary diagnostic: can Kiro ACP spawn a Python stdio MCP subprocess
-    in the AgentCore sandbox?
-
-    Writes a minimal agent config with a single MCP entry (python echo
-    server) + a "tools" reference that forces Kiro to connect at
-    initialize time. If Kiro can spawn the subprocess, we see its stderr;
-    if the sandbox blocks fork/exec we see EBADF again.
-    """
-    import asyncio as _a
-    import json as _j
-    import tempfile as _tf
-
-    probe_home = "/tmp/kiro-stdio-spawn-probe"
-    _os.makedirs(f"{probe_home}/.kiro/agents", exist_ok=True)
-    # The stdio MCP "server" here is literally `python -c 'print()'` that
-    # exits right away. We just want to know if the spawn itself works.
-    with open(f"{probe_home}/.kiro/agents/spawn.json", "w") as f:
-        _j.dump({
-            "name": "spawn",
-            "description": "",
-            "prompt": "test",
-            "mcpServers": {
-                "echo": {
-                    "command": _sys.executable,
-                    "args": ["-c", "import sys; sys.stderr.write('spawned OK\\n'); sys.stderr.flush()"],
-                    "env": {},
-                }
-            },
-            "tools": ["@echo"],
-            "toolAliases": {},
-            "allowedTools": [],
-            "resources": [],
-            "hooks": {},
-            "toolsSettings": {},
-            "includeMcpJson": False,
-            "model": "claude-haiku-4.5",
-        }, f)
-
-    try:
-        binary = "/var/task/kiro-bin/kiro-cli-chat"
-        # Prefer a /tmp copy if main.py already prepared one.
-        if _os.path.exists("/tmp/kiro-cli-chat"):
-            binary = "/tmp/kiro-cli-chat"
-        env = {**_os.environ,
-               "KIRO_API_KEY": _os.environ.get("KIRO_API_KEY", ""),
-               "HOME": probe_home,
-               "XDG_DATA_HOME": "/tmp/kiro-xdg-spawn-probe"}
-        sf = _tf.NamedTemporaryFile(prefix="spawn-probe-stderr-", delete=False)
-        p = await _a.create_subprocess_exec(
-            binary, "acp", "--agent", "spawn", "--trust-all-tools",
-            stdin=_a.subprocess.PIPE, stdout=_a.subprocess.PIPE, stderr=sf.fileno(),
-            env=env,
-        )
-        # initialize
-        p.stdin.write(b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{}}}\n')
-        await p.stdin.drain()
-        try:
-            line = await _a.wait_for(p.stdout.readline(), timeout=10)
-            _boot_log.info(f"probe stdio-spawn: init-resp={line[:200]!r}")
-        except _a.TimeoutError:
-            _boot_log.info("probe stdio-spawn: init-resp no line in 10s")
-        # session/new — this is where Kiro actually spawns the stdio MCP
-        # to query tool list. Our echo server prints 'spawned OK' to
-        # stderr and exits, so Kiro will fail to handshake MCP but we'll
-        # see the spawn attempt in stderr.
-        p.stdin.write(b'{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"' + probe_home.encode() + b'","mcpServers":[]}}\n')
-        await p.stdin.drain()
-        # Read anything that comes back, up to ~4s
-        import time as _pt
-        deadline = _pt.monotonic() + 4
-        while _pt.monotonic() < deadline:
-            try:
-                line = await _a.wait_for(p.stdout.readline(), timeout=deadline - _pt.monotonic())
-                if not line: break
-                _boot_log.info(f"probe stdio-spawn: post-new line={line[:300]!r}")
-            except _a.TimeoutError:
-                break
-        p.stdin.close()
-        try:
-            await _a.wait_for(p.wait(), timeout=5)
-        except _a.TimeoutError:
-            p.kill(); await p.wait()
-        sf.close()
-        with open(sf.name, "rb") as f:
-            data = f.read()
-        _os.unlink(sf.name)
-        _boot_log.info(f"probe stdio-spawn: exit={p.returncode} stderr={data[:800]!r}")
-    except Exception as e:  # noqa: BLE001
-        _boot_log.warning(f"probe stdio-spawn raised {type(e).__name__}: {e}")
-
-
 from kiro_adapter.acp_client import ACPError, KiroACPClient
 from kiro_adapter.kiro_home import (
     DEFAULT_MODEL as KIRO_DEFAULT_MODEL,
     KIRO_HOME_DEFAULT,
+    KIRO_PERSIST_ROOT,
     clear_kiro_session,
     default_system_prompt_src,
     ensure_kiro_home,
@@ -309,10 +218,13 @@ _META_AGENT_DIR = str(Path(__file__).resolve().parent)
 # using a /tmp copy (see the function).
 _KIRO_BINARY = str(Path(_META_AGENT_DIR) / "kiro-bin" / "kiro-cli-chat")
 
-# AgentCore's sessionStorage mount point. Must match `mountPath` in
-# deploy-agentcore.sh's filesystemConfigurations. Env override for local
-# dev where /mnt/kiro doesn't exist.
+# Where kiro-cli-chat treats as $HOME. Local /tmp path by default — see
+# kiro_home.py for why it is NOT the AgentCore sessionStorage mount.
 _KIRO_HOME = os.environ.get("AGENT_STUDIO_KIRO_HOME", KIRO_HOME_DEFAULT)
+
+# Cross-invocation pointer storage. Must match the `mountPath` declared
+# in deploy-agentcore.sh's filesystemConfigurations.
+_KIRO_PERSIST = os.environ.get("AGENT_STUDIO_KIRO_PERSIST", KIRO_PERSIST_ROOT)
 
 # Kiro API key is required. Fail fast on first invoke rather than letting
 # kiro-cli-chat produce a confusing stderr.
@@ -334,7 +246,6 @@ _PROMPT_TIMEOUT_S = 600.0
 # --------------------------------------------------------------------------
 
 _kiro_binary_ready = False
-_stdio_spawn_probed = False
 
 
 def _ensure_kiro_binary_ready() -> None:
@@ -447,13 +358,6 @@ async def invoke(payload, context):
         return
 
     _ensure_kiro_binary_ready()
-
-    # One-shot diagnostic: can Kiro spawn a Python stdio MCP subprocess?
-    global _stdio_spawn_probed
-    if not _stdio_spawn_probed:
-        _stdio_spawn_probed = True
-        await _probe_stdio_mcp_spawn()
-
     apply_scope(caller_id, workspace_id)
 
     # Per-invocation HOME. Rewrites the custom agent config + prompt on
@@ -466,6 +370,7 @@ async def invoke(payload, context):
         workspace_id=workspace_id,
         model_id=model_id,
         home_root=_KIRO_HOME,
+        persist_root=_KIRO_PERSIST,
     )
 
     client = KiroACPClient(
@@ -495,7 +400,7 @@ async def invoke(payload, context):
         # Save the uuid on the first turn, or re-pin defensively if
         # session/load somehow returned a different id.
         if is_new or (saved_uuid and session_id != saved_uuid):
-            save_kiro_session_uuid(session_id, home_root=_KIRO_HOME)
+            save_kiro_session_uuid(session_id, persist_root=_KIRO_PERSIST)
 
         user_text = _compose_user_text(
             prompt, _format_history(history), is_new
@@ -510,7 +415,7 @@ async def invoke(payload, context):
     except ACPError as e:
         log.exception("ACP error")
         if "Session not found" in (e.message or ""):
-            clear_kiro_session(home_root=_KIRO_HOME)
+            clear_kiro_session(persist_root=_KIRO_PERSIST)
         yield json.dumps({"__error": f"kiro_acp_error: {e.message}"})
     except Exception as e:  # noqa: BLE001
         log.exception("Meta-Agent invoke failed")
