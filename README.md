@@ -19,10 +19,10 @@
 ```mermaid
 graph LR
     User((用户)) --> Web[Web Console]
-    EB[EventBridge<br/>Scheduler]
+    Cron[定时器]
     Web -->|对话| Meta[Meta-Agent<br/>创建 / 管理]
-    Web -->|调用| Agents[Agents<br/>执行]
-    EB -.cron 触发.-> Agents
+    Web -->|对话| Agents[Agents<br/>执行]
+    Cron -.触发.-> Agents
     Meta -.codegen + deploy.-> Agents
     Agents --> LLM[Bedrock LLMs]
     Agents --> Ext[Skills · Tools · MCP]
@@ -104,10 +104,10 @@ An agent orchestration platform on AWS Bedrock AgentCore. Describe what you need
 ```mermaid
 graph LR
     User((User)) --> Web[Web Console]
-    EB[EventBridge<br/>Scheduler]
+    Cron[Scheduled trigger]
     Web -->|chat| Meta[Meta-Agent<br/>build / manage]
-    Web -->|invoke| Agents[Agents<br/>execute]
-    EB -.cron trigger.-> Agents
+    Web -->|chat| Agents[Agents<br/>execute]
+    Cron -.fire.-> Agents
     Meta -.codegen + deploy.-> Agents
     Agents --> LLM[Bedrock LLMs]
     Agents --> Ext[Skills · Tools · MCP]
