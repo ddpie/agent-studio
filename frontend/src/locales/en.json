@@ -839,6 +839,7 @@
   },
   "kiroUsage": {
     "title": "Kiro Credits",
+    "subscriptionScope": "Shows the total credits used on this Kiro subscription — including any usage from the Kiro IDE or CLI tied to the same account, not just calls made through Agent Studio.",
     "credits": "credits",
     "refresh": "Refresh",
     "resetsOn": "Resets on {{date}}",

@@ -11,7 +11,6 @@
 - **多模态输入** — 图片 / PDF / Excel / CSV / TSV 自动解析，无需额外配置
 - **定时触发** — 可视化 cron 构建器，每次执行留痕为卡片，可直接查看运行详情
 - **MCP 工具集** — AWS 官方 MCP 目录全量接入，按需启用
-- **团队共享 Kiro 订阅** — 一把 Kiro Key 配置后整个 workspace 共用，credits 用量所有成员可见，烧光之前就有人能提醒 admin
 - **平台级可观测性** — Token 成本、调用次数、日志按 Agent / workspace 自动聚合，不用在 CloudWatch 里拼十几个标签页
 - **Marketplace** — 跨 workspace 发布和克隆 Agent / Skill / Tool，元数据公开，源码克隆后才可见
 
@@ -20,12 +19,12 @@
 ```mermaid
 graph LR
     User((用户)) --> Web[Web Console]
-    Web --> Meta[Meta-Agent<br/>创建 / 管理]
-    Web --> Sub[Agents<br/>执行]
-    Meta -.codegen + deploy.-> Sub
-    Sub --> LLM[Bedrock LLMs]
-    Sub --> Ext[Skills · Tools · MCP]
-    Sub -.observability.-> Obs[Logs · Traces<br/>Evaluations · Costs]
+    Web -->|对话| Meta[Meta-Agent<br/>创建 / 管理]
+    Web -->|调用| Agents[Agents<br/>执行]
+    Meta -.codegen + deploy.-> Agents
+    Agents --> LLM[Bedrock LLMs]
+    Agents --> Ext[Skills · Tools · MCP]
+    Agents -.observability.-> Obs[Logs · Traces<br/>Evaluations · Costs]
 ```
 
 完整系统图（CloudFront / Lambda / EventBridge / Evaluator 等）与关键设计说明见 [docs/architecture.md](docs/architecture.md)。
@@ -95,7 +94,6 @@ An agent orchestration platform on AWS Bedrock AgentCore. Describe what you need
 - **Multimodal input** — Images / PDF / Excel / CSV / TSV parsed out of the box, no extra setup.
 - **Scheduled triggers** — Visual cron builder; every run is archived as a card with a click-through to full run details.
 - **MCP toolbelt** — The full AWS-official MCP catalog, enable what you need.
-- **Shared Kiro subscription** — One Kiro key per workspace, credit usage visible to all members so anyone can flag the admin before it runs out.
 - **Platform-level observability** — Token spend, invocation counts, and logs aggregated per agent and per workspace — no need to pivot between CloudWatch tabs by hand.
 - **Marketplace** — Publish and clone agents / skills / tools across workspaces; metadata is public, source stays private until cloned.
 
@@ -104,12 +102,12 @@ An agent orchestration platform on AWS Bedrock AgentCore. Describe what you need
 ```mermaid
 graph LR
     User((User)) --> Web[Web Console]
-    Web --> Meta[Meta-Agent<br/>build / manage]
-    Web --> Sub[Agents<br/>execute]
-    Meta -.codegen + deploy.-> Sub
-    Sub --> LLM[Bedrock LLMs]
-    Sub --> Ext[Skills · Tools · MCP]
-    Sub -.observability.-> Obs[Logs · Traces<br/>Evaluations · Costs]
+    Web -->|chat| Meta[Meta-Agent<br/>build / manage]
+    Web -->|invoke| Agents[Agents<br/>execute]
+    Meta -.codegen + deploy.-> Agents
+    Agents --> LLM[Bedrock LLMs]
+    Agents --> Ext[Skills · Tools · MCP]
+    Agents -.observability.-> Obs[Logs · Traces<br/>Evaluations · Costs]
 ```
 
 Full system diagram (CloudFront / Lambda / EventBridge / Evaluator, …) and key design notes live in [docs/architecture.md](docs/architecture.md).

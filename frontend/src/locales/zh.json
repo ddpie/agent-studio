@@ -839,6 +839,7 @@
   },
   "kiroUsage": {
     "title": "Kiro 配额",
+    "subscriptionScope": "显示的是该 Kiro 订阅的总消耗——包括绑定同一账号的 Kiro IDE 和 CLI 使用量，不仅限于通过 Agent Studio 发起的调用。",
     "credits": "credits",
     "refresh": "刷新",
     "resetsOn": "{{date}} 重置",
