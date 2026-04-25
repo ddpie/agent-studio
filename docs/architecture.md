@@ -1,6 +1,6 @@
 # 架构
 
-完整系统图与组件说明。两句话总览见 [主 README](../README.md#架构)。
+完整系统图与组件说明。简要概览见 [主 README](../README.md#架构)。
 
 ## 端到端图
 
@@ -99,22 +99,22 @@ graph LR
 ## 组件
 
 ### Meta-Agent（Kiro-backed）
-推理后端是 Kiro CLI。AgentCore 容器启动后，`main.py` 跑 `kiro-cli-chat acp --agent meta-agent` 子进程，用 ACP 协议驱动对话。Meta-Agent 的全部 `@tool` 函数（agent / skill / MCP / schedule / secret / preview / link 等）通过 **stdio MCP subprocess** 暴露给 Kiro，进程内直接调用，不经网络。详细胶水层见 `meta-agent/kiro_adapter/`。
+推理后端是 Kiro CLI。AgentCore 容器启动后，`main.py` 启动 `kiro-cli-chat acp --agent meta-agent` 子进程，通过 ACP 协议驱动对话。Meta-Agent 的全部 `@tool` 函数（agent / skill / MCP / schedule / secret / preview / link 等）通过 **stdio MCP subprocess** 暴露给 Kiro，调用在进程内完成，无需经过网络。适配层实现见 `meta-agent/kiro_adapter/`。
 
-Per-invocation 流水线：
+单次调用流水线：
 
-1. Invoke Lambda 从 Secrets Manager 读 workspace 的 Kiro API Key，作为 payload 字段发到 AgentCore（plaintext 只走 SigV4+TLS，不落 Runtime env）
-2. `main.py` 写一份 per-invocation `KIRO_HOME`（agent config + prompts + MCP 配置），`KIRO_API_KEY` 走环境变量注入 Kiro 子进程
-3. Kiro 拉模型目录 → `session/load` 复用或 `session/new` 开新会话
-4. 每轮 user prompt → Kiro 流式 `session/update` 事件 → `sse_mapper.py` 转回前端既有 SSE 帧（文本 + `__tool` 标记）
-5. Auto-continue 监督器：如果 Kiro 结束 turn 但没发 `[[TASK_COMPLETE]]` 标记且实际调过 tool，自动追加 "Continue." 再跑一轮，最多 3 轮
+1. Invoke Lambda 从 Secrets Manager 读取 workspace 的 Kiro API Key，作为 payload 字段传给 AgentCore（明文仅通过 SigV4+TLS 传输，不进入 Runtime 环境变量）
+2. `main.py` 为本次调用构建独立的 `KIRO_HOME`（agent config + prompts + MCP 配置），并通过环境变量将 `KIRO_API_KEY` 注入 Kiro 子进程
+3. Kiro 拉取模型目录 → 通过 `session/load` 恢复已有会话，或 `session/new` 创建新会话
+4. 每轮 user prompt → Kiro 流式 `session/update` 事件 → `sse_mapper.py` 转换为前端既有的 SSE 帧格式（文本 + `__tool` 标记）
+5. Auto-continue 监督器：若 Kiro 结束回合时未输出 `[[TASK_COMPLETE]]` 标记，但已触发过工具调用，则自动追加 "Continue." 再执行一轮，最多 3 轮
 
-Entrypoint 之外还暴露两个短路 action：
+Entrypoint 之外还提供两个短路 action：
 
-| Action | 做什么 |
+| Action | 功能 |
 |---|---|
-| `list_models` | 跑 `kiro-cli-chat chat --list-models`，返回动态模型列表给前端 picker（chat header + 3 个 AI 助手侧栏共享）|
-| `get_usage` | 跑 `kiro-cli-chat chat "/usage"` 解析 TUI 输出，返回结构化 credits / limit / reset date / tier / overage；前端 Workspace Settings 的 Kiro Credits 卡片消费 |
+| `list_models` | 执行 `kiro-cli-chat chat --list-models`，向前端 picker（chat header 与 3 个 AI 助手侧栏共享）返回当前模型目录 |
+| `get_usage` | 执行 `kiro-cli-chat chat "/usage"`，解析 TUI 输出并返回结构化的 credits / limit / reset date / tier / overage，供前端 Workspace Settings 的 Kiro Credits 卡片消费 |
 
 创建 Agent 流程：
 1. 用户："帮我做个 code reviewer agent"
@@ -127,14 +127,14 @@ Entrypoint 之外还暴露两个短路 action：
 ### Kiro Key & Credits
 每 workspace 一把 Kiro API Key，存 `agent-studio/workspaces/{wsId}/kiro-api-key`（Secrets Manager），带 `kiroRegion` tag（`us-east-1` 或 `eu-central-1`）。
 
-| 路由 | 角色 | 做什么 |
+| 路由 | 角色 | 功能 |
 |---|---|---|
-| `GET /api/workspaces/{wsId}/kiro-key` | viewer+ | 返回 `{configured, region, lastUpdated, updatedBy}`，永不返回 plaintext |
-| `PUT /api/workspaces/{wsId}/kiro-key` | admin | 写 key + region，tag 刷新 `updatedBy`，bust usage cache |
-| `DELETE /api/workspaces/{wsId}/kiro-key` | admin | 删 key，bust usage cache |
-| `GET /api/workspaces/{wsId}/kiro-key/usage` | viewer+ | 调 Meta-Agent `action=get_usage`，返回 credits / limit / reset date / tier / overage rate，60s in-memory 缓存 |
+| `GET /api/workspaces/{wsId}/kiro-key` | viewer+ | 返回 `{configured, region, lastUpdated, updatedBy}`，不返回明文密钥 |
+| `PUT /api/workspaces/{wsId}/kiro-key` | admin | 写入 key 与 region，刷新 `updatedBy` 标签，清除用量缓存 |
+| `DELETE /api/workspaces/{wsId}/kiro-key` | admin | 删除 key，清除用量缓存 |
+| `GET /api/workspaces/{wsId}/kiro-key/usage` | viewer+ | 以 `action=get_usage` 调用 Meta-Agent，返回 credits / limit / reset date / tier / overage rate，结果在 Lambda 进程内缓存 60 秒 |
 
-CRUD Lambda 在 `infra/lib/constructs/api.ts` 里对 `bedrock-agentcore:InvokeAgentRuntime` 的 Resource 用字面 Meta-Agent runtime ARN（无通配），Action 仅此一条。
+CRUD Lambda 在 `infra/lib/constructs/api.ts` 中对 `bedrock-agentcore:InvokeAgentRuntime` 的 Resource 指定精确的 Meta-Agent runtime ARN（不含通配符），且该语句只授予这一项 Action。
 
 ### Agents
 每个用户创建的 Agent 对应一个 AgentCore Runtime。Python 3.10 Strands Agent，包含：
@@ -143,19 +143,19 @@ CRUD Lambda 在 `infra/lib/constructs/api.ts` 里对 `bedrock-agentcore:InvokeAg
 - 捆绑内置 tool：`upload_to_s3`、`run_command`（Code Interpreter）、`fetch_webpage`（Browser）、`read_document`、`web_search` 等
 - 可选 MCP gateway tool（走 workspace 的 MCP Gateway）
 
-发出的 span 里 `resource.attributes.service.name` 就是 agent runtime id（如 `CustomerServiceBot-y3res08W8S`），Runs / Evaluations / Costs 页签都按这个 key 过滤。
+emit 的 span 中 `resource.attributes.service.name` 即 agent runtime id（如 `CustomerServiceBot-y3res08W8S`），Runs / Evaluations / Costs 页签均以此为过滤条件。
 
 ### Evaluator
-AgentCore OnlineEvaluationConfig，每个 agent 一个（AgentCore 限制 `serviceNames` 只能一个元素，无法 per-workspace）。评估器监听 `aws/spans` 按 service.name 过滤，对 100% 完成会话跑 LLM-as-Judge（Correctness / Helpfulness / GoalSuccessRate）。结果写入 `/aws/bedrock-agentcore/evaluations/results/<config-id>`。
+每个 Agent 对应一个 AgentCore OnlineEvaluationConfig 实例（AgentCore 限制 `serviceNames` 仅支持单元素，无法以 workspace 为粒度）。评估器按 service.name 过滤 `aws/spans`，对所有完成的会话执行 LLM-as-Judge（Correctness / Helpfulness / GoalSuccessRate）评分。结果写入 `/aws/bedrock-agentcore/evaluations/results/<config-id>`。
 
-CRUD 生命周期：
-- 在 `lambda/crud/agents.py::create_agent` 钩子里创建
-- 在 `create_agent::delete_agent` 钩子里删除
+生命周期：
+- 由 `lambda/crud/agents.py::create_agent` hook 创建
+- 由 `lambda/crud/agents.py::delete_agent` hook 删除
 
 ### Scheduler
-EventBridge Scheduler 调用 AWS SDK Universal Target `aws-sdk:bedrockagentcore:invokeAgentRuntime`。关键坑：`RuntimeSessionId` 必须是 `Target.Input` 的顶层字段（不能只放在 `Payload` 里），否则调用会静默失败。Session id 形如 `sched-{suffix}-<aws.scheduler.scheduled-time>`，UI 里 Recent Runs 可按 session 前缀过滤 span。
+EventBridge Scheduler 通过 AWS SDK Universal Target `aws-sdk:bedrockagentcore:invokeAgentRuntime` 调用 Agent。注意事项：`RuntimeSessionId` 必须置于 `Target.Input` 顶层字段，仅放在 `Payload` 中会导致调用静默失败。Session id 采用 `sched-{suffix}-<aws.scheduler.scheduled-time>` 的格式，便于 UI 的 Recent Runs 按 session 前缀过滤 span。
 
-"Run now" 创建一个 `at(now+5s)` 的一次性定时任务，触发后自删 —— 和真正 cron 走同一套代码，但 <1s 返回（避免冷启动偏重的 Agent 把 Lambda 打 timeout）。
+"Run now" 会创建一个 `at(now+5s)` 的一次性定时任务，触发后自动删除。它与周期性 cron 共用同一套代码路径，但可在 1 秒内返回，避免冷启动较慢的 Agent 导致 Lambda 超时。
 
 ### 可观测数据流
 
@@ -193,14 +193,14 @@ Agent 详情页采用 sticky 侧栏 + IntersectionObserver lazy-mount（Runs / E
 | `WafStack` (us-east-1) | 正则 + 限流规则；绑定到 CloudFront |
 | `AgentStudioStack` (应用区域) | Cognito、DynamoDB、API Gateway + CRUD Lambda、Invoke Lambda、A2A Proxy Lambda、CloudFront + OAC、S3、Secrets Manager |
 
-命名与安全规则由 CDK aspects + pre-commit hook 在代码里强制执行，不靠文档自觉。详见 `infra/lib/aspects/public-access-guard.ts`。
+命名与安全规则由 CDK aspects 与 pre-commit hook 在代码层面强制执行，不依赖文档约束。详见 `infra/lib/aspects/public-access-guard.ts`。
 
 ---
 
 # Architecture (English)
 
 Full system diagram and component-by-component notes. For the
-2-sentence pitch see [the main README](../README.md#architecture).
+one-paragraph overview see [the main README](../README.md#architecture).
 
 ## End-to-end diagram
 
@@ -309,19 +309,22 @@ hop. The glue layer lives in `meta-agent/kiro_adapter/`.
 Per-invocation pipeline:
 
 1. The Invoke Lambda reads the workspace's Kiro API key from Secrets
-   Manager and puts it on the payload going into AgentCore (plaintext
-   only rides SigV4+TLS, never lands in Runtime env).
-2. `main.py` materializes a per-invocation `KIRO_HOME` (agent config +
-   prompts + MCP config) and forwards `KIRO_API_KEY` into the Kiro
-   subprocess via env.
-3. Kiro lists models → `session/load` resumes, or `session/new` starts
-   a fresh one.
+   Manager and places it on the payload sent to AgentCore. The
+   plaintext is transmitted only via SigV4+TLS and never stored in
+   Runtime environment variables.
+2. `main.py` materializes a per-invocation `KIRO_HOME` (agent config,
+   prompts, MCP config) and injects `KIRO_API_KEY` into the Kiro
+   subprocess via environment.
+3. Kiro fetches the model catalog, then either resumes an existing
+   conversation with `session/load` or starts a new one with
+   `session/new`.
 4. Each user prompt streams back as `session/update` events;
-   `sse_mapper.py` turns them into the SSE frame format the frontend
-   already consumes (plain text + `__tool` markers).
+   `sse_mapper.py` converts them into the SSE frame format the
+   frontend already consumes (plain text + `__tool` markers).
 5. An auto-continue supervisor watches for the `[[TASK_COMPLETE]]`
-   marker: if Kiro ends a turn without it but actually ran tools, it
-   quietly sends "Continue." for another round (capped at 3).
+   marker. If Kiro ends a turn without emitting it but has already
+   invoked tools, the supervisor automatically submits "Continue."
+   for another round (capped at 3).
 
 Besides the main turn handler, the entrypoint short-circuits two
 control-plane actions:
@@ -369,28 +372,30 @@ runtime id (e.g. `CustomerServiceBot-y3res08W8S`). This is the key the
 Runs / Evaluations / Costs tabs use to filter.
 
 ### Evaluator
-AgentCore OnlineEvaluationConfig, one per agent (AgentCore restricts
-`serviceNames` to a single element, so per-workspace doesn't work). The
-evaluator watches `aws/spans` filtered by the agent's service.name and
-runs LLM-as-Judge (Correctness / Helpfulness / GoalSuccessRate) on
-100% of completed sessions. Results land in
+One AgentCore OnlineEvaluationConfig per agent (AgentCore restricts
+`serviceNames` to a single element, which rules out a workspace-wide
+configuration). The evaluator filters `aws/spans` by the agent's
+`service.name` and runs LLM-as-Judge (Correctness, Helpfulness,
+GoalSuccessRate) over every completed session. Results land in
 `/aws/bedrock-agentcore/evaluations/results/<config-id>`.
 
-CRUD lifecycle:
-- Created from `lambda/crud/agents.py::create_agent` (hook)
-- Deleted from `create_agent::delete_agent` (hook)
+Lifecycle:
+- Created by the `lambda/crud/agents.py::create_agent` hook
+- Deleted by the `lambda/crud/agents.py::delete_agent` hook
 
 ### Scheduler
-EventBridge Scheduler targets the AWS SDK Universal Target
-`aws-sdk:bedrockagentcore:invokeAgentRuntime`. Key gotcha:
-`RuntimeSessionId` must be a top-level field in `Target.Input` (not
-just inside `Payload`), otherwise invocations silently fail. Session
-ids are shaped `sched-{suffix}-<aws.scheduler.scheduled-time>` so
-Recent Runs in the UI can filter spans by session prefix.
+EventBridge Scheduler invokes agents via the AWS SDK Universal Target
+`aws-sdk:bedrockagentcore:invokeAgentRuntime`. Important caveat:
+`RuntimeSessionId` must appear at the top level of `Target.Input`;
+placing it inside `Payload` alone causes the invocation to fail
+silently. Session IDs follow the format
+`sched-{suffix}-<aws.scheduler.scheduled-time>` so Recent Runs in the
+UI can filter spans by session prefix.
 
 "Run now" creates a one-shot `at(now+5s)` schedule that deletes itself
-after firing — identical code path to real cron, but returns in <1 s
-(no Lambda timeout risk for cold-start-heavy agents).
+after firing. It shares the same code path as a recurring cron but
+returns in under one second, avoiding Lambda timeouts on agents with
+heavy cold-start cost.
 
 ### Observability data flow
 
@@ -439,5 +444,6 @@ similarly.
 | `WafStack` (us-east-1) | Regex + rate-limit rules; bound to CloudFront |
 | `AgentStudioStack` (app region) | Cognito, DynamoDB, API Gateway + CRUD Lambda, Invoke Lambda, A2A Proxy Lambda, CloudFront + OAC, S3, Secrets Manager |
 
-Naming and security rules are enforced in code (CDK aspects +
-pre-commit hook), not in docs. See `infra/lib/aspects/public-access-guard.ts`.
+Naming and security rules are enforced in code (CDK aspects plus a
+pre-commit hook) rather than relying on documentation to enforce them.
+See `infra/lib/aspects/public-access-guard.ts`.
