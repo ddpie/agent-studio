@@ -4,6 +4,7 @@ import {
   getWorkspaceId,
   setWorkspaceId,
 } from "../lib/api-client";
+import { demoteHashForWorkspaceSwitch } from "../lib/workspace-switch-url";
 
 export type WorkspaceRole = "viewer" | "editor" | "admin" | "owner";
 
@@ -92,7 +93,13 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const target = get().workspaces.find((w) => w.workspaceId === wsId);
     if (!target) return;
     setWorkspaceId(wsId);
-    // Hard reload so per-workspace state (agent list, sessions, stores) resets cleanly.
-    window.location.assign(window.location.pathname + window.location.search);
+    // Hard reload so per-workspace state (agent list, sessions, stores) resets
+    // cleanly. Preserve the current route but demote any workspace-scoped
+    // detail page (e.g. /agents/edit/<id>) to its list-view ancestor so we
+    // don't land on a 404 for a resource that doesn't exist in the target ws.
+    const nextHash = demoteHashForWorkspaceSwitch(window.location.hash);
+    window.location.assign(
+      window.location.pathname + window.location.search + nextHash,
+    );
   },
 }));

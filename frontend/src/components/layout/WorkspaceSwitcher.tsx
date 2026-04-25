@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "../../lib/toast";
 import { useWorkspaceStore } from "../../stores/workspace-store";
 import { createWorkspace, setWorkspaceId, ApiError } from "../../lib/api-client";
+import { demoteHashForWorkspaceSwitch } from "../../lib/workspace-switch-url";
 
 export default function WorkspaceSwitcher() {
   const { t } = useTranslation();
@@ -46,7 +47,10 @@ export default function WorkspaceSwitcher() {
       await refreshWorkspaces();
       // Switch into the newly created workspace (triggers hard reload).
       setWorkspaceId(ws.workspaceId);
-      window.location.assign(window.location.pathname + window.location.search);
+      const nextHash = demoteHashForWorkspaceSwitch(window.location.hash);
+      window.location.assign(
+        window.location.pathname + window.location.search + nextHash,
+      );
     } catch (err) {
       const msg = err instanceof ApiError ? err.body?.error : undefined;
       toast.error(msg || t("workspace.create.failed"));
