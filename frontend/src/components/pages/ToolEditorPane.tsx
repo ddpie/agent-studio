@@ -10,6 +10,7 @@ interface ToolEditorPaneProps {
   name: string;
   description: string;
   code: string;
+  readOnly?: boolean;
   onNameChange: (v: string) => void;
   onDescriptionChange: (v: string) => void;
   onCodeChange: (v: string | undefined) => void;
@@ -19,7 +20,7 @@ interface ToolEditorPaneProps {
 }
 
 export default function ToolEditorPane({
-  name, description, code, onNameChange, onDescriptionChange, onCodeChange, editorRef, monacoRef, errorBar,
+  name, description, code, readOnly, onNameChange, onDescriptionChange, onCodeChange, editorRef, monacoRef, errorBar,
 }: ToolEditorPaneProps) {
   const { t } = useTranslation();
   const isDark = useIsDark();
@@ -52,14 +53,14 @@ export default function ToolEditorPane({
       <div className={`flex items-center gap-3 px-4 py-2 border-b ${isDark ? "border-gray-800 bg-gray-900/50" : "border-gray-100 bg-gray-50/50"}`}>
         <div className="flex items-center gap-1.5">
           <label className="text-[10px] text-gray-500 dark:text-gray-400">{t("tools.name")}</label>
-          <input value={name} onChange={(e) => onNameChange(e.target.value)}
-            className={`px-2 py-1 text-xs border rounded w-36 outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? "border-gray-700 bg-gray-800 text-gray-200" : "border-gray-200 bg-white text-gray-800"}`}
+          <input value={name} onChange={(e) => onNameChange(e.target.value)} readOnly={readOnly} disabled={readOnly}
+            className={`px-2 py-1 text-xs border rounded w-36 outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-70 disabled:cursor-not-allowed ${isDark ? "border-gray-700 bg-gray-800 text-gray-200" : "border-gray-200 bg-white text-gray-800"}`}
             placeholder={t("tools.namePlaceholder")} />
         </div>
         <div className="flex items-center gap-1.5 flex-1">
           <label className="text-[10px] text-gray-500 dark:text-gray-400">{t("tools.description")}</label>
-          <input value={description} onChange={(e) => onDescriptionChange(e.target.value)}
-            className={`flex-1 px-2 py-1 text-xs border rounded outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? "border-gray-700 bg-gray-800 text-gray-200" : "border-gray-200 bg-white text-gray-800"}`}
+          <input value={description} onChange={(e) => onDescriptionChange(e.target.value)} readOnly={readOnly} disabled={readOnly}
+            className={`flex-1 px-2 py-1 text-xs border rounded outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-70 disabled:cursor-not-allowed ${isDark ? "border-gray-700 bg-gray-800 text-gray-200" : "border-gray-200 bg-white text-gray-800"}`}
             placeholder={t("tools.descPlaceholder")} />
         </div>
       </div>
@@ -70,7 +71,7 @@ export default function ToolEditorPane({
           value={code}
           onChange={onCodeChange}
           onMount={handleMount}
-          options={{ minimap: { enabled: false }, fontSize: 13, lineNumbers: "on", scrollBeyondLastLine: false, tabSize: 4, insertSpaces: true, wordWrap: "on", automaticLayout: true }}
+          options={{ readOnly: readOnly, minimap: { enabled: false }, fontSize: 13, lineNumbers: "on", scrollBeyondLastLine: false, tabSize: 4, insertSpaces: true, wordWrap: "on", automaticLayout: true }}
         />
       </div>
       {errorBar}

@@ -709,6 +709,8 @@
     "description": "描述",
     "descPlaceholder": "这个工具做什么？",
     "seed": "预置",
+    "readOnly": "只读",
+    "builtinReadOnly": "内置工具为只读。请创建新工具或 Fork 后自定义。",
     "toolNotFound": "工具未找到",
     "deleteConfirm": "{{name}} 将被移到回收站。你可以稍后从工具库页面恢复。",
     "saveFailed": "保存工具失败",

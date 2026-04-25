@@ -10,6 +10,7 @@ interface ToolToolbarProps {
   saving: boolean;
   validating: boolean;
   assistantOpen: boolean;
+  readOnly?: boolean;
   onBack: () => void;
   onSave: () => void;
   onDiscard: () => void;
@@ -21,7 +22,7 @@ interface ToolToolbarProps {
 }
 
 export default function ToolToolbar({
-  toolName, description, hasChanges, saving, validating, assistantOpen,
+  toolName, description, hasChanges, saving, validating, assistantOpen, readOnly,
   onBack, onSave, onDiscard, onValidate, onShowDiff, onDelete, onToggleAssistant,
   extraSlot,
 }: ToolToolbarProps) {
@@ -33,8 +34,18 @@ export default function ToolToolbar({
       <button onClick={onBack} className={`p-1 rounded ${isDark ? "hover:bg-gray-800 text-gray-300" : "hover:bg-gray-100 text-gray-600"}`} title={t("common.back")}>
         <ChevronLeft className="w-4 h-4" />
       </button>
-      <div className="flex-1 min-w-0">
-        <h2 className={`text-base font-semibold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{toolName}</h2>
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        <h2 className={`text-base font-semibold truncate ${isDark ? "text-gray-100" : "text-gray-900"}`}>{toolName}</h2>
+        {readOnly && (
+          <span
+            className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+              isDark ? "bg-gray-800 text-gray-400 border border-gray-700" : "bg-gray-100 text-gray-600 border border-gray-200"
+            }`}
+            title={t("tools.builtinReadOnly")}
+          >
+            {t("tools.readOnly")}
+          </span>
+        )}
         {description && <p className="text-xs text-gray-400 dark:text-gray-500 truncate">{description}</p>}
       </div>
       {extraSlot}
@@ -50,13 +61,13 @@ export default function ToolToolbar({
           {t("tools.showChanges")}
         </button>
       )}
-      {hasChanges && (
+      {hasChanges && !readOnly && (
         <button onClick={onDiscard}
           className={`px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${isDark ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800" : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"}`}>
           {t("common.discard")}
         </button>
       )}
-      {hasChanges && (
+      {hasChanges && !readOnly && (
         <>
           <div className={`w-px h-5 ${isDark ? "bg-gray-700" : "bg-gray-200"} mx-0.5`} />
           <button onClick={onSave} disabled={saving}
@@ -66,9 +77,11 @@ export default function ToolToolbar({
           </button>
         </>
       )}
-      <button onClick={onDelete} className={`p-1.5 rounded transition-colors ${isDark ? "text-red-400 hover:bg-red-900/20" : "text-red-400 hover:text-red-600 hover:bg-red-50"}`} title={t("common.delete")}>
-        <Trash2 className="w-4 h-4" />
-      </button>
+      {!readOnly && (
+        <button onClick={onDelete} className={`p-1.5 rounded transition-colors ${isDark ? "text-red-400 hover:bg-red-900/20" : "text-red-400 hover:text-red-600 hover:bg-red-50"}`} title={t("common.delete")}>
+          <Trash2 className="w-4 h-4" />
+        </button>
+      )}
       <button onClick={onToggleAssistant}
         className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${assistantOpen
           ? isDark ? "bg-purple-900/30 text-purple-400" : "bg-purple-50 text-purple-600"

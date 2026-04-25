@@ -208,6 +208,8 @@ def update_tool(wsId: str, toolId: str):
     existing = table.get_item(Key={"toolId": toolId}, ConsistentRead=True).get("Item")
     if not existing or existing.get("workspace_id") != ws_id:
         return forbidden()
+    if existing.get("builtin"):
+        return forbidden()
     if existing.get("deleted"):
         return not_found()
 
@@ -269,8 +271,12 @@ def delete_tool(wsId: str, toolId: str):
                 ":t": True,
                 ":now": datetime.utcnow().isoformat() + "Z",
                 ":ws": ws_id,
+                ":f": False,
             },
-            ConditionExpression="attribute_exists(toolId) AND workspace_id = :ws",
+            ConditionExpression=(
+                "attribute_exists(toolId) AND workspace_id = :ws "
+                "AND (attribute_not_exists(builtin) OR builtin = :f)"
+            ),
         )
     except table.meta.client.exceptions.ConditionalCheckFailedException:
         return forbidden()
@@ -367,8 +373,11 @@ def permanent_delete_tool(wsId: str, toolId: str):
     try:
         table.delete_item(
             Key={"toolId": toolId},
-            ConditionExpression="attribute_exists(toolId) AND workspace_id = :ws AND deleted = :t",
-            ExpressionAttributeValues={":ws": ws_id, ":t": True},
+            ConditionExpression=(
+                "attribute_exists(toolId) AND workspace_id = :ws AND deleted = :t "
+                "AND (attribute_not_exists(builtin) OR builtin = :f)"
+            ),
+            ExpressionAttributeValues={":ws": ws_id, ":t": True, ":f": False},
         )
     except table.meta.client.exceptions.ConditionalCheckFailedException:
         return forbidden()
