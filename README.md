@@ -23,6 +23,7 @@ graph LR
     Web -->|对话| Meta[Meta-Agent<br/>创建 / 管理]
 
     subgraph Agents
+        direction TB
         A1[Agent A] <-->|A2A| A2[Agent B]
         A3[Agent C]
     end
@@ -114,6 +115,7 @@ graph LR
     Web -->|chat| Meta[Meta-Agent<br/>build / manage]
 
     subgraph Agents
+        direction TB
         A1[Agent A] <-->|A2A| A2[Agent B]
         A3[Agent C]
     end
