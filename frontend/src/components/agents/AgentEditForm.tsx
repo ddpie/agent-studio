@@ -14,6 +14,8 @@ import ReviewChangesModal from "./ReviewChangesModal";
 import AgentFormSections from "./AgentFormSections";
 import SkillEditorView from "./SkillEditorView";
 import { useAgentDeploy } from "../../hooks/useAgentDeploy";
+import { toast } from "../../lib/toast";
+import { formatDraftAge } from "../../lib/draft-autosave";
 
 export default function AgentEditForm() {
   const { t } = useTranslation();
@@ -23,6 +25,7 @@ export default function AgentEditForm() {
     agentId, agentName, formData, loading, saving,
     loadAgent, updateField, setSaving, markSaved, getChangedFields,
     setEditingSkillId, pendingSkillFiles, originalSkillFiles,
+    restoredDraftTs, clearRestoredNotice,
   } = useAgentEditStore();
   const { agents, fetchAgents } = useAgentListStore();
   const { panelOpen, openPanel } = useEditAssistantStore();
@@ -62,6 +65,16 @@ export default function AgentEditForm() {
     window.addEventListener("open-skill-diff", handler);
     return () => window.removeEventListener("open-skill-diff", handler);
   }, []);
+
+  // Surface a one-off toast when loadAgent restores a draft. The store
+  // flags the capture timestamp via restoredDraftTs; this effect fires
+  // the toast exactly once per restore, then resets the flag.
+  useEffect(() => {
+    if (restoredDraftTs) {
+      toast.info(t("common.draftRestored", { when: formatDraftAge(restoredDraftTs, t) }));
+      clearRestoredNotice();
+    }
+  }, [restoredDraftTs, clearRestoredNotice, t]);
 
   // Load agent data when route param changes
   useEffect(() => {

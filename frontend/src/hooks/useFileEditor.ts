@@ -2,18 +2,35 @@
  * useFileEditor — Reusable hook for multi-file editing with staging (create/delete/rename).
  * Extracted from SkillDetail.tsx to share between SkillDetail and SkillEditorView.
  */
-import { useState, useMemo, useCallback, useRef } from "react"
+import { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import type { SkillStorageOps } from "./useSkillStorage"
 import type { TreeNode } from "../lib/tree-helpers"
 import type { ValidationResult } from "../lib/types/validation"
 import { buildTreeData } from "../lib/tree-helpers"
 import { validateSkill } from "../lib/validators/skill-validator"
+import { createDebouncedSaver, loadDraftWithMeta, clearDraft } from "../lib/draft-autosave"
 
 export type { SkillStorageOps }
 
 interface UseFileEditorParams {
   storage: SkillStorageOps
   onFileSwitch?: (path: string) => void
+  /**
+   * Optional localStorage key for autosaving in-progress edits. When set,
+   * the hook debounce-writes the `editedContents` map under this key on
+   * every change and restores from it after loadInitial succeeds. Staging
+   * ops (creates/deletes/renames) are intentionally NOT persisted — they
+   * interact with server state in ways that make post-reload replay
+   * fragile. `handleSaveAll` success clears the draft.
+   */
+  draftKey?: string
+  /**
+   * Optional callback fired exactly once per loadInitial when a draft is
+   * successfully restored. Receives the draft's capture timestamp so the
+   * caller can surface a toast like "Restored N minutes ago". Not fired
+   * if the draft was empty or fully matched the server copy.
+   */
+  onDraftRestored?: (ts: number) => void
 }
 
 interface UseFileEditorReturn {
@@ -56,7 +73,7 @@ interface UseFileEditorReturn {
   restoreEdits: (edits: Record<string, string>) => void
 }
 
-export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): UseFileEditorReturn {
+export function useFileEditor({ storage, onFileSwitch, draftKey, onDraftRestored }: UseFileEditorParams): UseFileEditorReturn {
   // --- Core state ---
   const [files, setFiles] = useState<string[]>([])
   const [currentFile, setCurrentFileInternal] = useState("SKILL.md")
@@ -77,6 +94,36 @@ export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): U
 
   const loadingPathRef = useRef<string | null>(null)
   const currentFileRef = useRef(currentFile)
+
+  // Local draft autosave. Only `editedContents` is persisted; staging ops
+  // (creates/deletes/renames) are skipped on purpose — restoring them after
+  // a reload would race with the server's current file list and confuse
+  // the diff baseline.
+  const draftSaver = useMemo(
+    () => draftKey ? createDebouncedSaver<Record<string, string>>(draftKey, 500) : null,
+    [draftKey],
+  )
+  // Flush any pending write when the key changes or the component unmounts
+  // so the last keystroke isn't lost.
+  useEffect(() => {
+    return () => { draftSaver?.flush() }
+  }, [draftSaver])
+
+  // Also flush on tab-close / reload / backgrounding — unmount doesn't fire
+  // in those cases. Synchronous localStorage.setItem is safe in beforeunload.
+  useEffect(() => {
+    if (!draftSaver) return
+    const onBeforeUnload = () => { draftSaver.flush() }
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") draftSaver.flush()
+    }
+    window.addEventListener("beforeunload", onBeforeUnload)
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload)
+      document.removeEventListener("visibilitychange", onVisibility)
+    }
+  }, [draftSaver])
 
   const setCurrentFile = useCallback((path: string) => {
     currentFileRef.current = path
@@ -126,8 +173,35 @@ export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): U
     setCurrentFile(initialFile || "SKILL.md")
     setLoadingContent(false)
 
+    // Replay any previously-autosaved edits now that originals are loaded.
+    // Only paths still present in the file list are restored — if a file
+    // has been deleted or renamed on the server the local edit is stale.
+    if (draftKey) {
+      const meta = loadDraftWithMeta<Record<string, string>>(draftKey)
+      if (meta && Object.keys(meta.data).length > 0) {
+        const restored: Record<string, string> = {}
+        const validPaths = new Set([...fileList, initialFile || "SKILL.md"])
+        for (const [path, content] of Object.entries(meta.data)) {
+          if (validPaths.has(path)) restored[path] = content
+        }
+        if (Object.keys(restored).length > 0) {
+          const next = new Set<string>()
+          for (const [path, content] of Object.entries(restored)) {
+            editedContents.set(path, content)
+            const orig = originalContents.get(path)
+            if (orig === undefined || content !== orig) next.add(path)
+          }
+          setChangedFiles(next)
+          // If the initial file was restored, surface it to the editor pane.
+          const cur = restored[initialFile || "SKILL.md"]
+          if (cur !== undefined) setContent(cur)
+          onDraftRestored?.(meta.ts)
+        }
+      }
+    }
+
     return { files: fileList, content: fileContent }
-  }, [storage, originalContents, editedContents, pendingCreates, pendingDeletes, pendingRenames, setCurrentFile])
+  }, [storage, originalContents, editedContents, pendingCreates, pendingDeletes, pendingRenames, setCurrentFile, draftKey])
 
   const loadFromMemory = useCallback((memFiles: Record<string, string>) => {
     originalContents.clear()
@@ -190,7 +264,22 @@ export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): U
       next.delete(path)
     }
     setChangedFiles(next)
-  }, [changedFiles, editedContents, originalContents])
+    // Snapshot all dirty paths (not just the current one) so a reload
+    // recovers every file the user touched this session.
+    if (draftSaver) {
+      if (next.size === 0) {
+        draftSaver.cancel()
+        if (draftKey) clearDraft(draftKey)
+      } else {
+        const snapshot: Record<string, string> = {}
+        for (const p of next) {
+          const c = editedContents.get(p)
+          if (c !== undefined) snapshot[p] = c
+        }
+        draftSaver.schedule(snapshot)
+      }
+    }
+  }, [changedFiles, editedContents, originalContents, draftSaver, draftKey])
 
   const stageMove = useCallback((oldPath: string, newPath: string) => {
     if (newPath === oldPath) return
@@ -362,6 +451,8 @@ export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): U
       setChangedFiles(new Set())
       setPendingDeletes(new Set())
       setPendingDeleteDirs(new Set())
+      draftSaver?.cancel()
+      if (draftKey) clearDraft(draftKey)
 
       // Refresh from storage
       const [newFiles, newContent] = await Promise.all([
@@ -396,9 +487,11 @@ export function useFileEditor({ storage, onFileSwitch }: UseFileEditorParams): U
     setChangedFiles(new Set())
     setPendingDeletes(new Set())
     setPendingDeleteDirs(new Set())
+    draftSaver?.cancel()
+    if (draftKey) clearDraft(draftKey)
     const orig = originalContents.get(currentFileRef.current)
     if (orig !== undefined) setContent(orig)
-  }, [pendingCreates, pendingDeletes, pendingDeleteDirs, pendingRenames, editedContents, originalContents])
+  }, [pendingCreates, pendingDeletes, pendingDeleteDirs, pendingRenames, editedContents, originalContents, draftSaver, draftKey])
 
   const getDiffChanges = useCallback((): Map<string, { original: string; edited: string }> => {
     const result = new Map<string, { original: string; edited: string }>()

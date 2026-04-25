@@ -2,7 +2,41 @@ import { fetchAuthSession } from "aws-amplify/auth";
 import { agentConfig } from "../config";
 
 const WS_KEY = "agent-studio-workspace-id";
+// Cognito `sub` of the user whose data is currently in localStorage. Used
+// to detect "different user logs in on the same browser" without relying
+// on Amplify's sign-out side-effects (which don't run on stale sessions).
+const USER_KEY = "agent-studio-last-user-sub";
 const API_BASE = agentConfig.apiUrl; // 空字符串 = 相对路径（生产），有值 = 直连 CloudFront（开发）
+
+const DRAFT_PREFIXES = ["agent-draft:", "skill-draft:", "tool-draft:"] as const;
+
+/**
+ * Wipe every piece of user-scoped persistent state — drafts, chat history,
+ * workspace pointer. UI prefs (`agent-studio-ui`) are NOT touched because
+ * theme/language are personal to the device, not the user.
+ *
+ * Intended for sign-out and cross-user-login flows. Best-effort: individual
+ * clears swallow errors so a failing import doesn't block the others.
+ */
+export async function clearUserScopedLocalData(): Promise<void> {
+  await Promise.all([
+    import("../stores/chat-store")
+      .then((m) => m.resetChatForWorkspaceSwitch())
+      .catch(() => {}),
+    import("../stores/agent-edit-store")
+      .then((m) => m.cancelAllAgentDraftSavers())
+      .catch(() => {}),
+    import("./draft-autosave")
+      .then((m) => m.clearDraftsByPrefix(DRAFT_PREFIXES))
+      .catch(() => {}),
+  ]);
+  try {
+    localStorage.removeItem(WS_KEY);
+    localStorage.removeItem(USER_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
 export function getWorkspaceId(): string {
   return localStorage.getItem(WS_KEY) || "default";
@@ -12,18 +46,21 @@ export function setWorkspaceId(wsId: string): Promise<void> {
   const prev = localStorage.getItem(WS_KEY);
   localStorage.setItem(WS_KEY, wsId);
   // Workspace changed — clear workspace-scoped persisted state (chat sessions,
-  // currentAgentId, lastActiveSessionByAgent) so stale agent IDs don't leak
-  // across workspaces. UI prefs (`agent-studio-ui`) and the workspace pointer
-  // itself (`agent-studio-workspace-id`) are intentionally preserved.
+  // in-progress drafts for agents/skills/tools) so stale resource ids don't
+  // leak across workspaces. UI prefs (`agent-studio-ui`) and the workspace
+  // pointer itself (`agent-studio-workspace-id`) are intentionally preserved.
   //
-  // Dynamic import to avoid a static cycle (chat-store -> agentcore-client
+  // Dynamic imports avoid a static cycle (chat-store -> agentcore-client
   // -> api-client). Returns a promise so callers that are about to do a hard
-  // reload (switchWorkspace) can await the clear — without the await the
-  // reload races ahead and the old chat's localStorage survives into the new
-  // workspace.
+  // reload (switchWorkspace) can await the clears — without the await the
+  // reload races ahead and old localStorage survives into the new workspace.
   if (prev && prev !== wsId) {
-    return import("../stores/chat-store")
-      .then((mod) => mod.resetChatForWorkspaceSwitch())
+    return Promise.all([
+      import("../stores/chat-store").then((m) => m.resetChatForWorkspaceSwitch()),
+      import("../stores/agent-edit-store").then((m) => m.cancelAllAgentDraftSavers()),
+      import("./draft-autosave").then((m) => m.clearDraftsByPrefix(DRAFT_PREFIXES)),
+    ])
+      .then(() => { /* all clears done */ })
       .catch(() => { /* best-effort; localStorage may survive a failure */ });
   }
   return Promise.resolve();
@@ -55,6 +92,43 @@ async function getIdToken(forceRefresh = false): Promise<string> {
   const token = session.tokens?.idToken?.toString();
   if (!token) throw new Error("Not authenticated");
   return token;
+}
+
+/**
+ * Wipe user-scoped local data if the logged-in user changed since last boot.
+ * Catches the shared-device scenario: user A signs out without triggering
+ * the signOut wipe (e.g. tab closed), then user B signs in — stale drafts
+ * keyed by agent/skill/tool ids might otherwise be readable.
+ *
+ * Compares the Cognito `sub` in the ID token against the one we stashed
+ * last boot. On mismatch (or first boot with existing drafts) wipes and
+ * updates the stash.
+ */
+export async function enforceUserIdentity(): Promise<void> {
+  let currentSub: string | null = null;
+  try {
+    const session = await fetchAuthSession();
+    const payload = session.tokens?.idToken?.payload;
+    const sub = payload?.sub;
+    if (typeof sub === "string") currentSub = sub;
+  } catch {
+    return; // not logged in, nothing to do
+  }
+  if (!currentSub) return;
+
+  const stored = localStorage.getItem(USER_KEY);
+  if (stored === currentSub) return;
+
+  // Identity changed (or was never recorded) — wipe anything workspace-
+  // scoped from the prior user and record the new sub.
+  if (stored && stored !== currentSub) {
+    await clearUserScopedLocalData();
+  }
+  try {
+    localStorage.setItem(USER_KEY, currentSub);
+  } catch {
+    /* ignore */
+  }
 }
 
 export class ApiError extends Error {

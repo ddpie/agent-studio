@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams, useBlocker } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Loader2, Code2, GitCompare, X, Sparkles } from "lucide-react";
@@ -11,6 +11,8 @@ import { useWorkspaceStore } from "../../stores/workspace-store";
 import { preloadPyodide, isPyodideReady, checkPythonSyntax } from "../../lib/pyodide-checker";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
 import { publishTool, unpublishTool } from "../../lib/api-client";
+import { createDebouncedSaver, loadDraftWithMeta, clearDraft, formatDraftAge } from "../../lib/draft-autosave";
+import { toast } from "../../lib/toast";
 import { getCurrentUser } from "aws-amplify/auth";
 import ToolAssistant from "../tools/ToolAssistant";
 import useIsDark from "../../hooks/useIsDark";
@@ -78,6 +80,22 @@ export default function ToolDetail() {
   const validateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveRef = useRef<(() => void) | undefined>(undefined);
 
+  // Local draft autosave. Survives F5 but not browser clear or device swap;
+  // a stopgap until tool drafts get server-side persistence like chat does.
+  const draftKey = toolId ? `tool-draft:${toolId}` : "";
+  const draftSaver = useMemo(
+    () => draftKey ? createDebouncedSaver<{ code: string; name: string; description: string }>(draftKey, 500) : null,
+    [draftKey],
+  );
+  // Tracks whether we've already attempted a one-time restore for this tool.
+  const draftRestoredRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // When toolId changes or component unmounts, flush any pending draft
+    // write so the last keystrokes aren't dropped on unmount.
+    return () => { draftSaver?.flush(); };
+  }, [draftSaver]);
+
   useEffect(() => { getCurrentUser().then(u => setCurrentUser(u.username)).catch(() => {}); }, []);
 
   // ESC to close diff
@@ -103,11 +121,36 @@ export default function ToolDetail() {
     if (!tool) { setNotFound(true); setLoaded(true); return; }
     setName(tool.name); setDescription(tool.description); setOriginalName(tool.name); setOriginalDescription(tool.description);
     setCode(tool.code); setOriginalCode(tool.code); setToolOwner(tool.owner); setIsBuiltin(tool.builtin === true); setVisibility(tool.visibility || "private"); setLoaded(true);
+    // Restore a local draft exactly once per tool id. Builtin tools are read-
+    // only, so skip the restore to avoid showing non-editable stale work.
+    if (toolId && !tool.builtin && draftKey && draftRestoredRef.current !== toolId) {
+      draftRestoredRef.current = toolId;
+      const meta = loadDraftWithMeta<{ code: string; name: string; description: string }>(draftKey);
+      if (meta && (meta.data.code !== tool.code || meta.data.name !== tool.name || meta.data.description !== tool.description)) {
+        setCode(meta.data.code);
+        setName(meta.data.name);
+        setDescription(meta.data.description);
+        toast.info(t("common.draftRestored", { when: formatDraftAge(meta.ts, t) }));
+      }
+    }
     if (toolId) openPanel(toolId);
-  }, [tools, toolId, isNew, paramName, paramDesc, fetchTools]);
+  }, [tools, toolId, isNew, paramName, paramDesc, fetchTools, draftKey]);
 
   const hasChanges = code !== originalCode || name !== originalName || description !== originalDescription;
   const canEdit = !isBuiltin && (isNew || (!!currentUser && toolOwner === currentUser));
+
+  // Autosave the in-flight edit so a reload doesn't lose typing. Only writes
+  // when there's actually a diff from the server copy; pristine state stays
+  // out of localStorage so we don't resurrect a "fake edit" on next load.
+  useEffect(() => {
+    if (!loaded || !canEdit || !draftSaver) return;
+    if (hasChanges) {
+      draftSaver.schedule({ code, name, description });
+    } else {
+      draftSaver.cancel();
+      if (draftKey) clearDraft(draftKey);
+    }
+  }, [loaded, canEdit, hasChanges, code, name, description, draftSaver, draftKey]);
 
   useEffect(() => { preloadPyodide(); }, []);
 
@@ -119,13 +162,26 @@ export default function ToolDetail() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  // beforeunload
+  // beforeunload: prompt the user AND flush any pending autosave so the last
+  // keystroke isn't lost inside the debounce window. visibilitychange also
+  // triggers a flush for the mobile/tab-switch case where beforeunload
+  // doesn't fire reliably.
   useEffect(() => {
     if (!hasChanges) return;
-    const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      draftSaver?.flush();
+      e.preventDefault();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") draftSaver?.flush();
+    };
     window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [hasChanges]);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [hasChanges, draftSaver]);
 
   const blocker = useBlocker(hasChanges);
 
@@ -211,12 +267,19 @@ export default function ToolDetail() {
     try {
       await saveTool(tool);
       setOriginalCode(code); setOriginalName(name || funcName); setOriginalDescription(description);
+      draftSaver?.cancel();
+      if (draftKey) clearDraft(draftKey);
+      // If the function name changed (implicitly renaming the tool), the
+      // new id gets a fresh URL; the old draft key is orphaned and will
+      // age out on its own via the 7-day TTL.
       if (isNew || funcName !== toolId) navigate(`/tools/${funcName}`, { replace: true });
     } catch { /* error in store */ }
   };
 
   const handleDelete = async () => {
     if (!toolId) return;
+    draftSaver?.cancel();
+    if (draftKey) clearDraft(draftKey);
     if (isNew || !originalCode) { navigate("/tools"); return; }
     try { await softDeleteTool(toolId); navigate("/tools"); } catch { /* error in store */ }
   };
