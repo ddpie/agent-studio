@@ -1,55 +1,47 @@
-"""Materialize the Kiro HOME directory tree for a Meta-Agent conversation.
+"""Materialize the Kiro HOME tree and manage cross-turn session continuity.
 
-AgentCore Runtime exposes a per-conversation persistent mount via
-`filesystemConfigurations.sessionStorage` (scoped by `runtimeSessionId`, up to
-8h, 1GB, replicated across microVMs). We point Kiro at this mount so its
-native `session/load` can resume a previous turn with full tool_use /
-tool_result history instead of rebuilding context from a replayed string.
+Storage split (bisected the hard way on AgentCore):
 
-Process (per invocation):
+  /tmp/kiro-home/   — Kiro's $HOME. Ephemeral, local ext4.
+                      Holds .kiro/agents/*.json, .kiro/sessions/cli/*.
+                      Must NOT be on NFS / sessionStorage: Kiro crashes
+                      with 'Bad file descriptor (os error 9)' when $HOME
+                      lives on the AgentCore NFS mount.
+  /mnt/kiro/        — AgentCore sessionStorage. Persistent per
+                      runtimeSessionId, replicated across microVMs,
+                      wiped on agent-runtime version update.
+                      Only holds `kiro_session.txt` (the uuid pointer)
+                      so session/load can pick up where the previous
+                      invocation left off.
 
-  1. AgentCore routes by runtimeSessionId → the same `/mnt/kiro` directory
-     is restored regardless of which microVM handles this call.
-  2. Meta-Agent entrypoint calls `ensure_kiro_home()`:
-       - if `/mnt/kiro/.kiro/...` already exists → this is a follow-up turn,
-         keep everything, just return the saved `kiro_session_uuid` (may be
-         None if first turn crashed before saving one).
-       - otherwise → lay down a fresh tree (agents/meta-agent.json,
-         prompts/meta-agent.md, sessions/cli/, etc.) and return None.
-  3. ACP client:
-       - uuid is None → send `session/new`, then `save_kiro_session_uuid()`.
-       - uuid is not None → send `session/load <uuid>`.
+Per-invocation flow:
 
-Layout inside the AgentCore-managed mount:
+  1. Meta-Agent entrypoint calls `ensure_kiro_home()`:
+       - rewrites /tmp/kiro-home/.kiro/agents/meta-agent.json (cheap,
+         picks up prompt/tool-list edits without a container restart)
+       - leaves any existing /tmp/kiro-home/.kiro/sessions/cli/ alone
+       - reads the uuid pointer from /mnt/kiro/kiro_session.txt
+  2. ACP client:
+       - uuid is None → send `session/new`, save the new uuid to
+         /mnt/kiro/kiro_session.txt
+       - uuid is present → send `session/load`; on failure clear the
+         pointer and fall back to session/new with replayed history
 
-  /mnt/kiro/
-    .kiro/
-      agents/meta-agent.json          (custom agent config)
-      sessions/cli/<uuid>.{json,jsonl}  (Kiro-owned session state)
-    prompts/meta-agent.md             (system prompt; rewritten every invoke
-                                       so prompt bumps take effect)
-    kiro_session.txt                  (uuid pointer for session/load)
-
-Tool allowlist on the custom agent (verified on EC2 via ACP probe):
+Tool allowlist on the custom agent:
 
 - 4 Kiro built-ins: web_search, web_fetch, subagent, todo_list
-- Full Meta-Agent MCP server: "@agent-studio-tools" (all 34 tools, wildcard)
+  (names come from the live ACP `_kiro.dev/commands/available` probe
+  against kiro-cli-chat 2.0.0; NOT the legacy aws/report/thinking/todo/
+  delegate aliases in the shipped agent_config.json.example)
+- Full Meta-Agent MCP server: "@agent-studio-tools" (all 34 tools,
+  wildcard), served over stdio from mcp_stdio_server.
 
-Intentionally omitted built-ins:
-- shell / use_aws     — bypass the Meta-Agent's workspace permission checks
-- read / write / code / grep / glob — Meta-Agent should not touch the FS
-- introspect / knowledge — Kiro-product-centric, not useful here
-
-Built-in names come from the live ACP `_kiro.dev/commands/available` probe
-against kiro-cli-chat 2.0.0. They do NOT match the names in the
-`agent_config.json.example` shipped with the CLI (aws/report/thinking/todo/
-delegate are legacy aliases); stick to the probed names.
-
-Caveats (from AgentCore docs):
-- An agent-runtime version update wipes every session's filesystem. Every
-  `deploy-agentcore.sh` run is such an update, so ongoing conversations
-  will lose their Kiro sessions. Acceptable for demo; document elsewhere.
-- 14 days of inactivity also wipes. Effectively "new conversation" on return.
+Caveats (from AgentCore docs + bisect):
+- An agent-runtime version update wipes every session's sessionStorage
+  filesystem. Every deploy-agentcore.sh run is such an update, so
+  ongoing conversations lose their saved session uuid and fall back
+  to session/new + history replay on their next turn.
+- 14 days of inactivity also wipes.
 """
 
 from __future__ import annotations
@@ -64,17 +56,29 @@ def _os_env_get(key: str, default: str) -> str:
     """Small helper so the agent config literal stays readable."""
     return os.environ.get(key, default)
 
-# AgentCore's sessionStorage mount point. Must match the `mountPath` passed
-# in `filesystemConfigurations` on CreateAgentRuntime / UpdateAgentRuntime.
-# Regex constraint: /mnt/<exactly-one-subdir>.
-KIRO_HOME_DEFAULT = "/mnt/kiro"
+# Where kiro-cli-chat treats as $HOME. Intentionally NOT the AgentCore
+# sessionStorage mount (/mnt/kiro): Kiro crashes with ConnectionReset /
+# 'Bad file descriptor (os error 9)' when HOME is on NFS-backed storage.
+# Bisect confirmed HOME=/mnt/kiro is the exclusive trigger — every other
+# config difference (prompt size, MCP command, tool list) works fine.
+# So we put Kiro HOME on local /tmp and cross-turn continuity comes from
+# the persistent uuid file we mirror into sessionStorage below.
+KIRO_HOME_DEFAULT = "/tmp/kiro-home"
+
+# Separate path on AgentCore's sessionStorage mount, used only to hold
+# small artifacts that legitimately need to survive across microVMs —
+# currently just the kiro session uuid pointer so session/load can
+# resume a conversation on a new container instance. Anything Kiro
+# itself wants to persist stays local; if it gets lost, ensure_session()
+# falls back to session/new and re-seeds history from the payload.
+KIRO_PERSIST_ROOT = "/mnt/kiro"
 
 # Built-in Kiro tools exposed to the Meta-Agent. Keep this minimal — each
 # built-in is an extra side-effect path outside the sanctioned 34-tool MCP
-# surface.
-# TEMPORARILY disabled while we debug AgentCore spawn issues — see if the
-# MCP-only config works first, then add built-ins back.
-KIRO_BUILTIN_TOOLS: list[str] = []
+# surface. Names come from the live ACP `_kiro.dev/commands/available`
+# probe (web_search / web_fetch / subagent / todo_list), not the legacy
+# aliases shipped in agent_config.json.example.
+KIRO_BUILTIN_TOOLS = ["web_search", "web_fetch", "subagent", "todo_list"]
 
 # MCP server name registered in the custom agent config. Must match
 # MCP_SERVER_NAME in mcp_server.py.
@@ -96,9 +100,10 @@ def ensure_kiro_home(
     workspace_id: str,
     model_id: str = DEFAULT_MODEL,
     home_root: str = KIRO_HOME_DEFAULT,
+    persist_root: str = KIRO_PERSIST_ROOT,
     python_executable: str | None = None,
 ) -> str | None:
-    """Populate the Kiro HOME mount, idempotently.
+    """Populate the Kiro HOME and look up any saved session uuid.
 
     Writes/overwrites the custom agent config and the prompt file on every
     call (cheap, and lets prompt bumps take effect without a container
@@ -114,13 +119,19 @@ def ensure_kiro_home(
         workspace_id: Per-invocation workspace identity, same purpose.
         model_id: Kiro model id to pin.
         home_root: Absolute path to use as $HOME for kiro-cli-chat.
+            Defaults to /tmp/kiro-home (local, ephemeral). NOT
+            /mnt/kiro — Kiro crashes with EBADF when HOME is on NFS.
+        persist_root: Where to stash cross-invocation pointers (session
+            uuid). Defaults to the AgentCore sessionStorage mount so it
+            survives microVM transitions for the same runtimeSessionId.
         python_executable: Python interpreter to spawn the MCP subprocess
             with. Defaults to the current interpreter.
 
     Returns:
-        The previously-saved kiro session uuid if present (meaning this is
-        a follow-up turn and the caller should `session/load` it); None if
-        no uuid is saved yet (first turn → caller should `session/new`).
+        The previously-saved kiro session uuid if present (meaning this
+        is a follow-up turn and the caller should `session/load` it);
+        None if no uuid is saved yet (first turn → caller should
+        `session/new`).
     """
     import sys as _sys
     python_executable = python_executable or _sys.executable
@@ -213,15 +224,18 @@ def ensure_kiro_home(
     with agent_path.open("w", encoding="utf-8") as f:
         json.dump(agent_config, f, indent=2, ensure_ascii=False)
 
-    return load_kiro_session_uuid(home_root)
+    return load_kiro_session_uuid(persist_root)
 
 
-def load_kiro_session_uuid(home_root: str = KIRO_HOME_DEFAULT) -> str | None:
+def load_kiro_session_uuid(persist_root: str = KIRO_PERSIST_ROOT) -> str | None:
     """Read the saved Kiro session uuid, if any.
 
-    Returns None when the pointer file is missing, empty, or unreadable.
+    Pointer file lives on the cross-invocation sessionStorage mount so
+    the next Runtime microVM (for the same runtimeSessionId) can
+    session/load. Returns None when the file is missing, empty, or
+    unreadable.
     """
-    path = Path(home_root) / _SESSION_UUID_FILENAME
+    path = Path(persist_root) / _SESSION_UUID_FILENAME
     try:
         uuid = path.read_text(encoding="utf-8").strip()
     except FileNotFoundError:
@@ -231,22 +245,26 @@ def load_kiro_session_uuid(home_root: str = KIRO_HOME_DEFAULT) -> str | None:
     return uuid or None
 
 
-def save_kiro_session_uuid(uuid: str, home_root: str = KIRO_HOME_DEFAULT) -> None:
+def save_kiro_session_uuid(uuid: str, persist_root: str = KIRO_PERSIST_ROOT) -> None:
     """Persist the Kiro session uuid for subsequent turns to `session/load`."""
     if not uuid:
         return
-    path = Path(home_root) / _SESSION_UUID_FILENAME
-    path.write_text(uuid, encoding="utf-8")
+    path = Path(persist_root)
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return
+    (path / _SESSION_UUID_FILENAME).write_text(uuid, encoding="utf-8")
 
 
-def clear_kiro_session(home_root: str = KIRO_HOME_DEFAULT) -> None:
+def clear_kiro_session(persist_root: str = KIRO_PERSIST_ROOT) -> None:
     """Forget the saved Kiro session uuid.
 
-    Called when `session/load` fails (e.g. the uuid on disk is stale after a
-    runtime update, which wipes Kiro-owned session files but may race with
-    our pointer). Next turn falls back to `session/new`.
+    Called when `session/load` fails (e.g. the uuid on disk is stale
+    after a runtime update or the Kiro-owned session files got lost
+    because HOME is ephemeral). Next turn falls back to `session/new`.
     """
-    path = Path(home_root) / _SESSION_UUID_FILENAME
+    path = Path(persist_root) / _SESSION_UUID_FILENAME
     try:
         path.unlink()
     except FileNotFoundError:
