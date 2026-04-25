@@ -1166,6 +1166,75 @@ export async function putSkillHistory(skillId: string, data: unknown[]): Promise
   }
 }
 
+// ── Chat session persistence (S3-backed, per-user) ──
+
+export interface ChatSessionSummary {
+  id: string;
+  agentKey: string;
+  title: string;
+  modelId?: string;
+  createdAt: number;
+  updatedAt: number;
+  messageCount: number;
+  preview: string;
+}
+
+export async function listChatSessions(agentKey: string): Promise<ChatSessionSummary[]> {
+  try {
+    const resp = await apiGet<{ items: ChatSessionSummary[] }>(
+      `/chat/agents/${encodeURIComponent(agentKey)}/sessions`,
+    );
+    return resp.items || [];
+  } catch {
+    console.error("listChatSessions failed");
+    return [];
+  }
+}
+
+export async function getChatSession<T = unknown>(
+  agentKey: string,
+  sessionId: string,
+): Promise<T | null> {
+  try {
+    return await apiGet<T>(
+      `/chat/agents/${encodeURIComponent(agentKey)}/sessions/${encodeURIComponent(sessionId)}`,
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    console.error("getChatSession failed");
+    return null;
+  }
+}
+
+export async function putChatSession(
+  agentKey: string,
+  sessionId: string,
+  body: unknown,
+): Promise<boolean> {
+  try {
+    await apiPut(
+      `/chat/agents/${encodeURIComponent(agentKey)}/sessions/${encodeURIComponent(sessionId)}`,
+      body,
+    );
+    return true;
+  } catch {
+    console.error("putChatSession failed");
+    return false;
+  }
+}
+
+export async function deleteChatSession(agentKey: string, sessionId: string): Promise<boolean> {
+  try {
+    await apiDelete(
+      `/chat/agents/${encodeURIComponent(agentKey)}/sessions/${encodeURIComponent(sessionId)}`,
+    );
+    return true;
+  } catch {
+    console.error("deleteChatSession failed");
+    return false;
+  }
+}
+
 // ── Workspace-scoped storage ──
 
 export async function getStorage<T = unknown>(key: string): Promise<T | null> {
