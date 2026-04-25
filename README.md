@@ -22,7 +22,7 @@ graph LR
     Cron[定时器]
     Web -->|对话| Meta[Meta-Agent<br/>创建 / 管理]
 
-    subgraph Agents["Agents（可 A2A 互调）"]
+    subgraph Agents
         A1[Agent A] <-->|A2A| A2[Agent B]
     end
 
@@ -112,7 +112,7 @@ graph LR
     Cron[Scheduled trigger]
     Web -->|chat| Meta[Meta-Agent<br/>build / manage]
 
-    subgraph Agents["Agents (A2A-callable)"]
+    subgraph Agents
         A1[Agent A] <-->|A2A| A2[Agent B]
     end
 
