@@ -113,7 +113,7 @@ class ACPToSSEMapper:
             if not tool_id or tool_id in self._started:
                 # Already announced; drop the duplicate.
                 return ()
-            name = update.get("title") or update.get("kind") or "tool"
+            name = _clean_tool_name(update.get("title") or update.get("kind") or "tool")
             self._started[tool_id] = name
             return (json.dumps({"__tool": "start", "name": name}, ensure_ascii=False),)
 
@@ -127,7 +127,7 @@ class ACPToSSEMapper:
             # `tool_call` never arrives. Cover that by emitting `start`
             # lazily from the first update if we haven't already.
             if tool_id not in self._started:
-                name = update.get("title") or update.get("kind") or "tool"
+                name = _clean_tool_name(update.get("title") or update.get("kind") or "tool")
                 self._started[tool_id] = name
                 start_frame = json.dumps(
                     {"__tool": "start", "name": name}, ensure_ascii=False
@@ -186,6 +186,52 @@ def _encode_b64_json(value: Any) -> str:
     return base64.b64encode(rendered.encode("utf-8")).decode("ascii")
 
 
+def _unwrap_mcp_envelope(value: Any) -> Any:
+    """Peel Kiro's MCP envelope off a tool rawOutput, if present.
+
+    When Kiro calls a tool exposed over the MCP stdio transport, `rawOutput`
+    arrives wrapped in an FastMCP-generated structure like:
+
+        {"items": [{"Json": {
+            "content": [{"type": "text", "text": "<tool return str>"}],
+            "structuredContent": {...},
+            "isError": false,
+        }}]}
+
+    The original sub-agent code (Strands path) returned the tool's own string
+    verbatim. Downstream consumers — the frontend deploy hook's
+    extractToolResults, ChatMessage, ToolCallDetails — all parse that string
+    as JSON. The envelope breaks them all.
+
+    Unwrap conservatively: only strip the wrapper when we see the exact
+    FastMCP shape. Anything else falls through untouched.
+    """
+    if not isinstance(value, dict):
+        return value
+    items = value.get("items")
+    if not isinstance(items, list) or not items:
+        return value
+    first = items[0]
+    if not isinstance(first, dict):
+        return value
+    inner = first.get("Json")
+    if not isinstance(inner, dict):
+        return value
+    # Prefer the text chunk — that's what the @tool function literally
+    # returned. Fall back to structuredContent.result if content is empty.
+    content = inner.get("content")
+    if isinstance(content, list):
+        for chunk in content:
+            if isinstance(chunk, dict) and chunk.get("type") == "text":
+                text = chunk.get("text")
+                if isinstance(text, str):
+                    return text
+    sc = inner.get("structuredContent")
+    if isinstance(sc, dict) and "result" in sc:
+        return sc["result"]
+    return value
+
+
 def _encode_b64_any(value: Any) -> str:
     """Base64-encode a textual rendition of `value`, with size cap.
 
@@ -194,6 +240,7 @@ def _encode_b64_any(value: Any) -> str:
     Structured values (dict/list) are JSON-serialized; primitives coerce
     via str().
     """
+    value = _unwrap_mcp_envelope(value)
     if value is None:
         return ""
     if isinstance(value, (dict, list)):
@@ -210,3 +257,33 @@ def _encode_b64_any(value: Any) -> str:
     if len(text) > MAX_TOOL_OUTPUT_CHARS:
         text = text[:MAX_TOOL_OUTPUT_CHARS] + TRUNCATION_SUFFIX
     return base64.b64encode(text.encode("utf-8")).decode("ascii")
+
+
+# Kiro's ACP `title` for an MCP-hosted tool is presentation-layer text, not
+# the bare function name — e.g. "Running: @agent-studio-tools/update_agent".
+# The frontend (useAgentDeploy.extractToolResults, ToolCallDetails, the
+# ChatPanel tool-name matcher) has always indexed results by bare function
+# name (update_agent, list_skills, ...). Normalize here so the wire format
+# stays stable regardless of how Kiro chooses to label things.
+_RUNNING_PREFIX = "Running: "
+
+
+def _clean_tool_name(raw: str) -> str:
+    """Strip Kiro's presentation prefixes from a tool title.
+
+    Examples:
+        "Running: @agent-studio-tools/update_agent" -> "update_agent"
+        "@agent-studio-tools/list_skills"           -> "list_skills"
+        "web_search"                                -> "web_search"
+    """
+    # Deferred import — mcp_server imports stuff (FastMCP) that the
+    # sse_mapper tests don't want to pull in. At runtime the symbol is
+    # already loaded by main.py before any event flows through here.
+    from kiro_adapter.mcp_server import MCP_SERVER_NAME
+    mcp_ns_prefix = f"@{MCP_SERVER_NAME}/"
+    s = (raw or "").strip()
+    if s.startswith(_RUNNING_PREFIX):
+        s = s[len(_RUNNING_PREFIX):].strip()
+    if s.startswith(mcp_ns_prefix):
+        s = s[len(mcp_ns_prefix):]
+    return s or "tool"

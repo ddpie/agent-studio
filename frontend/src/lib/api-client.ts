@@ -564,6 +564,37 @@ export async function getMetaAgentCard(): Promise<AgentCard | null> {
   }
 }
 
+export interface MetaAgentStatus {
+  status: string;
+  lastUpdated: string | null;
+}
+
+export async function getMetaAgentStatus(): Promise<MetaAgentStatus | null> {
+  try {
+    return await apiGet<MetaAgentStatus>(`/meta-agent/status`);
+  } catch {
+    return null;
+  }
+}
+
+export interface KiroKeyInfo {
+  configured: boolean;
+  lastUpdated: string | null;
+  updatedBy: string | null;
+}
+
+export async function getKiroKey(): Promise<KiroKeyInfo> {
+  return apiGet<KiroKeyInfo>(`/kiro-key`);
+}
+
+export async function putKiroKey(apiKey: string): Promise<KiroKeyInfo> {
+  return apiPut<KiroKeyInfo>(`/kiro-key`, { apiKey });
+}
+
+export async function deleteKiroKey(): Promise<KiroKeyInfo> {
+  return apiDelete<KiroKeyInfo>(`/kiro-key`);
+}
+
 export async function fetchAgentFile(agentId: string, filePath: string): Promise<string> {
   try {
     const data = await apiGet<{ content?: string }>(

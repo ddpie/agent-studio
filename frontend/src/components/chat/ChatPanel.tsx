@@ -5,11 +5,14 @@ import { useChatStore, useCurrentAgentChat } from "../../stores/chat-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { fetchAgentMetadataLight, type AgentMetadata } from "../../lib/agent-metadata";
 import { useUISettings } from "../../stores/ui-settings-store";
-import { DEFAULT_MODEL_ID } from "../../lib/models";
+import { DEFAULT_MODEL_ID, DEFAULT_KIRO_MODEL_ID } from "../../lib/models";
 import "katex/dist/katex.min.css";
+import { Link } from "react-router";
+import { AlertTriangle } from "lucide-react";
 import ChatHeader from "./ChatHeader";
 import MessageList from "./MessageList";
 import ChatInput, { type ChatInputHandle } from "./ChatInput";
+import useKiroKeyStatus from "../../hooks/useKiroKeyStatus";
 
 export default function ChatPanel() {
   const { t } = useTranslation();
@@ -25,11 +28,21 @@ export default function ChatPanel() {
   // switchAgent's useEffect causes stale state to leak across routes —
   // e.g. the "calling load_skill" label flashing on another agent's page.
   const {
-    messages, isStreaming, statusText, activeTool, activeSessionId, selectedModelId,
+    messages, isStreaming, statusText, activeTool, autoContinue, activeSessionId, selectedModelId,
   } = useCurrentAgentChat(agentId || null);
   const { agents, fetchAgents } = useAgentListStore();
   const agentName = agents.find(a => a.id === agentId)?.displayName || null;
-  const selectedModel = selectedModelId || DEFAULT_MODEL_ID;
+  // Meta-Agent runs on Kiro (expects Kiro-native model ids like
+  // "claude-opus-4.6"). Sub-agents run on Bedrock (expects inference-
+  // profile ids like "us.anthropic.claude-opus-4-7"). Without branching
+  // the default, a first-time visitor to Meta-Agent ends up sending a
+  // Bedrock id to Kiro, which either fails or silently falls back.
+  const defaultModel = agentId ? DEFAULT_MODEL_ID : DEFAULT_KIRO_MODEL_ID;
+  const selectedModel = selectedModelId || defaultModel;
+  // Only fetch kiro key status on the Meta-Agent route. Sub-agent chats
+  // don't use Kiro so the banner would be a distraction.
+  const kiroKey = useKiroKeyStatus();
+  const showKiroBanner = !agentId && kiroKey && !kiroKey.configured;
   const setSelectedModel = (id: string) => storeSetModel(id);
   const [metadata, setMetadata] = useState<AgentMetadata | null>(null);
   const { inputHeight, setInputHeight } = useUISettings();
@@ -102,11 +115,23 @@ export default function ChatPanel() {
         onNewSession={newSession}
         messages={messages}
       />
+      {showKiroBanner && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900/60 text-[12px] text-amber-800 dark:text-amber-200">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1">
+            {t("kiroKey.bannerMessage", "Kiro API key is not configured for this workspace. Meta-Agent will not respond until an admin adds one.")}
+          </span>
+          <Link to="/settings?tab=workspace" className="underline hover:no-underline font-medium">
+            {t("kiroKey.bannerCta", "Open Workspace Settings")}
+          </Link>
+        </div>
+      )}
       <MessageList
         messages={messages}
         isStreaming={isStreaming}
         statusText={statusText}
         activeTool={activeTool}
+        autoContinue={autoContinue}
         onRegenerate={regenerateLastMessage}
         emptyState={emptyState}
       />

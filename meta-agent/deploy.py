@@ -421,6 +421,8 @@ def wait_for_ready(agent_id: str, timeout: int = 300) -> str:
 
 def invoke_runtime(agent_id: str, prompt: str) -> str:
     """Invoke a deployed agent. Returns the streamed text response."""
+    import codecs
+
     client = boto3.client("bedrock-agentcore", region_name=REGION)
 
     resp = client.invoke_agent_runtime(
@@ -429,18 +431,40 @@ def invoke_runtime(agent_id: str, prompt: str) -> str:
         payload=json.dumps({"prompt": prompt}).encode(),
     )
 
-    parts = []
+    # AgentCore emits bytes in arbitrary TCP-sized chunks. A CJK 3-byte
+    # UTF-8 sequence can straddle two chunks (e.g. "我" = e4 b8 91 split
+    # as e4 | b8 91), and decoding each chunk in isolation raises
+    # `'utf-8' codec can't decode byte 0xe4 ... unexpected end of data`.
+    # An incremental decoder carries partial multibyte state across
+    # calls, emitting nothing until the sequence is complete.
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    line_buf = ""
+    parts: list[str] = []
+
+    def _consume_lines(flush: bool = False) -> None:
+        nonlocal line_buf
+        # Normalize CRLF, split on \n; hold the trailing incomplete line
+        # (if any) until the next chunk or flush=True.
+        line_buf = line_buf.replace("\r\n", "\n")
+        lines = line_buf.split("\n")
+        line_buf = "" if flush else (lines.pop() or "")
+        for line in lines:
+            if line.startswith("data: "):
+                parts.append(line[6:].strip().strip('"'))
+
     for event in resp["response"]:
         if isinstance(event, bytes):
-            text = event.decode("utf-8")
-            for line in text.strip().split("\n"):
-                if line.startswith("data: "):
-                    content = line[6:].strip().strip('"')
-                    parts.append(content)
+            line_buf += decoder.decode(event)
+            _consume_lines()
         elif isinstance(event, dict):
             for v in event.values():
                 if isinstance(v, bytes):
-                    parts.append(v.decode("utf-8"))
+                    line_buf += decoder.decode(v)
+                    _consume_lines()
+
+    # Flush any remaining multibyte state + any unterminated line.
+    line_buf += decoder.decode(b"", final=True)
+    _consume_lines(flush=True)
 
     return "".join(parts)
 

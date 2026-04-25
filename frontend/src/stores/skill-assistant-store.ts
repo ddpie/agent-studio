@@ -97,64 +97,35 @@ export const useSkillAssistantStore = create<SkillAssistantState>((set, get) => 
       isStreaming: true,
     }));
 
-    const contextPrompt = `## Role
-You are an AI assistant that helps edit skill files in Agent Studio (AgentSkills.io format: SKILL.md with YAML frontmatter).
+    // Backend runs the `skill_edit` Kiro agent for this route; its system
+    // prompt already spells out the __file_content / __file_edit fencing
+    // rules, so the user message here is purely file context + request.
+    // That avoids two prompts fighting over output format and keeps the
+    // payload small.
+    const otherFiles = fileContext.allFiles
+      .map(f => {
+        const c = f === fileContext.path ? null : fileContext.getFileContent(f);
+        return c ? `### ${f} (${c.split("\n").length} lines)\n\`\`\`\n${c}\n\`\`\`` : `- ${f}`;
+      })
+      .join("\n");
 
-## Current File
+    const contextPrompt = `## Current File
 - Path: ${fileContext.path}
-- Lines: ${fileContext.content.split("\\n").length}
+- Lines: ${fileContext.content.split("\n").length}
 \`\`\`
 ${fileContext.content}
 \`\`\`
 
 ## All Files in This Skill
-${fileContext.allFiles.map(f => {
-  const c = f === fileContext.path ? null : fileContext.getFileContent(f);
-  return c ? `### ${f} (${c.split("\\n").length} lines)\n\`\`\`\n${c}\n\`\`\`` : `- ${f}`;
-}).join("\\n")}
+${otherFiles}
 
 ## User Request
-${content}
+${content}`;
 
-## Workflow
-- For non-trivial changes: describe your plan first, wait for user confirmation, then execute.
-- For trivial fixes (typo, comment, rename): execute directly.
-- For questions or advice: respond with text only, no code blocks.
-
-## Output Format
-
-Use 4 backticks (\`\`\`\`) for all output blocks.
-
-### __file_content (whole file replacement)
-\`\`\`\`__file_content:PATH
-complete file content
-\`\`\`\`
-Use when: file < 200 lines, large rewrite, or new file.
-
-### __file_edit (search/replace)
-\`\`\`\`__file_edit:PATH
-<<<<<<< SEARCH
-exact text from file
-=======
-replacement
->>>>>>> REPLACE
-\`\`\`\`
-Use when: file >= 200 lines with small changes. SEARCH must match exactly.
-
-After code blocks, briefly explain what changed.
-
-## Rules
-- SKILL.md with __file_content MUST include valid YAML frontmatter.
-- For Python: ensure valid syntax, docstrings, type hints.
-- Multi-file changes: plan first, wait for confirmation.
-- NEVER output partial content without __file_content or __file_edit markers.
-- Respond in the SAME LANGUAGE the user uses.`;
-
-    // Inject language instruction based on user settings
     const lang = useUISettings.getState().language;
     const LANG_INSTRUCTIONS: Record<string, string> = {
-      zh: "\n\n## Language\n请用中文回复。所有解释、计划确认、错误提示都用中文。代码和技术标识符保持英文。",
-      en: "\n\n## Language\nRespond in English. All explanations, plan confirmations, and error messages in English. Keep code and technical identifiers as-is.",
+      zh: "\n\n请用中文回复。代码和技术标识符保持英文。",
+      en: "\n\nRespond in English. Keep code and technical identifiers as-is.",
     };
     const finalPrompt = contextPrompt + (LANG_INSTRUCTIONS[lang] ?? LANG_INSTRUCTIONS.en);
 
@@ -166,7 +137,15 @@ After code blocks, briefly explain what changed.
       }));
 
     try {
-      const stream = invokeMetaAgent(finalPrompt, history, undefined, undefined, undefined, get().selectedModelId || undefined);
+      const stream = invokeMetaAgent(
+        finalPrompt,
+        history,
+        undefined,
+        undefined,
+        undefined,
+        get().selectedModelId || undefined,
+        "skill_edit",
+      );
 
       let pendingText = "";
       let flushTimer: ReturnType<typeof setTimeout> | null = null;

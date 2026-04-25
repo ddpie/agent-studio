@@ -8,7 +8,7 @@ import { useToolAssistantStore, type ToolAssistantMessage } from "../../stores/t
 import { Loader2, Send, Trash2, X, Square, RefreshCw, Pencil, Check } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { MODEL_GROUPS, findModelLabel } from "../../lib/models";
+import useKiroModels from "../../hooks/useKiroModels";
 
 const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStreaming, onEdit }: {
   msg: ToolAssistantMessage;
@@ -84,6 +84,7 @@ export default function ToolAssistant({ toolId, currentCode, toolName, toolDescr
     messages, isStreaming, loading, panelOpen, selectedModelId,
     closePanel, sendMessage, cancelStreaming, clearHistory, setModel, openPanel,
   } = useToolAssistantStore();
+  const kiroModels = useKiroModels();
 
   useEffect(() => {
     if (panelOpen) openPanel(toolId);
@@ -194,23 +195,18 @@ export default function ToolAssistant({ toolId, currentCode, toolName, toolDescr
               onClick={() => setShowModelPicker(!showModelPicker)}
               className="text-[9px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
-              {findModelLabel(selectedModelId || MODEL_GROUPS[0].models[0].id)}
+              {kiroModels.find((m) => m.id === selectedModelId)?.name || selectedModelId || kiroModels[0]?.name || "Select"}
             </button>
             {showModelPicker && (
               <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 w-48 max-h-60 overflow-y-auto">
-                {MODEL_GROUPS.map((group) => (
-                  <div key={group.label}>
-                    <div className="px-2 py-0.5 text-[8px] font-medium text-gray-400 dark:text-gray-500 uppercase bg-gray-50 dark:bg-gray-700">{group.label}</div>
-                    {group.models.map((m) => (
-                      <button
-                        key={m.id}
-                        onClick={() => { setModel(m.id); setShowModelPicker(false); }}
-                        className={`w-full text-left px-2 py-1 text-[10px] hover:bg-blue-50 dark:hover:bg-blue-900/30 ${selectedModelId === m.id ? "text-blue-600 bg-blue-50/50 dark:bg-blue-900/20" : "text-gray-700 dark:text-gray-300"}`}
-                      >
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
+                {kiroModels.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => { setModel(m.id); setShowModelPicker(false); }}
+                    className={`w-full text-left px-2 py-1 text-[10px] hover:bg-blue-50 dark:hover:bg-blue-900/30 ${selectedModelId === m.id ? "text-blue-600 bg-blue-50/50 dark:bg-blue-900/20" : "text-gray-700 dark:text-gray-300"}`}
+                  >
+                    {m.name || m.id}
+                  </button>
                 ))}
               </div>
             )}

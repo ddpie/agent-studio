@@ -11,6 +11,7 @@ import useIsDark from "../../hooks/useIsDark"
 import { useSkillStorage } from "../../hooks/useSkillStorage"
 import { useFileEditor } from "../../hooks/useFileEditor"
 import { useAgentEditStore } from "../../stores/agent-edit-store"
+import { editorBridge } from "../../lib/editor-bridge"
 import { getFileIcon, type TreeNode } from "../../lib/tree-helpers"
 import { getMonacoLanguage } from "../../lib/monaco-helpers"
 import { validatePython } from "../../lib/validators/python-validator"
@@ -90,6 +91,29 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
     loadEverything()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentId, skill.id, skill.sourceSkillId])
+
+  // --- Accept AI-generated file updates from the edit-assistant sidebar ---
+  // The assistant parses `__field_value:skill:{id}:{path}` blocks and calls
+  // editorBridge.write(...). We forward writes that target THIS skill into
+  // the editor's external-write API, which keeps Monaco content, changedFiles,
+  // editedContents, and pendingCreates all in sync. The store-side update
+  // (pendingSkillFiles for diff/deploy) is already handled by the assistant.
+  //
+  // We hold markNewFromExternal in a ref rather than putting it in the effect
+  // deps: it's a useCallback that rebuilds on every render (its closure sees
+  // changedFiles/editedContents), and re-registering on every render would
+  // tear down and rebuild the bridge handler each keystroke.
+  const markNewRef = useRef(editor.markNewFromExternal)
+  markNewRef.current = editor.markNewFromExternal
+  useEffect(() => {
+    const dispose = editorBridge.register((sid, path, content) => {
+      if (sid !== skill.id) return
+      markNewRef.current(path, content).catch(err => {
+        console.error("[SkillEditor] external write failed:", err)
+      })
+    })
+    return dispose
+  }, [skill.id])
 
   const currentContent = editor.content ?? ""
 

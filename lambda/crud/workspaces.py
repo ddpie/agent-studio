@@ -71,7 +71,7 @@ def _hydrate_member_identities(members: list) -> list:
                 )
                 attrs = {a["Name"]: a["Value"] for a in resp.get("UserAttributes", [])}
                 cached = {
-                    "display_name": attrs.get("name") or attrs.get("preferred_username") or "",
+                    "display_name": attrs.get("name") or "",
                     "email": attrs.get("email", ""),
                 }
                 _identity_cache[user_id] = cached

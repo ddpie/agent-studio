@@ -22,6 +22,7 @@ from crud.schedules import router as schedules_router
 from crud.costs import router as costs_router
 from crud.logs import router as logs_router
 from crud.runs import router as runs_router
+from crud.kiro_key import router as kiro_key_router
 
 logger = Logger(service="agent-studio-crud")
 
@@ -48,6 +49,7 @@ app.include_router(schedules_router)
 app.include_router(costs_router)
 app.include_router(logs_router)
 app.include_router(runs_router)
+app.include_router(kiro_key_router)
 
 
 @app.get("/api/health")

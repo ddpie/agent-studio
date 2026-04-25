@@ -53,6 +53,44 @@ DEFAULT_REQUEST_TIMEOUT_S = 30.0
 DEFAULT_PROMPT_TIMEOUT_S = 300.0
 
 
+def _log_session_model(resp: dict, kind: str) -> None:
+    """Extract whichever model-selection field Kiro returns in the response.
+
+    ACP response shape (kiro-cli-chat 2.0.0) for session/new:
+      {"result": {"sessionId": "...", "models": [...], "currentModelId": "...", ...}}
+    session/load usually omits sessionId but carries the same models+current.
+    Field names observed across builds: currentModelId / selectedModelId /
+    activeModelId / model. Log whatever matches so we can verify the
+    agent-config `model` field actually took effect.
+    """
+    if not isinstance(resp, dict):
+        return
+    result = resp.get("result") or {}
+    if not isinstance(result, dict):
+        return
+    current = (
+        result.get("currentModelId")
+        or result.get("selectedModelId")
+        or result.get("activeModelId")
+        or result.get("model")
+        or result.get("defaultModelId")
+    )
+    models = result.get("models")
+    model_ids = []
+    if isinstance(models, list):
+        for m in models:
+            if isinstance(m, dict):
+                mid = m.get("id") or m.get("modelId")
+                if mid:
+                    model_ids.append(str(mid))
+            elif isinstance(m, str):
+                model_ids.append(m)
+    log.warning(
+        "acp %s: current_model=%r models_count=%d models=%s",
+        kind, current, len(model_ids), model_ids[:10],
+    )
+
+
 class ACPError(RuntimeError):
     """A JSON-RPC error response from kiro-cli-chat."""
 
@@ -91,6 +129,7 @@ class KiroACPClient:
         agent_name: str = "meta-agent",
         trust_all_tools: bool = True,
         extra_env: dict[str, str] | None = None,
+        model_id: str | None = None,
     ):
         self._binary = binary
         self._home = kiro_home
@@ -98,6 +137,12 @@ class KiroACPClient:
         self._agent_name = agent_name
         self._trust_all_tools = trust_all_tools
         self._extra_env = dict(extra_env or {})
+        # Passed to `kiro-cli-chat acp --model <id>`. When set, overrides
+        # whatever `model` the agent-config JSON carries. This is the
+        # per-invocation Kiro-native switch — no need to rewrite
+        # `/mnt/kiro/.kiro/agents/<name>.json` for each model change,
+        # which was racy across concurrent turns on the same container.
+        self._model_id = model_id
 
         self._proc: asyncio.subprocess.Process | None = None
         self._reader_task: asyncio.Task[None] | None = None
@@ -121,8 +166,11 @@ class KiroACPClient:
         env.update(self._extra_env)
 
         args = [self._binary, "acp", "--agent", self._agent_name]
+        if self._model_id:
+            args.extend(["--model", self._model_id])
         if self._trust_all_tools:
             args.append("--trust-all-tools")
+        log.debug("spawning kiro acp: argv=%s", args[1:])
 
         # Route kiro-cli-chat stderr to a real file descriptor. We read it
         # back after the process exits and ship each line to our logger so
@@ -227,6 +275,7 @@ class KiroACPClient:
         except Exception:
             pass
 
+
     # ---- verbs ------------------------------------------------------------
 
     async def ensure_session(
@@ -254,7 +303,7 @@ class KiroACPClient:
             try:
                 # session/load returns `modes` and `models` but *not*
                 # sessionId — the caller supplied it. Reuse the input uuid.
-                await self._request(
+                resp = await self._request(
                     "session/load",
                     {
                         "sessionId": saved_uuid,
@@ -262,6 +311,7 @@ class KiroACPClient:
                         "mcpServers": mcp_servers,
                     },
                 )
+                _log_session_model(resp, kind="session/load")
                 return saved_uuid, False
             except ACPError as e:
                 log.warning(
@@ -274,7 +324,22 @@ class KiroACPClient:
             "session/new",
             {"cwd": cwd, "mcpServers": mcp_servers},
         )
+        _log_session_model(resp, kind="session/new")
         return resp["result"]["sessionId"], True
+
+    async def list_models(self, cwd: str) -> list[dict[str, Any]]:
+        """Fetch the `models` array Kiro advertises for this agent config.
+
+        Kiro returns it in the `session/new` response. We open a throwaway
+        session just to read the list and discard the session id — the
+        frontend only needs model ids + labels, not a live conversation.
+        """
+        resp = await self._request(
+            "session/new", {"cwd": cwd, "mcpServers": []}
+        )
+        result = resp.get("result") or {}
+        models = result.get("models") or []
+        return models if isinstance(models, list) else []
 
     def prompt(
         self,
@@ -320,14 +385,32 @@ class KiroACPClient:
         async def _iter() -> AsyncIterator[dict[str, Any]]:
             await send_task
             deadline = asyncio.get_running_loop().time() + timeout_s
+            # Debug aid: periodically log iterator state so we can tell
+            # whether a slow turn is "Kiro thinking" (events_qsize steady at 0,
+            # fut not done) vs "Kiro already finished but client hung" (fut
+            # done, no events drained) vs "events flowing but nothing
+            # translated upstream" (qsize > 0 but mapper drops them).
+            _iter_start = asyncio.get_running_loop().time()
+            _last_tick = _iter_start
+            _events_seen = 0
             try:
                 while not fut.done():
-                    remaining = deadline - asyncio.get_running_loop().time()
+                    now = asyncio.get_running_loop().time()
+                    remaining = deadline - now
                     if remaining <= 0:
                         fut.cancel()
                         raise asyncio.TimeoutError(
                             f"session/prompt exceeded {timeout_s}s"
                         )
+                    # Tick log every 5s of quiet.
+                    if now - _last_tick >= 5.0:
+                        log.warning(
+                            "acp prompt tick: elapsed=%.1fs events_qsize=%d "
+                            "events_seen=%d fut_done=%s remaining=%.1fs",
+                            now - _iter_start, self._events.qsize(),
+                            _events_seen, fut.done(), remaining,
+                        )
+                        _last_tick = now
                     # Short wait so we periodically re-check fut.done(); the
                     # final response might land between events.
                     try:
@@ -336,7 +419,13 @@ class KiroACPClient:
                         )
                     except asyncio.TimeoutError:
                         continue
+                    _events_seen += 1
                     yield event
+                log.warning(
+                    "acp prompt done: elapsed=%.1fs events_seen=%d fut_done=%s",
+                    asyncio.get_running_loop().time() - _iter_start,
+                    _events_seen, fut.done(),
+                )
             finally:
                 self._pending.pop(req_id, None)
 

@@ -10,12 +10,27 @@ from strands import tool
 from config import MODEL_ID, REGION, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE, SUB_AGENT_ROLE_ARN
 from deploy import build_deployment_package_v2, upload_deployment, validate_agent_files, build_skill_prompt_section, _shared_env_vars
 from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
-from templates.prompt_templates import get_template_prompt, BASE_GUIDELINES
+from templates.prompt_templates import get_base_guidelines
+
+
+def _default_welcome(agent_name: str, description: str) -> str:
+    """Language-matched fallback welcome when the user cleared it out.
+
+    Same logic as create_agent._default_welcome. Duplicated instead of
+    factored out into a shared helper because the existing module
+    boundary keeps tools self-contained — introducing cross-tool
+    imports to save 4 lines isn't worth the coupling.
+    """
+    from tools._scope import current_creator_language
+    lang = (current_creator_language() or "").strip().lower()
+    if lang.startswith("zh"):
+        return f"我是 {agent_name}。{description}" if description else f"我是 {agent_name}。"
+    return f"I'm {agent_name}. {description}" if description else f"I'm {agent_name}."
 from tools_library.registry import get_tool_code_by_func_name as _get_builtin_code
 from tools.create_agent import _get_workspace_mcp_policy, _check_mcp_policy, _resolve_mcp_endpoints
 
 # Fields that require AgentCore redeploy when changed
-_REDEPLOY_FIELDS = {"system_prompt", "tool_definitions", "tool_names", "template_id", "mcp_targets"}
+_REDEPLOY_FIELDS = {"system_prompt", "tool_definitions", "tool_names", "mcp_targets"}
 
 
 def _clean_tool_definitions(defs: str) -> str:
@@ -98,7 +113,7 @@ def update_agent(
         tool_names: Updated comma-separated tool names. Leave empty to keep existing.
         welcome_message: Updated welcome message.
         suggestions: Updated suggestions separated by |.
-        template_id: Prompt template to apply.
+        template_id: Deprecated; ignored. Prompt templates have been retired.
         gateway_url: Optional MCP Gateway URL (deprecated, use mcp_targets).
         mcp_targets: Comma-separated MCP target names (e.g. "cloudwatch,iam"). Validated against workspace policy.
         supports_images: Whether this agent can process image inputs.
@@ -215,6 +230,8 @@ def update_agent(
     final_display = display_name or existing_metadata.get("display_name", agent_name)
     final_welcome = welcome_message or existing_metadata.get("welcome_message", "")
     final_suggestions = suggestions or "|".join(existing_metadata.get("suggestions", []))
+    # template_id is deprecated — kept in DDB for back-compat with pre-
+    # retirement agents but never consulted for prompt assembly.
     final_template = template_id or existing_metadata.get("template_id", "")
 
     # Preserve existing MCP config when mcp_targets is not explicitly provided
@@ -240,8 +257,9 @@ def update_agent(
         needs_redeploy = True
     if tool_names and tool_names != ",".join(existing_metadata.get("tools", [])):
         needs_redeploy = True
-    if template_id and template_id != existing_metadata.get("template_id", ""):
-        needs_redeploy = True
+    # template_id changes no longer trigger a redeploy — the field is
+    # retired (see _REDEPLOY_FIELDS). Left here as a comment so future
+    # readers know the omission is deliberate, not an oversight.
     if mcp_targets and mcp_targets != ",".join(existing_metadata.get("mcp_targets", [])):
         needs_redeploy = True
 
@@ -259,22 +277,17 @@ def update_agent(
     tool_names_list: list[str] = []
 
     if needs_redeploy:
-        # Do NOT re-prepend the template base prompt here. That concatenation
-        # belongs in create_agent (where user input is just the "specific
-        # instructions" layered onto a template). For updates, ``system_prompt``
-        # is already the full, final prompt the user wants — either edited
-        # in the UI, or rewritten wholesale by Meta-Agent. Re-applying the
-        # template would:
-        #   1) shove the user's actual prompt under "## Specific Instructions"
-        #      so the template directives dominate at the top of context,
-        #   2) compound on every subsequent update (template gets prepended
-        #      each time, giving the user the strong but misleading
-        #      impression that "nothing changed" because the first 6KB is
-        #      always the same English template boilerplate).
-        # BASE_GUIDELINES is still appended if it's missing, so persisted
-        # updates don't drift away from the core guardrails.
-        if not final_template and BASE_GUIDELINES not in final_prompt:
-            final_prompt = final_prompt + "\n" + BASE_GUIDELINES
+        # Ensure BASE_GUIDELINES is present on the persisted prompt. We
+        # use substring containment to stay idempotent across repeated
+        # updates — if the exact bytes are already in the prompt from a
+        # previous deploy we skip. Language is picked from the creator's
+        # UI locale (set in tools._scope from the invoke payload). When
+        # older sub-agents (pre-bilingual split) already have the English
+        # variant embedded, the containment check keeps them stable.
+        from tools._scope import current_creator_language
+        guidelines = get_base_guidelines(current_creator_language())
+        if guidelines not in final_prompt:
+            final_prompt = final_prompt + "\n" + guidelines
 
         # Build tool_names list
         tool_names_list = [t.strip() for t in final_tools_names.split(",") if t.strip()]
@@ -387,7 +400,7 @@ def update_agent(
         "model_id": MODEL_ID,
         "system_prompt": final_prompt,
         "tool_definitions": final_tools_def_for_meta,
-        "welcome_message": final_welcome or f"I'm {agent_name}. {final_desc}",
+        "welcome_message": final_welcome or _default_welcome(agent_name, final_desc),
         "suggestions": suggestion_list,
         "template_id": final_template,
         "tools": [t.strip() for t in final_tools_names.split(",") if t.strip()],

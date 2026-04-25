@@ -83,6 +83,14 @@ export const MODEL_GROUPS: ModelGroup[] = [
 
 export const DEFAULT_MODEL_ID = MODEL_GROUPS[0].models[0].id;
 
+/**
+ * Default Kiro-native model id used for Meta-Agent chat. The Meta-Agent
+ * runs on Kiro, which expects its own id format (not the Bedrock
+ * inference-profile ids in MODEL_GROUPS). Keep this in sync with
+ * `meta-agent/kiro_adapter/kiro_home.py::DEFAULT_MODEL`.
+ */
+export const DEFAULT_KIRO_MODEL_ID = "claude-opus-4.6";
+
 export const ALL_MODELS = MODEL_GROUPS.flatMap((g) => g.models);
 
 export function findModelLabel(modelId: string): string {

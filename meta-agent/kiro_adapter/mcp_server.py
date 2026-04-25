@@ -58,7 +58,7 @@ def build_mcp_server(tools: Iterable[Any]) -> FastMCP:
     return srv
 
 
-def apply_scope(caller_id: str, workspace_id: str) -> None:
+def apply_scope(caller_id: str, workspace_id: str, language: str = "") -> None:
     """Plumb per-invocation identity to the tool modules.
 
     Mirrors the legacy Strands plumbing: writes onto module-level variables
@@ -66,6 +66,11 @@ def apply_scope(caller_id: str, workspace_id: str) -> None:
     user. Called once per invocation in the Meta-Agent entrypoint AND once
     at mcp_stdio_server startup (since the stdio server is a separate
     subprocess and reads its scope from env).
+
+    `language` is the creator's UI language ("zh" / "en" / ""); create_agent
+    and update_agent use it to select the right BASE_GUIDELINES variant
+    when assembling a freshly-authored sub-agent system_prompt. Empty
+    string means "unknown" and downstream treats it as English.
 
     Tools that still read their own module-level `_caller_id` keep working
     unchanged; tools that switched to `tools._scope` pick up the update via
@@ -81,6 +86,7 @@ def apply_scope(caller_id: str, workspace_id: str) -> None:
 
     _scope._caller_id = caller_id
     _scope._workspace_id = workspace_id
+    _scope._creator_language = language
     _ca._caller_id = caller_id
     _ca._workspace_id = workspace_id
     _ua._caller_id = caller_id

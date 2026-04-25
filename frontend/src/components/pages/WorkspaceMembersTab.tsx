@@ -275,11 +275,6 @@ export default function WorkspaceMembersTab() {
                             {m.email}
                           </div>
                         )}
-                        {m.display_name && !m.email && (
-                          <div className="text-[10px] text-gray-400 dark:text-gray-500 font-mono truncate max-w-[220px]">
-                            {m.userId}
-                          </div>
-                        )}
                       </td>
                       <td className="px-3 py-2">
                         {canChangeRole ? (
@@ -483,7 +478,7 @@ export default function WorkspaceMembersTab() {
         open={!!removeTarget}
         title={t("workspace.members.removeConfirmTitle")}
         message={t("workspace.members.removeConfirmBody", {
-          name: removeTarget?.display_name || removeTarget?.userId || "",
+          name: removeTarget?.display_name || removeTarget?.email || removeTarget?.userId || "",
         })}
         confirmLabel={t("workspace.members.remove")}
         onConfirm={handleRemove}

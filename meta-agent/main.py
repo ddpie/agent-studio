@@ -82,7 +82,14 @@ _log_phase("bedrock_agentcore imported")
 # stdio MCP subprocess (kiro_adapter.mcp_stdio_server). But we still
 # import them here so ALL_TOOLS is the single source of truth; the stdio
 # server re-imports `main` and reads ALL_TOOLS from it.
-from tools.create_agent import create_agent, list_prompt_templates
+from tools.create_agent import create_agent
+# list_prompt_templates is deliberately NOT imported — the function
+# still exists as a deprecated no-op shim in create_agent.py for any
+# external caller linking to it, but the Meta-Agent's tool surface no
+# longer advertises prompt templates (they're retired; see
+# templates/prompt_templates.py). Removing it from ALL_TOOLS hides it
+# from Kiro's tool-choice planner so the model never lists a tool it
+# shouldn't use.
 _log_phase("create_agent imported")
 
 # Auto-publish tool catalog on startup (kept from the legacy path — the
@@ -125,10 +132,15 @@ _log_phase("all tools imported")
 
 from kiro_adapter.acp_client import ACPError, KiroACPClient
 from kiro_adapter.kiro_home import (
+    AGENT_EDIT_AGENT_NAME,
     DEFAULT_MODEL as KIRO_DEFAULT_MODEL,
     KIRO_HOME_DEFAULT,
     KIRO_PERSIST_ROOT,
+    META_AGENT_NAME,
+    SKILL_EDIT_AGENT_NAME,
     clear_kiro_session,
+    default_agent_edit_prompt_src,
+    default_skill_edit_prompt_src,
     default_system_prompt_src,
     ensure_kiro_home,
     save_kiro_session_uuid,
@@ -173,7 +185,6 @@ log = logging.getLogger("meta_agent")
 # mcp_stdio_server (which imports this module and reads ALL_TOOLS).
 ALL_TOOLS = [
     create_agent,
-    list_prompt_templates,
     list_agents,
     get_agent_detail,
     update_agent,
@@ -226,16 +237,30 @@ _KIRO_HOME = os.environ.get("AGENT_STUDIO_KIRO_HOME", KIRO_HOME_DEFAULT)
 # in deploy-agentcore.sh's filesystemConfigurations.
 _KIRO_PERSIST = os.environ.get("AGENT_STUDIO_KIRO_PERSIST", KIRO_PERSIST_ROOT)
 
-# Kiro API key is required. Fail fast on first invoke rather than letting
-# kiro-cli-chat produce a confusing stderr.
-_KIRO_API_KEY = os.environ.get("KIRO_API_KEY", "")
+# Kiro API key is required. Primary source is the Invoke Lambda payload
+# (per-workspace, fetched from Secrets Manager just-in-time) so the key
+# never sits in Runtime env / control-plane config. The env var is kept
+# as an admin fallback for local dev / debugging only.
+_KIRO_API_KEY_FALLBACK = os.environ.get("KIRO_API_KEY", "")
 
 # Default model. Overridable per-invoke via payload.model_id or globally
 # via env.
 _KIRO_DEFAULT_MODEL = os.environ.get("AGENT_STUDIO_KIRO_MODEL", KIRO_DEFAULT_MODEL)
 
 # Keep-alive cadence matching the legacy path (CloudFront 60s origin idle).
-_KEEPALIVE_INTERVAL_S = 30.0
+# Keep-alive cadence. CloudFront's origin readTimeout is 60s (our quota
+# default), so we need comfortable headroom — a single missed frame on a
+# flaky network, plus the 15s auto-continue silence threshold, both want
+# to happen WELL before CloudFront starts the close. 15s = 4x safety vs
+# the 60s ceiling and halves the idle window users notice as "stuck".
+_KEEPALIVE_INTERVAL_S = 15.0
+
+# Max rounds of auto-continue the supervisor fires per user turn when the
+# model ends without emitting [[TASK_COMPLETE]]. 3 rounds is a hard stop
+# against infinite loops when the model simply forgets the marker, while
+# still covering the observed failure mode: Opus 4.6 occasionally cuts
+# end_turn after 1-2 tool calls, another round usually finishes the task.
+_AUTO_CONTINUE_MAX_ROUNDS = 3
 
 # Per-turn ACP prompt budget. Headroom over anything realistic; the
 # container itself will be torn down long before this trips.
@@ -335,6 +360,125 @@ def _compose_user_text(prompt: str, history_blob: str, is_new_session: bool) -> 
 app = BedrockAgentCoreApp()
 
 
+# Payload `mode` → Kiro agent name. "skill_edit" swaps the meta-agent
+# (full 34-tool surface) for the tool-less skill-edit agent whose job is
+# to emit `__file_content:PATH` fenced blocks the browser captures
+# directly. Unknown modes fall back to meta-agent, matching legacy
+# callers that don't send the field at all.
+_MODE_TO_AGENT = {
+    "skill_edit": SKILL_EDIT_AGENT_NAME,
+    "agent_edit": AGENT_EDIT_AGENT_NAME,
+}
+
+
+async def _list_models(api_key: str):
+    """Short-circuit entrypoint branch for `action=list_models`.
+
+    Tries the CLI path first (`kiro-cli-chat chat --list-models`) as the
+    canonical catalog. Falls back to ACP `session/new` (whose response
+    includes a `models` array) if the CLI doesn't print a parseable
+    list. Both paths converge on the same `[{id, name}]` shape.
+
+    Yields one `__models` SSE frame. Failures produce `__error` so the
+    frontend falls back to its hard-coded list without the picker
+    breaking.
+    """
+    import re
+
+    # Kiro's CLI tacks on usage multipliers like "(2.2x credits)" after
+    # the display name; the frontend also strips these defensively, but
+    # stripping server-side keeps downstream log output / future API
+    # consumers clean too.
+    credits_re = re.compile(r"\s*\([^()]*\bcredits?\b[^()]*\)\s*$", re.IGNORECASE)
+
+    if not api_key:
+        yield json.dumps({"__error": "kiro_not_configured"})
+        return
+    _ensure_kiro_binary_ready()
+
+    # --- CLI path ---------------------------------------------------------
+    env = os.environ.copy()
+    env["HOME"] = _KIRO_HOME
+    env["KIRO_API_KEY"] = api_key
+    env["XDG_DATA_HOME"] = "/tmp/kiro-xdg"
+
+    models: list[dict[str, str]] = []
+    cli_stdout = ""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            _KIRO_BINARY, "chat", "--list-models", "--no-interactive",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=15.0)
+        cli_stdout = stdout_b.decode("utf-8", errors="replace")
+        cli_stderr = stderr_b.decode("utf-8", errors="replace")
+        if proc.returncode == 0:
+            ansi_re = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+            seen: set[str] = set()
+            for raw in cli_stdout.splitlines():
+                line = ansi_re.sub("", raw).strip()
+                if not line:
+                    continue
+                lower = line.lower()
+                if lower.startswith(("available", "model", "id ", "====", "----")):
+                    continue
+                parts = line.split(None, 1)
+                model_id = parts[0].strip()
+                if " " in model_id or not any(c in model_id for c in ".-"):
+                    continue
+                if model_id in seen:
+                    continue
+                seen.add(model_id)
+                label = parts[1].strip() if len(parts) > 1 else model_id
+                label = credits_re.sub("", label).strip() or model_id
+                models.append({"id": model_id, "name": label})
+        else:
+            log.warning("kiro-cli --list-models rc=%s stderr=%s",
+                        proc.returncode, cli_stderr[:400])
+    except asyncio.TimeoutError:
+        log.warning("kiro-cli --list-models timed out; falling back to ACP")
+    except Exception:  # noqa: BLE001
+        log.exception("kiro-cli --list-models spawn failed; falling back to ACP")
+
+    # --- ACP fallback -----------------------------------------------------
+    # Only needed if the CLI didn't produce anything we could parse.
+    # Uses the real meta-agent config (tool list + real model surface) so
+    # the `models` array Kiro advertises isn't filtered by a tool-less
+    # probe config. This does NOT rewrite the config — ensure_kiro_home is
+    # already written per-invoke in the main path; we assume it's present.
+    if not models:
+        try:
+            client = KiroACPClient(
+                binary=_KIRO_BINARY,
+                kiro_home=_KIRO_HOME,
+                api_key=api_key,
+                agent_name=META_AGENT_NAME,
+                trust_all_tools=True,
+                extra_env={"XDG_DATA_HOME": "/tmp/kiro-xdg"},
+            )
+            try:
+                await client.start()
+                raw_models = await client.list_models(cwd=_KIRO_HOME)
+                for m in raw_models:
+                    if isinstance(m, dict) and m.get("id"):
+                        models.append({
+                            "id": str(m["id"]),
+                            "name": str(m.get("name") or m.get("displayName") or m["id"]),
+                        })
+                    elif isinstance(m, str):
+                        models.append({"id": m, "name": m})
+            finally:
+                await client.close()
+        except Exception:  # noqa: BLE001
+            log.exception("ACP list_models fallback failed")
+
+    if not models:
+        log.warning("list_models produced 0 entries; cli_stdout=%s", cli_stdout[:400])
+    yield json.dumps({"__models": models}, ensure_ascii=False)
+
+
 @app.entrypoint
 async def invoke(payload, context):
     prompt = payload.get("prompt", "Hello! I'm Agent Studio.")
@@ -343,6 +487,26 @@ async def invoke(payload, context):
     model_id = payload.get("model_id") or _KIRO_DEFAULT_MODEL
     caller_id = payload.get("caller_id", "unknown")
     workspace_id = payload.get("workspace_id", "")
+    mode = (payload.get("mode") or "").strip()
+    action = (payload.get("action") or "").strip()
+    agent_name = _MODE_TO_AGENT.get(mode, META_AGENT_NAME)
+
+    # Lightweight control-plane actions that don't need a full turn.
+    # list_models: spawn Kiro, open a throwaway session, read the `models`
+    # list the ACP server advertised, emit as a single __models frame.
+    # Prefer the per-workspace key from payload (Invoke Lambda hydrates
+    # it from Secrets Manager). Fall back to KIRO_API_KEY env only for
+    # local dev / admin debugging.
+    kiro_api_key = (payload.get("kiro_api_key") or _KIRO_API_KEY_FALLBACK or "").strip()
+
+    if action == "list_models":
+        async for frame in _list_models(kiro_api_key):
+            yield frame
+        return
+    log.warning(
+        "invoke: payload_keys=%s mode=%r model_id=%r -> agent=%r",
+        sorted(payload.keys()), mode, model_id, agent_name,
+    )
 
     if images:
         log.warning(
@@ -351,34 +515,51 @@ async def invoke(payload, context):
             len(images),
         )
 
-    if not _KIRO_API_KEY:
-        err = "KIRO_API_KEY is not set; Meta-Agent cannot reach Kiro backend"
+    if not kiro_api_key:
+        err = "kiro_not_configured"
         log.error(err)
         yield json.dumps({"__error": err})
         return
 
     _ensure_kiro_binary_ready()
-    apply_scope(caller_id, workspace_id)
+    # Forward UI language ("zh" / "en") into the tool scope so
+    # create_agent/update_agent pick the right BASE_GUIDELINES variant.
+    # Value is also used by the auto-continue supervisor further down.
+    invoke_lang = (payload.get("language") or payload.get("lang") or "").strip()
+    apply_scope(caller_id, workspace_id, language=invoke_lang)
 
-    # Per-invocation HOME. Rewrites the custom agent config + prompt on
-    # every invoke so prompt edits take effect without a container
-    # restart; never touches Kiro-owned sessions/cli/.
+    # Per-invocation HOME. Rewrites both custom agent configs (meta-agent
+    # and skill-edit) + prompts on every invoke so prompt edits take
+    # effect without a container restart; never touches Kiro-owned
+    # sessions/cli/. Returns the session uuid for `agent_name`, which we
+    # then use to either session/load or session/new.
     saved_uuid = ensure_kiro_home(
         system_prompt_src=default_system_prompt_src(),
+        skill_edit_prompt_src=default_skill_edit_prompt_src(),
+        agent_edit_prompt_src=default_agent_edit_prompt_src(),
         meta_agent_dir=_META_AGENT_DIR,
         caller_id=caller_id,
         workspace_id=workspace_id,
         model_id=model_id,
         home_root=_KIRO_HOME,
         persist_root=_KIRO_PERSIST,
+        agent_name=agent_name,
+        creator_language=invoke_lang,
     )
 
     client = KiroACPClient(
         binary=_KIRO_BINARY,
         kiro_home=_KIRO_HOME,
-        api_key=_KIRO_API_KEY,
-        agent_name="meta-agent",
+        api_key=kiro_api_key,
+        agent_name=agent_name,
         trust_all_tools=True,
+        # Per-invocation model pin via `kiro-cli-chat acp --model`. This
+        # replaces the earlier approach of rewriting the agent-config
+        # JSON's `model` field on every turn — that path had a race
+        # against concurrent invokes sharing the same HOME directory,
+        # and was indirect (Kiro reads the config as a "default"). The
+        # CLI flag is explicit per spawn and concurrency-safe.
+        model_id=model_id,
         # Kiro stores its SQLite DB and runtime assets under $XDG_DATA_HOME
         # (default $HOME/.local/share). On /mnt/kiro (NFS-backed
         # sessionStorage) SQLite file locks are unreliable — we saw
@@ -400,51 +581,312 @@ async def invoke(payload, context):
         # Save the uuid on the first turn, or re-pin defensively if
         # session/load somehow returned a different id.
         if is_new or (saved_uuid and session_id != saved_uuid):
-            save_kiro_session_uuid(session_id, persist_root=_KIRO_PERSIST)
+            save_kiro_session_uuid(
+                session_id, persist_root=_KIRO_PERSIST, agent_name=agent_name
+            )
 
         user_text = _compose_user_text(
             prompt, _format_history(history), is_new
         )
 
-        async for frame in _stream_with_keepalive(
-            client.prompt(session_id, user_text, timeout_s=_PROMPT_TIMEOUT_S),
-            mapper,
-        ):
-            yield frame
+        # Auto-continue supervisor. When the model ends a turn without
+        # the [[TASK_COMPLETE]] marker AND it actually ran tools
+        # (tool_events_seen > 0), we assume Kiro cut out prematurely
+        # and silently send "Continue." (or locale-appropriate text) as
+        # a fresh prompt on the same session. Capped at 3 rounds to
+        # avoid infinite loops when the model forgets the marker.
+        #
+        # Only enabled for the full meta-agent turn. The tool-less
+        # skill-edit/agent-edit sidebars have no tool use, their
+        # "completion" is just the final assistant text — gating on
+        # tool_events_seen > 0 naturally skips them.
+        continue_prompt = "继续。" if invoke_lang.lower().startswith("zh") else "Continue."
+        current_prompt = user_text
+        prev_tool_events = 0  # captured from last round's state before it's replaced
+        for round_idx in range(_AUTO_CONTINUE_MAX_ROUNDS + 1):
+            if round_idx > 0:
+                # Log AFTER capturing prev_tool_events from the prior
+                # round's state but BEFORE constructing the fresh state.
+                # The earlier version read from a just-reset state and
+                # always logged 0.
+                log.warning(
+                    "auto-continue round %d/%d (prev_tool_events=%d)",
+                    round_idx, _AUTO_CONTINUE_MAX_ROUNDS, prev_tool_events,
+                )
+                # Surface to frontend so the UI can show a badge.
+                yield json.dumps(
+                    {"__auto_continue": round_idx, "max": _AUTO_CONTINUE_MAX_ROUNDS},
+                    ensure_ascii=False,
+                )
+            state = _TurnStreamState()
+            async for frame in _stream_with_keepalive(
+                client.prompt(session_id, current_prompt, timeout_s=_PROMPT_TIMEOUT_S),
+                mapper,
+                state,
+            ):
+                yield frame
+            prev_tool_events = state.tool_events_seen
+
+            if state.marker_seen:
+                break
+            if state.tool_events_seen == 0:
+                # Model answered in pure text (no tool use). Pretend
+                # the marker was there — most likely the model just
+                # forgot to emit it on a trivial chit-chat turn, and
+                # auto-continuing an already-finished answer would
+                # just produce noise.
+                log.warning(
+                    "turn ended without marker but no tool events — "
+                    "skipping auto-continue"
+                )
+                break
+            if round_idx == _AUTO_CONTINUE_MAX_ROUNDS:
+                log.warning(
+                    "auto-continue budget exhausted (%d rounds, "
+                    "last tool_events=%d); surfacing partial response",
+                    _AUTO_CONTINUE_MAX_ROUNDS, state.tool_events_seen,
+                )
+                break
+            current_prompt = continue_prompt
 
     except ACPError as e:
-        log.exception("ACP error")
+        # Pull Kiro's `data` field into the error log. code=-32603 "Internal
+        # error" means Kiro itself gave up on this turn (LLM timeout, model
+        # refusal, overflow, etc.); the data blob is the only clue to which.
+        log.error(
+            "ACP error: method=%s code=%s message=%r data=%r",
+            e.method, e.code, e.message, e.data,
+        )
         if "Session not found" in (e.message or ""):
-            clear_kiro_session(persist_root=_KIRO_PERSIST)
-        yield json.dumps({"__error": f"kiro_acp_error: {e.message}"})
-    except Exception as e:  # noqa: BLE001
+            clear_kiro_session(persist_root=_KIRO_PERSIST, agent_name=agent_name)
+        # Don't leak `data` to the browser — it may contain prompt snippets
+        # or model IDs. Surface the code + message only; operator digs into
+        # CloudWatch for the data blob.
+        yield json.dumps({"__error": f"kiro_acp_error: {e.message} (code {e.code})"})
+    except Exception:  # noqa: BLE001
+        # See the list_models branch — repr(e) leaks subprocess argv,
+        # filesystem paths, and env fragments to the browser. Surface a
+        # stable code only; the full traceback goes to CloudWatch.
         log.exception("Meta-Agent invoke failed")
-        yield json.dumps({"__error": f"meta_agent_error: {e!r}"})
+        yield json.dumps({"__error": "meta_agent_error"})
     finally:
         await client.close()
 
 
-async def _stream_with_keepalive(events_iter, mapper: ACPToSSEMapper):
+# Completion marker the Meta-Agent prompt asks the model to emit as the
+# last line of a finished response (see prompts/meta-agent.md →
+# "Task Completion Marker"). _stream_with_keepalive watches every
+# outgoing text chunk for it and flags the turn as complete; the
+# auto-continue supervisor in `invoke` uses that flag to decide whether
+# to re-prompt.
+#
+# We strip the marker from user-visible output by buffering the *trailing
+# edge* of every text chunk — up to MARKER_BUFFER bytes — and only
+# flushing characters that are definitely not part of a partial marker.
+# A naive `text.replace(marker, "")` wouldn't catch the case where the
+# marker is split across two streamed chunks (e.g. "...answer.\n[[TASK_" |
+# "COMPLETE]]"), because by the time the second chunk arrives we've
+# already sent the first half to the browser.
+_COMPLETION_MARKER = "[[TASK_COMPLETE]]"
+
+
+class _TurnStreamState:
+    """Carries per-turn stream metadata between _stream_with_keepalive
+    invocations: was the marker seen, did the model actually run tools,
+    how many frames did we relay.
+
+    Kept as a plain class (not dataclass) so callers can mutate fields
+    cheaply without triggering frozen-dataclass surprises.
+    """
+
+    __slots__ = ("marker_seen", "tool_events_seen", "frames_out")
+
+    def __init__(self) -> None:
+        self.marker_seen = False
+        self.tool_events_seen = 0
+        self.frames_out = 0
+
+
+async def _stream_with_keepalive(
+    events_iter,
+    mapper: ACPToSSEMapper,
+    state: _TurnStreamState,
+):
     """Adapt an async iterator of ACP events into SSE frames with heartbeat.
 
     Iterates `events_iter` (from `KiroACPClient.prompt`), pipes each event
-    through the mapper, and yields all resulting SSE frames. When the
-    upstream is silent for `_KEEPALIVE_INTERVAL_S`, yields a keepalive
-    sentinel so CloudFront doesn't close the origin stream.
+    through the mapper, and yields all resulting SSE frames. Side effects
+    on `state`:
+
+    - `marker_seen` flips to True once we've observed the completion
+      marker in an outgoing text chunk. The marker itself is stripped
+      from the stream.
+    - `tool_events_seen` counts tool_call/tool_result frames so the
+      supervisor can tell "trivial chit-chat turn" from "agent was
+      clearly doing work when it got cut".
+    - `frames_out` is total frames shipped to the caller (debugging).
+
+    When upstream is silent for `_KEEPALIVE_INTERVAL_S`, yields a
+    keepalive sentinel so CloudFront doesn't close the origin stream.
+
+    Implementation note: we DO NOT wrap `ait.__anext__()` in `wait_for`.
+    Python async generators that get cancelled mid-`__anext__` enter an
+    unrecoverable "aclose-pending" state, so the next `__anext__` raises
+    StopAsyncIteration immediately — one keepalive tick would kill the
+    stream. Instead we forward events through a queue from a detached
+    pump task; the keepalive timer races the queue.get(), which is a
+    plain coroutine and safe to cancel repeatedly.
     """
-    ait = events_iter.__aiter__()
-    while True:
+    keepalive_count = 0
+    loop = asyncio.get_running_loop()
+    t0 = loop.time()
+
+    # Forward events_iter -> queue. A sentinel marks natural EOF; any
+    # unexpected exception propagates as an (is_error, exc) tuple so the
+    # consumer side raises it faithfully rather than silently hanging.
+    #
+    # The pump MUST guarantee _EOF (or an error packet) on any exit
+    # path. If it dies silently, the consumer's `queue.get()` blocks
+    # until `_PROMPT_TIMEOUT_S` (600s) while keepalives keep firing —
+    # which looks exactly like the original pre-fix bug. Two places
+    # this could leak before the outer `try/finally` existed:
+    #   - `except Exception` misses `asyncio.CancelledError` on
+    #     Python 3.8+ (BaseException subclass).
+    #   - Any sync exception before the `try` obviously can't be
+    #     caught at all, but the body is trivially async-only.
+    # Route both via a plain `finally` that stuffs a sentinel onto the
+    # queue, re-raising cancellation so the task's state reflects
+    # reality for any outer await.
+    _EOF = object()
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def _pump():
+        eof_sent = False
         try:
-            event = await asyncio.wait_for(
-                ait.__anext__(), timeout=_KEEPALIVE_INTERVAL_S
-            )
-        except asyncio.TimeoutError:
-            yield keepalive()
-            continue
-        except StopAsyncIteration:
+            async for evt in events_iter:
+                await queue.put(evt)
+        except asyncio.CancelledError:
+            # Outer consumer aborted us. Put EOF so a racing get()
+            # wakes up cleanly instead of hanging, then re-raise so
+            # the task is properly marked cancelled.
+            try:
+                queue.put_nowait(_EOF)
+                eof_sent = True
+            except Exception:  # noqa: BLE001
+                pass
+            raise
+        except Exception as e:  # noqa: BLE001
+            try:
+                queue.put_nowait(("__pump_error__", e))
+                eof_sent = True
+            except Exception:  # noqa: BLE001
+                pass
             return
-        for frame in mapper.translate(event):
-            yield frame
+        finally:
+            if not eof_sent:
+                # Natural exhaustion of `async for` lands here. Also
+                # the safety net for any exit path that didn't already
+                # enqueue something.
+                try:
+                    queue.put_nowait(_EOF)
+                except Exception:  # noqa: BLE001
+                    pass
+
+    pump_task = asyncio.create_task(_pump(), name="acp-pump")
+    # Trailing bytes we might need to hold back in case they're the start
+    # of a split marker. Cap at marker_len-1 — at most that much of the
+    # marker could have arrived without completing.
+    pending_tail = ""
+    marker_len = len(_COMPLETION_MARKER)
+
+    def _filter_text(chunk: str) -> str | None:
+        """Strip completion marker from a text chunk, handling split-across-chunks.
+
+        Returns the safe prefix to ship now; keeps any trailing bytes
+        that could still be the start of a partial marker in
+        pending_tail. Returns None when after filtering there's nothing
+        to ship (chunk was entirely held for split-detection).
+        """
+        nonlocal pending_tail
+        combined = pending_tail + chunk
+        # Fully-formed marker: strip it, flag state.
+        while _COMPLETION_MARKER in combined:
+            state.marker_seen = True
+            combined = combined.replace(_COMPLETION_MARKER, "", 1)
+        # Hold back up to marker_len-1 bytes that could be the start of
+        # the marker. Any whole-prefix that can't possibly be part of
+        # the marker is safe to ship now.
+        keep_back = 0
+        # Find the longest suffix of `combined` that is a proper prefix
+        # of the marker. Those bytes must stay in pending_tail.
+        for k in range(min(marker_len - 1, len(combined)), 0, -1):
+            if _COMPLETION_MARKER.startswith(combined[-k:]):
+                keep_back = k
+                break
+        if keep_back:
+            ship = combined[:-keep_back]
+            pending_tail = combined[-keep_back:]
+        else:
+            ship = combined
+            pending_tail = ""
+        return ship if ship else None
+
+    try:
+        while True:
+            try:
+                event = await asyncio.wait_for(
+                    queue.get(), timeout=_KEEPALIVE_INTERVAL_S
+                )
+            except asyncio.TimeoutError:
+                keepalive_count += 1
+                log.warning(
+                    "keepalive #%d emitted at +%.1fs (frames_out=%d)",
+                    keepalive_count, loop.time() - t0, state.frames_out,
+                )
+                yield keepalive()
+                continue
+            if event is _EOF:
+                # Flush any held bytes that turned out NOT to be a marker.
+                if pending_tail and _COMPLETION_MARKER not in pending_tail:
+                    state.frames_out += 1
+                    yield pending_tail
+                pending_tail = ""
+                log.warning(
+                    "stream ended at +%.1fs (frames_out=%d keepalives=%d "
+                    "tool_events=%d marker_seen=%s)",
+                    loop.time() - t0, state.frames_out, keepalive_count,
+                    state.tool_events_seen, state.marker_seen,
+                )
+                return
+            if isinstance(event, tuple) and len(event) == 2 and event[0] == "__pump_error__":
+                raise event[1]
+            for frame in mapper.translate(event):
+                # sse_mapper emits two kinds of strings:
+                #   1. raw text (model prose) — MIGHT contain the marker
+                #   2. JSON control frames like `{"__tool": ...}` — never
+                # Detect by leading `{` which is safe because prose chunks
+                # Kiro ships are never JSON-object-shaped.
+                if frame.startswith("{") and frame.endswith("}"):
+                    # Tool markers count as "agent did real work".
+                    if '"__tool"' in frame:
+                        state.tool_events_seen += 1
+                    state.frames_out += 1
+                    yield frame
+                    continue
+                # Text chunk — run through marker filter.
+                shipped = _filter_text(frame)
+                if shipped is not None:
+                    state.frames_out += 1
+                    yield shipped
+    finally:
+        # Always tear down the pump task so its upstream async-generator
+        # gets a clean aclose. Cancelling is safe even if _pump already
+        # completed; in that case `task.cancel()` is a no-op.
+        pump_task.cancel()
+        try:
+            await pump_task
+        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            pass
 
 
 if __name__ == "__main__":

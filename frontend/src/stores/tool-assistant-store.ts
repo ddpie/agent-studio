@@ -209,7 +209,15 @@ def my_tool(query: str, max_results: int = 5) -> str:
       }));
 
     try {
-      const stream = invokeMetaAgent(finalPrompt, history, undefined, undefined, undefined, get().selectedModelId || undefined);
+      const stream = invokeMetaAgent(
+        finalPrompt,
+        history,
+        undefined,
+        undefined,
+        undefined,
+        get().selectedModelId || undefined,
+        "agent_edit",
+      );
 
       let pendingText = "";
       let flushTimer: ReturnType<typeof setTimeout> | null = null;

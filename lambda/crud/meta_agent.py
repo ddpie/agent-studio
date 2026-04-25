@@ -73,6 +73,37 @@ _META_AGENT_SKILLS = [
 ]
 
 
+@router.get("/api/workspaces/<wsId>/meta-agent/status")
+def get_meta_agent_status(wsId: str):
+    """Lightweight health probe for the Meta-Agent runtime.
+
+    Powers the status dot in the chat header. Only returns the live
+    control-plane status + a timestamp; any richer metadata lives in
+    the agent-card endpoint.
+    """
+    _, _, _, err = auth_check(router.current_event, ws_id=wsId)
+    if err:
+        return err
+    if not META_AGENT_ARN:
+        return success({"status": "NOT_CONFIGURED", "lastUpdated": None})
+
+    runtime_id = _extract_runtime_id(META_AGENT_ARN)
+    try:
+        info = _get_control().get_agent_runtime(agentRuntimeId=runtime_id)
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        if code == "ResourceNotFoundException":
+            return success({"status": "NOT_FOUND", "lastUpdated": None})
+        logger.exception("get_agent_runtime failed", extra={"error_code": code})
+        return internal_error()
+
+    last_updated = info.get("lastUpdatedAt") or info.get("createdAt")
+    return success({
+        "status": info.get("status") or "UNKNOWN",
+        "lastUpdated": last_updated.isoformat() if last_updated else None,
+    })
+
+
 @router.get("/api/workspaces/<wsId>/meta-agent/agent-card")
 def get_meta_agent_card(wsId: str):
     _, _, _, err = auth_check(router.current_event, ws_id=wsId)

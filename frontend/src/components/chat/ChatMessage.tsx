@@ -11,6 +11,7 @@ import rehypeKatex from "rehype-katex";
 import { useChatStore, type Message } from "../../stores/chat-store";
 import { fetchSignedS3, buildAttachmentHint } from "../../lib/s3-utils";
 import { agentConfig } from "../../config";
+import { useUISettings } from "../../stores/ui-settings-store";
 import ImageLightbox from "../ui/ImageLightbox";
 import CopyButtons from "./CopyButtons";
 import { mdComponents } from "./CodeBlock";
@@ -27,11 +28,30 @@ const sanitizeSchema = {
   },
 };
 
+/** Render a prose fragment with the same ReactMarkdown pipeline as the
+ * main content block. Extracted so inline-mode can render each text
+ * block the same way the stacked-mode single block does. */
+function ProseBlock({ text, isUser }: { text: string; isUser: boolean }) {
+  if (!text) return null;
+  return (
+    <div className={`prose prose-sm max-w-none ${isUser ? "prose-invert [&_*]:text-white" : "dark:prose-invert"}`}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeKatex]}
+        components={mdComponents}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
 const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStreaming }: { message: Message; isLastAssistant: boolean; isStreaming: boolean }) {
   const { t } = useTranslation();
   const isUser = message.role === "user";
   const showTypingIndicator = isLastAssistant && isStreaming && message.role === "assistant";
   const showCopy = !isUser && message.content && !showTypingIndicator;
+  const showInlineToolCalls = useUISettings((s) => s.showInlineToolCalls);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const { editAndResend } = useChatStore();
@@ -147,25 +167,55 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
               </span>
             );
           }
+          // Inline mode renders blocks in arrival order so tool calls
+          // interleave with prose. When the setting is OFF the user
+          // wants tool calls hidden entirely — just render the prose
+          // concatenation. Legacy messages without `blocks` also fall
+          // through to prose-only; they still show stacked toolCalls
+          // because pre-blocks messages never participated in the
+          // inline/hidden toggle and hiding them retroactively would
+          // erase history the user already saw.
+          const canInline = !isUser && !!message.blocks && message.blocks.length > 0;
+          const useInline = showInlineToolCalls && canInline;
+          const stripAttachmentHints = (text: string) =>
+            message.attachments?.length
+              ? text.replace(/\n\n\[Attached file:[^\]]*\]/g, "").trim()
+              : text;
           return (
             <>
-              {hasContent && (
-                <div ref={contentDivRef} className={`prose prose-sm max-w-none ${isUser ? "prose-invert [&_*]:text-white" : "dark:prose-invert"}`}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]} rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeSchema], rehypeKatex]} components={mdComponents}>{
-                    (() => {
-                      let text = message.content;
-                      if (message.attachments?.length) text = text.replace(/\n\n\[Attached file:[^\]]*\]/g, "").trim();
-                      return text;
-                    })()
-                  }</ReactMarkdown>
+              {useInline ? (
+                <div ref={contentDivRef}>
+                  {message.blocks!.map((b, i) =>
+                    b.kind === "text" ? (
+                      <ProseBlock key={i} text={stripAttachmentHints(b.text)} isUser={isUser} />
+                    ) : (
+                      <ToolCallDetails key={i} calls={[b.call]} />
+                    ),
+                  )}
                   {showTypingIndicator && (
                     <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500 text-xs mt-2">
                       <Loader2 className="w-3 h-3 animate-spin" /> {t("chat.working")}
                     </span>
                   )}
                 </div>
+              ) : (
+                <>
+                  {hasContent && (
+                    <div ref={contentDivRef}>
+                      <ProseBlock text={stripAttachmentHints(message.content)} isUser={isUser} />
+                      {showTypingIndicator && (
+                        <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500 text-xs mt-2">
+                          <Loader2 className="w-3 h-3 animate-spin" /> {t("chat.working")}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {/* Stacked tool list only for legacy messages without
+                      blocks. New-pipeline messages with blocks respect
+                      the toggle: off = hidden. */}
+                  {hasTools && !canInline && <ToolCallDetails calls={message.toolCalls!} />}
+                </>
               )}
-              {hasTools && <ToolCallDetails calls={message.toolCalls!} />}
               {hasDownloads && <S3DownloadList downloads={message.s3Downloads!} />}
             </>
           );

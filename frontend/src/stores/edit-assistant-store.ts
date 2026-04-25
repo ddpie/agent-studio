@@ -5,6 +5,7 @@
 import { create } from "zustand";
 import { fetchAgentHistory, putAgentHistory, getStorage, putStorage } from "../lib/api-client";
 import { invokeMetaAgent } from "../lib/agentcore-client";
+import { editorBridge } from "../lib/editor-bridge";
 import { useUISettings } from "./ui-settings-store";
 import { useAgentEditStore } from "./agent-edit-store";
 
@@ -170,46 +171,62 @@ ${(() => {
   const pendingFiles = editStore.pendingSkillFiles || {};
   const originalFiles = editStore.originalSkillFiles || {};
 
-  // Surface dirty in-editor edits so the assistant doesn't read a stale
-  // S3 version via read_skill_file and then clobber unsaved work. A file
-  // is "dirty" when its pending content differs from the original we
-  // captured on first load. The assistant is told to treat these as the
-  // source of truth and NOT to call read_skill_file for them.
-  const MAX_DIRTY_BYTES = 20000;
-  const collectDirty = (skillId: string): Array<{ path: string; content: string; truncated: boolean }> => {
-    const pending = pendingFiles[skillId] || {};
-    const original = originalFiles[skillId] || {};
-    const out: Array<{ path: string; content: string; truncated: boolean }> = [];
-    for (const [path, content] of Object.entries(pending)) {
-      if (typeof content !== "string") continue;
-      if (original[path] === content) continue; // clean — same as S3 baseline
-      const truncated = content.length > MAX_DIRTY_BYTES;
-      out.push({
-        path,
-        content: truncated ? content.slice(0, MAX_DIRTY_BYTES) + `\n\n... [truncated ${content.length - MAX_DIRTY_BYTES} chars]` : content,
-        truncated,
-      });
-    }
-    return out;
+  // For each bound skill, inline the current content of every known file —
+  // pending (dirty) first, then original S3 baseline for anything not yet
+  // edited. The agent_edit Kiro mode has no tools, so we can't ask the
+  // model to call read_skill_file on demand; it has to see the source
+  // inline or it'll just say "I can't see the file contents".
+  const MAX_FILE_BYTES = 20000;
+  const clip = (s: string): { text: string; truncated: boolean } => {
+    if (s.length <= MAX_FILE_BYTES) return { text: s, truncated: false };
+    return {
+      text: s.slice(0, MAX_FILE_BYTES) + `\n\n... [truncated ${s.length - MAX_FILE_BYTES} chars]`,
+      truncated: true,
+    };
   };
 
-  const renderDirty = (skillId: string): string => {
-    const dirty = collectDirty(skillId);
-    if (dirty.length === 0) return "";
-    const blocks = dirty.map(({ path, content, truncated }) =>
-      `### ${path}${truncated ? " (truncated)" : ""}\n\`\`\`\n${content}\n\`\`\``
-    );
-    return `\n\n  **Unsaved edits in the editor (override S3 for these paths):**\n\n${blocks.join("\n\n")}`;
+  const renderSkillFiles = (s: { id: string; files: string[] }): string => {
+    const pending = pendingFiles[s.id] || {};
+    const original = originalFiles[s.id] || {};
+    const parts: string[] = [];
+    for (const path of s.files) {
+      const pContent = pending[path];
+      const oContent = original[path];
+      let source: "pending" | "original" | null = null;
+      let content: string | undefined;
+      if (typeof pContent === "string" && pContent !== oContent) {
+        source = "pending";
+        content = pContent;
+      } else if (typeof oContent === "string") {
+        source = "original";
+        content = oContent;
+      } else if (typeof pContent === "string") {
+        source = "pending";
+        content = pContent;
+      }
+      if (source === null || content === undefined) {
+        parts.push(`#### ${path} (not loaded in editor)`);
+        continue;
+      }
+      const { text, truncated } = clip(content);
+      const tag = source === "pending" ? " [unsaved edits]" : "";
+      const suffix = truncated ? " (truncated)" : "";
+      parts.push(`#### ${path}${tag}${suffix}\n\`\`\`\n${text}\n\`\`\``);
+    }
+    return parts.length ? "\n\n" + parts.join("\n\n") : "";
   };
 
   return `## Bound Skills${editingSkillId ? " (currently editing)" : ""}
-${skills.map(s => `- ${s.name} (id=${s.id}): ${s.description}\n  files: ${s.files.join(", ")}${renderDirty(s.id)}`).join("\n")}
+${skills.map(s => `- ${s.name} (id=${s.id}): ${s.description}\n  files: ${s.files.join(", ")}${renderSkillFiles(s)}`).join("\n\n")}
 
-Before rewriting or reviewing a skill file, use read_skill_file(skill_id, path) to fetch its content (and list_skill_files(skill_id) first if you need the full tree). Don't guess file content you haven't read. Pull only the files relevant to the ask — for "optimize SKILL.md", read SKILL.md plus any INDEX / layout / helper files that SKILL.md references.
+All skill file contents above are the current source of truth (pending
+edits override the S3 baseline). Base your analysis and any edits on
+this inline content — do NOT assume files you can't see exist or have
+different content. If a file is marked "(not loaded in editor)", ask
+the user to open it before you proceed.
 
-**Unsaved-edits rule:** If a file appears under "Unsaved edits in the editor" above, use that inline content as the source of truth — do NOT call read_skill_file for it. The S3 copy is stale compared to what the user is currently editing, and reading it would cause you to overwrite their in-progress changes.
-
-When the user asks to modify a skill file, write the new content with __field_value:
+When the user asks to modify a skill file, write the COMPLETE new
+content with __field_value:
 
 \`\`\`\`__field_value:skill:{skillId}:{filePath}
 complete new file content
@@ -342,7 +359,15 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
       }));
 
     try {
-      const stream = invokeMetaAgent(finalPrompt, history, undefined, undefined, undefined, get().selectedModelId || undefined);
+      const stream = invokeMetaAgent(
+        finalPrompt,
+        history,
+        undefined,
+        undefined,
+        undefined,
+        get().selectedModelId || undefined,
+        "agent_edit",
+      );
 
       let pendingText = "";
       let flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -424,10 +449,23 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
               if (parts.length >= 3) {
                 const skillId = parts[1];
                 const filePath = parts.slice(2).join(":");
-                // Write skill file via pending skill files in agent-edit-store
+                // Dual-write to keep every consumer in sync. Read the
+                // functions comment atop `editor-bridge.ts` for why these
+                // are separate calls rather than one.
+                //   1. Store — powers the "unsaved changes" banner, the
+                //      SkillDiffModal, and the deploy pipeline (which
+                //      reads pendingSkillFiles directly, see
+                //      useAgentDeploy.ts).
                 const { setPendingSkillFiles, getPendingSkillFiles } = useAgentEditStore.getState();
                 const existing = getPendingSkillFiles(skillId) || {};
                 setPendingSkillFiles(skillId, { ...existing, [filePath]: content });
+                //   2. Editor — powers Monaco's displayed content, the
+                //      file-tree dirty dot, the save button (handleSaveAll
+                //      reads editedContents, not the store), and discard.
+                //      No-op if no SkillEditorView is currently mounted;
+                //      on next mount loadEverything() picks up the pending
+                //      store state.
+                editorBridge.write(skillId, filePath, content);
                 editedFields.push(`skill:${skillId}:${filePath}`);
                 processedText = processedText.replace(raw, "");
               }
