@@ -48,9 +48,10 @@ export default function WorkspaceSwitcher() {
       // Switch into the newly created workspace (triggers hard reload).
       setWorkspaceId(ws.workspaceId);
       const nextHash = demoteHashForWorkspaceSwitch(window.location.hash);
-      window.location.assign(
-        window.location.pathname + window.location.search + nextHash,
-      );
+      if (nextHash !== window.location.hash) {
+        window.location.hash = nextHash;
+      }
+      window.location.reload();
     } catch (err) {
       const msg = err instanceof ApiError ? err.body?.error : undefined;
       toast.error(msg || t("workspace.create.failed"));
