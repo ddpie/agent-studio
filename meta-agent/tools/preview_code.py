@@ -6,7 +6,7 @@ from strands import tool
 
 from config import MODEL_ID, REGION, S3_BUCKET
 from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
-from templates.prompt_templates import get_template_prompt, BASE_GUIDELINES
+from templates.prompt_templates import get_base_guidelines
 from deploy import validate_agent_files
 
 
@@ -29,7 +29,7 @@ def preview_assembled_code(
         system_prompt: The system prompt text.
         tool_definitions: Python @tool function code.
         tool_names: Comma-separated tool names.
-        template_id: Prompt template to apply.
+        template_id: Deprecated; ignored. Prompt templates have been retired.
         gateway_url: Optional MCP Gateway URL.
 
     Returns:
@@ -49,13 +49,14 @@ def preview_assembled_code(
         except Exception as e:
             return json.dumps({"error": f"Failed to read staging config: {e}"})
 
-    # Apply template
-    final_prompt = system_prompt or "You are a helpful assistant."
-    if template_id:
-        base_prompt = get_template_prompt(template_id)
-        final_prompt = base_prompt + "\n\n## Specific Instructions\n" + final_prompt
-    elif BASE_GUIDELINES not in final_prompt:
-        final_prompt = final_prompt + "\n" + BASE_GUIDELINES
+    # Compose final prompt. template_id is accepted for back-compat but
+    # ignored — see create_agent.py for the rationale. The sub-agent
+    # always gets the user's raw system_prompt + BASE_GUIDELINES in the
+    # creator's language.
+    from tools._scope import current_creator_language
+    base = system_prompt or "You are a helpful assistant."
+    guidelines = get_base_guidelines(current_creator_language())
+    final_prompt = base if guidelines in base else base + "\n" + guidelines
 
     # Build files
     tool_names_list = [t.strip() for t in tool_names.split(",") if t.strip()] if tool_names else []

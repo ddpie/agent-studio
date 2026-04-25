@@ -7,6 +7,7 @@
 import { BedrockAgentCoreClient, InvokeAgentRuntimeCommand } from "@aws-sdk/client-bedrock-agentcore";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
+import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { randomBytes } from "node:crypto";
 
@@ -23,7 +24,37 @@ const ISSUER = `https://cognito-idp.${REGION}.amazonaws.com/${COGNITO_USER_POOL_
 
 const agentcore = new BedrockAgentCoreClient({ region: REGION });
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION }));
+const secretsClient = new SecretsManagerClient({ region: REGION });
 const jwks = createRemoteJWKSet(new URL(JWKS_URL));
+
+// In-memory cache of Kiro keys per workspace, keyed by wsId. Lambda
+// container reuse saves a Secrets Manager call per turn — KMS + SM is
+// ~100ms added to cold + every invoke otherwise. 60s TTL bounds how
+// long a stale key can linger after an admin rotates it while still
+// cutting the bulk of per-turn SM calls. `null` means "we already
+// looked and the secret doesn't exist".
+const KIRO_KEY_TTL_MS = 60 * 1000;
+const kiroKeyCache = new Map(); // wsId -> { value: string | null, fetchedAt: number }
+
+async function fetchKiroKey(wsId) {
+  const cached = kiroKeyCache.get(wsId);
+  if (cached && Date.now() - cached.fetchedAt < KIRO_KEY_TTL_MS) {
+    return cached.value;
+  }
+  const secretId = `agent-studio/workspaces/${wsId}/kiro-api-key`;
+  try {
+    const resp = await secretsClient.send(new GetSecretValueCommand({ SecretId: secretId }));
+    const value = resp.SecretString || null;
+    kiroKeyCache.set(wsId, { value, fetchedAt: Date.now() });
+    return value;
+  } catch (err) {
+    if (err.name === "ResourceNotFoundException") {
+      kiroKeyCache.set(wsId, { value: null, fetchedAt: Date.now() });
+      return null;
+    }
+    throw err;
+  }
+}
 
 const ROLE_LEVEL = { viewer: 0, editor: 1, admin: 2, owner: 3 };
 const ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -221,6 +252,51 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
   payload.workspace_id = route.wsId;
   if (route.type === "meta-agent") {
     payload.caller_id = auth.userId;
+    // `mode` selects which Kiro agent config handles the turn. The skill
+    // editor sidebar sends "skill_edit" to swap to the tool-less variant;
+    // empty / missing defaults to the full meta-agent. Only a short
+    // whitelist is forwarded to keep the payload surface honest.
+    if (typeof body.mode === "string" && body.mode.length <= 32) {
+      payload.mode = body.mode;
+    }
+    // `action` triggers short-circuit entrypoint branches (currently
+    // `list_models`). Same whitelist approach as `mode`: if the caller
+    // sends anything unreasonably large, drop it.
+    if (typeof body.action === "string" && body.action.length <= 32) {
+      payload.action = body.action;
+    }
+    // `language` feeds the auto-continue supervisor's locale choice
+    // ("Continue." vs "继续。"). Accept 2-8 char strings only — BCP-47
+    // tags like "en-US" or "zh-Hans" fit; anything longer is suspect.
+    if (typeof body.language === "string" && body.language.length <= 8) {
+      payload.language = body.language;
+    }
+
+    // Hydrate the per-workspace Kiro API key into the payload. We never
+    // put this in the Runtime's environment variables because those are
+    // plaintext in the control-plane config; payload is transported via
+    // SigV4+TLS only. If the workspace hasn't configured a key yet,
+    // short-circuit with 400 — the UI surfaces a banner linking to the
+    // settings page so the admin can configure it.
+    let kiroKey;
+    try {
+      kiroKey = await fetchKiroKey(route.wsId);
+    } catch (err) {
+      console.error("fetchKiroKey error:", err);
+      const meta = { statusCode: 500, headers: { "content-type": "application/json" } };
+      responseStream = awslambda.HttpResponseStream.from(responseStream, meta);
+      responseStream.write(JSON.stringify({ error: "kiro_key_lookup_failed" }));
+      responseStream.end();
+      return;
+    }
+    if (!kiroKey) {
+      const meta = { statusCode: 400, headers: { "content-type": "application/json" } };
+      responseStream = awslambda.HttpResponseStream.from(responseStream, meta);
+      responseStream.write(JSON.stringify({ error: "kiro_not_configured" }));
+      responseStream.end();
+      return;
+    }
+    payload.kiro_api_key = kiroKey;
   }
 
   const commandInput = {

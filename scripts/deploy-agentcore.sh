@@ -142,6 +142,12 @@ _aid = agent_id or "agentStudioMeta"
 _account = os.environ["AGENT_STUDIO_ACCOUNT_ID"]
 env_vars = {
     "AGENT_STUDIO_REGION": region,
+    # Explicit S3 bucket + account id. config.py has a STS/region fallback,
+    # but kiro_home.py forwards these verbatim into the MCP stdio subprocess
+    # env — any empty value there turns every tool that touches S3 into a
+    # "Invalid bucket name" failure.
+    "AGENT_STUDIO_S3_BUCKET": bucket,
+    "AGENT_STUDIO_ACCOUNT_ID": _account,
     # AgentCore Observability via ADOT — emits gen_ai.* spans to aws/spans.
     # AgentCore's data plane captures OTLP from the runtime pod using the
     # x-aws-log-group header; no sidecar collector exists on localhost:4318,
@@ -169,26 +175,32 @@ for _k in (
     "AGENT_STUDIO_BROWSER_ID",
     "AGENT_STUDIO_CLOUDFRONT_DOMAIN",
     "AGENT_STUDIO_A2A_INVOKE_URL",
-    # Kiro backend — required for the kiro_adapter entrypoint.
-    # AGENT_STUDIO_KIRO_API_KEY is mapped to KIRO_API_KEY below, which is
-    # what kiro-cli-chat itself reads. AGENT_STUDIO_KIRO_MODEL is optional
-    # (defaults inside main.py).
+    # Needed by list_mcp_servers / list_mcp_target_tools. Without this,
+    # those tools fail immediately with "gateway id not configured".
+    "AGENT_STUDIO_MCP_GATEWAY_ID",
+    # config.py reads MCP_GATEWAY_URL first, then falls back to
+    # s3://bucket/config/mcp_gateway_url.txt. Forwarding it saves one S3
+    # GetObject per cold-start of the MCP stdio subprocess.
+    "AGENT_STUDIO_MCP_GATEWAY_URL",
+    # Kiro model default is still env-configured; the API key moved to
+    # per-workspace Secrets Manager (hydrated at invoke time by the
+    # Invoke Lambda) so it no longer ships in Runtime env at all.
     "AGENT_STUDIO_KIRO_MODEL",
 ):
     _v = os.environ.get(_k, "")
     if _v:
         env_vars[_k] = _v
 
-# Kiro expects KIRO_API_KEY in the subprocess environment. Pipe it from the
-# caller's AGENT_STUDIO_KIRO_API_KEY so deploy-all.sh and the CDK stack don't
-# have to special-case a Kiro-specific variable name.
-_kiro_key = os.environ.get("AGENT_STUDIO_KIRO_API_KEY", "")
-if _kiro_key:
-    env_vars["KIRO_API_KEY"] = _kiro_key
-else:
+# Admin-only fallback: if KIRO_API_KEY is present in the deployer's shell
+# env we forward it as a last-resort credential the Runtime uses when no
+# per-workspace key is configured. Leave unset in prod; users must
+# configure per-workspace keys via the Settings UI.
+_kiro_fallback = os.environ.get("AGENT_STUDIO_KIRO_API_KEY", "")
+if _kiro_fallback:
+    env_vars["KIRO_API_KEY"] = _kiro_fallback
     print(
-        "  WARNING: AGENT_STUDIO_KIRO_API_KEY is empty; Meta-Agent will fail "
-        "at first invoke with 'KIRO_API_KEY is not set'.",
+        "  NOTE: AGENT_STUDIO_KIRO_API_KEY is set; forwarding as admin "
+        "fallback. Workspaces should configure their own keys in Settings.",
         file=sys.stderr,
     )
 

@@ -9,10 +9,16 @@ interface UISettingsState {
   inputHeight: number;
   theme: Theme;
   language: Language;
+  // When true (default), assistant tool calls render inline with the
+  // prose so readers see the sequence: "said A, called X, said B".
+  // When false, all tool calls stack at the end of the message (the
+  // pre-blocks render path). Persisted so users keep their pick.
+  showInlineToolCalls: boolean;
   setSidebarWidth: (width: number) => void;
   setInputHeight: (height: number) => void;
   setTheme: (theme: Theme) => void;
   setLanguage: (language: Language) => void;
+  setShowInlineToolCalls: (show: boolean) => void;
 }
 
 function applyTheme(theme: Theme) {
@@ -32,6 +38,7 @@ export const useUISettings = create<UISettingsState>()(
       inputHeight: 44,
       theme: "light" as Theme,
       language: "zh" as Language,
+      showInlineToolCalls: true,
       setSidebarWidth: (width) => set({ sidebarWidth: width }),
       setInputHeight: (height) => set({ inputHeight: height }),
       setTheme: (theme) => {
@@ -39,6 +46,7 @@ export const useUISettings = create<UISettingsState>()(
         set({ theme });
       },
       setLanguage: (language) => set({ language }),
+      setShowInlineToolCalls: (show) => set({ showInlineToolCalls: show }),
     }),
     {
       name: "agent-studio-ui",

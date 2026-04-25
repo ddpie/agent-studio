@@ -79,6 +79,18 @@ export class Invoke extends Construct {
       resources: [`arn:aws:s3:::${props.config.s3Bucket}/uploads/*`],
     }));
 
+    // Per-workspace Kiro API key lookup. Read-only, prefix-scoped so the
+    // Invoke Lambda can't reach agent-level secrets (those belong to
+    // Meta-Agent / Sub-Agent roles). The trailing `??????` is the 6-char
+    // Secrets Manager suffix — using `kiro-api-key-*` instead would also
+    // match hypothetical `kiro-api-key-legacy-*` names.
+    this.invokeLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["secretsmanager:GetSecretValue"],
+      resources: [
+        `arn:aws:secretsmanager:${props.config.region}:${props.config.accountId}:secret:agent-studio/workspaces/*/kiro-api-key-??????`,
+      ],
+    }));
+
     new cdk.CfnOutput(this, "InvokeFunctionUrl", { value: this.functionUrl.url });
   }
 }

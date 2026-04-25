@@ -127,6 +127,9 @@ export class Api extends Construct {
         "secretsmanager:GetSecretValue",
         "secretsmanager:PutSecretValue",
         "secretsmanager:DeleteSecret",
+        // kiro_key.py Describe + TagResource for updatedBy metadata.
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:TagResource",
       ],
       resources: [
         `arn:aws:secretsmanager:${props.config.region}:${props.config.accountId}:secret:agent-studio/*`,

@@ -29,6 +29,19 @@ export interface S3Download {
   filename: string;
 }
 
+/**
+ * Ordered render unit used to interleave assistant prose with tool call
+ * UI in the transcript. Each text block may be appended to as streaming
+ * continues; tool_call blocks carry a snapshot of the ToolCallRecord.
+ *
+ * The concatenation of all `text` blocks equals `Message.content` — this
+ * invariant lets everything outside the renderer (history replay, export,
+ * edit-and-resend, migration) keep working without caring about blocks.
+ */
+export type MessageBlock =
+  | { kind: "text"; text: string }
+  | { kind: "tool_call"; call: ToolCallRecord };
+
 export interface Message {
   id: string;
   role: "user" | "assistant" | "system";
@@ -41,6 +54,14 @@ export interface Message {
   attachments?: Array<{ name: string; size: number; s3Key: string }>;
   /** Tool invocations captured during the turn (streaming order). */
   toolCalls?: ToolCallRecord[];
+  /**
+   * Inline render sequence. When present, ChatMessage renders prose and
+   * tool calls in arrival order so readers see the model's "then I
+   * called X, then said Y" flow. Absent on legacy messages (pre-blocks
+   * migration) and on messages rendered with the `showInlineToolCalls`
+   * setting off — both fall back to `content + toolCalls` stacked.
+   */
+  blocks?: MessageBlock[];
   /** Files the sub-agent uploaded for download (deduped by key). */
   s3Downloads?: S3Download[];
   timestamp: number;
@@ -70,6 +91,11 @@ interface ChatState {
   streamingByAgent: Record<string, boolean>;
   statusByAgent: Record<string, string | null>;
   activeToolByAgent: Record<string, string | null>;
+  // { n: current round 1..max, max }, or null when not auto-continuing.
+  // Meta-Agent's supervisor emits this when it re-prompts Kiro after a
+  // premature end_turn; the ChatPanel renders a small "(auto-continuing
+  // N/M)" badge. Cleared on the first real text chunk of the next round.
+  autoContinueByAgent: Record<string, { n: number; max: number } | null>;
   sessionIdByAgent: Record<string, string | undefined>;
   activeSessionByAgent: Record<string, string | null>;
   selectedModelByAgent: Record<string, string | null>;
@@ -221,6 +247,17 @@ export function _migrateToV3(persisted: LegacyPersistedState): Partial<ChatState
   if (persisted.selectedModelId !== undefined && !(key in selectedModelByAgent)) {
     selectedModelByAgent[key] = persisted.selectedModelId ?? null;
   }
+  // Format guard: the "meta" slot holds Meta-Agent's Kiro-native id
+  // (e.g. "claude-opus-4.6"). Before B-4 the store was Bedrock-only —
+  // persisted `us.anthropic.*` / `global.anthropic.*` / region-prefixed
+  // values in the "meta" slot would get sent to Kiro as model_id and
+  // silently fail. Scrub any such legacy value so the store falls back
+  // to the Kiro default on next read.
+  const BEDROCK_ID_RE = /^(us|global|apac|eu)\./;
+  const metaId = selectedModelByAgent["meta"];
+  if (typeof metaId === "string" && BEDROCK_ID_RE.test(metaId)) {
+    selectedModelByAgent["meta"] = null;
+  }
 
   return {
     currentAgentId: persisted.currentAgentId ?? null,
@@ -270,6 +307,7 @@ const _chatInitialState = {
   streamingByAgent: {} as Record<string, boolean>,
   statusByAgent: {} as Record<string, string | null>,
   activeToolByAgent: {} as Record<string, string | null>,
+  autoContinueByAgent: {} as Record<string, { n: number; max: number } | null>,
   sessionIdByAgent: {} as Record<string, string | undefined>,
   activeSessionByAgent: {} as Record<string, string | null>,
   selectedModelByAgent: {} as Record<string, string | null>,
@@ -292,6 +330,7 @@ function setFlagFor<K extends
   | "streamingByAgent"
   | "statusByAgent"
   | "activeToolByAgent"
+  | "autoContinueByAgent"
   | "sessionIdByAgent"
   | "activeSessionByAgent"
   | "selectedModelByAgent">(
@@ -492,13 +531,34 @@ export const useChatStore = create<ChatState>()(
           let pendingText = "";
           let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
+          // Blocks mirror the streaming order (text / tool_call / text / ...).
+          // Maintained in parallel with the flat `content` + `toolCalls` fields
+          // so the existing consumers (history replay, export, fallback
+          // render) don't need to know about blocks. The invariant is:
+          // concat of every text block's `text` === content.
+          const appendTextBlock = (text: string) => {
+            if (!text) return;
+            set((s) => setMessagesFor(s, sendingAgentKey, (msgs) =>
+              msgs.map((m) => {
+                if (m.id !== assistantMsg.id) return m;
+                const blocks = [...(m.blocks || [])];
+                const last = blocks[blocks.length - 1];
+                if (last && last.kind === "text") {
+                  // Mutate a shallow copy so React sees the reference change.
+                  blocks[blocks.length - 1] = { kind: "text", text: last.text + text };
+                } else {
+                  blocks.push({ kind: "text", text });
+                }
+                return { ...m, content: m.content + text, blocks };
+              }),
+            ));
+          };
+
           const flushPending = () => {
             if (!pendingText) return;
             const text = pendingText;
             pendingText = "";
-            set((s) => setMessagesFor(s, sendingAgentKey, (msgs) =>
-              msgs.map((m) => m.id === assistantMsg.id ? { ...m, content: m.content + text } : m),
-            ));
+            appendTextBlock(text);
           };
 
           const scheduleFlush = () => {
@@ -513,7 +573,11 @@ export const useChatStore = create<ChatState>()(
           const appendToolCall = (call: ToolCallRecord) => {
             set((s) => setMessagesFor(s, sendingAgentKey, (msgs) =>
               msgs.map((m) => m.id === assistantMsg.id
-                ? { ...m, toolCalls: [...(m.toolCalls || []), call] }
+                ? {
+                    ...m,
+                    toolCalls: [...(m.toolCalls || []), call],
+                    blocks: [...(m.blocks || []), { kind: "tool_call", call }],
+                  }
                 : m,
               ),
             ));
@@ -552,9 +616,40 @@ export const useChatStore = create<ChatState>()(
           for await (const chunk of stream) {
             if (signal.aborted) break;
 
+            // 1a. Auto-continue control frame: Meta-Agent's supervisor
+            //     emits `{"__auto_continue": N, "max": M}` as its own
+            //     top-level SSE frame before re-prompting Kiro after a
+            //     premature end_turn. parseSSEStream in agentcore-client
+            //     has already filtered it to standalone frames (not
+            //     prose-embedded quotes), so we recognize via a simple
+            //     startsWith + JSON.parse. Regex-scanning the chunk body
+            //     was fragile: a user quoting the JSON back would have
+            //     triggered the badge.
+            let cleanedAutoCont = chunk;
+            const trimmedChunk = chunk.trimStart();
+            if (trimmedChunk.startsWith('{"__auto_continue"')) {
+              try {
+                const parsed = JSON.parse(trimmedChunk);
+                if (typeof parsed.__auto_continue === "number" && typeof parsed.max === "number") {
+                  set((s) => setFlagFor(s, "autoContinueByAgent", sendingAgentKey, {
+                    n: parsed.__auto_continue,
+                    max: parsed.max,
+                  }));
+                  cleanedAutoCont = "";  // consume the whole chunk
+                }
+              } catch {
+                // malformed — let it fall through as normal content
+              }
+            } else if (chunk.length > 0 && get().autoContinueByAgent[sendingAgentKey]) {
+              // First real content after an auto-continue announcement —
+              // clear the badge so the user sees normal streaming again.
+              set((s) => setFlagFor(s, "autoContinueByAgent", sendingAgentKey, null));
+            }
+            if (!cleanedAutoCont) continue;  // nothing left to process this chunk
+
             // 1. Extract complete __tool JSON markers from the buffer.
             const toolJsonRe = /\{"__tool"[^}]*\}/g;
-            toolBuffer += chunk;
+            toolBuffer += cleanedAutoCont;
             let textAfterTools = "";
             const markers: { type: string; name: string; input?: string; output?: string }[] = [];
 
@@ -589,6 +684,10 @@ export const useChatStore = create<ChatState>()(
                 try { inp = m.input ? new TextDecoder().decode(Uint8Array.from(atob(m.input), c => c.charCodeAt(0))) : ""; } catch { inp = m.input || ""; }
                 try { out = m.output ? new TextDecoder().decode(Uint8Array.from(atob(m.output), c => c.charCodeAt(0))) : ""; } catch { out = m.output || ""; }
                 const isSvg = !!out && out.trimStart().startsWith("<svg");
+                // Flush buffered prose before pushing the tool block so
+                // the tool lands AFTER the text the model said just before
+                // calling it, not before.
+                flushPending();
                 appendToolCall({
                   id: crypto.randomUUID(),
                   name: m.name,
@@ -691,6 +790,7 @@ export const useChatStore = create<ChatState>()(
             ...setFlagFor(s, "streamingByAgent", sendingAgentKey, false),
             ...setFlagFor(s, "statusByAgent", sendingAgentKey, null),
             ...setFlagFor(s, "activeToolByAgent", sendingAgentKey, null),
+            ...setFlagFor(s, "autoContinueByAgent", sendingAgentKey, null),
           }));
         }
       },
@@ -704,6 +804,7 @@ export const useChatStore = create<ChatState>()(
           ...setFlagFor(s, "sessionIdByAgent", key, undefined),
           ...setFlagFor(s, "activeSessionByAgent", key, null),
           ...setFlagFor(s, "statusByAgent", key, null),
+          ...setFlagFor(s, "autoContinueByAgent", key, null),
         }));
       },
 
@@ -719,6 +820,10 @@ export const useChatStore = create<ChatState>()(
         set((s) => ({
           ...setFlagFor(s, "streamingByAgent", key, false),
           ...setFlagFor(s, "statusByAgent", key, null),
+          // Belt-and-suspenders: sendMessage's `finally` also clears
+          // this, but if a future refactor skips that path the badge
+          // should still come down the moment the user hits cancel.
+          ...setFlagFor(s, "autoContinueByAgent", key, null),
         }));
       },
 
@@ -874,6 +979,7 @@ export function useCurrentAgentChat(agentId?: string | null) {
         isStreaming: !!s.streamingByAgent[key],
         statusText: s.statusByAgent[key] ?? null,
         activeTool: s.activeToolByAgent[key] ?? null,
+        autoContinue: s.autoContinueByAgent[key] ?? null,
         sessionId: s.sessionIdByAgent[key],
         activeSessionId: s.activeSessionByAgent[key] ?? null,
         selectedModelId: s.selectedModelByAgent[key] ?? null,

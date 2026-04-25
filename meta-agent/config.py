@@ -80,7 +80,9 @@ def get_max_tokens(model_id: str) -> int:
     return 16384  # conservative default for unknown models
 
 
-MCP_GATEWAY_URL = os.getenv("MCP_GATEWAY_URL", "")
+MCP_GATEWAY_URL = os.getenv("MCP_GATEWAY_URL", "") or os.getenv(
+    "AGENT_STUDIO_MCP_GATEWAY_URL", ""
+)
 if not MCP_GATEWAY_URL:
     try:
         import boto3 as _b3

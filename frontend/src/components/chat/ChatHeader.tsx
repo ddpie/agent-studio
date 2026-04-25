@@ -5,6 +5,28 @@ import { MODEL_GROUPS, findModelLabel } from "../../lib/models";
 import type { ChatSession } from "../../stores/chat-store";
 import IntegrationTab from "../agents/IntegrationTab";
 import { formatDate, formatTimeShort } from "../../lib/date-format";
+import useMetaAgentStatus from "../../hooks/useMetaAgentStatus";
+import useKiroModels from "../../hooks/useKiroModels";
+
+// Map AgentCore runtime statuses → dot color. READY is the happy path;
+// transient provisioning states are yellow; explicit failure is red;
+// anything we don't recognize stays gray rather than lying green.
+function statusDotColor(status: string | undefined): string {
+  switch (status) {
+    case "READY":
+      return "bg-green-500";
+    case "CREATING":
+    case "UPDATING":
+      return "bg-yellow-500";
+    case "CREATE_FAILED":
+    case "UPDATE_FAILED":
+    case "DELETE_FAILED":
+    case "FAILED":
+      return "bg-red-500";
+    default:
+      return "bg-gray-400";
+  }
+}
 
 interface ChatHeaderProps {
   agentId?: string;
@@ -27,6 +49,10 @@ export default function ChatHeader({
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showMetaIntegration, setShowMetaIntegration] = useState(false);
+  // Only poll when the user is actually on the Meta-Agent chat; the hook
+  // runs unconditionally but we just don't render the dot for sub-agents.
+  const metaStatus = useMetaAgentStatus();
+  const kiroModels = useKiroModels();
   const historyRef = useRef<HTMLDivElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
 
@@ -40,12 +66,25 @@ export default function ChatHeader({
     return () => document.removeEventListener("mousedown", handler);
   }, [showHistory, showModelPicker]);
 
-  const selectedModelLabel = findModelLabel(selectedModel);
+  // Meta-Agent chat uses Kiro's dynamic model list (Kiro-native IDs);
+  // sub-agent chat uses the static Bedrock inference-profile list. The
+  // two id formats aren't interchangeable — keep them separate.
+  const isMetaAgent = !agentId;
+  const selectedModelLabel = isMetaAgent
+    ? (kiroModels.find((m) => m.id === selectedModel)?.name || selectedModel || "Select")
+    : findModelLabel(selectedModel);
 
   return (
     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
       <div className="min-w-0">
-        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
+        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate flex items-center gap-1.5">
+          {!agentId && (
+            <span
+              className={`inline-block w-2 h-2 rounded-full ${statusDotColor(metaStatus?.status)}`}
+              title={metaStatus?.status || "unknown"}
+              aria-label={`Meta-Agent status: ${metaStatus?.status || "unknown"}`}
+            />
+          )}
           {agentId ? agentName : t("agents.metaAgent")}
         </h2>
         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
@@ -76,20 +115,30 @@ export default function ChatHeader({
           </button>
           {showModelPicker && (
             <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 max-h-80 overflow-y-auto">
-              {MODEL_GROUPS.map((group) => (
-                <div key={group.label}>
-                  <div className="px-2 py-1 text-[9px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide bg-gray-50 dark:bg-gray-800">{group.label}</div>
-                  {group.models.map((m) => (
+              {isMetaAgent
+                ? kiroModels.map((m) => (
                     <button
                       key={m.id}
                       onClick={() => { onModelChange(m.id); setShowModelPicker(false); }}
                       className={`w-full text-left px-3 py-1 text-[10px] hover:bg-blue-50 dark:hover:bg-blue-900/30 ${selectedModel === m.id ? "text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20" : "text-gray-700 dark:text-gray-300"}`}
                     >
-                      {m.label}
+                      {m.name || m.id}
                     </button>
+                  ))
+                : MODEL_GROUPS.map((group) => (
+                    <div key={group.label}>
+                      <div className="px-2 py-1 text-[9px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide bg-gray-50 dark:bg-gray-800">{group.label}</div>
+                      {group.models.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => { onModelChange(m.id); setShowModelPicker(false); }}
+                          className={`w-full text-left px-3 py-1 text-[10px] hover:bg-blue-50 dark:hover:bg-blue-900/30 ${selectedModel === m.id ? "text-blue-600 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-900/20" : "text-gray-700 dark:text-gray-300"}`}
+                        >
+                          {m.label}
+                        </button>
+                      ))}
+                    </div>
                   ))}
-                </div>
-              ))}
             </div>
           )}
         </div>

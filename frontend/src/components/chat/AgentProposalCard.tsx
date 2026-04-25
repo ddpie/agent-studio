@@ -49,7 +49,11 @@ export default function AgentProposalCard({ json }: { json: string }) {
 
   const name = String(proposal.agent_name || "");
   const desc = String(proposal.description || "");
-  const template = String(proposal.template_id || "");
+  // template_id is retired — see meta-agent/templates/prompt_templates.py.
+  // We intentionally ignore any value the Meta-Agent might still emit
+  // (old chat sessions or older deploys might still include one) so the
+  // proposal preview matches what will actually be deployed. The field
+  // is not forwarded into the agent-edit store either.
   const welcome = String(proposal.welcome_message || "");
   const suggestions = String(proposal.suggestions || "").split("|").filter(Boolean);
   const toolNames = String(proposal.tool_names || "").split(",").filter(Boolean);
@@ -69,7 +73,6 @@ export default function AgentProposalCard({ json }: { json: string }) {
       name,
       display_name: name,
       description: desc,
-      template_id: template,
       system_prompt: systemPrompt,
       tool_definitions: toolDefs,
       tool_names: toolNames.join(","),
@@ -93,7 +96,6 @@ export default function AgentProposalCard({ json }: { json: string }) {
       </div>
       {desc && <p className="text-gray-600 dark:text-gray-400 mb-2">{desc}</p>}
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400 mb-2">
-        {template && <div>{t("chat.proposalTemplate")} <span className="text-gray-700 dark:text-gray-300">{template}</span></div>}
         <div>{t("chat.proposalImages")} <span className="text-gray-700 dark:text-gray-300">{supportsImages ? t("chat.yes") : t("chat.no")}</span></div>
         {toolNames.length > 0 && (
           <div className="col-span-2">{t("chat.proposalTools")} {toolNames.map(t2 => (

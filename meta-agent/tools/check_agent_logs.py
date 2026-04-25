@@ -10,6 +10,46 @@ from strands import tool
 from config import REGION
 from tools._scope import ensure_agent_in_workspace, list_workspace_agents, ROLE_VIEWER
 
+try:
+    # Python 3.9+ stdlib. Available on the AgentCore runtime image.
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover — only matters pre-3.9
+    ZoneInfo = None  # type: ignore
+
+# AgentCore / OTEL log records use varying field names. This is the
+# fallback chain for the human-readable body and severity label so we
+# don't render `[HH:MM:SS]  ` with an empty payload.
+_MESSAGE_KEYS = ("message", "body", "msg", "Message", "Body")
+_LEVEL_KEYS = ("level", "severityText", "levelname", "Severity")
+
+
+def _extract_text(parsed: dict) -> tuple[str, str]:
+    """Pull a (level, message) pair out of a parsed JSON log record.
+
+    Returns empty strings if nothing usable was found — callers decide
+    whether to fall back to the raw string.
+    """
+    level = ""
+    for k in _LEVEL_KEYS:
+        v = parsed.get(k)
+        if isinstance(v, str) and v:
+            level = v
+            break
+    message = ""
+    for k in _MESSAGE_KEYS:
+        v = parsed.get(k)
+        if isinstance(v, str) and v:
+            message = v
+            break
+    # OTEL log bodies sometimes nest under {"body": {"stringValue": "..."}}.
+    if not message:
+        body = parsed.get("body")
+        if isinstance(body, dict):
+            sv = body.get("stringValue")
+            if isinstance(sv, str):
+                message = sv
+    return level, message
+
 
 def _resolve_agent_id(agent_id_or_name: str) -> str | None:
     """Resolve a possibly-a-name to a concrete agent_id, scoped to the
@@ -32,7 +72,7 @@ def _resolve_agent_id(agent_id_or_name: str) -> str | None:
 
 
 @tool
-def check_agent_logs(agent_id: str, minutes: int = 30) -> str:
+def check_agent_logs(agent_id: str, minutes: int = 30, tz: str = "UTC") -> str:
     """Read recent CloudWatch logs for a deployed agent. Useful for diagnosing errors.
 
     You can pass either the agent runtime ID (e.g., "myAgent-abc123XYZ")
@@ -41,6 +81,10 @@ def check_agent_logs(agent_id: str, minutes: int = 30) -> str:
     Args:
         agent_id: The agent runtime ID or agent name.
         minutes: How many minutes of recent logs to fetch. Default 30.
+        tz: IANA timezone name (e.g. "Asia/Shanghai", "America/Los_Angeles")
+            for formatting timestamps in the output. Defaults to "UTC".
+            Use the user's local zone when they ask about "just now" /
+            "刚才" to avoid mental math; keep UTC for batch analysis.
 
     Returns:
         Recent log entries as text, or error message if no logs found.
@@ -51,6 +95,18 @@ def check_agent_logs(agent_id: str, minutes: int = 30) -> str:
     _record, err = ensure_agent_in_workspace(resolved_id, min_role=ROLE_VIEWER)
     if err:
         return json.dumps(err)
+
+    # Resolve the requested timezone. Fall back to UTC if the name is
+    # unknown rather than erroring the tool call — the Meta-Agent shouldn't
+    # have to retry a log pull over a typo.
+    tz_label = tz or "UTC"
+    try:
+        display_tz = ZoneInfo(tz_label) if ZoneInfo and tz_label != "UTC" else timezone.utc
+        if display_tz is timezone.utc:
+            tz_label = "UTC"
+    except Exception:
+        display_tz = timezone.utc
+        tz_label = "UTC"
 
     log_group = f"/aws/bedrock-agentcore/runtimes/{resolved_id}-DEFAULT"
     logs_client = boto3.client("logs", region_name=REGION)
@@ -78,19 +134,31 @@ def check_agent_logs(agent_id: str, minutes: int = 30) -> str:
         for event in events:
             ts = event.get("timestamp", 0)
             msg = event.get("message", "").strip()
-            dt = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).strftime("%H:%M:%S")
+            # Full date + timezone suffix so humans can cross-reference
+            # with CloudWatch without reading "is that UTC or local?".
+            dt = datetime.fromtimestamp(ts / 1000, tz=display_tz).strftime(
+                f"%Y-%m-%d %H:%M:%S {tz_label}"
+            )
 
-            # Parse JSON log entries for cleaner output
+            # Parse JSON log entries for cleaner output. Multiple field
+            # conventions coexist: stdlib `logging` uses message/level,
+            # powertools uses message/level, AgentCore OTEL export uses
+            # body/severityText. _extract_text covers them all.
             try:
                 parsed = json.loads(msg)
-                level = parsed.get("level", "")
-                message = parsed.get("message", "")
-                error_type = parsed.get("errorType", "")
-                error_msg = parsed.get("errorMessage", "")
+                level, message = _extract_text(parsed)
+                error_type = parsed.get("errorType") or ""
+                error_msg = parsed.get("errorMessage") or ""
                 if error_type:
-                    log_lines.append(f"[{dt}] {level} {error_type}: {error_msg}")
+                    log_lines.append(f"[{dt}] {level} {error_type}: {error_msg}".rstrip())
+                elif message:
+                    log_lines.append(f"[{dt}] {level} {message}".rstrip())
                 else:
-                    log_lines.append(f"[{dt}] {level} {message}")
+                    # Fallback: show the raw record (trimmed) so empty
+                    # lines don't slip through when the field shape is
+                    # something we don't recognize yet.
+                    snippet = msg[:400] + ("..." if len(msg) > 400 else "")
+                    log_lines.append(f"[{dt}] {snippet}")
             except (json.JSONDecodeError, TypeError):
                 if msg and "Invalid HTTP request" not in msg:
                     log_lines.append(f"[{dt}] {msg}")

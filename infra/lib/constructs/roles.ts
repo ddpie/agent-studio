@@ -63,6 +63,19 @@ export class AgentCoreRoles extends Construct {
         ],
         resources: [`arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*`],
       }),
+      // Read-only Gateway access so list_mcp_servers / list_mcp_target_tools
+      // can enumerate MCP targets. Scoped to "*" because ListGateways has
+      // no resource-level ARN, and gateway IDs aren't known at CDK-synth
+      // time. The actions are read-only — no CreateGateway / DeleteTarget.
+      new iam.PolicyStatement({
+        actions: [
+          "bedrock-agentcore:ListGateways",
+          "bedrock-agentcore:GetGateway",
+          "bedrock-agentcore:ListGatewayTargets",
+          "bedrock-agentcore:GetGatewayTarget",
+        ],
+        resources: ["*"],
+      }),
       new iam.PolicyStatement({
         actions: [
           "bedrock-agentcore:StartCodeInterpreterSession",
@@ -225,6 +238,13 @@ export class AgentCoreRoles extends Construct {
         StringEquals: { "iam:PassedToService": "bedrock-agentcore.amazonaws.com" },
       },
     }));
+    // create_schedule hands schedulerTargetRoleArn to EventBridge Scheduler
+    // so the service can assume it when firing a scheduled agent invocation.
+    // Separate statement because the PassedToService string is different and
+    // IAM requires condition-resource pairs be scoped together. Resource is
+    // filled in lower down once `schedulerTargetRole` is defined — we can't
+    // forward-reference it here without a closure, so apply the statement
+    // after the role is created.
     // Meta-Agent reads/writes per-agent secrets for:
     //   - manage_secrets tools (set/list/delete under agent-studio/{ws}/{agent}/{key})
     //   - link_agent linked A2A keys blob (same prefix)
@@ -247,6 +267,39 @@ export class AgentCoreRoles extends Construct {
     metaAgentRole.addToPolicy(new iam.PolicyStatement({
       actions: ["secretsmanager:ListSecrets"],
       resources: ["*"],
+    }));
+
+    // EventBridge Scheduler — create_schedule tool provisions / updates
+    // cron triggers for agents. Scoped to the default group (AgentCore
+    // runtimes don't use custom groups); ListSchedules gets its own
+    // statement because the action doesn't support resource-level
+    // filtering in IAM (matches the CRUD Lambda pattern in api.ts).
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        "scheduler:CreateSchedule",
+        "scheduler:UpdateSchedule",
+        "scheduler:DeleteSchedule",
+        "scheduler:GetSchedule",
+      ],
+      resources: [
+        `arn:aws:scheduler:${props.region}:${props.accountId}:schedule/default/*`,
+      ],
+    }));
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["scheduler:ListSchedules"],
+      resources: ["*"],
+    }));
+
+    // check_agent_logs tool reads the runtime log stream. The baseline
+    // policy above covers write-side actions only (CreateLogStream,
+    // PutLogEvents); filter/describe are needed for read. These two
+    // actions require the `:*` log-stream ARN form, not the bare
+    // log-group ARN — the bare form is silently ignored.
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["logs:FilterLogEvents", "logs:DescribeLogStreams"],
+      resources: [
+        `arn:aws:logs:${props.region}:${props.accountId}:log-group:/aws/bedrock-agentcore/runtimes/*:*`,
+      ],
     }));
 
     this.subAgentRoleArn = subAgentRole.roleArn;
@@ -321,6 +374,18 @@ export class AgentCoreRoles extends Construct {
       ],
     }));
     this.schedulerTargetRoleArn = schedulerTargetRole.roleArn;
+
+    // Meta-Agent passes the scheduler target role to EventBridge Scheduler
+    // when create_schedule provisions a new trigger. Uses the construct's
+    // own token reference so a future rename can't silently drift the
+    // resource string.
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["iam:PassRole"],
+      resources: [schedulerTargetRole.roleArn],
+      conditions: {
+        StringEquals: { "iam:PassedToService": "scheduler.amazonaws.com" },
+      },
+    }));
 
     new cdk.CfnOutput(this, "SchedulerTargetRoleArn", {
       value: schedulerTargetRole.roleArn,

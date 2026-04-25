@@ -10,7 +10,22 @@ from strands import tool
 from config import MODEL_ID, REGION, S3_BUCKET, AGENTS_TABLE, PERMISSION_TIER_ROLES, DEFAULT_PERMISSION_TIER
 from deploy import build_deployment_package_v2, upload_deployment, create_runtime, wait_for_ready, validate_agent_files, build_skill_prompt_section
 from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
-from templates.prompt_templates import get_template_prompt, get_template_names, BASE_GUIDELINES
+from templates.prompt_templates import get_base_guidelines
+
+
+def _default_welcome(agent_name: str, description: str) -> str:
+    """Language-matched fallback when the user didn't specify welcome_message.
+
+    Mirrors the BASE_GUIDELINES bilingual split — a Chinese-speaking
+    creator building an agent without a welcome line gets a Chinese
+    welcome, not an English "I'm foo. ...". Reads the creator's
+    language from tools._scope.
+    """
+    from tools._scope import current_creator_language
+    lang = (current_creator_language() or "").strip().lower()
+    if lang.startswith("zh"):
+        return f"我是 {agent_name}。{description}" if description else f"我是 {agent_name}。"
+    return f"I'm {agent_name}. {description}" if description else f"I'm {agent_name}."
 from tools_library.registry import get_tool_code_by_func_name as _get_builtin_code
 
 
@@ -117,16 +132,6 @@ def _resolve_mcp_endpoints(target_names: list) -> list:
 
 
 @tool
-def list_prompt_templates() -> str:
-    """List available system prompt templates for creating agents.
-
-    Returns:
-        JSON array of templates with id, name, and description.
-    """
-    return json.dumps(get_template_names(), indent=2, ensure_ascii=False)
-
-
-@tool
 def create_agent(
     agent_name: str,
     description: str = "",
@@ -152,7 +157,7 @@ def create_agent(
         tool_names: Comma-separated list of tool function names.
         welcome_message: Welcome message shown when user opens this agent's chat.
         suggestions: Three suggested prompts separated by | (e.g., "Ask about X|Try Y|Help with Z").
-        template_id: Optional prompt template to use as base.
+        template_id: Deprecated; ignored. Prompt templates have been retired — write the full system_prompt yourself.
         gateway_url: Optional AgentCore Gateway MCP URL (deprecated, use mcp_targets).
         mcp_targets: Comma-separated MCP target names (e.g. "cloudwatch,iam"). Validated against workspace policy.
         supports_images: Whether this agent can process image inputs.
@@ -231,12 +236,16 @@ def create_agent(
                 "skill_md_content": skill_md_content,
             })
 
-    # Apply template if specified
-    if template_id:
-        base_prompt = get_template_prompt(template_id)
-        final_prompt = base_prompt + "\n\n## Specific Instructions\n" + system_prompt
-    else:
-        final_prompt = system_prompt + "\n" + BASE_GUIDELINES
+    # Compose the final system prompt. template_id is deliberately ignored
+    # here — the pre-canned 5-template scheme used to prepend an English
+    # block in front of the user's (often Chinese) prompt, producing
+    # mixed-language sub-agents. The Meta-Agent now writes the full
+    # domain-specific prompt itself in the caller's language, and we only
+    # tack on the shared BASE_GUIDELINES (behavioral rules that every
+    # sub-agent should follow regardless of domain), picking the zh vs en
+    # variant based on the creator's UI language.
+    from tools._scope import current_creator_language
+    final_prompt = system_prompt + "\n" + get_base_guidelines(current_creator_language())
 
     # Build tool_names list
     tool_names_list = [t.strip() for t in tool_names.split(",") if t.strip()]
@@ -301,7 +310,7 @@ def create_agent(
         "model_id": MODEL_ID,
         "system_prompt": final_prompt,
         "tool_definitions": tools_py.replace(TOOLS_PY_HEADER, "").strip(),
-        "welcome_message": welcome_message or f"I'm {agent_name}. {description}",
+        "welcome_message": welcome_message or _default_welcome(agent_name, description),
         "suggestions": suggestion_list,
         "template_id": template_id,
         "tools": tool_names_list,
@@ -318,6 +327,28 @@ def create_agent(
         Key=f"agents/{agent_id}/metadata.json",
         Body=json.dumps(metadata, indent=2, ensure_ascii=False).encode("utf-8"),
         ContentType="application/json",
+    )
+
+    # Mirror system_prompt and tool_definitions to standalone S3 files so
+    # the frontend edit page's fetchAgentMetadata (agent-metadata.ts) can
+    # show what's currently deployed. update_agent already does this; the
+    # two tools must stay symmetric or Meta-Agent-created agents open in
+    # the edit UI with empty prompt and empty tool code (the files 404 and
+    # the frontend's .catch(() => "") silently swallows them). The strings
+    # written here match the shape update_agent uses so round-tripping
+    # through create → update → reload stays idempotent.
+    tool_definitions_source = tools_py.replace(TOOLS_PY_HEADER, "").strip()
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key=f"agents/{agent_id}/system_prompt.txt",
+        Body=final_prompt.encode("utf-8"),
+        ContentType="text/plain; charset=utf-8",
+    )
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key=f"agents/{agent_id}/tool_definitions.py",
+        Body=tool_definitions_source.encode("utf-8"),
+        ContentType="text/x-python; charset=utf-8",
     )
 
     # Write to DynamoDB
@@ -341,7 +372,7 @@ def create_agent(
         "mcp_targets": mcp_targets_list,
         "supports_images": supports_images,
         "template_id": template_id,
-        "welcome_message": welcome_message or f"I'm {agent_name}. {description}",
+        "welcome_message": welcome_message or _default_welcome(agent_name, description),
         "suggestions": suggestion_list,
         "status": "active",
         "created_at": now,

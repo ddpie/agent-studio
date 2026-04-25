@@ -15,6 +15,7 @@ import { toast } from "../../lib/toast";
 import { useWorkspaceStore, type WorkspaceRole } from "../../stores/workspace-store";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { formatDateTime } from "../../lib/date-format";
+import KiroKeySection from "./KiroKeySection";
 
 const ROLE_LEVEL: Record<WorkspaceRole, number> = {
   viewer: 1,
@@ -86,6 +87,15 @@ export default function WorkspaceSettingsTab() {
     () => detail?.members.find((m) => m.role === "owner"),
     [detail]
   );
+
+  // "张三 (zhang@x.com)" when both are known; fall back down the chain
+  // to email, then userId. Used for owner row + transfer dropdown so the
+  // raw Cognito sub never surfaces unless the user was deleted.
+  const memberLabel = (m?: WorkspaceMember): string => {
+    if (!m) return "";
+    if (m.display_name && m.email) return `${m.display_name} (${m.email})`;
+    return m.display_name || m.email || m.userId;
+  };
 
   const transferCandidates = useMemo<WorkspaceMember[]>(
     () => (detail?.members ?? []).filter((m) => m.userId !== currentUserId && m.role !== "owner"),
@@ -196,11 +206,12 @@ export default function WorkspaceSettingsTab() {
   }
 
   const transferTarget = transferCandidates.find((m) => m.userId === transferTargetId);
-  const transferTargetLabel =
-    transferTarget?.display_name || transferTarget?.userId || "";
+  const transferTargetLabel = memberLabel(transferTarget);
 
   return (
     <div className="space-y-4">
+      {/* Per-workspace Kiro API key */}
+      <KiroKeySection canEdit={canEdit} />
       {/* Metadata / editable fields */}
       <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
         <div className="flex items-center justify-between mb-3">
@@ -272,8 +283,8 @@ export default function WorkspaceSettingsTab() {
                   <span className="text-gray-500 dark:text-gray-400">
                     {t("workspace.settings.owner")}
                   </span>
-                  <span className="text-gray-700 dark:text-gray-300 truncate" title={ownerMember?.userId || ""}>
-                    {ownerMember?.display_name || ownerMember?.userId || "—"}
+                  <span className="text-gray-700 dark:text-gray-300 truncate" title={memberLabel(ownerMember)}>
+                    {memberLabel(ownerMember) || "—"}
                   </span>
                 </div>
                 <div className="flex justify-between gap-2 border-t border-gray-100 dark:border-gray-800 pt-2">
@@ -336,7 +347,7 @@ export default function WorkspaceSettingsTab() {
                   <option value="">—</option>
                   {transferCandidates.map((m) => (
                     <option key={m.userId} value={m.userId}>
-                      {(m.display_name || m.userId)} · {t(`workspace.role.${m.role}`)}
+                      {memberLabel(m)} · {t(`workspace.role.${m.role}`)}
                     </option>
                   ))}
                 </select>

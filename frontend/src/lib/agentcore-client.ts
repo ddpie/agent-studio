@@ -46,6 +46,13 @@ export type StatusCallback = (status: string | null) => void;
 
 /**
  * Invoke the Meta-Agent with full conversation history.
+ *
+ * The optional `mode` selects which Kiro agent handles the turn server-side:
+ *   - undefined          → full Meta-Agent with 34 tools (default)
+ *   - "skill_edit"       → tool-less sidekick for /skills/:id/edit,
+ *                          emits `__file_content:PATH` fenced blocks only
+ *   - "agent_edit"       → tool-less sidekick for /agents/:id/edit,
+ *                          emits `__field_value:FIELD` fenced blocks only
  */
 export async function* invokeMetaAgent(
   prompt: string,
@@ -53,13 +60,69 @@ export async function* invokeMetaAgent(
   sessionId?: string,
   onStatus?: StatusCallback,
   images?: string[],
-  modelId?: string
+  modelId?: string,
+  mode?: "skill_edit" | "agent_edit",
 ): AsyncGenerator<string> {
   const callerId = await getCallerId();
   const wsId = getWorkspaceId();
   const url = `${API_BASE}/invoke/workspaces/${wsId}/meta-agent`;
-  const body = { prompt, history, images, model_id: modelId, caller_id: callerId, session_id: sessionId };
+  // Read the user's current UI language. The Meta-Agent's auto-continue
+  // supervisor uses this to pick the "Continue." (EN) vs "继续。" (ZH)
+  // re-prompt text when it detects a premature end_turn. Kept inline
+  // rather than a per-caller parameter so every site (chat,
+  // skill-assistant, edit-assistant, deploy) gets it for free.
+  let language = "en";
+  try {
+    const { useUISettings } = await import("../stores/ui-settings-store");
+    language = useUISettings.getState().language || "en";
+  } catch {
+    // Non-fatal: fall back to English. Happens in unit tests where the
+    // store isn't mounted.
+  }
+  const body: Record<string, unknown> = {
+    prompt,
+    history,
+    images,
+    model_id: modelId,
+    caller_id: callerId,
+    session_id: sessionId,
+    language,
+  };
+  if (mode) body.mode = mode;
   yield* invokeAgent(url, body, onStatus);
+}
+
+export interface KiroModelInfo {
+  id: string;
+  name?: string;
+}
+
+/**
+ * One-shot control-plane call: asks the Meta-Agent runtime to surface
+ * Kiro's advertised model list. Returns [] on any failure so the caller
+ * can fall back to its static list without caring about the reason.
+ */
+export async function listKiroModels(): Promise<KiroModelInfo[]> {
+  const callerId = await getCallerId();
+  const wsId = getWorkspaceId();
+  const url = `${API_BASE}/invoke/workspaces/${wsId}/meta-agent`;
+  const body = { action: "list_models", caller_id: callerId, prompt: "" };
+  try {
+    for await (const chunk of invokeAgent(url, body)) {
+      if (chunk.includes('"__models"')) {
+        try {
+          const parsed = JSON.parse(chunk);
+          if (Array.isArray(parsed.__models)) return parsed.__models;
+        } catch {
+          // fall through
+        }
+      }
+    }
+  } catch {
+    // Any error — cold start, auth, Kiro down — we just return empty.
+    return [];
+  }
+  return [];
 }
 
 /**
@@ -157,6 +220,11 @@ async function* invokeAgent(
   throw lastError || new Error("Failed to invoke agent");
 }
 
+// Watchdog: if upstream is silent longer than this, cancel the reader and
+// throw. 2× the 30s keepalive cadence — real network stalls exceed that,
+// but a healthy stream never does.
+const SSE_IDLE_WATCHDOG_MS = 60_000;
+
 async function* parseSSEStream(response: Response): AsyncGenerator<string> {
   const reader = response.body?.getReader();
   if (!reader) return;
@@ -166,7 +234,21 @@ async function* parseSSEStream(response: Response): AsyncGenerator<string> {
 
   try {
     while (true) {
-      const { done, value } = await reader.read();
+      // Race the next chunk against the idle watchdog so a silent-drop
+      // doesn't leave the UI spinner stuck forever. Must clear the timer
+      // on every successful read — a naked `setTimeout` per iteration
+      // accumulates into dozens of live timers over a long conversation.
+      let timerId: ReturnType<typeof setTimeout> | null = null;
+      const idleTimer = new Promise<never>((_, rej) => {
+        timerId = setTimeout(() => rej(new Error("stream_idle_timeout")), SSE_IDLE_WATCHDOG_MS);
+      });
+      let raced;
+      try {
+        raced = await Promise.race([reader.read(), idleTimer]);
+      } finally {
+        if (timerId !== null) clearTimeout(timerId);
+      }
+      const { done, value } = raced;
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
@@ -180,17 +262,54 @@ async function* parseSSEStream(response: Response): AsyncGenerator<string> {
             content = JSON.parse(content);
           }
           if (!content) continue;
-          // Keep-alive sentinel emitted by Meta-Agent runtime every 30s to
+          // Keep-alive sentinel emitted by Meta-Agent runtime every 15s to
           // prevent CloudFront's 60s origin idle timeout during long
           // tool_use argument generation. Drop silently — it carries no
           // user-visible content.
           if (content.includes('"__keepalive"')) continue;
+          // Top-level control frames. Each one is emitted by Meta-Agent as
+          // a standalone JSON object, so a strict `startsWith` + parse
+          // check gives us a false-positive-proof recognizer — a model
+          // that happens to quote the JSON inside prose will have the
+          // text arrive as part of a larger text chunk and won't trigger.
+          const trimmed = content.trimStart();
+          // Auto-continue: supervisor fires before re-prompting Kiro
+          // when a turn ends without [[TASK_COMPLETE]]. Forwarded to
+          // chat-store so it can render an "auto-continuing (N/M)"
+          // badge. Forward as-is (matching the __tool convention) —
+          // chat-store parses the JSON itself.
+          if (trimmed.startsWith('{"__auto_continue"')) {
+            try {
+              JSON.parse(trimmed);  // validate shape; on fail, fall through
+              yield content;
+              continue;
+            } catch (e) {
+              if (!(e instanceof SyntaxError)) throw e;
+              // malformed — fall through to normal yield
+            }
+          }
+          // Error frame: Meta-Agent emits this on ACPError / exception
+          // paths just before returning. Without recognition the JSON
+          // leaks into message content and the outer try/catch never
+          // runs — the spinner stays on even though SSE is done.
+          if (trimmed.startsWith('{"__error"')) {
+            try {
+              const parsed = JSON.parse(content);
+              if (parsed && typeof parsed.__error === "string") {
+                throw new Error(parsed.__error);
+              }
+            } catch (e) {
+              if (e instanceof SyntaxError) {
+                // Fall through — not actually a JSON frame.
+              } else {
+                throw e;
+              }
+            }
+          }
           yield content;
         }
       }
     }
-  } catch (streamErr) {
-    yield `\n\n[${(streamErr as Error).message || "stream interrupted"}]\n`;
   } finally {
     await reader.cancel().catch(() => {});
   }

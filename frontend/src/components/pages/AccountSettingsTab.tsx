@@ -6,7 +6,7 @@ import {
   updatePassword,
   signOut,
 } from "aws-amplify/auth";
-import { User, KeyRound, LogOut, Mail, AtSign, Loader2 } from "lucide-react";
+import { User, KeyRound, LogOut, Mail, Loader2 } from "lucide-react";
 import { toast } from "../../lib/toast";
 import ConfirmDialog from "../ui/ConfirmDialog";
 
@@ -28,9 +28,7 @@ export default function AccountSettingsTab() {
   // Profile
   const [email, setEmail] = useState<string>("");
   const [initialName, setInitialName] = useState<string>("");
-  const [initialPreferredUsername, setInitialPreferredUsername] = useState<string>("");
   const [name, setName] = useState<string>("");
-  const [preferredUsername, setPreferredUsername] = useState<string>("");
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -51,8 +49,6 @@ export default function AccountSettingsTab() {
       setEmail(attrs.email || "");
       setInitialName(attrs.name || "");
       setName(attrs.name || "");
-      setInitialPreferredUsername(attrs.preferred_username || "");
-      setPreferredUsername(attrs.preferred_username || "");
     } catch (err) {
       toast.error(err instanceof Error ? err : t("settings.account.loadFailed"));
     } finally {
@@ -64,21 +60,14 @@ export default function AccountSettingsTab() {
     loadAttributes();
   }, [loadAttributes]);
 
-  const profileDirty =
-    name.trim() !== initialName || preferredUsername.trim() !== initialPreferredUsername;
+  const profileDirty = name.trim() !== initialName;
 
   const handleSaveProfile = async () => {
     if (!profileDirty) return;
     setSavingProfile(true);
     try {
-      const attrsToUpdate: Record<string, string> = {};
-      if (name.trim() !== initialName) attrsToUpdate.name = name.trim();
-      if (preferredUsername.trim() !== initialPreferredUsername) {
-        attrsToUpdate.preferred_username = preferredUsername.trim();
-      }
-      await updateUserAttributes({ userAttributes: attrsToUpdate });
+      await updateUserAttributes({ userAttributes: { name: name.trim() } });
       setInitialName(name.trim());
-      setInitialPreferredUsername(preferredUsername.trim());
       toast.success(t("settings.account.profileSaved"));
     } catch (err) {
       toast.error(err instanceof Error ? err : t("settings.account.profileSaveFailed"));
@@ -183,24 +172,6 @@ export default function AccountSettingsTab() {
                 className={inputCls}
               />
               <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">{t("settings.account.displayNameHint")}</p>
-            </div>
-
-            {/* Preferred username */}
-            <div>
-              <label className="text-[10px] font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1 mb-1">
-                <AtSign className="w-3 h-3" /> {t("settings.account.preferredUsername")}
-              </label>
-              <input
-                type="text"
-                value={preferredUsername}
-                onChange={(e) => setPreferredUsername(e.target.value)}
-                placeholder={t("settings.account.preferredUsernamePlaceholder")}
-                maxLength={60}
-                className={inputCls}
-              />
-              <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
-                {t("settings.account.preferredUsernameHint")}
-              </p>
             </div>
 
             <div className="flex justify-end">

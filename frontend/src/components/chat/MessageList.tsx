@@ -9,11 +9,12 @@ interface MessageListProps {
   isStreaming: boolean;
   statusText: string | null;
   activeTool: string | null;
+  autoContinue: { n: number; max: number } | null;
   onRegenerate: () => void;
   emptyState: React.ReactNode;
 }
 
-export default function MessageList({ messages, isStreaming, statusText, activeTool, onRegenerate, emptyState }: MessageListProps) {
+export default function MessageList({ messages, isStreaming, statusText, activeTool, autoContinue, onRegenerate, emptyState }: MessageListProps) {
   const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUp = useRef(false);
@@ -81,6 +82,16 @@ export default function MessageList({ messages, isStreaming, statusText, activeT
             <div className="flex items-center gap-2 text-xs">
               <Loader2 className="w-3 h-3 animate-spin" />
               <span><Trans i18nKey="chat.calling" values={{ tool: activeTool }} components={[<strong />]} /></span>
+            </div>
+          </div>
+        </div>
+      )}
+      {autoContinue && !statusText && !activeTool && (
+        <div className="flex justify-start mb-4">
+          <div className="rounded-xl px-3 py-2 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300">
+            <div className="flex items-center gap-2 text-xs">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span>{t("chat.autoContinuing", "自动继续 ({{n}}/{{max}})", { n: autoContinue.n, max: autoContinue.max })}</span>
             </div>
           </div>
         </div>

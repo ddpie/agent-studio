@@ -1,6 +1,7 @@
-import { Settings, Download, Trash2, Database, Shield, Sun, Moon, Monitor, Languages, Users, UserCog } from "lucide-react";
+import { Settings, Download, Trash2, Shield, Sun, Moon, Monitor, Languages, Users, UserCog } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router";
 import { useUISettings } from "../../stores/ui-settings-store";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import WorkspaceMembersTab from "./WorkspaceMembersTab";
@@ -11,9 +12,15 @@ type TabId = "general" | "account" | "workspace";
 
 export default function SettingsPage() {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
   const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const [tab, setTab] = useState<TabId>("general");
-  const { sidebarWidth, inputHeight, theme, language, setSidebarWidth, setInputHeight, setTheme, setLanguage } = useUISettings();
+  // Deep-link support: ?tab=workspace takes you straight to the workspace
+  // tab (used by the Kiro-key banner "Open Workspace Settings" CTA).
+  const initialTab = (searchParams.get("tab") as TabId | null) || "general";
+  const [tab, setTab] = useState<TabId>(
+    ["general", "account", "workspace"].includes(initialTab) ? initialTab : "general"
+  );
+  const { sidebarWidth, inputHeight, theme, language, showInlineToolCalls, setSidebarWidth, setInputHeight, setTheme, setLanguage, setShowInlineToolCalls } = useUISettings();
 
   const clearLocalStorage = () => {
     localStorage.clear();
@@ -152,24 +159,32 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* Infrastructure Info */}
+          {/* Chat UI */}
           <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-            <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-              <Database className="w-3.5 h-3.5" /> {t("settings.infrastructure")}
+            <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3">
+              {t("settings.chatUi", "Chat")}
             </h3>
-            <div className="space-y-1.5 text-xs text-gray-500 dark:text-gray-400">
-              <div className="flex justify-between">
-                <span>{t("settings.region")}</span>
-                <span className="font-mono text-gray-700 dark:text-gray-300">{import.meta.env.VITE_AGENTCORE_REGION || "—"}</span>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                  {t("settings.showInlineToolCalls", "Show tool calls inline")}
+                </p>
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                  {t("settings.showInlineToolCallsHint", "Interleave tool invocations with the assistant's text. Turn off to stack them at the end of the message.")}
+                </p>
               </div>
-              <div className="flex justify-between">
-                <span>{t("settings.storage")}</span>
-                <span className="font-mono text-gray-700 dark:text-gray-300">S3 + DynamoDB</span>
-              </div>
-              <div className="flex justify-between">
-                <span>{t("settings.auth")}</span>
-                <span className="font-mono text-gray-700 dark:text-gray-300">Cognito</span>
-              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showInlineToolCalls}
+                onClick={() => setShowInlineToolCalls(!showInlineToolCalls)}
+                className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${showInlineToolCalls ? "bg-blue-600" : "bg-gray-200 dark:bg-gray-700"}`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition-transform ${showInlineToolCalls ? "translate-x-4" : "translate-x-0"}`}
+                />
+              </button>
             </div>
           </section>
 

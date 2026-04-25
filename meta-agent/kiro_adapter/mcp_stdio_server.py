@@ -24,6 +24,36 @@ import os
 import sys
 from pathlib import Path
 
+# === Protect the stdio MCP channel from stray stdout writes ===
+# Kiro frames MCP JSON-RPC over our stdin/stdout; ANY non-JSON-RPC byte on
+# stdout kills the transport with "server may have written non-JSON-RPC
+# output to stdout which caused the connection to close" and the session
+# bails with code -32603.
+#
+# Strands' `Agent(...)` constructor (pulled in transitively by validate_agent)
+# initializes a MetricsClient which logs to root-level stdout. OTEL
+# auto-instrumentation likewise emits the occasional banner. We can't audit
+# every transitive dependency. So: quarantine the original stdout fd on a
+# private Python file object, and redirect everything that writes via
+# `print()` / `sys.stdout` / fd 1 to stderr instead.
+#
+#   _MCP_STDOUT            → private file wrapping the REAL stdout fd
+#                            (handed to FastMCP below via sys.stdout swap
+#                            just before run_stdio_async)
+#   sys.stdout / fd 1      → stderr (Kiro logs that stream; it doesn't
+#                            parse it as JSON-RPC)
+#
+# Must happen BEFORE importing anything that might touch stdout at import
+# time. asyncio/logging/os/sys are safe.
+_real_stdout_fd = os.dup(1)
+os.dup2(2, 1)  # fd 1 → stderr: stray write(1, ...) and print() go there
+_MCP_STDOUT = os.fdopen(_real_stdout_fd, "w", buffering=1, encoding="utf-8")
+# Python-level sys.stdout now also points at stderr so `print()` from any
+# code that ran *before* this file (unlikely, but harmless) or after it
+# also goes to stderr. We re-point sys.stdout at _MCP_STDOUT just around
+# run_stdio_async() in main(), because FastMCP reads sys.stdout.buffer.
+sys.stdout = os.fdopen(2, "w", buffering=1, encoding="utf-8", closefd=False)
+
 # Make `tools.*` importable when Kiro spawns us with cwd=/mnt/kiro or any
 # other directory. The binary's file path is stable regardless of cwd.
 _THIS = Path(__file__).resolve()
@@ -57,6 +87,9 @@ def main() -> None:
     # will then fail ownership checks, which is the right loud failure.
     caller_id = os.environ.get("AGENT_STUDIO_CALLER_ID", "")
     workspace_id = os.environ.get("AGENT_STUDIO_WORKSPACE_ID", "")
+    # Forwarded from main.py via the mcpServers env in kiro_home.py.
+    # create_agent / update_agent need it to pick zh vs en BASE_GUIDELINES.
+    creator_language = os.environ.get("AGENT_STUDIO_CREATOR_LANGUAGE", "")
 
     # Import inside main so a misconfigured env doesn't explode at module
     # import time (and also so the file-based log captures import errors).
@@ -70,7 +103,7 @@ def main() -> None:
         log.exception("import failed; exiting")
         raise
 
-    apply_scope(caller_id, workspace_id)
+    apply_scope(caller_id, workspace_id, language=creator_language)
     log.info(
         "scope applied caller_id=%r workspace_id=%r tools=%d",
         caller_id, workspace_id, len(_meta_main.ALL_TOOLS),
@@ -78,6 +111,14 @@ def main() -> None:
 
     srv = build_mcp_server(_meta_main.ALL_TOOLS)
 
+    # Re-point sys.stdout at the quarantined MCP fd only for the duration
+    # of run_stdio_async. FastMCP reads sys.stdout.buffer inside its
+    # setup, so it captures the REAL stdout there; meanwhile fd 1 still
+    # points at stderr so any stray write(1, ...) from deep libs stays
+    # harmless. Restore afterwards so our own logging / teardown doesn't
+    # accidentally write JSON into the MCP pipe.
+    saved_stdout = sys.stdout
+    sys.stdout = _MCP_STDOUT
     try:
         asyncio.run(srv.run_stdio_async())
     except (KeyboardInterrupt, asyncio.CancelledError):
@@ -86,6 +127,7 @@ def main() -> None:
         log.exception("mcp_stdio_server crashed")
         raise
     finally:
+        sys.stdout = saved_stdout
         log.info("mcp_stdio_server exiting")
 
 
