@@ -93,7 +93,7 @@ from tools.create_agent import create_agent
 _log_phase("create_agent imported")
 
 # Auto-publish tool catalog on startup (kept from the legacy path — the
-# catalog is consumed by sub-agents, not the Meta-Agent itself).
+# catalog is consumed by agents, not the Meta-Agent itself).
 try:
     from tools_library.registry import upload_tool_catalog
     _catalog_count = upload_tool_catalog()

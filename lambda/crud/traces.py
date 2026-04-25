@@ -135,7 +135,7 @@ def list_traces(wsId: str, agentId: str):
     # invoke_agent / POST /invocations per session for latency + tokens +
     # status. We pass the same 24h window to both.
     #
-    # Session id resolution: prefer the sub-agent's own `agent_studio.session_id`
+    # Session id resolution: prefer the agent's own `agent_studio.session_id`
     # (tagged per-span by our SpanProcessor) because AgentCore's managed
     # `attributes.session.id` sticks to whichever session started the warm
     # container. Fall back to the managed value for older runs that

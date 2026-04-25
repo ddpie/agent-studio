@@ -18,14 +18,14 @@ export function buildPublicAgentCard({
   description,
   version,
   a2aBaseUrl,
-  kind = "sub-agent",
+  kind = "agent",
 }) {
   const skills = kind === "meta-agent"
     ? [
         {
           id: "agent_lifecycle",
-          name: "Manage sub-agents",
-          description: "Create, update, deploy, archive, and restore sub-agents.",
+          name: "Manage agents",
+          description: "Create, update, deploy, archive, and restore agents.",
           tags: ["orchestrator"],
         },
         {
@@ -39,7 +39,7 @@ export function buildPublicAgentCard({
         {
           id: "invoke",
           name: "Invoke agent",
-          description: description || "Invoke this Agent Studio sub-agent via A2A.",
+          description: description || "Invoke this Agent Studio agent via A2A.",
           tags: ["invoke"],
         },
       ];
@@ -48,7 +48,7 @@ export function buildPublicAgentCard({
     name,
     description:
       description ||
-      `Agent Studio ${kind === "meta-agent" ? "Meta-Agent" : "sub-agent"} ${name}.`,
+      `Agent Studio ${kind === "meta-agent" ? "Meta-Agent" : "agent"} ${name}.`,
     url: a2aBaseUrl,
     version: String(version || "1"),
     protocolVersion: "0.3.0",

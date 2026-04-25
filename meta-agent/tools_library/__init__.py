@@ -1,4 +1,4 @@
-"""Pre-built tool library for sub-agents.
+"""Pre-built tool library for agents.
 
 Each module exports:
   - TOOL_CODE: str — Python code for the @tool function(s)

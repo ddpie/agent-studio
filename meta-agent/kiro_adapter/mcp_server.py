@@ -69,7 +69,7 @@ def apply_scope(caller_id: str, workspace_id: str, language: str = "") -> None:
 
     `language` is the creator's UI language ("zh" / "en" / ""); create_agent
     and update_agent use it to select the right BASE_GUIDELINES variant
-    when assembling a freshly-authored sub-agent system_prompt. Empty
+    when assembling a freshly-authored agent system_prompt. Empty
     string means "unknown" and downstream treats it as English.
 
     Tools that still read their own module-level `_caller_id` keep working

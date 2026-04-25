@@ -41,7 +41,7 @@ def _install_config_stub():
         "ACCOUNT_ID": "000000000000",
         "S3_BUCKET": "test-bucket",
         "AGENT_ROLE_ARN": "arn:aws:iam::000000000000:role/test-role",
-        "SUB_AGENT_ROLE_ARN": "arn:aws:iam::000000000000:role/sub-agent",
+        "SUB_AGENT_ROLE_ARN": "arn:aws:iam::000000000000:role/agent",
         "AGENTS_TABLE": "agent-studio-agents",
         "TOOLS_TABLE": "agent-studio-tools",
         "BASE_DEPLOYMENT_KEY": "base/deployment.zip",

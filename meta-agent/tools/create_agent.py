@@ -55,7 +55,7 @@ def _check_mcp_policy(targets: list, policy: dict) -> list:
 def _resolve_mcp_endpoints(target_names: list) -> list:
     """Resolve MCP target names to endpoint configs (discriminated union).
 
-    Runtime targets get lazy-resolved at sub-agent startup (only target_name stored).
+    Runtime targets get lazy-resolved at agent startup (only target_name stored).
     Remote targets get their URL stored directly.
 
     Args:
@@ -210,7 +210,7 @@ def create_agent(
 
     # Skill files are NOT packaged into the deployment zip. They live at
     # ``agents/{agent_id}/skills/{skill_id}/`` in S3 (written by the CRUD
-    # Lambda) and are fetched on demand by the sub-agent's load_skill /
+    # Lambda) and are fetched on demand by the agent's load_skill /
     # run_skill_script at runtime. That decouples skill revisions from
     # agent redeploys — change a skill, all consuming agents see it on
     # next invocation. We still need SKILL.md content in-hand to build
@@ -239,10 +239,10 @@ def create_agent(
     # Compose the final system prompt. template_id is deliberately ignored
     # here — the pre-canned 5-template scheme used to prepend an English
     # block in front of the user's (often Chinese) prompt, producing
-    # mixed-language sub-agents. The Meta-Agent now writes the full
+    # mixed-language agents. The Meta-Agent now writes the full
     # domain-specific prompt itself in the caller's language, and we only
     # tack on the shared BASE_GUIDELINES (behavioral rules that every
-    # sub-agent should follow regardless of domain), picking the zh vs en
+    # agent should follow regardless of domain), picking the zh vs en
     # variant based on the creator's UI language.
     from tools._scope import current_creator_language
     final_prompt = system_prompt + "\n" + get_base_guidelines(current_creator_language())

@@ -52,7 +52,7 @@ def attach_agent_skill(
       4. Appends a new entry to the agent's skills manifest.
       5. Redeploys (unless ``redeploy=False``) so the baked-in prompt picks
          up the new ``## Skill:`` section. Without redeploy, runtime
-         ``load_skill(name)`` still works immediately because the sub-agent
+         ``load_skill(name)`` still works immediately because the agent
          reads the manifest and scripts from S3 — but the system prompt
          won't mention the new skill until the next deploy, which blunts
          the model's ability to know it's available.

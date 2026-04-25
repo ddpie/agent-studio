@@ -1,4 +1,4 @@
-"""check_agent_logs — Read CloudWatch logs for a sub-agent to diagnose issues."""
+"""check_agent_logs — Read CloudWatch logs for a agent to diagnose issues."""
 
 import json
 import time

@@ -29,7 +29,7 @@ export async function uploadFileToS3(
 /**
  * Build the tool-usage hint injected into chat messages for an attached file.
  *
- * For PDF / spreadsheet / tabular files, the sub-agent has a purpose-built
+ * For PDF / spreadsheet / tabular files, the agent has a purpose-built
  * `read_document` builtin that handles extraction. For other file types the
  * generic `s3_read(bucket=..., key=...)` fallback is still advertised.
  */

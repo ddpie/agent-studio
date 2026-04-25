@@ -84,11 +84,11 @@ function SecretsSection({ agentId }: { agentId: string }) {
       return;
     }
     // Capture before the write so the success toast can tell the user
-    // whether a redeploy is needed. The ARN list passed to the sub-agent
+    // whether a redeploy is needed. The ARN list passed to the agent
     // runtime is computed at deploy time — adding a NEW key doesn't take
     // effect until the agent is redeployed (rebuilding AGENT_STUDIO_
     // SECRET_ARNS). Overwriting an EXISTING key's value doesn't need
-    // a redeploy: the ARN is unchanged, the sub-agent's next cold start
+    // a redeploy: the ARN is unchanged, the agent's next cold start
     // fetches the new value from Secrets Manager automatically.
     const isNewKey = !existingKeys.has(key);
     setSavingKey(key);

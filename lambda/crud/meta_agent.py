@@ -54,8 +54,8 @@ def _build_invocation_url(arn: str, region: str) -> str:
 _META_AGENT_SKILLS = [
     {
         "id": "agent_lifecycle",
-        "name": "Manage sub-agents",
-        "description": "Create, update, validate, deploy, and delete sub-agents.",
+        "name": "Manage agents",
+        "description": "Create, update, validate, deploy, and delete agents.",
         "tags": ["agent", "create", "update", "delete", "deploy"],
     },
     {
@@ -66,7 +66,7 @@ _META_AGENT_SKILLS = [
     },
     {
         "id": "debugging",
-        "name": "Debug sub-agents",
+        "name": "Debug agents",
         "description": "Inspect logs, run validation, and analyze traces for deployed agents.",
         "tags": ["logs", "trace", "debug"],
     },
@@ -126,7 +126,7 @@ def get_meta_agent_card(wsId: str):
 
     card = {
         "name": name,
-        "description": "Agent Studio Meta-Agent — orchestrates sub-agent lifecycle.",
+        "description": "Agent Studio Meta-Agent — orchestrates agent lifecycle.",
         "url": url,
         "version": version,
         "protocolVersion": "0.3.0",

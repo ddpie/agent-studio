@@ -50,7 +50,7 @@ export default function ChatHeader({
   const [showHistory, setShowHistory] = useState(false);
   const [showMetaIntegration, setShowMetaIntegration] = useState(false);
   // Only poll when the user is actually on the Meta-Agent chat; the hook
-  // runs unconditionally but we just don't render the dot for sub-agents.
+  // runs unconditionally but we just don't render the dot for agents.
   const metaStatus = useMetaAgentStatus();
   const kiroModels = useKiroModels();
   const historyRef = useRef<HTMLDivElement>(null);
@@ -67,7 +67,7 @@ export default function ChatHeader({
   }, [showHistory, showModelPicker]);
 
   // Meta-Agent chat uses Kiro's dynamic model list (Kiro-native IDs);
-  // sub-agent chat uses the static Bedrock inference-profile list. The
+  // agent chat uses the static Bedrock inference-profile list. The
   // two id formats aren't interchangeable — keep them separate.
   const isMetaAgent = !agentId;
   const selectedModelLabel = isMetaAgent

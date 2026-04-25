@@ -25,7 +25,7 @@ beforeEach(() => {
   }
 });
 
-describe("useA2aKeys (sub-agent)", () => {
+describe("useA2aKeys (agent)", () => {
   it("loads keys on mount", async () => {
     listA2aKeys.mockResolvedValue([{ keyId: "k1", keyPrefix: "as_abcd", createdAt: "t", revoked: false }]);
     const { result } = renderHook(() => useA2aKeys("agt-1"));

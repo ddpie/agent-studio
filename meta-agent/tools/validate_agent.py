@@ -407,7 +407,7 @@ def validate_agent(
                 errors.append(f"Library '{lib}' is not available in the sandbox. Use MCP Gateway or a different approach.")
 
         # 6. (Removed) Previously checked readonly tier vs write operations.
-        # All sub-agents now use a unified role with sufficient permissions.
+        # All agents now use a unified role with sufficient permissions.
 
         # 7. Security patterns
         if "import os" in tool_definitions and ("os.system" in tool_definitions or "subprocess" in tool_definitions):

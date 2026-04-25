@@ -67,6 +67,11 @@ function AgentCostBar({ agents, total }: { agents: CostAgentRow[]; total: number
           <li key={a.agentId} className="flex items-center gap-2 text-xs">
             <span className={`h-2 w-2 rounded-full ${palette[idx % palette.length]}`} />
             <span className="truncate text-gray-700 dark:text-gray-300">{a.name}</span>
+            {a.status === "archived" && (
+              <span className="rounded-sm bg-gray-200 px-1 py-[1px] text-[10px] uppercase tracking-wide text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                {t("costs.archivedBadge")}
+              </span>
+            )}
             <span className="ml-auto font-mono text-gray-900 dark:text-gray-100">{formatUsd(a.costUsd)}</span>
           </li>
         ))}
@@ -309,9 +314,20 @@ export default function CostsPage() {
                     </tr>
                   )}
                   {sortedAgents.map((a) => (
-                    <tr key={a.agentId} data-testid={`costs-row-${a.agentId}`}>
-                      <td className="max-w-[260px] truncate px-4 py-2 text-gray-900 dark:text-gray-100">
-                        {a.name}
+                    <tr
+                      key={a.agentId}
+                      data-testid={`costs-row-${a.agentId}`}
+                      className={a.status === "archived" ? "text-gray-500 dark:text-gray-400" : ""}
+                    >
+                      <td className="max-w-[260px] px-4 py-2 text-gray-900 dark:text-gray-100">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate">{a.name}</span>
+                          {a.status === "archived" && (
+                            <span className="shrink-0 rounded-sm bg-gray-200 px-1 py-[1px] text-[10px] uppercase tracking-wide text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                              {t("costs.archivedBadge")}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="max-w-[200px] truncate px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
                         {a.modelId || "—"}

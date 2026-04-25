@@ -51,7 +51,7 @@ from typing import Any, Iterable
 
 # Matches the caps main.py:621-625 enforces on the legacy path. `load_skill`
 # is a special case there; we don't have that here since the tool is run by
-# sub-agents, not the Meta-Agent. Keep 5000 as the one-size-fits-all cap.
+# agents, not the Meta-Agent. Keep 5000 as the one-size-fits-all cap.
 MAX_TOOL_OUTPUT_CHARS = 5000
 TRUNCATION_SUFFIX = "\n... (truncated)"
 
@@ -198,7 +198,7 @@ def _unwrap_mcp_envelope(value: Any) -> Any:
             "isError": false,
         }}]}
 
-    The original sub-agent code (Strands path) returned the tool's own string
+    The original agent code (Strands path) returned the tool's own string
     verbatim. Downstream consumers — the frontend deploy hook's
     extractToolResults, ChatMessage, ToolCallDetails — all parse that string
     as JSON. The envelope breaks them all.

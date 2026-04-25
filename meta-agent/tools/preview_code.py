@@ -50,7 +50,7 @@ def preview_assembled_code(
             return json.dumps({"error": f"Failed to read staging config: {e}"})
 
     # Compose final prompt. template_id is accepted for back-compat but
-    # ignored — see create_agent.py for the rationale. The sub-agent
+    # ignored — see create_agent.py for the rationale. The agent
     # always gets the user's raw system_prompt + BASE_GUIDELINES in the
     # creator's language.
     from tools._scope import current_creator_language

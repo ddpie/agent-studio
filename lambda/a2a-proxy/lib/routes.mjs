@@ -1,7 +1,7 @@
 /**
  * A2A proxy route parsing.
  *
- * All paths live behind CloudFront behaviour /a2a/*. Sub-agents and the
+ * All paths live behind CloudFront behaviour /a2a/*. Agents and the
  * Meta-Agent share the same shape — RFC 8615 well-known card, extended
  * card, and JSON-RPC endpoint — so that generic A2A clients can treat
  * Meta-Agent as a peer of every other agent.

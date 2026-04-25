@@ -52,7 +52,7 @@ _WORKSPACES_TABLE = os.getenv("WORKSPACES_TABLE", "agent-studio-workspaces")
 # Set by main.py at each invocation
 _workspace_id: str = ""
 _caller_id: str = ""
-# Language hint carried from the invoke payload. Sub-agent builders
+# Language hint carried from the invoke payload. Agent builders
 # (create_agent, update_agent) read this to pick which BASE_GUIDELINES
 # variant (zh vs en) to append to the freshly-authored system_prompt.
 # Falls back to "en" when the caller didn't declare a language.

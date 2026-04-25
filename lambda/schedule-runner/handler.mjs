@@ -5,7 +5,7 @@
  * previously sent to the Universal Target:
  *   { AgentRuntimeArn, RuntimeSessionId, Payload }
  *
- * The sub-agent's _stream_and_record writes DDB/S3 run records as it
+ * The agent's _stream_and_record writes DDB/S3 run records as it
  * streams. This Lambda's only job is to keep the stream alive until the
  * agent finishes.
  */

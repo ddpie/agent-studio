@@ -17,7 +17,7 @@ interface Props {
   kind?: A2aKeyKind;
 }
 
-export default function IntegrationTab({ agentId, kind = "sub-agent" }: Props) {
+export default function IntegrationTab({ agentId, kind = "agent" }: Props) {
   const { t } = useTranslation();
   const { keys, loading, error, generate, revoke } = useA2aKeys(agentId, kind);
   const [justCreated, setJustCreated] = useState<A2aKeyCreated | null>(null);
