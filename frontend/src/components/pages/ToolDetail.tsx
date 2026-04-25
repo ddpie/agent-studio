@@ -69,6 +69,7 @@ export default function ToolDetail() {
   const [fetchAttempted, setFetchAttempted] = useState(false);
   const [currentUser, setCurrentUser] = useState("");
   const [toolOwner, setToolOwner] = useState("");
+  const [isBuiltin, setIsBuiltin] = useState(false);
   const [visibility, setVisibility] = useState<string>("private");
   const { currentWorkspace } = useWorkspaceStore();
 
@@ -94,19 +95,19 @@ export default function ToolDetail() {
       const existing = tools.find((t) => t.id === toolId);
       if (existing) { navigate(`/tools/${toolId}`, { replace: true }); return; }
       setName(paramName); setDescription(paramDesc); setOriginalName(paramName); setOriginalDescription(paramDesc);
-      setCode(TOOL_TEMPLATE); setOriginalCode(""); setToolOwner(""); setVisibility("private"); setLoaded(true);
+      setCode(TOOL_TEMPLATE); setOriginalCode(""); setToolOwner(""); setIsBuiltin(false); setVisibility("private"); setLoaded(true);
       if (toolId) openPanel(toolId);
       return;
     }
     const tool = tools.find((t) => t.id === toolId);
     if (!tool) { setNotFound(true); setLoaded(true); return; }
     setName(tool.name); setDescription(tool.description); setOriginalName(tool.name); setOriginalDescription(tool.description);
-    setCode(tool.code); setOriginalCode(tool.code); setToolOwner(tool.owner); setVisibility(tool.visibility || "private"); setLoaded(true);
+    setCode(tool.code); setOriginalCode(tool.code); setToolOwner(tool.owner); setIsBuiltin(tool.builtin === true); setVisibility(tool.visibility || "private"); setLoaded(true);
     if (toolId) openPanel(toolId);
   }, [tools, toolId, isNew, paramName, paramDesc, fetchTools]);
 
   const hasChanges = code !== originalCode || name !== originalName || description !== originalDescription;
-  const canEdit = isNew || (currentUser && toolOwner === currentUser) || toolOwner === "__builtin__";
+  const canEdit = !isBuiltin && (isNew || (!!currentUser && toolOwner === currentUser));
 
   useEffect(() => { preloadPyodide(); }, []);
 
@@ -199,6 +200,7 @@ export default function ToolDetail() {
   };
 
   const handleSave = async () => {
+    if (!canEdit) return;
     clearError();
     const funcName = extractFuncName(code);
     if (!funcName) { setValidationError(t("tools.missingDecorator")); return; }
@@ -239,6 +241,7 @@ export default function ToolDetail() {
         saving={saving}
         validating={validating}
         assistantOpen={panelOpen}
+        readOnly={!canEdit}
         onBack={() => navigate("/tools")}
         onSave={handleSave}
         onDiscard={handleDiscard}
@@ -246,7 +249,7 @@ export default function ToolDetail() {
         onShowDiff={() => setShowDiff(true)}
         onDelete={() => setConfirmDelete(true)}
         onToggleAssistant={() => { if (toolId) { if (panelOpen) useToolAssistantStore.getState().closePanel(); else openPanel(toolId); } }}
-        extraSlot={!isNew && toolId && !hasChanges && toolOwner !== "__builtin__" ? (
+        extraSlot={!isNew && toolId && !hasChanges && !isBuiltin ? (
           <PublishToggle
             visibility={visibility}
             canPublish={(currentWorkspace?.role === "admin" || currentWorkspace?.role === "owner")}
@@ -293,7 +296,7 @@ export default function ToolDetail() {
 
       <div className="flex flex-1 min-h-0">
         <ToolEditorPane
-          name={name} description={description} code={code}
+          name={name} description={description} code={code} readOnly={!canEdit}
           onNameChange={setName} onDescriptionChange={setDescription} onCodeChange={handleCodeChange}
           editorRef={editorRef} monacoRef={monacoRef}
           errorBar={(error || validationError) ? (

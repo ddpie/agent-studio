@@ -10,8 +10,8 @@ import { formatDate } from "../../lib/date-format";
 
 function ToolCard({ tool, onClick, currentUser }: { tool: ToolTemplate; onClick: () => void; currentUser: string }) {
   const { t } = useTranslation();
-  const isMine = tool.owner === currentUser;
-  const isSeed = tool.owner === "__builtin__";
+  const isSeed = tool.builtin === true;
+  const isMine = !isSeed && !!tool.owner && tool.owner === currentUser;
   return (
     <div
       onClick={onClick}

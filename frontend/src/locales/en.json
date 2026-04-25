@@ -709,6 +709,8 @@
     "description": "Description",
     "descPlaceholder": "What does this tool do?",
     "seed": "Seed",
+    "readOnly": "Read-only",
+    "builtinReadOnly": "Built-in tools are read-only. Fork or create a new tool to customize.",
     "toolNotFound": "Tool not found",
     "deleteConfirm": "{{name}} will be moved to trash. You can restore it later from the Tools page.",
     "saveFailed": "Failed to save tool",
