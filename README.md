@@ -1,14 +1,15 @@
 # Agent Studio
 
-基于 AWS Bedrock AgentCore 的 Agent 编排平台。用自然语言创建、部署、运营 Sub-Agent。
+基于 AWS Bedrock AgentCore 的 Agent 编排平台。用自然语言创建、部署、运营 Sub-Agent。Meta-Agent 由 **Kiro CLI** 驱动（ACP 协议 + stdio MCP），Sub-Agent 基于 Strands。
 
 ## 能做什么
 
 - **对话创建** — 告诉 Meta-Agent 你要什么，它写 prompt、选工具、生成代码、部署上线
-- **表单 + AI 双模式编辑** — 不想写代码就改表单；要精细控制就让 AI 助手改 prompt 和 tool 源码
+- **Kiro 驱动的 Meta-Agent** — 每个 workspace 自带一把 Kiro API Key（admin 配置），Meta-Agent 通过 Kiro CLI 调用 Claude/Sonnet 等模型；Workspace Settings 里可见实时 credits 用量（进度条 + 订阅等级 + 重置日期 + 超额信息），所有成员可见，admin 用以轮换密钥
+- **表单 + AI 双模式编辑** — 不想写代码就改表单；要精细控制就让 AI 助手改 prompt 和 tool 源码。AI 助手（编辑/技能/工具三条）与聊天头部共享 Kiro 模型选择器，模型列表每次启动从 Kiro 后端动态拉取
 - **流式测试** — tool-use 过程可视化，每一步都看得见
 - **Skill 热插拔** — AgentSkills.io 格式，运行时按需加载，跨 Agent 共享
-- **MCP 工具集** — 49 个 AWS 官方 MCP target，14 个服务类别，直连 AgentCore Runtime
+- **MCP 工具集** — 49 个 AWS 官方 MCP target（默认 36 个启用），14 个服务类别，直连 AgentCore Runtime
 - **多模态输入** — 图片 + PDF / Excel / CSV / TSV，内置 `read_document` 自动解析
 - **定时触发** — 可视化 Schedule builder（每 N 分钟 / 每小时 / 每天 / 每周 / 每月 / 自定义 cron），含人类可读描述与下 5 次触发预览；每次执行记录为卡片，点击弹出运行详情（输入、输出、tool 调用、附件）
 - **Agent 互调** — `link_agent` 把另一个 Agent 挂为 tool，走 A2A 协议 + 自动配密钥
@@ -61,6 +62,19 @@ cd frontend && npm run dev                    # 本地开发
 
 ## 关键设计
 
+### Meta-Agent 后端：Kiro CLI
+Meta-Agent 不再是纯 Strands loop。每次 invoke：
+
+1. Invoke Lambda 从 Secrets Manager 读取该 workspace 的 Kiro API Key（`agent-studio/workspaces/{wsId}/kiro-api-key`），注入 Meta-Agent payload（plaintext 只走 SigV4+TLS，永不落 Runtime env）
+2. AgentCore 容器里 `kiro-cli-chat acp --agent meta-agent` 进程通过 ACP 协议驱动推理
+3. Meta-Agent 的 33 个 `@tool` 函数（agent CRUD、skill、MCP、schedule、secret、preview、link 等）通过 **stdio MCP subprocess** 暴露给 Kiro，保持进程内直接调用，不经网络
+4. Kiro 流式 `session/update` 事件 → `kiro_adapter/sse_mapper.py` 转回前端既有的 SSE 帧格式（文本 + `__tool` 标记）
+5. 额外 action：
+   - `list_models`：每次启动从 Kiro 后端拉模型列表（前端 picker 不再硬编码）
+   - `get_usage`：在容器内跑 `kiro-cli-chat chat "/usage"` 解析 TUI 输出，返回 `{currentUsage, usageLimit, resetsOn, tier, overagesEnabled, overageRate}`
+
+Credit 数据路径：前端 → `GET /api/workspaces/{wsId}/kiro-key/usage`（viewer+） → crud Lambda → `InvokeAgentRuntime` → Kiro CLI `/usage` → 反向 SSE 帧双解码 → 60s in-memory cache，PUT/DELETE key 时自动 bust。
+
 ### Observability
 Sub-Agent 启动时经 ADOT auto-instrumentation 钩住 Strands / botocore，emit OTEL spans 到 CloudWatch `aws/spans`（含 `gen_ai.request.model` / `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens`）。前端 Cost Dashboard、Schedule Executions、Agent Logs 查看器都从此取数。
 
@@ -86,15 +100,21 @@ API 密钥 SHA-256 hash 存 `agent-studio-a2a-keys` DDB 表，每用户每 Agent
 ```
 agent-studio/
 ├── frontend/              # React 19 + Vite 8 + Tailwind 4 + Zustand 5
-├── meta-agent/            # Strands Agent on AgentCore Runtime
-│   ├── tools/             # 28 个 meta 工具（agent 生命周期、skill、MCP、a2a 等）
+├── meta-agent/            # Kiro-backed Meta-Agent on AgentCore Runtime
+│   ├── main.py            # Entrypoint（ACP 驱动，keepalive + auto-continue 监督）
+│   ├── kiro_adapter/      # Kiro CLI ↔ Agent Studio 胶水层
+│   │   ├── acp_client.py      #   ACP subprocess 驱动
+│   │   ├── sse_mapper.py      #   ACP session/update → 前端 SSE 帧
+│   │   ├── kiro_home.py       #   per-invocation KIRO_HOME materialization
+│   │   └── mcp_stdio_server.py#   33 tools 通过 stdio MCP 暴露给 Kiro
+│   ├── tools/             # 33 个 meta 工具（agent 生命周期、skill、MCP、schedule、secret、link 等）
 │   ├── tools_library/     # 7 个预构建 sub-agent 工具模板
 │   └── templates/         # 代码生成 + prompt 模板
 ├── lambda/
-│   ├── crud/              # Python CRUD Lambda（API Gateway 后端）
-│   ├── invoke-node/       # Node.js SSE streaming proxy
+│   ├── crud/              # Python CRUD Lambda（含 kiro_key.py 管理 key + usage）
+│   ├── invoke-node/       # Node.js SSE streaming proxy（Meta-Agent + Sub-Agent）
 │   └── a2a-proxy/         # A2A JSON-RPC proxy
-├── mcp-runtime/           # 49 个 MCP target + Dockerfile 模板
+├── mcp-runtime/           # 49 个 AWS MCP target（36 默认启用）+ mcp-registry.yaml + Dockerfile
 ├── infra/                 # AWS CDK (TypeScript)
 ├── scripts/               # 部署 / 测试脚本
 └── .env.example
@@ -110,15 +130,16 @@ bash scripts/run-tests.sh
 
 # Agent Studio (English)
 
-An agent orchestration platform on AWS Bedrock AgentCore. Create, deploy, and run sub-agents via natural language.
+An agent orchestration platform on AWS Bedrock AgentCore. Create, deploy, and run sub-agents via natural language. The Meta-Agent is powered by the **Kiro CLI** (ACP protocol + stdio MCP); sub-agents run on Strands.
 
 ## What It Does
 
 - **Conversational creation** — Tell the Meta-Agent what you want; it writes the prompt, picks tools, generates code, deploys.
-- **Form + AI dual editing** — Forms for quick tweaks; AI assistant for prompt + tool source edits.
+- **Kiro-backed Meta-Agent** — Each workspace owns a Kiro API key (admins configure it once); the Meta-Agent calls Claude/Sonnet etc. through Kiro. Workspace Settings surfaces live credit usage (progress bar, subscription tier, reset date, overage line) to all members so anyone can alert the admin when credits run low.
+- **Form + AI dual editing** — Forms for quick tweaks; AI assistants for prompt + tool source edits. The edit, skill, and tool assistants share one Kiro model picker with the chat header; the model list is fetched from Kiro at cold start, not hard-coded.
 - **Streaming chat testing** — Real-time tool-use visualization.
 - **Hot-swappable Skills** — AgentSkills.io format, lazy-loaded at runtime, shared across agents.
-- **MCP toolbelt** — 49 AWS-official MCP targets across 14 service categories, direct-connect.
+- **MCP toolbelt** — 49 AWS-official MCP targets (36 enabled by default) across 14 service categories, direct-connect.
 - **Multimodal input** — Images + PDF / Excel / CSV / TSV via built-in `read_document`.
 - **Scheduled triggers** — Visual schedule builder (every-N-minutes / hourly / daily / weekly / monthly / custom cron) with plain-English descriptions and the next 5 fire times previewed. Each execution is a card; click to pop a run-detail modal with inputs, outputs, tool calls, and attachments.
 - **Agent-as-tool** — `link_agent` mounts one agent as another's tool over A2A, keys auto-provisioned.
@@ -169,6 +190,19 @@ Existing resources listed in `.env` are reused.
 
 ## Key Design
 
+### Meta-Agent backend: Kiro CLI
+The Meta-Agent is no longer a plain Strands loop. Per invocation:
+
+1. The Invoke Lambda reads the workspace's Kiro API key from Secrets Manager (`agent-studio/workspaces/{wsId}/kiro-api-key`) and injects it into the Meta-Agent payload (plaintext only rides SigV4+TLS, never lands in Runtime env).
+2. Inside the AgentCore container, `kiro-cli-chat acp --agent meta-agent` drives reasoning over ACP.
+3. The Meta-Agent's 33 `@tool` functions (agent CRUD, skill management, MCP, scheduling, secrets, preview, link, …) are exposed to Kiro via a **stdio MCP subprocess** — in-process calls, no network hop.
+4. Kiro's streamed `session/update` events are translated by `kiro_adapter/sse_mapper.py` back into the SSE frame format the frontend already consumes (plain text + `__tool` markers).
+5. Extra short-circuit actions in the entrypoint:
+   - `list_models`: fetched from Kiro at cold start so the picker isn't hard-coded.
+   - `get_usage`: runs `kiro-cli-chat chat "/usage"` inside the container, parses the TUI, returns `{currentUsage, usageLimit, resetsOn, tier, overagesEnabled, overageRate}`.
+
+Credit data path: frontend → `GET /api/workspaces/{wsId}/kiro-key/usage` (viewer+) → crud Lambda → `InvokeAgentRuntime` → Kiro CLI `/usage` → SSE `data:` frames double-decoded → 60 s in-memory cache, busted on key PUT/DELETE.
+
 ### Observability
 Sub-agent boot wires ADOT auto-instrumentation around Strands + botocore. OTEL spans flow to CloudWatch `aws/spans` with `gen_ai.request.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`. The Cost Dashboard, Schedule Executions view, and the inline agent log viewer all read from here.
 
@@ -194,15 +228,21 @@ Every sub-agent ships with two built-in sandbox tools: `run_command` (Code Inter
 ```
 agent-studio/
 ├── frontend/              # React 19 + Vite 8 + Tailwind 4 + Zustand 5
-├── meta-agent/            # Strands Agent on AgentCore Runtime
-│   ├── tools/             # 28 meta tools (agent lifecycle, skills, MCP, a2a, ...)
+├── meta-agent/            # Kiro-backed Meta-Agent on AgentCore Runtime
+│   ├── main.py            # Entrypoint (ACP-driven, with keepalive + auto-continue supervisor)
+│   ├── kiro_adapter/      # Kiro CLI ↔ Agent Studio glue
+│   │   ├── acp_client.py       #  ACP subprocess driver
+│   │   ├── sse_mapper.py       #  ACP session/update → frontend SSE frames
+│   │   ├── kiro_home.py        #  per-invocation KIRO_HOME materialization
+│   │   └── mcp_stdio_server.py #  33 tools exposed to Kiro over stdio MCP
+│   ├── tools/             # 33 meta tools (agent lifecycle, skills, MCP, schedule, secrets, link, ...)
 │   ├── tools_library/     # 7 pre-built sub-agent tool templates
 │   └── templates/         # Codegen + prompt templates
 ├── lambda/
-│   ├── crud/              # Python CRUD Lambda (API Gateway backend)
-│   ├── invoke-node/       # Node.js SSE streaming proxy
+│   ├── crud/              # Python CRUD Lambda (includes kiro_key.py — key + usage)
+│   ├── invoke-node/       # Node.js SSE streaming proxy (Meta-Agent + sub-agent)
 │   └── a2a-proxy/         # A2A JSON-RPC proxy
-├── mcp-runtime/           # 49 MCP targets + Dockerfile template
+├── mcp-runtime/           # 49 AWS MCP targets (36 enabled by default) + mcp-registry.yaml + Dockerfile
 ├── infra/                 # AWS CDK (TypeScript)
 ├── scripts/               # Deploy + test scripts
 └── .env.example

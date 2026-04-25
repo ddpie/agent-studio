@@ -21,11 +21,12 @@ graph LR
     end
 
     subgraph AgentCore["AWS Bedrock AgentCore"]
-        Meta[Meta-Agent Runtime<br/>Strands Agent]
-        Sub[Sub-Agent Runtimes<br/>每个 agent 一个容器]
+        Meta[Meta-Agent Runtime<br/>Kiro CLI + ACP<br/>+ stdio MCP tools]
+        Sub[Sub-Agent Runtimes<br/>Strands · 每个 agent 一个容器]
     end
 
     subgraph Outbound["Agent 依赖"]
+        Kiro[Kiro 后端<br/>kiro.dev · q.&lt;region&gt;.amazonaws.com]
         Bedrock[Bedrock 基础模型<br/>Claude · Nova · DeepSeek · Qwen]
         Skills[Skills<br/>SKILL.md]
         Tools[内置 Tools<br/>S3 · Code Interpreter · Browser]
@@ -35,7 +36,7 @@ graph LR
     subgraph Data[数据]
         DDB[(DynamoDB<br/>workspaces · agents · skills · tools)]
         S3[(S3<br/>部署包 · 产物)]
-        Secrets[(Secrets Manager<br/>每 agent 一把密钥)]
+        Secrets[(Secrets Manager<br/>每 agent 一把密钥<br/>+ 每 workspace 一把 Kiro key)]
     end
 
     subgraph Observability[可观测性]
@@ -67,6 +68,7 @@ graph LR
     Meta -.生成代码 · 打包 · 部署.-> Sub
     Meta --- DDB
     Meta --- S3
+    Meta -.Kiro API Key + /usage.-> Kiro
 
     Sub --> Bedrock
     Sub --> Skills
@@ -95,8 +97,23 @@ graph LR
 
 ## 组件
 
-### Meta-Agent
-运行在 AgentCore Runtime 的单个 Strands Agent，外加约 25 个 tool，用来 CRUD DynamoDB / S3 / AgentCore runtimes。用户通过和 sub-agent 对话同一个聊天 UI 与之交互。
+### Meta-Agent（Kiro-backed）
+**推理后端是 Kiro CLI**，不是 Strands loop。AgentCore 容器启动后，`main.py` 跑 `kiro-cli-chat acp --agent meta-agent` 子进程，用 ACP 协议驱动对话。33 个 `@tool` 函数（agent / skill / MCP / schedule / secret / preview / link 等）通过 **stdio MCP subprocess** 暴露给 Kiro，进程内直接调用，不经网络。详细胶水层见 `meta-agent/kiro_adapter/`。
+
+Per-invocation 流水线：
+
+1. Invoke Lambda 从 Secrets Manager 读 workspace 的 Kiro API Key，作为 payload 字段发到 AgentCore（plaintext 只走 SigV4+TLS，不落 Runtime env）
+2. `main.py` 写一份 per-invocation `KIRO_HOME`（agent config + prompts + MCP 配置），`KIRO_API_KEY` 走环境变量注入 Kiro 子进程
+3. Kiro 拉模型目录 → `session/load` 复用或 `session/new` 开新会话
+4. 每轮 user prompt → Kiro 流式 `session/update` 事件 → `sse_mapper.py` 转回前端既有 SSE 帧（文本 + `__tool` 标记）
+5. Auto-continue 监督器：如果 Kiro 结束 turn 但没发 `[[TASK_COMPLETE]]` 标记且实际调过 tool，自动追加 "Continue." 再跑一轮，最多 3 轮
+
+Entrypoint 之外还暴露两个短路 action：
+
+| Action | 做什么 |
+|---|---|
+| `list_models` | 跑 `kiro-cli-chat chat --list-models`，返回动态模型列表给前端 picker（chat header + 3 个 AI 助手侧栏共享）|
+| `get_usage` | 跑 `kiro-cli-chat chat "/usage"` 解析 TUI 输出，返回结构化 credits / limit / reset date / tier / overage；前端 Workspace Settings 的 Kiro Credits 卡片消费 |
 
 创建 sub-agent 流程：
 1. 用户："帮我做个 code reviewer agent"
@@ -105,6 +122,18 @@ graph LR
 4. 上传 `s3://bucket/agents/{id}/deployment.zip`
 5. 调 AgentCore 控制面的 `create_agent_runtime`
 6. 轮询直到 READY（≤300s）
+
+### Kiro Key & Credits
+每 workspace 一把 Kiro API Key，存 `agent-studio/workspaces/{wsId}/kiro-api-key`（Secrets Manager），带 `kiroRegion` tag（`us-east-1` 或 `eu-central-1`）。
+
+| 路由 | 角色 | 做什么 |
+|---|---|---|
+| `GET /api/workspaces/{wsId}/kiro-key` | viewer+ | 返回 `{configured, region, lastUpdated, updatedBy}`，永不返回 plaintext |
+| `PUT /api/workspaces/{wsId}/kiro-key` | admin | 写 key + region，tag 刷新 `updatedBy`，bust usage cache |
+| `DELETE /api/workspaces/{wsId}/kiro-key` | admin | 删 key，bust usage cache |
+| `GET /api/workspaces/{wsId}/kiro-key/usage` | viewer+ | 调 Meta-Agent `action=get_usage`，返回 credits / limit / reset date / tier / overage rate，60s in-memory 缓存 |
+
+CRUD Lambda 的 IAM role 仅授予 `bedrock-agentcore:InvokeAgentRuntime` 在 Meta-Agent runtime ARN 上（不是 `runtime/*` 通配）。
 
 ### Sub-Agents
 每个用户创建的 agent 对应一个 AgentCore Runtime。Python 3.10 Strands Agent，包含：
@@ -191,11 +220,12 @@ graph LR
     end
 
     subgraph AgentCore["AWS Bedrock AgentCore"]
-        Meta[Meta-Agent Runtime<br/>Strands Agent]
-        Sub[Sub-Agent Runtimes<br/>per-agent containers]
+        Meta[Meta-Agent Runtime<br/>Kiro CLI + ACP<br/>+ stdio MCP tools]
+        Sub[Sub-Agent Runtimes<br/>Strands · per-agent container]
     end
 
     subgraph Outbound["Agent dependencies"]
+        Kiro[Kiro backend<br/>kiro.dev · q.&lt;region&gt;.amazonaws.com]
         Bedrock[Bedrock Foundation Models<br/>Claude · Nova · DeepSeek · Qwen]
         Skills[Skills<br/>SKILL.md]
         Tools[Builtin Tools<br/>S3 · Code Interpreter · Browser]
@@ -205,7 +235,7 @@ graph LR
     subgraph Data
         DDB[(DynamoDB<br/>workspaces · agents · skills · tools)]
         S3[(S3<br/>deployment zips · artifacts)]
-        Secrets[(Secrets Manager<br/>per-agent API keys)]
+        Secrets[(Secrets Manager<br/>per-agent API keys<br/>+ per-workspace Kiro key)]
     end
 
     subgraph Observability
@@ -237,6 +267,7 @@ graph LR
     Meta -.codegen · zip · deploy.-> Sub
     Meta --- DDB
     Meta --- S3
+    Meta -.Kiro API key + /usage.-> Kiro
 
     Sub --> Bedrock
     Sub --> Skills
@@ -265,18 +296,62 @@ graph LR
 
 ## Components
 
-### Meta-Agent
-Single Strands Agent running on AgentCore Runtime, plus ~25 tools that
-CRUD DynamoDB / S3 / AgentCore runtimes. Users talk to it through the
-same chat UI they use to talk to their sub-agents.
+### Meta-Agent (Kiro-backed)
+**The reasoning backend is the Kiro CLI**, not a Strands loop. When the
+AgentCore container boots, `main.py` spawns `kiro-cli-chat acp --agent
+meta-agent` and drives it over ACP. The Meta-Agent's 33 `@tool`
+functions (agent / skill / MCP / schedule / secret / preview / link, …)
+are exposed to Kiro via a **stdio MCP subprocess** — in-process calls,
+no network hop. The glue layer lives in `meta-agent/kiro_adapter/`.
 
-Flow for creating a new sub-agent:
+Per-invocation pipeline:
+
+1. The Invoke Lambda reads the workspace's Kiro API key from Secrets
+   Manager and puts it on the payload going into AgentCore (plaintext
+   only rides SigV4+TLS, never lands in Runtime env).
+2. `main.py` materializes a per-invocation `KIRO_HOME` (agent config +
+   prompts + MCP config) and forwards `KIRO_API_KEY` into the Kiro
+   subprocess via env.
+3. Kiro lists models → `session/load` resumes, or `session/new` starts
+   a fresh one.
+4. Each user prompt streams back as `session/update` events;
+   `sse_mapper.py` turns them into the SSE frame format the frontend
+   already consumes (plain text + `__tool` markers).
+5. An auto-continue supervisor watches for the `[[TASK_COMPLETE]]`
+   marker: if Kiro ends a turn without it but actually ran tools, it
+   quietly sends "Continue." for another round (capped at 3).
+
+Besides the main turn handler, the entrypoint short-circuits two
+control-plane actions:
+
+| Action | What it does |
+|---|---|
+| `list_models` | Runs `kiro-cli-chat chat --list-models`, returns the live model catalog for the frontend picker (shared by the chat header and all three AI-assistant sidebars). |
+| `get_usage` | Runs `kiro-cli-chat chat "/usage"`, parses the TUI output, returns structured credits / limit / reset date / tier / overage. Consumed by the Kiro Credits card in Workspace Settings. |
+
+Creating a sub-agent:
 1. User: "make me a code reviewer agent"
 2. Meta-Agent writes `main.py` / `tools.py` / `prompt.txt` / `config.json`
 3. Downloads `s3://bucket/base/deployment.zip`, injects generated files
 4. Uploads `s3://bucket/agents/{id}/deployment.zip`
 5. Calls `create_agent_runtime` on AgentCore control plane
 6. Polls until READY (≤300 s)
+
+### Kiro Key & Credits
+One Kiro API key per workspace, stored at
+`agent-studio/workspaces/{wsId}/kiro-api-key` in Secrets Manager with a
+`kiroRegion` tag (`us-east-1` or `eu-central-1`).
+
+| Route | Role | Purpose |
+|---|---|---|
+| `GET /api/workspaces/{wsId}/kiro-key` | viewer+ | Returns `{configured, region, lastUpdated, updatedBy}`; plaintext never leaves the backend. |
+| `PUT /api/workspaces/{wsId}/kiro-key` | admin | Writes key + region; refreshes `updatedBy` tag; busts usage cache. |
+| `DELETE /api/workspaces/{wsId}/kiro-key` | admin | Removes key; busts usage cache. |
+| `GET /api/workspaces/{wsId}/kiro-key/usage` | viewer+ | Invokes the Meta-Agent with `action=get_usage`; returns credits / limit / reset date / tier / overage rate. 60 s in-memory cache keyed per workspace. |
+
+The CRUD Lambda's IAM role has `bedrock-agentcore:InvokeAgentRuntime`
+narrowed to the Meta-Agent runtime ARN specifically — not a `runtime/*`
+wildcard.
 
 ### Sub-Agents
 One AgentCore Runtime per user-created agent. Python 3.10 Strands
