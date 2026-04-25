@@ -23,11 +23,8 @@ graph LR
     Web -->|对话| Meta[Meta-Agent<br/>创建 / 管理]
 
     subgraph Agents
-        direction LR
         A1[Agent A] <-->|A2A| A2[Agent B]
-        A3[Agent C] ~~~ A4[Agent D]
-        A1 ~~~ A3
-        A2 ~~~ A4
+        A3[Agent C]
     end
 
     Web -->|对话| Agents
@@ -117,11 +114,8 @@ graph LR
     Web -->|chat| Meta[Meta-Agent<br/>build / manage]
 
     subgraph Agents
-        direction LR
         A1[Agent A] <-->|A2A| A2[Agent B]
-        A3[Agent C] ~~~ A4[Agent D]
-        A1 ~~~ A3
-        A2 ~~~ A4
+        A3[Agent C]
     end
 
     Web -->|chat| Agents
