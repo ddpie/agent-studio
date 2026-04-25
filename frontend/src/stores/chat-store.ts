@@ -2,6 +2,12 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 import { invokeMetaAgent, invokeAgentById } from "../lib/agentcore-client";
+import {
+  listChatSessions,
+  getChatSession,
+  putChatSession,
+  deleteChatSession,
+} from "../lib/api-client";
 import i18next from "i18next";
 
 /**
@@ -360,7 +366,10 @@ export const useChatStore = create<ChatState>()(
         // Any in-flight stream for the previous agent keeps running and
         // keeps writing into its own bucket — not cancelled.
         const state = get();
-        _saveCurrentSession(state, set);
+        _saveCurrentSessionAndSync(state, set);
+        // Kick off a one-time cloud hydrate for the target agent. No-op if
+        // we've already hydrated this agentKey in this browser session.
+        void hydrateSessionsFromCloud(agentId);
 
         const fresh = get();
         const currentKey = agentKey(fresh.currentAgentId);
@@ -403,7 +412,7 @@ export const useChatStore = create<ChatState>()(
       newSession: () => {
         const state = get();
         const key = agentKey(state.currentAgentId);
-        _saveCurrentSession(state, set);
+        _saveCurrentSessionAndSync(state, set);
         set((s) => ({
           ...setMessagesFor(s, key, () => []),
           ...setFlagFor(s, "sessionIdByAgent", key, undefined),
@@ -416,7 +425,7 @@ export const useChatStore = create<ChatState>()(
       loadSession: (sessionId: string) => {
         const state = get();
         const key = agentKey(state.currentAgentId);
-        _saveCurrentSession(state, set);
+        _saveCurrentSessionAndSync(state, set);
         const session = state.sessions.find((s) => s.id === sessionId);
         if (session) {
           set((s) => ({
@@ -436,6 +445,14 @@ export const useChatStore = create<ChatState>()(
         const state = get();
         const key = agentKey(state.currentAgentId);
         const isActive = state.activeSessionByAgent[key] === sessionId;
+        // Cancel any queued cloud save for this session before deleting —
+        // a late PUT would resurrect it.
+        const pending = _cloudSaveTimers.get(sessionId);
+        if (pending) {
+          clearTimeout(pending);
+          _cloudSaveTimers.delete(sessionId);
+        }
+        const target = state.sessions.find((s) => s.id === sessionId);
         set((s) => ({
           sessions: s.sessions.filter((sess) => sess.id !== sessionId),
           ...(isActive
@@ -446,6 +463,7 @@ export const useChatStore = create<ChatState>()(
               }
             : {}),
         }));
+        if (target) void deleteChatSession(target.agentKey, target.id);
       },
 
       setSelectedModel: (modelId: string) => {
@@ -792,13 +810,17 @@ export const useChatStore = create<ChatState>()(
             ...setFlagFor(s, "activeToolByAgent", sendingAgentKey, null),
             ...setFlagFor(s, "autoContinueByAgent", sendingAgentKey, null),
           }));
+          // Snapshot the just-completed turn into a session and push to S3.
+          // Uses the sending agent's key, not currentAgentId, so the save
+          // targets the right agent even if the user navigated away.
+          _saveCurrentSessionAndSync(get(), set, sendingAgentKey);
         }
       },
 
       clearMessages: () => {
         const state = get();
         const key = agentKey(state.currentAgentId);
-        _saveCurrentSession(state, set);
+        _saveCurrentSessionAndSync(state, set);
         set((s) => ({
           ...setMessagesFor(s, key, () => []),
           ...setFlagFor(s, "sessionIdByAgent", key, undefined),
@@ -882,7 +904,8 @@ export const useChatStore = create<ChatState>()(
  * Persisted sessions/currentAgentId/lastActiveSessionByAgent reference agent
  * IDs scoped to a single workspace — after switching workspaces those IDs are
  * stale and would render as broken links. Clear both the in-memory store and
- * the persisted localStorage copy.
+ * the persisted localStorage copy. When the user returns to the original
+ * workspace the store will hydrate from the cloud via hydrateSessionsFromCloud.
  *
  * Intentionally does NOT touch `agent-studio-ui` (workspace-agnostic) or
  * `agent-studio-workspace-id` (identifies the workspace itself).
@@ -893,12 +916,110 @@ export function resetChatForWorkspaceSwitch(): void {
     try { c.abort(); } catch { /* ignore */ }
   }
   _abortControllersByAgent.clear();
+  resetCloudHydrationCache();
   useChatStore.setState(_chatInitialState);
   try {
     useChatStore.persist.clearStorage();
   } catch {
     // clearStorage can throw if storage is unavailable — safe to ignore.
   }
+}
+
+// ── Cloud sync (S3-backed, per-user within workspace) ───────────────────
+//
+// Sessions live in S3 at chat/{ws}/{user}/{agentKey}/sessions/{id}.json.
+// The Lambda derives {user} from the JWT so the client cannot address
+// another user's folder even if the localStorage copy is tampered with.
+//
+// The design is intentionally simple: localStorage stays as a warm cache
+// (offline resilience + zero-latency first paint); the cloud is authority.
+// On agent switch we list + pull; after each turn we PUT the active
+// session (debounced per-session to coalesce streaming updates).
+
+const _cloudSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+// Guard against re-entrant hydrates on rapid agent switches.
+const _hydratedAgentKeys = new Set<string>();
+
+function _queueCloudSave(session: ChatSession): void {
+  const existing = _cloudSaveTimers.get(session.id);
+  if (existing) clearTimeout(existing);
+  const t = setTimeout(() => {
+    _cloudSaveTimers.delete(session.id);
+    // Fire-and-forget. The helper swallows errors; localStorage still has
+    // the latest state so nothing is lost if the PUT fails.
+    void putChatSession(session.agentKey, session.id, session);
+  }, 1500);
+  _cloudSaveTimers.set(session.id, t);
+}
+
+function _saveCurrentSessionAndSync(
+  state: ChatState,
+  set: (partial: Partial<ChatState> | ((s: ChatState) => Partial<ChatState>)) => void,
+  explicitKey?: string,
+): void {
+  _saveCurrentSession(state, set, explicitKey);
+  const after = useChatStore.getState();
+  const key = explicitKey ?? agentKey(after.currentAgentId);
+  const activeId = after.activeSessionByAgent[key];
+  if (!activeId) return;
+  const sess = after.sessions.find((s) => s.id === activeId);
+  if (sess) _queueCloudSave(sess);
+}
+
+/**
+ * Pull the session list for an agent from the cloud and merge it into the
+ * in-memory store. Cloud is the source of truth — server records overwrite
+ * matching local ids by session.updatedAt.
+ *
+ * Called on first switch to an agent in this browser session. Subsequent
+ * switches read from in-memory state to avoid flicker. Failures are silent
+ * and leave local state intact so the UI degrades to "localStorage only".
+ */
+export async function hydrateSessionsFromCloud(agentIdOrKey: string | null): Promise<void> {
+  const key = agentKey(agentIdOrKey);
+  if (_hydratedAgentKeys.has(key)) return;
+  _hydratedAgentKeys.add(key);
+
+  let summaries;
+  try {
+    summaries = await listChatSessions(key);
+  } catch {
+    _hydratedAgentKeys.delete(key);
+    return;
+  }
+
+  if (!summaries || summaries.length === 0) return;
+
+  // Pull full session bodies sequentially to avoid thundering a cold Lambda.
+  // 30-session cap means this is at most a few seconds in the worst case.
+  const fetched: ChatSession[] = [];
+  for (const summary of summaries) {
+    const body = await getChatSession<ChatSession>(key, summary.id);
+    if (body && Array.isArray(body.messages)) fetched.push(body);
+  }
+  if (fetched.length === 0) return;
+
+  useChatStore.setState((s) => {
+    const byId = new Map<string, ChatSession>();
+    for (const sess of s.sessions) byId.set(sess.id, sess);
+    for (const sess of fetched) {
+      const existing = byId.get(sess.id);
+      if (!existing || (sess.updatedAt || 0) >= (existing.updatedAt || 0)) {
+        byId.set(sess.id, sess);
+      }
+    }
+    return { sessions: Array.from(byId.values()) };
+  });
+}
+
+/**
+ * Drop in-memory hydration gate. Called after a workspace switch so the next
+ * agent visit re-pulls from the (new workspace's) cloud.
+ */
+export function resetCloudHydrationCache(): void {
+  _hydratedAgentKeys.clear();
+  for (const t of _cloudSaveTimers.values()) clearTimeout(t);
+  _cloudSaveTimers.clear();
 }
 
 /**
@@ -910,8 +1031,9 @@ export function resetChatForWorkspaceSwitch(): void {
 function _saveCurrentSession(
   state: ChatState,
   set: (partial: Partial<ChatState> | ((s: ChatState) => Partial<ChatState>)) => void,
+  explicitKey?: string,
 ) {
-  const key = agentKey(state.currentAgentId);
+  const key = explicitKey ?? agentKey(state.currentAgentId);
   const buffer = state.messagesByAgent[key] || [];
   const msgs = buffer.filter(
     (m) => m.content || m.toolCalls?.length || m.s3Downloads?.length,
