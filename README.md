@@ -25,6 +25,7 @@ graph LR
     subgraph Agents
         A1[Agent A] <-->|A2A| A2[Agent B]
         A3[Agent C]
+        A4[Agent D]
     end
 
     Web -->|对话| Agents
@@ -116,6 +117,7 @@ graph LR
     subgraph Agents
         A1[Agent A] <-->|A2A| A2[Agent B]
         A3[Agent C]
+        A4[Agent D]
     end
 
     Web -->|chat| Agents
