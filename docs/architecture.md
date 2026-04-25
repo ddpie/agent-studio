@@ -98,7 +98,7 @@ graph LR
 ## 组件
 
 ### Meta-Agent（Kiro-backed）
-**推理后端是 Kiro CLI**，不是 Strands loop。AgentCore 容器启动后，`main.py` 跑 `kiro-cli-chat acp --agent meta-agent` 子进程，用 ACP 协议驱动对话。33 个 `@tool` 函数（agent / skill / MCP / schedule / secret / preview / link 等）通过 **stdio MCP subprocess** 暴露给 Kiro，进程内直接调用，不经网络。详细胶水层见 `meta-agent/kiro_adapter/`。
+推理后端是 Kiro CLI。AgentCore 容器启动后，`main.py` 跑 `kiro-cli-chat acp --agent meta-agent` 子进程，用 ACP 协议驱动对话。33 个 `@tool` 函数（agent / skill / MCP / schedule / secret / preview / link 等）通过 **stdio MCP subprocess** 暴露给 Kiro，进程内直接调用，不经网络。详细胶水层见 `meta-agent/kiro_adapter/`。
 
 Per-invocation 流水线：
 
@@ -133,7 +133,7 @@ Entrypoint 之外还暴露两个短路 action：
 | `DELETE /api/workspaces/{wsId}/kiro-key` | admin | 删 key，bust usage cache |
 | `GET /api/workspaces/{wsId}/kiro-key/usage` | viewer+ | 调 Meta-Agent `action=get_usage`，返回 credits / limit / reset date / tier / overage rate，60s in-memory 缓存 |
 
-CRUD Lambda 的 IAM role 仅授予 `bedrock-agentcore:InvokeAgentRuntime` 在 Meta-Agent runtime ARN 上（不是 `runtime/*` 通配）。
+CRUD Lambda 在 `infra/lib/constructs/api.ts` 里对 `bedrock-agentcore:InvokeAgentRuntime` 的 Resource 用字面 Meta-Agent runtime ARN（无通配），Action 仅此一条。
 
 ### Sub-Agents
 每个用户创建的 agent 对应一个 AgentCore Runtime。Python 3.10 Strands Agent，包含：
@@ -183,7 +183,7 @@ runtime log groups
 - 所有代码编辑统一用 Monaco
 - Amplify Auth（Cognito）登录
 
-Agent 详情页采用 sticky 侧栏 + IntersectionObserver lazy-mount（Runs / Evaluations / Costs 不会在页面加载时全部打后端）。顶部 5 项：Runs（首位）、Schedules、Evaluations、Costs、Integration；底部 Advanced 折叠组：Deployments、Endpoints、Secrets、Logs。单个运行可通过 `/agents/:id/runs/:sessionId` 直接分享；Run 列表按 session id 前缀 `sched-`/`-manual-`/uuid 分类显示触发来源徽章。当前 section 按 agentId 持久化到 `sessionStorage`。
+Agent 详情页采用 sticky 侧栏 + IntersectionObserver lazy-mount（Runs / Evaluations / Costs 不会在页面加载时全部打后端）。顶部 5 项：Runs（首位）、Schedules、Evaluations、Costs、Integration；底部 Advanced 折叠组：Deployments、Endpoints、Secrets、Logs。单个运行可通过 `/agents/:id/runs/:sessionId` 直接分享；Run 列表按 session id 前缀 `sched-`/`-manual-`/uuid 分类显示触发来源徽章。当前 section 按 agentId 持久化到 `sessionStorage`；Advanced 折叠组的展开/收起也同样持久化。
 
 ## 基础设施（AWS CDK, TypeScript）
 
@@ -297,12 +297,12 @@ graph LR
 ## Components
 
 ### Meta-Agent (Kiro-backed)
-**The reasoning backend is the Kiro CLI**, not a Strands loop. When the
-AgentCore container boots, `main.py` spawns `kiro-cli-chat acp --agent
-meta-agent` and drives it over ACP. The Meta-Agent's 33 `@tool`
-functions (agent / skill / MCP / schedule / secret / preview / link, …)
-are exposed to Kiro via a **stdio MCP subprocess** — in-process calls,
-no network hop. The glue layer lives in `meta-agent/kiro_adapter/`.
+The reasoning backend is the Kiro CLI. When the AgentCore container
+boots, `main.py` spawns `kiro-cli-chat acp --agent meta-agent` and
+drives it over ACP. The Meta-Agent's 33 `@tool` functions (agent /
+skill / MCP / schedule / secret / preview / link, …) are exposed to
+Kiro via a **stdio MCP subprocess** — in-process calls, no network
+hop. The glue layer lives in `meta-agent/kiro_adapter/`.
 
 Per-invocation pipeline:
 
@@ -349,9 +349,10 @@ One Kiro API key per workspace, stored at
 | `DELETE /api/workspaces/{wsId}/kiro-key` | admin | Removes key; busts usage cache. |
 | `GET /api/workspaces/{wsId}/kiro-key/usage` | viewer+ | Invokes the Meta-Agent with `action=get_usage`; returns credits / limit / reset date / tier / overage rate. 60 s in-memory cache keyed per workspace. |
 
-The CRUD Lambda's IAM role has `bedrock-agentcore:InvokeAgentRuntime`
-narrowed to the Meta-Agent runtime ARN specifically — not a `runtime/*`
-wildcard.
+In `infra/lib/constructs/api.ts`, the CRUD Lambda's statement for
+`bedrock-agentcore:InvokeAgentRuntime` uses the literal Meta-Agent
+runtime ARN as its Resource (no wildcards), and that is the only
+Action granted on that statement.
 
 ### Sub-Agents
 One AgentCore Runtime per user-created agent. Python 3.10 Strands
