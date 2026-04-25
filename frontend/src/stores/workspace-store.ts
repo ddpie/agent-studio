@@ -93,13 +93,14 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     const target = get().workspaces.find((w) => w.workspaceId === wsId);
     if (!target) return;
     setWorkspaceId(wsId);
-    // Hard reload so per-workspace state (agent list, sessions, stores) resets
-    // cleanly. Preserve the current route but demote any workspace-scoped
-    // detail page (e.g. /agents/edit/<id>) to its list-view ancestor so we
-    // don't land on a 404 for a resource that doesn't exist in the target ws.
+    // Demote workspace-scoped detail routes (e.g. /agents/edit/<id>) to their
+    // list-view ancestor so we don't land on a 404 in the target ws. Set the
+    // hash first, then force a full reload — assigning the same URL is a
+    // no-op, so we can't rely on location.assign() alone.
     const nextHash = demoteHashForWorkspaceSwitch(window.location.hash);
-    window.location.assign(
-      window.location.pathname + window.location.search + nextHash,
-    );
+    if (nextHash !== window.location.hash) {
+      window.location.hash = nextHash;
+    }
+    window.location.reload();
   },
 }));
