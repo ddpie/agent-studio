@@ -577,22 +577,49 @@ export async function getMetaAgentStatus(): Promise<MetaAgentStatus | null> {
   }
 }
 
+export type KiroRegion = "us-east-1" | "eu-central-1";
+
 export interface KiroKeyInfo {
   configured: boolean;
   lastUpdated: string | null;
   updatedBy: string | null;
+  region: KiroRegion;
+}
+
+// Response from GET /kiro-key/usage. Shape is the happy path; on error
+// the backend returns `{configured: true, region, error: "..."}` (same
+// HTTP 200) so the UI can render a soft warning. Everything after
+// `configured` is optional to cover both the "not configured" and
+// "failed" paths.
+export interface KiroUsageInfo {
+  configured: boolean;
+  region?: KiroRegion;
+  tier?: string;
+  currentUsage?: number;
+  usageLimit?: number;
+  resetsOn?: string;
+  overagesEnabled?: boolean;
+  overageRate?: number;
+  overageUsed?: number;
+  currency?: string;
+  fetchedAt?: string;
+  error?: string;
 }
 
 export async function getKiroKey(): Promise<KiroKeyInfo> {
   return apiGet<KiroKeyInfo>(`/kiro-key`);
 }
 
-export async function putKiroKey(apiKey: string): Promise<KiroKeyInfo> {
-  return apiPut<KiroKeyInfo>(`/kiro-key`, { apiKey });
+export async function putKiroKey(apiKey: string, region: KiroRegion): Promise<KiroKeyInfo> {
+  return apiPut<KiroKeyInfo>(`/kiro-key`, { apiKey, region });
 }
 
 export async function deleteKiroKey(): Promise<KiroKeyInfo> {
   return apiDelete<KiroKeyInfo>(`/kiro-key`);
+}
+
+export async function getKiroUsage(): Promise<KiroUsageInfo> {
+  return apiGet<KiroUsageInfo>(`/kiro-key/usage`);
 }
 
 export async function fetchAgentFile(agentId: string, filePath: string): Promise<string> {

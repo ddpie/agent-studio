@@ -12,14 +12,24 @@ type TabId = "general" | "account" | "workspace";
 
 export default function SettingsPage() {
   const { t } = useTranslation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showClearConfirm, setShowClearConfirm] = useState(false);
-  // Deep-link support: ?tab=workspace takes you straight to the workspace
-  // tab (used by the Kiro-key banner "Open Workspace Settings" CTA).
-  const initialTab = (searchParams.get("tab") as TabId | null) || "general";
-  const [tab, setTab] = useState<TabId>(
-    ["general", "account", "workspace"].includes(initialTab) ? initialTab : "general"
-  );
+  // URL is the source of truth for the active tab. ?tab=workspace deep-
+  // links to the workspace tab (Kiro-key banner CTA), and clicking a
+  // tab header writes back with `replace:true` so we don't flood the
+  // history stack with one entry per click.
+  const rawTab = searchParams.get("tab") as TabId | null;
+  const tab: TabId = rawTab && ["general", "account", "workspace"].includes(rawTab)
+    ? rawTab
+    : "general";
+  const setTab = (id: TabId) => {
+    const next = new URLSearchParams(searchParams);
+    // Keep the default (general) out of the URL so /settings stays
+    // canonical — only non-default tabs surface in the query string.
+    if (id === "general") next.delete("tab");
+    else next.set("tab", id);
+    setSearchParams(next, { replace: true });
+  };
   const { sidebarWidth, inputHeight, theme, language, showInlineToolCalls, setSidebarWidth, setInputHeight, setTheme, setLanguage, setShowInlineToolCalls } = useUISettings();
 
   const clearLocalStorage = () => {
