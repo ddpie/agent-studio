@@ -35,6 +35,11 @@
     "remove": "Remove",
     "offline": "You're offline. Reconnecting...",
     "backOnline": "Back online",
+    "draftRestored": "Restored unsaved edits from {{when}}",
+    "draftJustNow": "just now",
+    "draftMinutesAgo": "{{count}}m ago",
+    "draftHoursAgo": "{{count}}h ago",
+    "draftDaysAgo": "{{count}}d ago",
     "errorBoundary": {
       "rootTitle": "Something went wrong",
       "rootMessage": "Agent Studio ran into an unexpected error. Please reload the page.",

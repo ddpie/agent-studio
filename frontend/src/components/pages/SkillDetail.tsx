@@ -17,6 +17,7 @@ import ConfirmDialog from "../ui/ConfirmDialog";
 import PublishToggle from "../shared/PublishToggle";
 import ApprovalPill from "../shared/ApprovalPill";
 import { toast } from "../../lib/toast";
+import { formatDraftAge } from "../../lib/draft-autosave";
 import { invokeMetaAgent } from "../../lib/agentcore-client";
 import { preloadPyodide } from "../../lib/pyodide-checker";
 import type { ValidationResult } from "../../lib/types/validation";
@@ -48,9 +49,18 @@ export default function SkillDetail() {
   const [activeDialog, setActiveDialog] = useState<DialogState | null>(null);
   const { size: sidebarWidth, dragHandleProps: sidebarDragProps } = useResizable(224, { min: 120, max: 500, direction: "horizontal" });
 
+  // Scope the autosave key to the caller context (library skill vs agent-
+  // attached skill copy) so drafts don't cross-pollinate between views.
+  const draftKey = skillId
+    ? (agentId
+        ? `skill-draft:agent:${agentId}:${agentSkillId || skillId}`
+        : `skill-draft:lib:${skillId}`)
+    : undefined;
   const editor = useFileEditor({
     storage,
     onFileSwitch: (path) => setSearchParams(path === "SKILL.md" ? {} : { file: path }),
+    draftKey,
+    onDraftRestored: (ts) => toast.info(t("common.draftRestored", { when: formatDraftAge(ts, t) })),
   });
 
   const currentPath = activeFile || "SKILL.md";

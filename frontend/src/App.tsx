@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Authenticator } from "@aws-amplify/ui-react";
 import "@aws-amplify/ui-react/styles.css";
 import { RouterProvider } from "react-router";
 import { createRouter } from "./router";
-import { ensureWorkspaceId } from "./lib/api-client";
+import { ensureWorkspaceId, enforceUserIdentity, clearUserScopedLocalData } from "./lib/api-client";
 import { useWorkspaceStore } from "./stores/workspace-store";
 import { useTranslation } from "react-i18next";
 import Toaster from "./components/common/Toaster";
@@ -66,12 +66,26 @@ function AuthenticatedApp({ signOut, user }: { signOut?: () => void; user?: { si
   const { t } = useTranslation();
 
   useEffect(() => {
-    ensureWorkspaceId()
+    // Enforce user identity BEFORE ensureWorkspaceId so that a prior user's
+    // WS_KEY / drafts don't leak into the new session (shared-device case).
+    enforceUserIdentity()
+      .then(() => ensureWorkspaceId())
       .then(() => useWorkspaceStore.getState().loadCurrentWorkspace())
       .finally(() => setReady(true));
   }, []);
 
-  const router = useMemo(() => createRouter(signOut, user), [signOut, user]);
+  // Wrap Amplify's signOut so we clear user-scoped local data (chat history,
+  // drafts, workspace pointer) before Cognito tokens go away. Without this,
+  // anyone who uses the same browser next would see the previous user's
+  // tool code, agent prompts, and chat transcripts in localStorage.
+  const handleSignOut = useCallback(() => {
+    // Fire-and-forget: we must not block sign-out on a localStorage quirk.
+    // The clear is synchronous under the hood once the dynamic imports
+    // resolve; tokens are wiped by Amplify's signOut regardless.
+    void clearUserScopedLocalData().finally(() => signOut?.());
+  }, [signOut]);
+
+  const router = useMemo(() => createRouter(handleSignOut, user), [handleSignOut, user]);
 
   if (!ready) {
     return (

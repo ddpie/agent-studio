@@ -2,6 +2,46 @@ import { create } from "zustand";
 import { fetchAgentMetadata, type AgentMetadata, type AgentSkillEntry } from "../lib/agent-metadata";
 import { extractToolsFromDeployment } from "../lib/tool-extractor";
 import { fetchTools, deleteAgentSkillFiles } from "../lib/api-client";
+import { createDebouncedSaver, loadDraftWithMeta, clearDraft } from "../lib/draft-autosave";
+
+/**
+ * Local draft autosave for agent edits. Survives F5 but not workspace
+ * switch (resetAgentDraftsForWorkspaceSwitch wipes all agent-draft:*
+ * keys — agent ids are workspace-scoped and would render as broken
+ * links in the new workspace).
+ *
+ * Persists the minimal diff: formData + pendingSkillFiles + a stored
+ * originalData snapshot so the dirty check stays accurate after reload.
+ */
+function draftKeyFor(agentId: string): string {
+  return `agent-draft:${agentId}`;
+}
+
+interface AgentDraft {
+  formData: Partial<AgentMetadata>;
+  pendingSkillFiles: Record<string, Record<string, string>>;
+  // Snapshot of originalData at the time the draft was captured. Needed so
+  // the reloaded store can still compute "is dirty" — without this, we'd
+  // treat every restored field as a change against a server-fresh baseline.
+  originalData: Partial<AgentMetadata>;
+  originalSkillFiles: Record<string, Record<string, string>>;
+}
+
+// Keyed by agentId so switching between agents doesn't cross-contaminate.
+const _draftSavers = new Map<string, ReturnType<typeof createDebouncedSaver<AgentDraft>>>();
+
+function _getSaver(agentId: string) {
+  let saver = _draftSavers.get(agentId);
+  if (!saver) {
+    saver = createDebouncedSaver<AgentDraft>(draftKeyFor(agentId), 750);
+    _draftSavers.set(agentId, saver);
+  }
+  return saver;
+}
+
+function _deepEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 
 interface AgentEditState {
   agentId: string | null;
@@ -13,6 +53,10 @@ interface AgentEditState {
   pendingSkillFiles: Record<string, Record<string, string>>;
   originalSkillFiles: Record<string, Record<string, string>>;
   editingSkillId: string | null;
+  // Timestamp of a draft just restored from localStorage. AgentEditForm
+  // reads this in an effect to fire a "Restored from Xm ago" toast and
+  // then resets it via clearRestoredNotice.
+  restoredDraftTs: number | null;
 
   loadAgent: (agentId: string, agentName: string) => Promise<void>;
   openNewWithData: (data: Partial<AgentMetadata>) => void;
@@ -30,6 +74,7 @@ interface AgentEditState {
   clearPendingSkillFiles: (skillId: string) => void;
   updatePendingSkillFile: (skillId: string, filePath: string, content: string) => void;
   setEditingSkillId: (skillId: string | null) => void;
+  clearRestoredNotice: () => void;
 }
 
 /**
@@ -75,6 +120,9 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   pendingSkillFiles: {},
   originalSkillFiles: {},
   editingSkillId: null,
+  restoredDraftTs: null,
+
+  clearRestoredNotice: () => set({ restoredDraftTs: null }),
 
   hasChanges: () => {
     const { formData, originalData, pendingSkillFiles, originalSkillFiles } = get();
@@ -87,7 +135,7 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   },
 
   loadAgent: async (agentId, agentName) => {
-    set({ agentId: agentId, agentName: agentName, loading: true, formData: null, pendingSkillFiles: {}, originalSkillFiles: {}, editingSkillId: null });
+    set({ agentId: agentId, agentName: agentName, loading: true, formData: null, pendingSkillFiles: {}, originalSkillFiles: {}, editingSkillId: null, restoredDraftTs: null });
 
     // API 已经整合了 DDB + S3 数据，不需要 fallback
     let metadata = await fetchAgentMetadata(agentId);
@@ -116,7 +164,36 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     // Inject missing built-in tool code from catalog
     await injectBuiltinToolCode(data);
 
-    set({ formData: data, originalData: JSON.parse(JSON.stringify(data)), loading: false });
+    // Look for a local draft. Restore the user's in-progress form + skill
+    // file edits on top of the *fresh* server baseline — not the snapshot
+    // that was captured alongside the draft. If another user (or this same
+    // user from another device) changed the server between draft capture
+    // and now, those remote edits stay in `originalData`; the dirty check
+    // and diff view compare against current server state, and a subsequent
+    // save won't silently overwrite fields the draft never touched.
+    //
+    // The draft's stored `originalData` is deliberately discarded. Keeping
+    // it would mean "save as-of-3-days-ago" semantics, which silently
+    // clobbers newer concurrent edits.
+    const meta = loadDraftWithMeta<AgentDraft>(draftKeyFor(agentId));
+    if (meta && meta.data.formData) {
+      const freshOriginal: Partial<AgentMetadata> = JSON.parse(JSON.stringify(data));
+      // Leave originalSkillFiles empty: initSkillFiles repopulates it from
+      // the server the first time the user opens each skill after restore,
+      // so the per-skill diff rebases against current server content instead
+      // of the stale snapshot from the draft.
+      set({
+        formData: meta.data.formData,
+        originalData: freshOriginal,
+        pendingSkillFiles: meta.data.pendingSkillFiles || {},
+        originalSkillFiles: {},
+        loading: false,
+        restoredDraftTs: meta.ts,
+      });
+      return;
+    }
+
+    set({ formData: data, originalData: JSON.parse(JSON.stringify(data)), loading: false, restoredDraftTs: null });
   },
 
   openNewWithData: (data: Partial<AgentMetadata>) => {
@@ -145,12 +222,19 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
   setSaving: (saving) => set({ saving }),
 
   markSaved: () => {
-    const { formData, pendingSkillFiles } = get();
+    const { agentId, formData, pendingSkillFiles } = get();
     if (formData) {
       set({
         originalData: JSON.parse(JSON.stringify(formData)),
         originalSkillFiles: JSON.parse(JSON.stringify(pendingSkillFiles)),
       });
+    }
+    // After a successful save the draft is obsolete — drop it so a reload
+    // doesn't resurrect the diff against the new server baseline.
+    if (agentId) {
+      const saver = _draftSavers.get(agentId);
+      saver?.cancel();
+      clearDraft(draftKeyFor(agentId));
     }
   },
 
@@ -292,3 +376,54 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
 
   setEditingSkillId: (skillId) => set({ editingSkillId: skillId }),
 }));
+
+// ── Draft autosave wiring ───────────────────────────────────────────────
+//
+// Subscribe to store changes and debounce-write the draft to localStorage
+// whenever the user has unsaved work. Pristine state (no diff vs originals)
+// wipes any stored draft so we don't replay a fake edit on next load.
+//
+// Lives at module scope rather than inside the create factory so there's
+// exactly one listener regardless of how many components mount.
+
+useAgentEditStore.subscribe((state, prev) => {
+  const { agentId, formData, originalData, pendingSkillFiles, originalSkillFiles, loading } = state;
+  if (!agentId || !formData || !originalData || loading) return;
+  // Skip spurious no-op updates (the loading=false tail of loadAgent, etc.)
+  if (
+    prev &&
+    prev.formData === formData &&
+    prev.pendingSkillFiles === pendingSkillFiles &&
+    prev.originalData === originalData &&
+    prev.originalSkillFiles === originalSkillFiles
+  ) {
+    return;
+  }
+  const formDirty = !_deepEqual(formData, originalData);
+  const filesDirty = !_deepEqual(pendingSkillFiles, originalSkillFiles);
+  const saver = _getSaver(agentId);
+  if (formDirty || filesDirty) {
+    saver.schedule({ formData, originalData, pendingSkillFiles, originalSkillFiles });
+  } else {
+    saver.cancel();
+    clearDraft(draftKeyFor(agentId));
+  }
+});
+
+/** Cancel every pending saver. Used on workspace switch before wiping keys. */
+export function cancelAllAgentDraftSavers(): void {
+  for (const saver of _draftSavers.values()) saver.cancel();
+  _draftSavers.clear();
+}
+
+// Flush every pending agent-draft save on tab-close / reload / backgrounding
+// so the last 750 ms of typing isn't dropped on the floor.
+if (typeof window !== "undefined") {
+  const flushAll = () => {
+    for (const saver of _draftSavers.values()) saver.flush();
+  };
+  window.addEventListener("beforeunload", flushAll);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushAll();
+  });
+}
