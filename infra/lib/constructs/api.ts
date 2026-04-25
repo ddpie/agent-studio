@@ -150,6 +150,20 @@ export class Api extends Construct {
       resources: ["*"],
     }));
 
+    // kiro_key.py: `GET /kiro-key/usage` calls the Meta-Agent runtime
+    // with action=get_usage to ask Kiro for the caller workspace's
+    // credit balance. Scoped to the Meta-Agent ARN only (not *-runtime
+    // wildcard) so this role can't fire arbitrary agent invocations.
+    if (props.metaAgentArn) {
+      this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+        actions: ["bedrock-agentcore:InvokeAgentRuntime"],
+        resources: [
+          props.metaAgentArn,
+          `${props.metaAgentArn}/runtime-endpoint/*`,
+        ],
+      }));
+    }
+
     // Sprint 1 D1-D3: runtime observability passthrough endpoints
     // (crud/runtime.py). Read-only against sub-agent runtimes; endpoint
     // mutations for blue/green UI.

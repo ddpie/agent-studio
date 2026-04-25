@@ -832,7 +832,23 @@
     "removed": "API key removed",
     "confirmDelete": "Remove the Kiro API key for this workspace? Meta-Agent will stop working until a new key is set.",
     "bannerMessage": "Kiro API key is not configured for this workspace. Meta-Agent will not respond until an admin adds one.",
-    "bannerCta": "Open Workspace Settings"
+    "bannerCta": "Open Workspace Settings",
+    "region": "Region",
+    "regionHint": "Kiro service region. Pick the region matching your Kiro subscription."
+  },
+  "kiroUsage": {
+    "title": "Kiro Credits",
+    "credits": "credits",
+    "refresh": "Refresh",
+    "resetsOn": "Resets on {{date}}",
+    "openDashboard": "Manage plan",
+    "fetchedAt": "Fetched {{time}}",
+    "overage": "Overage this period: {{amount}} {{currency}} ({{rate}}/req)",
+    "errorGeneric": "Failed to fetch Kiro usage.",
+    "errorNotConfigured": "No Kiro API key configured.",
+    "errorCliFailed": "Kiro CLI did not respond. Verify the API key is still valid.",
+    "errorParseFailed": "Could not parse Kiro's usage response. Kiro may have changed its output format.",
+    "errorRuntimeFailed": "Meta-Agent runtime is unreachable. Retry or check the runtime status."
   },
   "secrets": {
     "title": "Secrets",

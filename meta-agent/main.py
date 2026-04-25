@@ -371,6 +371,162 @@ _MODE_TO_AGENT = {
 }
 
 
+# Regex bank for parsing the human-readable `/usage` slash-command
+# output. Kiro ships a structured AWS API under the hood
+# (AmazonCodeWhispererService.GetUsageLimits) but the 36-char
+# KIRO_API_KEY isn't a bearer token for that endpoint — only the CLI
+# can auth to it, after doing its own internal exchange. So we shell
+# out to `kiro-cli-chat chat --no-interactive "/usage"` and parse the
+# TUI output. Format (verified 2026-04-25 against kiro 0.11.x):
+#
+#   Estimated Usage | resets on 2026-05-01 | KIRO POWER
+#   Credits (204.98 of 10000 covered in plan)
+#   ██████...████ 2%
+#   Overages: Enabled  billed at $0.04 per request
+#   Credits used: 0.00
+#   Est. cost: $0.00 USD
+#
+# `(?s)` not used — each pattern is line-scoped after ANSI stripping.
+_USAGE_ANSI = __import__("re").compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+_USAGE_RE_HEADER = __import__("re").compile(
+    r"resets on (\d{4}-\d{2}-\d{2})\s*\|\s*(.+?)\s*$",
+    __import__("re").MULTILINE,
+)
+_USAGE_RE_CREDITS = __import__("re").compile(
+    r"Credits\s*\(([\d.]+)\s*of\s*([\d.]+)\s*covered",
+    __import__("re").IGNORECASE,
+)
+_USAGE_RE_OVERAGE = __import__("re").compile(
+    r"Overages:\s*(Enabled|Disabled)(?:.*?\$([\d.]+)\s*per\s*request)?",
+    __import__("re").IGNORECASE,
+)
+_USAGE_RE_OVERUSED = __import__("re").compile(
+    r"Credits\s*used:\s*([\d.]+)", __import__("re").IGNORECASE,
+)
+
+
+async def _get_usage(api_key: str, region: str):
+    """Short-circuit branch for `action=get_usage`.
+
+    Spawns `kiro-cli-chat chat --no-interactive "/usage"` with the
+    caller's KIRO_API_KEY (and AWS_REGION pinned so Kiro hits the right
+    q.<region>.amazonaws.com endpoint). Strips ANSI and regex-parses
+    the TUI into one of:
+
+        {"__usage": {currentUsage, usageLimit, resetsOn, tier,
+                     overagesEnabled, overageRate, overageUsed, currency}}
+
+    or an error envelope:
+
+        {"__error": "kiro_not_configured"}                (no key)
+        {"__error": "usage_cli_failed", "detail": ...}    (CLI rc != 0)
+        {"__error": "usage_parse_failed", "raw": ...}     (regex miss)
+
+    The whole thing is one SSE frame — caller awaits `async for` and
+    gets exactly one yield.
+    """
+    import re
+
+    if not api_key:
+        yield json.dumps({"__error": "kiro_not_configured"})
+        return
+    _ensure_kiro_binary_ready()
+
+    env = os.environ.copy()
+    env["HOME"] = _KIRO_HOME
+    env["KIRO_API_KEY"] = api_key
+    env["XDG_DATA_HOME"] = "/tmp/kiro-xdg"
+    # Kiro's CLI picks the AWS region from AWS_REGION when it calls the
+    # CodeWhisperer API internally. us-east-1 default matches the
+    # AgentCore runtime region; eu-central-1 is the only other Kiro-
+    # supported region at the time of writing. Anything else we reject
+    # upstream in the Lambda so we don't need to defend here.
+    if region:
+        env["AWS_REGION"] = region
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            _KIRO_BINARY, "chat", "--no-interactive", "--trust-all-tools", "/usage",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+        )
+        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=20.0)
+    except asyncio.TimeoutError:
+        log.warning("kiro-cli /usage timed out")
+        yield json.dumps({"__error": "usage_cli_failed", "detail": "timeout"})
+        return
+    except Exception as e:  # noqa: BLE001
+        log.exception("kiro-cli /usage spawn failed")
+        yield json.dumps({"__error": "usage_cli_failed", "detail": repr(e)[:120]})
+        return
+
+    out = stdout_b.decode("utf-8", errors="replace")
+    err = stderr_b.decode("utf-8", errors="replace")
+    if proc.returncode != 0:
+        log.warning("kiro-cli /usage rc=%s stderr=%s", proc.returncode, err[:400])
+        yield json.dumps({
+            "__error": "usage_cli_failed",
+            "detail": f"rc={proc.returncode}",
+        })
+        return
+
+    # Kiro's TUI writes the `/usage` report to stderr when stdout isn't a
+    # TTY (verified against kiro 0.11.x). stdout carries structured data
+    # if and only if a machine-readable flag is set; under
+    # `--no-interactive /usage` it stays empty. Concatenate both so a
+    # future CLI version switching the stream doesn't silently break us.
+    clean = _USAGE_ANSI.sub("", out + "\n" + err)
+    m_credits = _USAGE_RE_CREDITS.search(clean)
+    if not m_credits:
+        log.warning("usage parse failed; raw=%s", clean[:400])
+        # Don't echo stdout to the browser — keep it server-side.
+        yield json.dumps({"__error": "usage_parse_failed"})
+        return
+
+    current = float(m_credits.group(1))
+    limit = float(m_credits.group(2))
+
+    reset_on = ""
+    tier = ""
+    m_hdr = _USAGE_RE_HEADER.search(clean)
+    if m_hdr:
+        reset_on = m_hdr.group(1)
+        tier = m_hdr.group(2).strip()
+
+    overages_enabled = False
+    overage_rate = 0.0
+    m_ov = _USAGE_RE_OVERAGE.search(clean)
+    if m_ov:
+        overages_enabled = m_ov.group(1).lower() == "enabled"
+        if m_ov.group(2):
+            try:
+                overage_rate = float(m_ov.group(2))
+            except ValueError:
+                overage_rate = 0.0
+
+    overage_used = 0.0
+    m_ou = _USAGE_RE_OVERUSED.search(clean)
+    if m_ou:
+        try:
+            overage_used = float(m_ou.group(1))
+        except ValueError:
+            overage_used = 0.0
+
+    yield json.dumps({
+        "__usage": {
+            "currentUsage": current,
+            "usageLimit": limit,
+            "resetsOn": reset_on,
+            "tier": tier,
+            "overagesEnabled": overages_enabled,
+            "overageRate": overage_rate,
+            "overageUsed": overage_used,
+            "currency": "USD",
+        }
+    }, ensure_ascii=False)
+
+
 async def _list_models(api_key: str):
     """Short-circuit entrypoint branch for `action=list_models`.
 
@@ -501,6 +657,15 @@ async def invoke(payload, context):
 
     if action == "list_models":
         async for frame in _list_models(kiro_api_key):
+            yield frame
+        return
+    if action == "get_usage":
+        # region passed through from the caller (Lambda) so we hit the
+        # right q.<region>.amazonaws.com when Kiro's CLI makes its
+        # internal GetUsageLimits call. Values are whitelisted in the
+        # Lambda; we trust the payload here.
+        kiro_region = (payload.get("kiro_region") or "us-east-1").strip()
+        async for frame in _get_usage(kiro_api_key, kiro_region):
             yield frame
         return
     log.warning(

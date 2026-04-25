@@ -16,6 +16,7 @@ import { useWorkspaceStore, type WorkspaceRole } from "../../stores/workspace-st
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { formatDateTime } from "../../lib/date-format";
 import KiroKeySection from "./KiroKeySection";
+import KiroUsageSection from "./KiroUsageSection";
 
 const ROLE_LEVEL: Record<WorkspaceRole, number> = {
   viewer: 1,
@@ -210,8 +211,11 @@ export default function WorkspaceSettingsTab() {
 
   return (
     <div className="space-y-4">
-      {/* Per-workspace Kiro API key */}
+      {/* Per-workspace Kiro API key — admin-only edit, viewer sees status */}
       <KiroKeySection canEdit={canEdit} />
+      {/* Kiro credit usage — all members can see so they can nudge the
+          admin when credits run low. Hides itself when key is unset. */}
+      <KiroUsageSection />
       {/* Metadata / editable fields */}
       <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
         <div className="flex items-center justify-between mb-3">

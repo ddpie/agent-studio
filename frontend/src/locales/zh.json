@@ -832,7 +832,23 @@
     "removed": "密钥已移除",
     "confirmDelete": "确定要移除该工作区的 Kiro API 密钥吗？在重新配置前 Meta-Agent 将停止工作。",
     "bannerMessage": "该工作区尚未配置 Kiro API 密钥，管理员配置后 Meta-Agent 才会响应。",
-    "bannerCta": "打开工作区设置"
+    "bannerCta": "打开工作区设置",
+    "region": "区域",
+    "regionHint": "Kiro 服务所在区域，请选择与你的 Kiro 订阅一致的区域。"
+  },
+  "kiroUsage": {
+    "title": "Kiro 配额",
+    "credits": "credits",
+    "refresh": "刷新",
+    "resetsOn": "{{date}} 重置",
+    "openDashboard": "管理套餐",
+    "fetchedAt": "查询于 {{time}}",
+    "overage": "本周期超额：{{amount}} {{currency}}（{{rate}}/次）",
+    "errorGeneric": "获取 Kiro 用量失败。",
+    "errorNotConfigured": "未配置 Kiro API 密钥。",
+    "errorCliFailed": "Kiro CLI 无响应，请确认 API 密钥仍然有效。",
+    "errorParseFailed": "无法解析 Kiro 返回的用量数据，Kiro 可能更新了输出格式。",
+    "errorRuntimeFailed": "Meta-Agent 运行时不可达，请重试或检查运行时状态。"
   },
   "secrets": {
     "title": "密钥",
