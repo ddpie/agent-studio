@@ -21,15 +21,17 @@ graph LR
     User((用户)) --> Web[Web Console]
     Cron[定时器]
     Web -->|对话| Meta[Meta-Agent<br/>创建 / 管理]
-    Web -->|对话| A1[Agent A]
-    Web -->|对话| A2[Agent B]
-    Meta -.部署.-> A1
-    Meta -.部署.-> A2
-    Cron -.触发.-> A1
-    A1 -->|A2A 互调| A2
-    A1 --> LLM[Bedrock LLMs]
-    A1 --> Ext[Skills · Tools · MCP]
-    A1 -.observability.-> Obs[Logs · Traces<br/>Evaluations · Costs]
+
+    subgraph Agents["Agents（可 A2A 互调）"]
+        A1[Agent A] <-->|A2A| A2[Agent B]
+    end
+
+    Web -->|对话| Agents
+    Meta -.部署.-> Agents
+    Cron -.触发.-> Agents
+    Agents --> LLM[Bedrock LLMs]
+    Agents --> Ext[Skills · Tools · MCP]
+    Agents -.observability.-> Obs[Logs · Traces<br/>Evaluations · Costs]
 ```
 
 完整系统图（CloudFront / Lambda / EventBridge / Evaluator 等）与关键设计说明见 [docs/architecture.md](docs/architecture.md)。
@@ -109,15 +111,17 @@ graph LR
     User((User)) --> Web[Web Console]
     Cron[Scheduled trigger]
     Web -->|chat| Meta[Meta-Agent<br/>build / manage]
-    Web -->|chat| A1[Agent A]
-    Web -->|chat| A2[Agent B]
-    Meta -.deploy.-> A1
-    Meta -.deploy.-> A2
-    Cron -.fire.-> A1
-    A1 -->|A2A| A2
-    A1 --> LLM[Bedrock LLMs]
-    A1 --> Ext[Skills · Tools · MCP]
-    A1 -.observability.-> Obs[Logs · Traces<br/>Evaluations · Costs]
+
+    subgraph Agents["Agents (A2A-callable)"]
+        A1[Agent A] <-->|A2A| A2[Agent B]
+    end
+
+    Web -->|chat| Agents
+    Meta -.deploy.-> Agents
+    Cron -.fire.-> Agents
+    Agents --> LLM[Bedrock LLMs]
+    Agents --> Ext[Skills · Tools · MCP]
+    Agents -.observability.-> Obs[Logs · Traces<br/>Evaluations · Costs]
 ```
 
 Full system diagram (CloudFront / Lambda / EventBridge / Evaluator, …) and key design notes live in [docs/architecture.md](docs/architecture.md).
