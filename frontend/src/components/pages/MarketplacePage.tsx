@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Store, Search, Loader2, Bot, Package, Wrench, Copy, Tag } from "lucide-react";
 import {
@@ -18,16 +18,29 @@ import { useWorkspaceStore } from "../../stores/workspace-store";
 
 type Tab = "agents" | "skills" | "tools";
 
+const TABS: readonly Tab[] = ["agents", "skills", "tools"] as const;
+const DEFAULT_TAB: Tab = "agents";
 const PAGE_SIZE = 24;
+
+function isTab(v: string | undefined): v is Tab {
+  return !!v && (TABS as readonly string[]).includes(v);
+}
 
 export default function MarketplacePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { tab: tabParam } = useParams<{ tab?: string }>();
   const { currentWorkspace } = useWorkspaceStore();
   const role = currentWorkspace?.role || "viewer";
   const canClone = role === "editor" || role === "admin" || role === "owner";
   const disabledTooltip = canClone ? undefined : t("marketplace.cloneDisabledTooltip");
-  const [tab, setTab] = useState<Tab>("agents");
+  const tab: Tab = isTab(tabParam) ? tabParam : DEFAULT_TAB;
+  const setTab = useCallback(
+    (next: Tab) => {
+      navigate(next === DEFAULT_TAB ? "/marketplace" : `/marketplace/${next}`, { replace: true });
+    },
+    [navigate],
+  );
   const [search, setSearch] = useState("");
 
   const [agents, setAgents] = useState<PublicAgentItem[]>([]);
@@ -69,6 +82,12 @@ export default function MarketplacePage() {
       setLoading(false);
     }
   }, [cursors]);
+
+  useEffect(() => {
+    if (tabParam !== undefined && !isTab(tabParam)) {
+      navigate("/marketplace", { replace: true });
+    }
+  }, [tabParam, navigate]);
 
   useEffect(() => {
     if (!loaded[tab]) void loadPage(tab, true);

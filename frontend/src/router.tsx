@@ -49,6 +49,7 @@ export function createRoutes(
         { path: "mcp", element: withBoundary(<McpPage />) },
         { path: "mcp-policy", element: withBoundary(<McpPolicyPage />) },
         { path: "marketplace", element: withBoundary(<MarketplacePage />) },
+        { path: "marketplace/:tab", element: withBoundary(<MarketplacePage />) },
         { path: "costs", element: withBoundary(<CostsPage />) },
         { path: "settings", element: withBoundary(<SettingsPage />) },
       ],
