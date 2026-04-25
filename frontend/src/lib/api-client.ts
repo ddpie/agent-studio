@@ -45,20 +45,22 @@ export function getWorkspaceId(): string {
 export function setWorkspaceId(wsId: string): Promise<void> {
   const prev = localStorage.getItem(WS_KEY);
   localStorage.setItem(WS_KEY, wsId);
-  // Workspace changed — clear workspace-scoped persisted state (chat sessions,
-  // in-progress drafts for agents/skills/tools) so stale resource ids don't
-  // leak across workspaces. UI prefs (`agent-studio-ui`) and the workspace
-  // pointer itself (`agent-studio-workspace-id`) are intentionally preserved.
+  // Workspace changed — reset in-memory chat state (sessions re-hydrate from
+  // S3 per the new workspace) and cancel any pending agent-draft debounce
+  // timers. Drafts in localStorage are NOT wiped: draft keys embed resource
+  // ids (agentId/skillId/toolId) that the new workspace can't reach anyway,
+  // and the user's unsaved work should survive a round-trip A → B → A.
+  // Cross-user contamination is handled by enforceUserIdentity on login.
   //
   // Dynamic imports avoid a static cycle (chat-store -> agentcore-client
-  // -> api-client). Returns a promise so callers that are about to do a hard
-  // reload (switchWorkspace) can await the clears — without the await the
-  // reload races ahead and old localStorage survives into the new workspace.
+  // -> api-client). Returns a promise so callers that are about to do a
+  // hard reload (switchWorkspace) can await the reset — without the await
+  // the reload races ahead and chat-store's localStorage survives into
+  // the new workspace.
   if (prev && prev !== wsId) {
     return Promise.all([
       import("../stores/chat-store").then((m) => m.resetChatForWorkspaceSwitch()),
       import("../stores/agent-edit-store").then((m) => m.cancelAllAgentDraftSavers()),
-      import("./draft-autosave").then((m) => m.clearDraftsByPrefix(DRAFT_PREFIXES)),
     ])
       .then(() => { /* all clears done */ })
       .catch(() => { /* best-effort; localStorage may survive a failure */ });

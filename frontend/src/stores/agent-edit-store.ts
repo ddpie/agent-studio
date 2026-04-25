@@ -5,13 +5,15 @@ import { fetchTools, deleteAgentSkillFiles, fetchAgentSkillFilesBulk } from "../
 import { createDebouncedSaver, loadDraftWithMeta, clearDraft } from "../lib/draft-autosave";
 
 /**
- * Local draft autosave for agent edits. Survives F5 but not workspace
- * switch (resetAgentDraftsForWorkspaceSwitch wipes all agent-draft:*
- * keys — agent ids are workspace-scoped and would render as broken
- * links in the new workspace).
+ * Local draft autosave for agent edits. Survives F5 and workspace
+ * switches (drafts are keyed by agentId, which is workspace-scoped on
+ * the server; the new workspace simply can't address the old id, so
+ * there's nothing to leak and everything to preserve if the user
+ * round-trips back).
  *
- * Persists the minimal diff: formData + pendingSkillFiles + a stored
- * originalData snapshot so the dirty check stays accurate after reload.
+ * Does NOT survive sign-out or a different user logging in on the
+ * same browser — api-client.clearUserScopedLocalData wipes everything
+ * then.
  */
 function draftKeyFor(agentId: string): string {
   return `agent-draft:${agentId}`;
