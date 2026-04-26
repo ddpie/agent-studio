@@ -7,6 +7,11 @@ PROJECT_ROOT="$SCRIPT_DIR/.."
 
 FAILED=0
 
+echo "=== MCP IAM policy sync check ==="
+cd "$PROJECT_ROOT"
+python3 scripts/sync-mcp-iam-policies.py --check || FAILED=1
+
+echo ""
 echo "=== Backend: meta-agent tests ==="
 cd "$PROJECT_ROOT/meta-agent"
 PYTHONPATH=. python3 -m pytest tests/ -v --tb=short \

@@ -114,7 +114,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   },
 
   deleteRecord: async (workspaceId, agentId, recordId, strategy) => {
-    await deleteMyMemory(workspaceId, agentId, recordId);
+    await deleteMyMemory(workspaceId, agentId, recordId, strategy);
     set((s) => {
       const b = s.byAgent[agentId];
       if (!b) return s;
