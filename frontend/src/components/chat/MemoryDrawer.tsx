@@ -70,7 +70,9 @@ export default function MemoryDrawer({ open, onClose, workspaceId, agentId }: Me
                 className="flex items-start gap-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-900/40 border border-gray-100 dark:border-gray-800"
               >
                 <p className="flex-1 text-[13px] text-gray-700 dark:text-gray-300 min-w-0">
-                  {String(record.content)}
+                  {typeof record.content === "string"
+                    ? record.content
+                    : (record.content as { text?: string })?.text ?? JSON.stringify(record.content)}
                 </p>
                 <button
                   type="button"

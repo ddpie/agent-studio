@@ -49,9 +49,13 @@ runtime_targets:
             - cloudwatch:DescribeAlarms
             - cloudwatch:GetMetricData
             - cloudwatch:GetMetricStatistics
+            - cloudwatch:ListMetrics
             - logs:DescribeLogGroups
             - logs:StartQuery
+            - logs:StopQuery
             - logs:GetQueryResults
+            - logs:FilterLogEvents
+            - logs:GetLogEvents
           Resource: "*"
 
   - name: cloudwatch-applicationsignals
@@ -126,8 +130,14 @@ runtime_targets:
           Action:
             - iam:GetUser
             - iam:GetRole
+            - iam:GetPolicy
+            - iam:GetPolicyVersion
+            - iam:GetRolePolicy
             - iam:ListRoles
             - iam:ListPolicies
+            - iam:ListRolePolicies
+            - iam:ListAttachedRolePolicies
+            - iam:SimulatePrincipalPolicy
           Resource: "*"
 
   - name: well-architected-security

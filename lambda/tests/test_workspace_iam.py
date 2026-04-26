@@ -8,6 +8,14 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def mock_platform_admin():
+    """All workspace_iam endpoints require platform admin. Patch globally for these tests."""
+    with patch("crud.workspace_iam.check_platform_admin") as mock:
+        mock.return_value = ("test-user-id", True, None)
+        yield mock
+
+
+@pytest.fixture(autouse=True)
 def inject_env(monkeypatch):
     monkeypatch.setenv("AGENT_STUDIO_ACCOUNT_ID", "123456789012")
     monkeypatch.setenv("WORKSPACE_BOUNDARY_ARN",

@@ -126,6 +126,7 @@ def update_agent(
     s3 = boto3.client("s3", region_name=REGION)
 
     # If staging_key provided, read params from S3
+    staged = {}
     if staging_key:
         try:
             obj = s3.get_object(Bucket=S3_BUCKET, Key=staging_key)
