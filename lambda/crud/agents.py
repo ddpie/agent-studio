@@ -9,7 +9,7 @@ from aws_lambda_powertools.event_handler.api_gateway import Router
 from boto3.dynamodb.conditions import Key
 
 from shared.auth import verify_jwt, get_membership, check_permission
-from shared.config import AGENTS_TABLE, REGION, ASSETS_BUCKET
+from shared.config import AGENTS_TABLE, WORKSPACES_TABLE, REGION, ASSETS_BUCKET
 from shared.middleware import auth_check
 from shared.response import success, paginated, forbidden, not_found, bad_request, version_conflict, internal_error
 from shared.validators import validate_id, validate_path, parse_pagination
@@ -18,6 +18,7 @@ router = Router()
 logger = Logger(child=True)
 
 _table = None
+_ws_table = None
 _s3 = None
 
 
@@ -28,11 +29,27 @@ def _get_table():
     return _table
 
 
+def _get_ws_table():
+    global _ws_table
+    if _ws_table is None:
+        _ws_table = boto3.resource("dynamodb", region_name=REGION).Table(WORKSPACES_TABLE)
+    return _ws_table
+
+
 def _get_s3():
     global _s3
     if _s3 is None:
         _s3 = boto3.client("s3", region_name=REGION)
     return _s3
+
+
+def _validate_memory_enable(*, memory_enabled: bool, workspace_memory_id: str | None) -> None:
+    """Raise ValueError if memory is being enabled on a workspace without a Memory resource."""
+    if memory_enabled and not workspace_memory_id:
+        raise ValueError(
+            "Cannot enable memory: workspace memory resource missing. "
+            "Workspace owner must run repair."
+        )
 
 
 ALLOWED_AGENT_FIELDS = {
@@ -171,6 +188,20 @@ def create_agent(wsId: str):
     if len(name) > 200:
         return bad_request("name must be 200 characters or less")
 
+    # Validate memory.enabled against workspace memory resource
+    memory_cfg = body.get("memory")
+    if isinstance(memory_cfg, dict) and memory_cfg.get("enabled"):
+        ws_item = _get_ws_table().get_item(
+            Key={"workspaceId": ws_id, "sk": "META"}, ConsistentRead=False,
+        ).get("Item") or {}
+        try:
+            _validate_memory_enable(
+                memory_enabled=True,
+                workspace_memory_id=ws_item.get("memory_id"),
+            )
+        except ValueError as e:
+            return bad_request(str(e))
+
     agent_id = str(uuid.uuid4())
     now = datetime.utcnow().isoformat() + "Z"
     item = _build_agent_item(body, ws_id, agent_id, user_id, now)
@@ -199,6 +230,21 @@ def update_agent(wsId: str, agentId: str):
         return forbidden()
 
     body = router.current_event.json_body or {}
+
+    # Validate memory.enabled against workspace memory resource
+    memory_cfg = body.get("memory")
+    if isinstance(memory_cfg, dict) and memory_cfg.get("enabled"):
+        ws_item = _get_ws_table().get_item(
+            Key={"workspaceId": ws_id, "sk": "META"}, ConsistentRead=False,
+        ).get("Item") or {}
+        try:
+            _validate_memory_enable(
+                memory_enabled=True,
+                workspace_memory_id=ws_item.get("memory_id"),
+            )
+        except ValueError as e:
+            return bad_request(str(e))
+
     now = datetime.utcnow().isoformat() + "Z"
     expected_updated_at = body.get("expected_updated_at")
 
