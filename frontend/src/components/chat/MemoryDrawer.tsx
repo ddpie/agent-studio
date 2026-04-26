@@ -53,11 +53,14 @@ export default function MemoryDrawer({ open, onClose, workspaceId, agentId }: Me
 
     return (
       <div className="mb-6">
-        <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wide">
+        <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 uppercase tracking-wide">
           {t(titleKey)}
         </h3>
+        <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-2">
+          {t(`${titleKey}Hint`)}
+        </p>
         {records.length === 0 && (
-          <p className="text-xs text-gray-400 dark:text-gray-500">{t("memory.emptyState")}</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 italic">{t("memory.emptyState")}</p>
         )}
         {records.length > 0 && (
           <div className="space-y-2">

@@ -1113,9 +1113,13 @@
     "emptyState": "Nothing learned yet in this category.",
     "section": {
       "preferences": "Preferences",
+      "preferencesHint": "Language, format, style, and other personal preferences",
       "facts": "Facts",
+      "factsHint": "Objective information like names, roles, and project details",
       "summaries": "Summaries",
-      "episodes": "Episodes"
+      "summariesHint": "Key takeaways from past conversations for continuity",
+      "episodes": "Episodes",
+      "episodesHint": "Complete interaction snippets for recalling similar past scenarios"
     },
     "delete": "Delete",
     "confirm": "Confirm",
