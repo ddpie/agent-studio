@@ -67,10 +67,11 @@ def _create_workspace_memory(workspace_id: str) -> str | None:
     Failure must never block workspace creation.
     """
     try:
+        safe_name = f"agentstudio_ws_{workspace_id[:12].replace('-', '_')}"
         resp = _get_control().create_memory(
-            name=f"agentstudio-ws-{workspace_id[:12]}",
+            name=safe_name,
             description=f"Agent Studio workspace {workspace_id}",
-            memoryStrategies=DEFAULT_MEMORY_STRATEGIES,
+            eventExpiryDuration=90,
         )
         return resp["memory"]["id"]
     except Exception as e:
