@@ -1153,7 +1153,7 @@
   },
   "iam": {
     "title": "IAM 权限",
-    "noRoleDesc": "此工作区未绑定 IAM 角色。绑定后可使用 CloudWatch、CloudTrail 等 AWS 服务工具。",
+    "noRoleDesc": "此工作区尚未绑定自定义 IAM 角色。默认情况下，Agent 仅能使用平台内置工具（搜索、图表、代码解释器等）。如果你的 Agent 需要访问 AWS 服务（如 CloudWatch 监控、CloudTrail 审计、IAM 策略分析等），请创建一个专属 IAM 角色。该角色受 Permission Boundary 保护，权限上限由平台控制。",
     "createRole": "创建 IAM 角色",
     "creating": "创建中...",
     "roleCreated": "IAM 角色已创建",
@@ -1176,7 +1176,7 @@
       "aiml": "AI/ML",
       "other": "其他"
     },
-    "mcpAuth": "MCP 工具授权",
+    "mcpAuth": "角色权限",
     "scpNote": "权限通过 SimulatePrincipalPolicy 检查。若账户使用了 Organization SCP，模拟结果可能不准确。",
     "noExtraPerms": "无需额外权限",
     "allPermsGranted": "已授予所有权限",
@@ -1184,6 +1184,7 @@
     "autoGrant": "一键授权",
     "contactAdmin": "请联系平台管理员",
     "manual": "手动",
+    "grantedActions": "已授权的操作",
     "missingActions": "缺少的操作",
     "jsonPolicy": "IAM Policy JSON",
     "cliCommand": "AWS CLI 命令",

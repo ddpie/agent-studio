@@ -1153,7 +1153,7 @@
   },
   "iam": {
     "title": "IAM Permissions",
-    "noRoleDesc": "This workspace has no custom IAM role. Create one to use AWS service tools such as CloudWatch, CloudTrail, and IAM.",
+    "noRoleDesc": "This workspace does not have a custom IAM role yet. By default, agents can only use platform tools (search, charts, code interpreter, etc.). To access AWS services like CloudWatch monitoring, CloudTrail auditing, or IAM policy analysis, create a dedicated IAM role. The role is protected by a Permission Boundary that caps its maximum privileges.",
     "createRole": "Create IAM role",
     "creating": "Creating...",
     "roleCreated": "IAM role created",
@@ -1176,7 +1176,7 @@
       "aiml": "AI/ML",
       "other": "Other"
     },
-    "mcpAuth": "MCP Tool Authorization",
+    "mcpAuth": "Role Permissions",
     "scpNote": "Permissions are checked via SimulatePrincipalPolicy. If the account uses Organization SCPs, results may not be accurate.",
     "noExtraPerms": "No extra permissions needed",
     "allPermsGranted": "All permissions granted",
@@ -1184,6 +1184,7 @@
     "autoGrant": "Auto-grant",
     "contactAdmin": "Contact platform admin",
     "manual": "Manual",
+    "grantedActions": "Granted Actions",
     "missingActions": "Missing Actions",
     "jsonPolicy": "IAM Policy JSON",
     "cliCommand": "AWS CLI Command",

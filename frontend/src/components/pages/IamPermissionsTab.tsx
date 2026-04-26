@@ -407,17 +407,21 @@ export default function IamPermissionsTab() {
                     {target.displayName}
                   </span>
 
-                  {/* Status text — clickable to expand details when denied */}
-                  {noIamNeeded || isGranted ? (
+                  {/* Status text — clickable to expand details */}
+                  {noIamNeeded ? (
                     <span className="flex-1 text-[12px] text-gray-400 dark:text-gray-500">
-                      {noIamNeeded ? t("iam.noExtraPerms") : t("iam.allPermsGranted")}
+                      {t("iam.noExtraPerms")}
                     </span>
                   ) : (
                     <button
                       onClick={() => toggleExpanded(target.name)}
-                      className="flex-1 flex items-center gap-1 text-[12px] text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
+                      className={`flex-1 flex items-center gap-1 text-[12px] hover:underline cursor-pointer ${
+                        isGranted
+                          ? "text-green-600 dark:text-green-400"
+                          : "text-amber-600 dark:text-amber-400"
+                      }`}
                     >
-                      {t("iam.missingPerms", { count: missingCount })}
+                      {isGranted ? t("iam.allPermsGranted") : t("iam.missingPerms", { count: missingCount })}
                       {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                     </button>
                   )}
@@ -435,20 +439,27 @@ export default function IamPermissionsTab() {
                   )}
                 </div>
 
-                {/* Expanded manual section */}
-                {isExpanded && !isGranted && !noIamNeeded && status && (
+                {/* Expanded detail section */}
+                {isExpanded && !noIamNeeded && target.iamPolicy && (
                   <div className="px-3 pb-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
                     <div className="pt-3 space-y-3">
-                      {/* Missing actions list */}
+                      {/* Actions list — green for granted, red for missing */}
                       <div>
-                        <p className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
-                          {t("iam.missingActions")}
+                        <p className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
+                          {isGranted ? t("iam.grantedActions") : t("iam.missingActions")}
                         </p>
                         <div className="flex flex-wrap gap-1">
-                          {status.missingActions.map((action) => (
+                          {(isGranted
+                            ? target.iamPolicy.Statement.flatMap((s) => s.Action)
+                            : status?.missingActions ?? []
+                          ).map((action) => (
                             <span
                               key={action}
-                              className="px-1.5 py-0.5 text-[10px] font-mono bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded border border-red-200 dark:border-red-800"
+                              className={`px-1.5 py-0.5 text-[10px] font-mono rounded border ${
+                                isGranted
+                                  ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800"
+                                  : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800"
+                              }`}
                             >
                               {action}
                             </span>
