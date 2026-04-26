@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Trash2, Loader2, Heart, BookOpen, MessageSquare, Clapperboard } from "lucide-react";
+import { X, Trash2, Loader2, Heart, BookOpen, MessageSquare, Clapperboard, ChevronDown, ChevronRight } from "lucide-react";
 import { useMemoryStore } from "../../stores/memory-store";
 import type { MemoryRecord, MemoryStrategy } from "../../lib/api-client";
 
@@ -107,6 +107,16 @@ export default function MemoryDrawer({ open, onClose, workspaceId, agentId }: Me
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [forgetAllConfirm, setForgetAllConfirm] = useState(false);
   const [forgetting, setForgetting] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Set<MemoryStrategy>>(new Set());
+
+  const toggleSection = (s: MemoryStrategy) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (open && agentId) fetchMemories(workspaceId, agentId);
@@ -142,44 +152,58 @@ export default function MemoryDrawer({ open, onClose, workspaceId, agentId }: Me
     const records = section.records;
     const count = records.length;
     const Icon = SECTION_ICONS[strategy];
+    const collapsed = collapsedSections.has(strategy);
 
     return (
-      <div className="mb-5">
-        <div className="flex items-center gap-1.5 mb-2">
+      <div className="mb-4">
+        <button
+          type="button"
+          onClick={() => toggleSection(strategy)}
+          className="w-full flex items-center gap-1.5 py-1.5 group"
+        >
+          {collapsed
+            ? <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+            : <ChevronDown className="w-3 h-3 text-gray-400 dark:text-gray-500" />
+          }
           <Icon className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
           <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
             {t(titleKey)}
           </h3>
           {count > 0 && (
-            <span className="ml-1 px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-full">
+            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-full">
               {count}
             </span>
           )}
-        </div>
-        {count === 0 ? (
-          <p className="text-[11px] text-gray-400 dark:text-gray-500 italic pl-5">{t("memory.emptyState")}</p>
-        ) : (
-          <div className="space-y-1.5">
-            {records.map((record) => (
-              <RecordCard
-                key={record.id}
-                record={record}
-                deleting={deletingId === record.id}
-                onDelete={() => handleDelete(record.id, strategy)}
-                t={t}
-              />
-            ))}
+        </button>
+        {!collapsed && (
+          <div className="pl-5 mt-1">
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-2">{t(`memory.section.${strategy}Hint`)}</p>
+            {count === 0 ? (
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 italic">{t("memory.emptyState")}</p>
+            ) : (
+              <div className="space-y-1.5">
+                {records.map((record) => (
+                  <RecordCard
+                    key={record.id}
+                    record={record}
+                    deleting={deletingId === record.id}
+                    onDelete={() => handleDelete(record.id, strategy)}
+                    t={t}
+                  />
+                ))}
+              </div>
+            )}
+            {section.nextToken && (
+              <button
+                type="button"
+                onClick={() => loadMore(workspaceId, agentId, strategy)}
+                disabled={section.loadingMore}
+                className="mt-2 text-[11px] text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium disabled:opacity-50"
+              >
+                {section.loadingMore ? t("memory.loading") : t("memory.loadMore")}
+              </button>
+            )}
           </div>
-        )}
-        {section.nextToken && (
-          <button
-            type="button"
-            onClick={() => loadMore(workspaceId, agentId, strategy)}
-            disabled={section.loadingMore}
-            className="mt-2 pl-5 text-[11px] text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium disabled:opacity-50"
-          >
-            {section.loadingMore ? t("memory.loading") : t("memory.loadMore")}
-          </button>
         )}
       </div>
     );
