@@ -1071,5 +1071,34 @@
       "show": "Show recent runs",
       "hide": "Hide recent runs"
     }
+  },
+  "memory": {
+    "drawerTitle": "Memory",
+    "close": "Close",
+    "loading": "Loading...",
+    "loadMore": "Load more",
+    "emptyState": "Nothing learned yet in this category.",
+    "section": {
+      "preferences": "Preferences",
+      "facts": "Facts",
+      "summaries": "Summaries",
+      "episodes": "Episodes"
+    },
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "forgetAll": "Forget everything this Agent knows about me",
+    "forgetAllConfirm": "Delete ALL memory this Agent has learned about you? This can't be undone.",
+    "forgetAllDoIt": "Yes, forget everything",
+    "builder": {
+      "title": "Long-term Memory",
+      "toggle": "Enable long-term memory",
+      "toggleHint": "When enabled, this Agent will remember facts, preferences, summaries, and episodes across user sessions.",
+      "strategyPreferences": "Remember user preferences",
+      "strategyFacts": "Remember factual information",
+      "strategySummaries": "Remember conversation summaries",
+      "strategyEpisodes": "Remember past scenarios (episodes)",
+      "unavailable": "Memory unavailable — ask workspace owner to run repair."
+    }
   }
 }

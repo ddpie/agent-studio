@@ -39,11 +39,13 @@ interface ChatHeaderProps {
   onDeleteSession: (id: string) => void;
   onNewSession: () => void;
   messages: { role: string; content: string }[];
+  children?: React.ReactNode;
 }
 
 export default function ChatHeader({
   agentId, agentName, selectedModel, onModelChange,
   sessions, activeSessionId, onLoadSession, onDeleteSession, onNewSession, messages,
+  children,
 }: ChatHeaderProps) {
   const { t } = useTranslation();
   const [showModelPicker, setShowModelPicker] = useState(false);
@@ -217,6 +219,7 @@ export default function ChatHeader({
         <button onClick={onNewSession} className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30" title={t("chat.newSession")}>
           <Plus className="w-4 h-4" />
         </button>
+        {children}
       </div>
 
       {showMetaIntegration && (
