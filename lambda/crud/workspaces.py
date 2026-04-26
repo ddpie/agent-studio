@@ -10,6 +10,7 @@ from boto3.dynamodb.conditions import Key
 
 from shared.auth import verify_jwt, get_membership, check_permission, ROLE_LEVEL
 from shared.config import WORKSPACES_TABLE, REGION, COGNITO_USER_POOL_ID
+from shared.memory_strategies import DEFAULT_MEMORY_STRATEGIES
 from shared.middleware import auth_check
 from shared.response import success, paginated, forbidden, not_found, bad_request, version_conflict, internal_error
 from shared.validators import validate_id, parse_pagination
@@ -19,6 +20,7 @@ logger = Logger(child=True)
 
 _table = None
 _cognito = None
+_control = None
 # Per-userId identity cache. Keyed by Cognito sub (== userId) so it can
 # safely span workspaces — the sub->attributes mapping is global to the
 # user pool. Lambda container reuse provides the bulk of the speedup.
@@ -37,6 +39,31 @@ def _get_cognito():
     if _cognito is None:
         _cognito = boto3.client("cognito-idp", region_name=REGION)
     return _cognito
+
+
+def _get_control():
+    global _control
+    if _control is None:
+        _control = boto3.client("bedrock-agentcore-control", region_name=REGION)
+    return _control
+
+
+def _create_workspace_memory(workspace_id: str) -> str | None:
+    """Best-effort create an AgentCore Memory for the workspace.
+
+    Returns the memory ID on success, or None if the call fails.
+    Failure must never block workspace creation.
+    """
+    try:
+        resp = _get_control().create_memory(
+            name=f"agentstudio-ws-{workspace_id[:12]}",
+            description=f"Agent Studio workspace {workspace_id}",
+            memoryStrategies=DEFAULT_MEMORY_STRATEGIES,
+        )
+        return resp["memory"]["id"]
+    except Exception as e:
+        logger.warning("create_memory failed for workspace %s: %s", workspace_id, e)
+        return None
 
 
 def _hydrate_member_identities(members: list) -> list:
@@ -167,12 +194,21 @@ def create_workspace():
         "joined_at": now,
     })
 
+    memory_id = _create_workspace_memory(ws_id)
+    if memory_id:
+        table.update_item(
+            Key={"workspaceId": ws_id, "sk": "META"},
+            UpdateExpression="SET memory_id = :m",
+            ExpressionAttributeValues={":m": memory_id},
+        )
+
     return success({
         "workspaceId": ws_id,
         "name": name,
         "description": body.get("description", ""),
         "role": "owner",
         "created_at": now,
+        "memory_id": memory_id,
     }, status_code=201)
 
 
@@ -241,6 +277,14 @@ def onboarding():
             })
         return bad_request("User already has a workspace")
 
+    memory_id = _create_workspace_memory(ws_id)
+    if memory_id:
+        table.update_item(
+            Key={"workspaceId": ws_id, "sk": "META"},
+            UpdateExpression="SET memory_id = :m",
+            ExpressionAttributeValues={":m": memory_id},
+        )
+
     return success({
         "workspaceId": ws_id,
         "name": "My Workspace",
@@ -248,6 +292,7 @@ def onboarding():
         "role": "owner",
         "created_at": now,
         "onboarding": True,
+        "memory_id": memory_id,
     }, status_code=201)
 
 
