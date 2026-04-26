@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Copy,
   Check,
+  AlertTriangle,
 } from "lucide-react";
 import {
   createWorkspaceRole,
@@ -52,6 +53,7 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
   const [grantingTargets, setGrantingTargets] = useState<Set<string>>(new Set());
   const [expandedTargets, setExpandedTargets] = useState<Set<string>>(new Set());
   const [copiedTarget, setCopiedTarget] = useState<string | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<McpTargetDef | null>(null);
 
   useEffect(() => { isPlatformAdmin().then(setIsAdmin); }, []);
 
@@ -141,13 +143,21 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
     }
   };
 
-  const handleGrant = async (targetName: string) => {
+  const requestGrant = (target: McpTargetDef) => {
+    if (target.sensitivity === "medium" || target.sensitivity === "high") {
+      setConfirmTarget(target);
+    } else {
+      doGrant(target.name);
+    }
+  };
+
+  const doGrant = async (targetName: string) => {
     if (!wsId) return;
+    setConfirmTarget(null);
     setGrantingTargets((prev) => new Set(prev).add(targetName));
     try {
       await grantMcpTargets(wsId, [targetName]);
       toast.success(t("iam.grantSuccess", { target: targetName }));
-      // IAM propagation takes a few seconds before SimulatePrincipalPolicy reflects the change
       await new Promise((r) => setTimeout(r, 3000));
       await checkPermissions(true);
     } catch (err) {
@@ -338,10 +348,20 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
                     <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                   )}
 
-                  {/* Name */}
+                  {/* Name + sensitivity badge */}
                   <span className="text-xs font-medium text-gray-800 dark:text-gray-200">
                     {target.displayName}
                   </span>
+                  {target.sensitivity === "medium" && (
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800" title={target.sensitiveReasons.join("; ")}>
+                      <AlertTriangle className="w-2.5 h-2.5" /> {t("iam.sensitivityMedium")}
+                    </span>
+                  )}
+                  {target.sensitivity === "high" && (
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800" title={target.sensitiveReasons.join("; ")}>
+                      <AlertTriangle className="w-2.5 h-2.5" /> {t("iam.sensitivityHigh")}
+                    </span>
+                  )}
 
                   {/* Status text — clickable to expand details */}
                   {noIamNeeded ? (
@@ -365,7 +385,7 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
                   {/* Auto-grant button for denied targets */}
                   {!isGranted && !noIamNeeded && !readOnly && isAdmin && (
                     <button
-                      onClick={() => handleGrant(target.name)}
+                      onClick={() => requestGrant(target)}
                       disabled={isGranting}
                       className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-md transition-colors disabled:opacity-50"
                     >
@@ -491,6 +511,52 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
           {t("iam.refresh")}
         </button>
       </div>
+
+      {/* Sensitivity confirmation modal */}
+      {confirmTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setConfirmTarget(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full mx-4 p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <h3 className="text-sm font-semibold">{t("iam.confirmGrantTitle")}</h3>
+            </div>
+            <p className="text-xs text-gray-600 dark:text-gray-300">
+              {t("iam.confirmGrantDesc", { target: confirmTarget.displayName })}
+            </p>
+            <ul className="space-y-1.5">
+              {confirmTarget.sensitiveReasons.map((reason, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-300">
+                  <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                  <span>{reason}</span>
+                </li>
+              ))}
+            </ul>
+            {confirmTarget.iamPolicy && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {confirmTarget.iamPolicy.Statement.flatMap((s) => s.Action).map((a) => (
+                  <span key={a} className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                    {a}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setConfirmTarget(null)}
+                className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              >
+                {t("iam.confirmGrantCancel")}
+              </button>
+              <button
+                onClick={() => doGrant(confirmTarget.name)}
+                className="px-3 py-1.5 text-xs bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors"
+              >
+                {t("iam.confirmGrantBtn")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

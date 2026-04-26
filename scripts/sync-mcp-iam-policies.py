@@ -117,6 +117,8 @@ VIRTUAL_TARGETS: dict[str, dict] = {
     "kms": {
         "displayName": "KMS",
         "category": "security",
+        "sensitivity": "medium",
+        "sensitiveReasons": ["kms:GetKeyPolicy 可读取密钥策略内容"],
         "policy": {
             "Statement": [{"Sid": "Kms", "Effect": "Allow", "Action": ["kms:Describe*", "kms:List*", "kms:Get*"], "Resource": "*"}]
         },
@@ -229,6 +231,8 @@ VIRTUAL_TARGETS: dict[str, dict] = {
     "cost-explorer": {
         "displayName": "Cost Explorer",
         "category": "cost",
+        "sensitivity": "medium",
+        "sensitiveReasons": ["可查看完整的 AWS 账单和成本数据"],
         "policy": {
             "Statement": [{"Sid": "CostExplorer", "Effect": "Allow", "Action": ["ce:Get*", "ce:Describe*", "ce:List*"], "Resource": "*"}]
         },
@@ -250,6 +254,8 @@ VIRTUAL_TARGETS: dict[str, dict] = {
     "cognito": {
         "displayName": "Cognito",
         "category": "security",
+        "sensitivity": "medium",
+        "sensitiveReasons": ["可查看用户池列表和用户信息"],
         "policy": {
             "Statement": [{"Sid": "Cognito", "Effect": "Allow", "Action": ["cognito-idp:Describe*", "cognito-idp:List*"], "Resource": "*"}]
         },
@@ -392,6 +398,8 @@ def _extract_targets(registry: dict) -> list[dict]:
             "category": remote.get("category", "general"),
             "enabled": remote.get("enabled", True),
             "iamPolicy": remote.get("iam_policy"),
+            "sensitivity": remote.get("sensitivity", "low"),
+            "sensitiveReasons": remote.get("sensitive_reasons", []),
             "source": "yaml",
         })
 
@@ -407,6 +415,8 @@ def _extract_targets(registry: dict) -> list[dict]:
             "category": rt.get("category", "general"),
             "enabled": rt.get("enabled", True),
             "iamPolicy": policy,
+            "sensitivity": rt.get("sensitivity", "low"),
+            "sensitiveReasons": rt.get("sensitive_reasons", []),
             "source": "yaml",
         })
 
@@ -420,6 +430,8 @@ def _extract_targets(registry: dict) -> list[dict]:
                 "category": vt["category"],
                 "enabled": True,
                 "iamPolicy": vt["policy"],
+                "sensitivity": vt.get("sensitivity", "low"),
+                "sensitiveReasons": vt.get("sensitiveReasons", []),
                 "source": "virtual",
             })
 
@@ -435,7 +447,7 @@ def _extract_targets(registry: dict) -> list[dict]:
 def _compute_hash(targets: list[dict]) -> str:
     """Deterministic hash of target policies for staleness detection."""
     serialized = json.dumps(
-        [{k: t[k] for k in ("name", "iamPolicy")} for t in targets],
+        [{k: t[k] for k in ("name", "iamPolicy", "sensitivity")} for t in targets],
         sort_keys=True,
     )
     return hashlib.sha256(serialized.encode()).hexdigest()[:12]
@@ -468,10 +480,14 @@ def _generate_frontend(targets: list[dict], sync_hash: str) -> str:
     """Generate TypeScript source for MCP_TARGETS array."""
     lines = [HEADER_FRONTEND.format(hash=sync_hash)]
     lines.append("")
+    lines.append("export type Sensitivity = \"low\" | \"medium\" | \"high\";")
+    lines.append("")
     lines.append("export interface McpTargetDef {")
     lines.append("  name: string;")
     lines.append("  displayName: string;")
     lines.append("  category: string;")
+    lines.append("  sensitivity: Sensitivity;")
+    lines.append("  sensitiveReasons: string[];")
     lines.append("  iamPolicy: { Statement: { Sid: string; Effect: string; Action: string[]; Resource: string }[] } | null;")
     lines.append("}")
     lines.append("")
@@ -490,8 +506,10 @@ def _generate_frontend(targets: list[dict], sync_hash: str) -> str:
                 )
             policy_ts = "{ Statement: [" + ", ".join(stmt_parts) + "] }"
 
+        reasons_ts = json.dumps(t.get("sensitiveReasons", []), ensure_ascii=False)
         lines.append(f'  {{ name: "{t["name"]}", displayName: "{t["displayName"]}", '
-                     f'category: "{t["category"]}", iamPolicy: {policy_ts} }},')
+                     f'category: "{t["category"]}", sensitivity: "{t["sensitivity"]}", '
+                     f'sensitiveReasons: {reasons_ts}, iamPolicy: {policy_ts} }},')
 
     lines.append("];")
     lines.append("")

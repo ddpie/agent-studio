@@ -48,11 +48,7 @@ export class WorkspaceBoundary extends Construct {
         }),
         new iam.PolicyStatement({
           sid: "AgentCoreRuntime",
-          actions: [
-            "bedrock-agentcore:InvokeAgentRuntime",
-            "bedrock-agentcore:GetAgentRuntime",
-            "bedrock-agentcore:ListAgentRuntimes",
-          ],
+          actions: ["bedrock-agentcore:InvokeAgentRuntime"],
           resources: [
             `arn:aws:bedrock-agentcore:${region}:${accountId}:runtime/*`,
             `arn:aws:bedrock-agentcore:${region}:${accountId}:runtime/*/runtime-endpoint/*`,
@@ -61,18 +57,12 @@ export class WorkspaceBoundary extends Construct {
         new iam.PolicyStatement({
           sid: "AgentCoreServices",
           actions: [
-            "bedrock-agentcore:InvokeCodeInterpreter",
-            "bedrock-agentcore:StartCodeInterpreterSession",
-            "bedrock-agentcore:StopCodeInterpreterSession",
-            "bedrock-agentcore:InvokeBrowser",
-            "bedrock-agentcore:StartBrowserSession",
-            "bedrock-agentcore:StopBrowserSession",
-            "bedrock-agentcore:GetBrowserSession",
-            "bedrock-agentcore:ListBrowserSessions",
-            "bedrock-agentcore:SaveBrowserSessionProfile",
-            "bedrock-agentcore:UpdateBrowserStream",
-            "bedrock-agentcore:ConnectBrowserStream",
-            "bedrock-agentcore:ConnectBrowserAutomationStream",
+            "bedrock-agentcore:Invoke*",
+            "bedrock-agentcore:Start*",
+            "bedrock-agentcore:Stop*",
+            "bedrock-agentcore:Save*",
+            "bedrock-agentcore:Update*",
+            "bedrock-agentcore:Connect*",
           ],
           resources: [
             `arn:aws:bedrock-agentcore:${region}:${accountId}:code-interpreter-custom/*`,
@@ -140,19 +130,8 @@ export class WorkspaceBoundary extends Construct {
           },
         }),
         new iam.PolicyStatement({
-          sid: "GatewayReadOnly",
-          actions: [
-            "bedrock-agentcore:ListGateways",
-            "bedrock-agentcore:GetGateway",
-            "bedrock-agentcore:ListGatewayTargets",
-            "bedrock-agentcore:GetGatewayTarget",
-          ],
-          resources: ["*"],
-        }),
-        new iam.PolicyStatement({
           sid: "ECR",
           actions: [
-            "ecr:BatchGetImage",
             "ecr:GetDownloadUrlForLayer",
             "ecr:GetAuthorizationToken",
           ],
@@ -168,34 +147,44 @@ export class WorkspaceBoundary extends Construct {
         new iam.PolicyStatement({
           sid: "AWSServicesReadCeiling",
           actions: [
-            // Compute
+            // Compute / containers
             "ec2:Describe*",
             "lambda:Get*", "lambda:List*",
             "ecs:Describe*", "ecs:List*",
             "eks:Describe*", "eks:List*",
             "autoscaling:Describe*",
-            // Containers
             "ecr:Describe*", "ecr:List*", "ecr:BatchGetImage",
+            "compute-optimizer:Get*",
             // Storage
             "s3:GetBucketLocation", "s3:GetBucketTagging", "s3:ListAllMyBuckets", "s3:ListBucket",
+            "s3:GetObject",
+            "s3tables:Get*", "s3tables:List*",
             "elasticfilesystem:Describe*",
             // Database
             "rds:Describe*", "rds:List*",
             "dynamodb:Describe*", "dynamodb:List*",
+            "dynamodb:GetItem", "dynamodb:BatchGetItem", "dynamodb:Query", "dynamodb:Scan",
             "elasticache:Describe*", "elasticache:List*",
             "redshift:Describe*", "redshift:List*",
+            "redshift-data:Describe*", "redshift-data:Get*",
             "es:Describe*", "es:List*",
+            "neptune-db:ReadDataViaQuery",
+            "timestream:Describe*", "timestream:List*", "timestream:SelectValues",
             // Analytics
             "athena:Get*", "athena:List*", "athena:BatchGet*",
             "glue:Get*", "glue:List*", "glue:BatchGet*",
             "kinesis:Describe*", "kinesis:List*", "kinesis:Get*",
             "firehose:Describe*", "firehose:List*",
-            // Monitoring
+            // Monitoring / observability
             "cloudwatch:Describe*", "cloudwatch:Get*", "cloudwatch:List*",
-            "logs:Describe*", "logs:Get*", "logs:StartQuery", "logs:StopQuery", "logs:FilterLogEvents",
-            "cloudtrail:LookupEvents", "cloudtrail:Get*", "cloudtrail:List*", "cloudtrail:StartQuery",
+            "logs:Describe*", "logs:Get*", "logs:List*",
+            "logs:*Query", "logs:Filter*",
+            "cloudtrail:Describe*", "cloudtrail:Get*", "cloudtrail:List*",
+            "cloudtrail:Lookup*", "cloudtrail:*Query",
+            "application-signals:Get*", "application-signals:List*",
+            "aps:Describe*", "aps:Get*", "aps:List*", "aps:QueryMetrics",
             "pi:Describe*", "pi:Get*", "pi:List*",
-            // Security
+            // Security / identity
             "iam:Get*", "iam:List*", "iam:Simulate*",
             "kms:Describe*", "kms:List*", "kms:Get*",
             "acm:Describe*", "acm:List*", "acm:GetCertificate",
@@ -209,23 +198,36 @@ export class WorkspaceBoundary extends Construct {
             "elasticloadbalancing:Describe*",
             "apigateway:GET",
             "cloudfront:Get*", "cloudfront:List*",
+            "appsync:Get*", "appsync:List*",
             // Messaging
             "sns:Get*", "sns:List*",
             "sqs:Get*", "sqs:List*",
             "events:Describe*", "events:List*",
             "states:Describe*", "states:List*",
+            "mq:Describe*", "mq:List*",
+            "kafka:Describe*", "kafka:Get*", "kafka:List*",
             // Management
             "cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary",
             "ssm:DescribeParameters", "ssm:GetParameter", "ssm:GetParameters", "ssm:List*",
             "servicequotas:Get*", "servicequotas:List*",
             "tag:Get*", "health:Describe*",
+            "support:Describe*",
             // Cost
-            "ce:Get*", "ce:List*",
+            "ce:Describe*", "ce:Get*", "ce:List*",
             "pricing:GetProducts", "pricing:DescribeServices",
             "budgets:Describe*", "budgets:View*",
-            // AI/ML
-            "bedrock:Get*", "bedrock:List*",
+            // AI/ML — bedrock:Retrieve is read-only KB retrieval (billable, not a write)
+            "bedrock:Get*", "bedrock:List*", "bedrock:Retrieve*",
+            "bedrock-agentcore:Get*", "bedrock-agentcore:List*",
             "sagemaker:Describe*", "sagemaker:List*",
+            "kendra:Describe*", "kendra:List*", "kendra:Query", "kendra:Retrieve",
+            "qbusiness:ChatSync", "qbusiness:Get*", "qbusiness:List*",
+            // Industry
+            "geo:Get*", "geo:List*", "geo:Search*", "geo:CalculateRoute",
+            "healthlake:Describe*", "healthlake:List*",
+            "healthlake:Read*", "healthlake:Search*",
+            "iotsitewise:Describe*", "iotsitewise:Get*", "iotsitewise:List*", "iotsitewise:BatchGet*",
+            "omics:Get*", "omics:List*",
             // Other
             "wellarchitected:Get*", "wellarchitected:List*",
             "sts:GetCallerIdentity",

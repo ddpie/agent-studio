@@ -1206,7 +1206,13 @@
     "refresh": "Refresh permission status",
     "grantSuccess": "Permissions granted for {{target}}",
     "grantFailed": "Failed to grant permissions",
-    "mcpIamRequired": "This MCP target requires workspace IAM authorization"
+    "mcpIamRequired": "This MCP target requires workspace IAM authorization",
+    "sensitivityMedium": "Sensitive",
+    "sensitivityHigh": "High risk",
+    "confirmGrantTitle": "Confirm authorization",
+    "confirmGrantDesc": "You are about to grant the following sensitive permissions for \"{{target}}\":",
+    "confirmGrantBtn": "Confirm grant",
+    "confirmGrantCancel": "Cancel"
   },
   "admin": {
     "title": "Admin Console",
