@@ -660,14 +660,12 @@ def create_workspace_role(wsId: str):
 
     Requires platform-admins Cognito group membership.
     """
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
-    if err:
-        return err
     _, is_admin, admin_err = check_platform_admin(router.current_event)
     if admin_err:
         return admin_err
     if not is_admin:
         return forbidden()
+    ws_id = wsId
 
     if not ACCOUNT_ID:
         return internal_error("AGENT_STUDIO_ACCOUNT_ID not configured")
@@ -762,14 +760,12 @@ def grant_mcp(wsId: str):
     Requires platform-admins Cognito group membership.
     Body: {"targets": ["cloudwatch", "cloudtrail"]}
     """
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
-    if err:
-        return err
     _, is_admin, admin_err = check_platform_admin(router.current_event)
     if admin_err:
         return admin_err
     if not is_admin:
         return forbidden()
+    ws_id = wsId
 
     body = router.current_event.json_body or {}
     targets = body.get("targets", [])
@@ -839,14 +835,12 @@ def revoke_mcp(wsId: str):
     Requires platform-admins Cognito group membership.
     Body: {"targets": ["iam"]}
     """
-    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
-    if err:
-        return err
     _, is_admin, admin_err = check_platform_admin(router.current_event)
     if admin_err:
         return admin_err
     if not is_admin:
         return forbidden()
+    ws_id = wsId
 
     body = router.current_event.json_body or {}
     targets = body.get("targets", [])
@@ -908,10 +902,14 @@ def get_permissions(wsId: str):
 
     Query param: actions=cloudwatch:DescribeAlarms,logs:StartQuery
     Returns per-action allowed/denied status.
+    Accessible by workspace members (viewer+) OR platform admins.
     """
     user_id, ws_id, member, err = auth_check(router.current_event, min_role="viewer", ws_id=wsId)
     if err:
-        return err
+        _, is_admin, _ = check_platform_admin(router.current_event)
+        if not is_admin:
+            return err
+        ws_id = wsId
 
     meta = _get_workspace_meta(ws_id)
     if not meta:
