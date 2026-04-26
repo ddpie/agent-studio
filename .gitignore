@@ -79,3 +79,4 @@ base/staged-*/
 base/.kiro-cache/
 .worktrees/
 cdk-outputs.json
+.vite/
