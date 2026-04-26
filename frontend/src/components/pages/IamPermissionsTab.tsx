@@ -334,6 +334,8 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
             const isExpanded = expandedTargets.has(target.name);
             const isGranting = grantingTargets.has(target.name);
             const noIamNeeded = !target.iamPolicy;
+            const totalActions = target.iamPolicy?.Statement.flatMap((s) => s.Action).length ?? 0;
+            const grantedCount = totalActions - missingCount;
 
             return (
               <div
@@ -377,7 +379,9 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
                           : "text-amber-600 dark:text-amber-400"
                       }`}
                     >
-                      {isGranted ? t("iam.allPermsGranted") : t("iam.missingPerms", { count: missingCount })}
+                      {isGranted
+                        ? `${t("iam.allPermsGranted")} (${totalActions})`
+                        : `${grantedCount}/${totalActions} · ${t("iam.missingPerms", { count: missingCount })}`}
                       {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                     </button>
                   )}
