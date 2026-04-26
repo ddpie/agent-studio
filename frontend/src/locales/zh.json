@@ -376,6 +376,7 @@
     "tabGeneral": "常规",
     "tabAccount": "账户",
     "tabWorkspace": "工作区",
+    "tabIam": "IAM 权限",
     "interface": "界面",
     "sidebarWidth": "侧边栏宽度",
     "currentValue": "当前：{{value}}px",
