@@ -46,16 +46,17 @@ runtime_targets:
       Statement:
         - Effect: Allow
           Action:
-            - cloudwatch:DescribeAlarms
-            - cloudwatch:GetMetricData
-            - cloudwatch:GetMetricStatistics
-            - cloudwatch:ListMetrics
-            - logs:DescribeLogGroups
+            - cloudwatch:Describe*
+            - cloudwatch:Get*
+            - cloudwatch:List*
+            - logs:Describe*
+            - logs:Get*
+            - logs:List*
             - logs:StartQuery
             - logs:StopQuery
-            - logs:GetQueryResults
             - logs:FilterLogEvents
-            - logs:GetLogEvents
+            - application-signals:Get*
+            - application-signals:List*
           Resource: "*"
 
   - name: cloudwatch-applicationsignals
@@ -93,8 +94,10 @@ runtime_targets:
         - Effect: Allow
           Action:
             - cloudtrail:LookupEvents
+            - cloudtrail:Describe*
+            - cloudtrail:Get*
+            - cloudtrail:List*
             - cloudtrail:StartQuery
-            - cloudtrail:GetQueryResults
           Resource: "*"
 
   - name: prometheus
@@ -128,16 +131,9 @@ runtime_targets:
       Statement:
         - Effect: Allow
           Action:
-            - iam:GetUser
-            - iam:GetRole
-            - iam:GetPolicy
-            - iam:GetPolicyVersion
-            - iam:GetRolePolicy
-            - iam:ListRoles
-            - iam:ListPolicies
-            - iam:ListRolePolicies
-            - iam:ListAttachedRolePolicies
-            - iam:SimulatePrincipalPolicy
+            - iam:Get*
+            - iam:List*
+            - iam:Simulate*
           Resource: "*"
 
   - name: well-architected-security
