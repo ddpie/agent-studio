@@ -85,7 +85,7 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {tab === "iam" && canSeeIam && <IamPermissionsTab />}
+      {tab === "iam" && canSeeIam && <IamPermissionsTab readOnly />}
 
       {tab === "account" && <AccountSettingsTab />}
 

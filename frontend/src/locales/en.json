@@ -769,7 +769,13 @@
     "marketplace": "Marketplace",
     "costs": "Usage",
     "dashboard": "Dashboard",
+    "admin": "Admin",
     "settings": "Settings"
+  },
+  "admin": {
+    "title": "Admin Console",
+    "tabWorkspaces": "Workspaces",
+    "noAccess": "You don't have admin access."
   },
   "stats": {
     "invocations": "Invocations",
@@ -1194,9 +1200,21 @@
     "consoleStep2": "Find and open role \"{{roleName}}\"",
     "consoleStep3": "Click \"Add permissions\" > \"Create inline policy\"",
     "consoleStep4": "Paste the JSON policy document and save",
+    "goToAdmin": "Go to Admin Console",
     "refresh": "Refresh permission status",
     "grantSuccess": "Permissions granted for {{target}}",
     "grantFailed": "Failed to grant permissions",
     "mcpIamRequired": "This MCP target requires workspace IAM authorization"
+  },
+  "admin": {
+    "title": "Admin Console",
+    "noAccess": "You do not have permission to access the admin console.",
+    "tabWorkspaces": "Workspace Management",
+    "selectWorkspace": "Select a workspace",
+    "workspaceSearch": "Search workspaces...",
+    "workspaceCount": "{{count}} workspaces",
+    "hasRole": "IAM role bound",
+    "noRole": "No IAM role",
+    "goToAdmin": "Go to Admin Console to manage"
   }
 }
