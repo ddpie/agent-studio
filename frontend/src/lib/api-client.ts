@@ -1556,3 +1556,105 @@ export async function fetchAgentCosts(agentId: string, range: CostRange = "7d") 
     `/agents/${encodeURIComponent(agentId)}/costs?range=${encodeURIComponent(range)}`,
   );
 }
+
+// ── Observability: Traces ──
+
+export interface TraceSession {
+  sessionId: string;
+  startTime: string;
+  status: string;
+  durationMs: number | null;
+  toolCount: number;
+  model: string | null;
+}
+
+export interface TraceSpan {
+  spanId: string;
+  parentSpanId: string | null;
+  name: string;
+  kind: string;
+  status: string;
+  durationMs: number;
+  startTime: string;
+  attributes: Record<string, unknown>;
+}
+
+export interface TraceDetail {
+  sessionId: string;
+  spans: TraceSpan[];
+  summary: {
+    totalDurationMs: number;
+    spanCount: number;
+    errorCount: number;
+    toolCalls: Array<{ name: string; input: string; output: string }>;
+    model: string | null;
+    inputTokens: number;
+    outputTokens: number;
+  };
+}
+
+export interface TraceStats {
+  range: string;
+  count: number;
+  errorCount: number;
+  errorRate: number;
+  latencyMs: {
+    p50: number | null;
+    p90: number | null;
+    p95: number | null;
+    p99: number | null;
+    avg: number | null;
+  };
+  timeseries: Array<{
+    bucket: string;
+    count: number;
+    errors: number;
+    p95Ms: number | null;
+  }>;
+}
+
+export interface WorkspaceCostAgent {
+  agentId: string;
+  name: string;
+  calls: number;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export interface WorkspaceCosts {
+  agents: WorkspaceCostAgent[];
+  workspace: {
+    totalCalls: number;
+    totalCostUsd: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    timeseries: Array<{ bucket: string; cost: number; calls: number }>;
+    rangeStart: number;
+    rangeEnd: number;
+    bucket: string;
+  };
+}
+
+export async function listTraces(agentId: string, range = "24h"): Promise<TraceSession[]> {
+  const resp = await apiGet<{ sessions: TraceSession[] }>(
+    `/agents/${encodeURIComponent(agentId)}/traces?range=${range}`
+  );
+  return resp.sessions || [];
+}
+
+export async function getSessionTrace(agentId: string, sessionId: string): Promise<TraceDetail> {
+  return apiGet<TraceDetail>(
+    `/agents/${encodeURIComponent(agentId)}/traces/${encodeURIComponent(sessionId)}`
+  );
+}
+
+export async function getTraceStats(agentId: string, range = "24h"): Promise<TraceStats> {
+  return apiGet<TraceStats>(
+    `/agents/${encodeURIComponent(agentId)}/traces/stats?range=${range}`
+  );
+}
+
+export async function getWorkspaceCosts(range = "24h"): Promise<WorkspaceCosts> {
+  return apiGet<WorkspaceCosts>(`/costs?range=${range}`);
+}
