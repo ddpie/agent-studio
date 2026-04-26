@@ -14,7 +14,7 @@ from aws_lambda_powertools.event_handler.api_gateway import Router
 from shared.config import REGION, WORKSPACES_TABLE, ACCOUNT_ID, WORKSPACE_BOUNDARY_ARN
 from shared.middleware import auth_check, check_platform_admin
 from shared.response import success, bad_request, forbidden, internal_error, not_found
-from mcp_iam_registry import MCP_IAM_POLICIES, _NO_IAM_TARGETS
+from crud.mcp_iam_registry import MCP_IAM_POLICIES, _NO_IAM_TARGETS
 
 router = Router()
 logger = Logger(child=True)
