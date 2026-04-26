@@ -3,7 +3,7 @@
 Source of truth: mcp-runtime/mcp-registry.yaml
 Regenerate:     python scripts/sync-mcp-iam-policies.py
 """
-# SYNC_HASH: 4e52a0bbadad
+# SYNC_HASH: 62af13e4f1b9
 
 
 MCP_IAM_POLICIES: dict[str, dict | None] = {
@@ -337,7 +337,6 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                 "Action": [
                     "lambda:GetFunction",
                     "lambda:ListFunctions",
-                    "lambda:InvokeFunction",
                     "lambda:GetPolicy",
                     "logs:DescribeLogGroups",
                     "logs:GetLogEvents",
@@ -913,10 +912,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Effect": "Allow",
                 "Action": [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream",
-                    "s3:GetObject",
-                    "s3:PutObject"
+                    "s3:GetObject"
                 ],
                 "Resource": "*",
                 "Sid": "BedrockDataAutomation"

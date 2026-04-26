@@ -1206,7 +1206,13 @@
     "refresh": "刷新权限状态",
     "grantSuccess": "已授权 {{target}} 的权限",
     "grantFailed": "授权失败",
-    "mcpIamRequired": "此 MCP 工具需要工作区 IAM 授权"
+    "mcpIamRequired": "此 MCP 工具需要工作区 IAM 授权",
+    "sensitivityMedium": "敏感",
+    "sensitivityHigh": "高风险",
+    "confirmGrantTitle": "确认授权",
+    "confirmGrantDesc": "即将授予「{{target}}」以下敏感权限：",
+    "confirmGrantBtn": "确认授权",
+    "confirmGrantCancel": "取消"
   },
   "admin": {
     "title": "管理后台",

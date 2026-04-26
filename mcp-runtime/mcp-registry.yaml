@@ -15,6 +15,7 @@ remote_targets:
     endpoint: "https://aws-mcp.us-east-1.api.aws/mcp"
     auth: sigv4
     category: general
+    sensitivity: low
     iam_policy: null  # Uses caller's own credentials; permissions depend on actual API called
 
   - name: aws-knowledge
@@ -23,6 +24,7 @@ remote_targets:
     endpoint: "https://knowledge-mcp.global.api.aws"
     auth: none
     category: general
+    sensitivity: low
     iam_policy: null  # Public endpoint, no IAM needed
 
 # ─── Runtime 部署：awslabs MCP Servers ───
@@ -42,6 +44,9 @@ runtime_targets:
     version: 0.0.24
     description: "CloudWatch 指标、日志、告警、调查技能"
     category: observability
+    sensitivity: medium
+    sensitive_reasons:
+      - "日志内容可能含 PII、密钥或业务敏感数据"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -66,6 +71,7 @@ runtime_targets:
     version: 0.1.29
     description: "Application Signals 性能监控"
     category: observability
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -89,6 +95,9 @@ runtime_targets:
     version: 0.0.12
     description: "CloudTrail 审计日志查询"
     category: observability
+    sensitivity: medium
+    sensitive_reasons:
+      - "可查看账户内所有用户和角色的 API 调用审计日志"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -107,6 +116,7 @@ runtime_targets:
     version: 0.2.14
     description: "Managed Prometheus 指标查询"
     category: observability
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -127,6 +137,10 @@ runtime_targets:
     version: 1.0.17
     description: "IAM 权限管理和策略分析"
     category: security
+    sensitivity: medium
+    sensitive_reasons:
+      - "可读取所有 IAM 用户、角色、策略内容"
+      - "iam:Simulate* 可推断任意 role 的 effective permissions"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -143,6 +157,7 @@ runtime_targets:
     version: 0.1.7
     description: "Well-Architected 安全评估"
     category: security
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -164,6 +179,9 @@ runtime_targets:
     version: 0.0.17
     description: "账单和预算管理（cost-explorer 升级版）"
     category: cost
+    sensitivity: medium
+    sensitive_reasons:
+      - "可查看账户完整的成本和预算数据"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -182,6 +200,7 @@ runtime_targets:
     version: 1.0.27
     description: "AWS 定价查询"
     category: cost
+    sensitivity: low
     iam_policy: null  # Uses pricing:GetProducts via caller's SigV4 credentials; no extra workspace IAM needed
 
   # ━━━ 计算 ━━━
@@ -192,6 +211,7 @@ runtime_targets:
     version: 0.1.28
     description: "ECS 服务管理 + Express Mode 一键部署"
     category: compute
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -214,6 +234,7 @@ runtime_targets:
     version: 0.1.27
     description: "EKS 集群和 K8s 资源管理"
     category: compute
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -229,19 +250,21 @@ runtime_targets:
           Resource: "*"
 
   - name: lambda-tool
-    enabled: true
+    enabled: false  # disabled: core capability (InvokeFunction) is a HIGH-risk write; MCP useless without it
     package: awslabs-lambda-tool-mcp-server
     command: awslabs.lambda-tool-mcp-server
     version: 2.0.16
     description: "Lambda 函数调用和日志查询"
     category: compute
+    sensitivity: high
+    sensitive_reasons:
+      - "lambda:InvokeFunction 会直接执行任意 Lambda（有副作用）"
     iam_policy:
       Statement:
         - Effect: Allow
           Action:
             - lambda:GetFunction
             - lambda:ListFunctions
-            - lambda:InvokeFunction
             - lambda:GetPolicy
             - logs:DescribeLogGroups
             - logs:GetLogEvents
@@ -255,6 +278,7 @@ runtime_targets:
     version: 0.1.21
     description: "Step Functions 状态机管理"
     category: compute
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -273,6 +297,9 @@ runtime_targets:
     version: 2.0.24
     description: "DynamoDB 数据建模、schema 校验、CDK 代码生成"
     category: database
+    sensitivity: medium
+    sensitive_reasons:
+      - "Query/Scan/GetItem 可读取任意 DDB 表里的客户数据"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -292,6 +319,9 @@ runtime_targets:
     version: 0.0.22
     description: "S3 Tables Iceberg 格式"
     category: database
+    sensitivity: medium
+    sensitive_reasons:
+      - "s3:GetObject 可读取任意 S3 对象的内容"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -314,6 +344,9 @@ runtime_targets:
     description: "RDS PostgreSQL 操作"
     category: database
     vpc_required: true
+    sensitivity: high
+    sensitive_reasons:
+      - "rds-db:connect 颁发 DB 连接令牌"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -331,6 +364,9 @@ runtime_targets:
     description: "RDS MySQL 操作"
     category: database
     vpc_required: true
+    sensitivity: high
+    sensitive_reasons:
+      - "rds-db:connect 颁发 DB 连接令牌"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -348,6 +384,7 @@ runtime_targets:
     description: "DocumentDB 文档数据库操作"
     category: database
     vpc_required: true
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -364,6 +401,10 @@ runtime_targets:
     description: "Redshift 数据仓库查询"
     category: database
     vpc_required: true
+    sensitivity: high
+    sensitive_reasons:
+      - "redshift:GetClusterCredentials 颁发 DB 凭证"
+      - "redshift-data:ExecuteStatement 可执行任意 SQL"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -383,6 +424,9 @@ runtime_targets:
     description: "Aurora DSQL 分布式 SQL"
     category: database
     vpc_required: true
+    sensitivity: high
+    sensitive_reasons:
+      - "dsql:DbConnectAdmin 管理员级 DB 连接"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -400,6 +444,9 @@ runtime_targets:
     description: "Neptune 图数据库查询"
     category: database
     vpc_required: true
+    sensitivity: medium
+    sensitive_reasons:
+      - "neptune-db:ReadDataViaQuery 读取图库数据面内容"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -417,6 +464,7 @@ runtime_targets:
     description: "ElastiCache Redis/Memcached"
     category: database
     vpc_required: true
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -434,6 +482,7 @@ runtime_targets:
     description: "Valkey 缓存服务"
     category: database
     vpc_required: true
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -451,6 +500,7 @@ runtime_targets:
     description: "Memcached 缓存操作"
     category: database
     vpc_required: true
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -467,6 +517,9 @@ runtime_targets:
     description: "Timestream 时序数据"
     category: database
     vpc_required: true
+    sensitivity: medium
+    sensitive_reasons:
+      - "timestream:SelectValues 读取时序数据"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -487,6 +540,7 @@ runtime_targets:
     version: 2.0.17
     description: "SNS + SQS 消息管理"
     category: messaging
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -506,6 +560,7 @@ runtime_targets:
     version: 2.0.19
     description: "Amazon MQ 消息代理"
     category: messaging
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -523,6 +578,7 @@ runtime_targets:
     version: 0.0.17
     description: "MSK (Kafka) 集群管理"
     category: messaging
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -544,6 +600,10 @@ runtime_targets:
     version: 1.0.19
     description: "Bedrock 知识库 RAG 检索"
     category: ai_ml
+    sensitivity: medium
+    sensitive_reasons:
+      - "可检索任意 KB 内容（可能含机密）"
+      - "bedrock:RetrieveAndGenerate 调模型，按 token 计费"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -561,6 +621,7 @@ runtime_targets:
     version: 1.0.7
     description: "SageMaker 模型部署和推理"
     category: ai_ml
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -575,20 +636,21 @@ runtime_targets:
           Resource: "*"
 
   - name: bedrock-data-automation
-    enabled: true
+    enabled: false  # disabled: core capability requires bedrock:InvokeModel + s3:PutObject (HIGH-risk writes)
     package: awslabs-aws-bedrock-data-automation-mcp-server
     command: awslabs.aws-bedrock-data-automation-mcp-server
     version: 0.0.19
     description: "Bedrock 文档理解和数据提取"
     category: ai_ml
+    sensitivity: high
+    sensitive_reasons:
+      - "bedrock:InvokeModel 调用模型，按 token 计费"
+      - "s3:PutObject 向 S3 写入文件"
     iam_policy:
       Statement:
         - Effect: Allow
           Action:
-            - bedrock:InvokeModel
-            - bedrock:InvokeModelWithResponseStream
             - s3:GetObject
-            - s3:PutObject
           Resource: "*"
 
   - name: bedrock-agentcore
@@ -598,6 +660,7 @@ runtime_targets:
     version: 0.0.16
     description: "AgentCore 资源管理和文档查询"
     category: ai_ml
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -618,6 +681,10 @@ runtime_targets:
     version: 1.0.15
     description: "Kendra 企业搜索"
     category: search
+    sensitivity: medium
+    sensitive_reasons:
+      - "可检索企业搜索索引（可能含机密）"
+      - "kendra:Query 按查询量计费"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -636,6 +703,10 @@ runtime_targets:
     description: "Amazon Q Index 搜索"
     category: search
     extra_packages: "mypy-boto3-qbusiness"
+    sensitivity: medium
+    sensitive_reasons:
+      - "qbusiness:ChatSync 调用 Q Business 对话（写会话状态 + 计费）"
+      - "可读取 Q Business 历史消息"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -653,6 +724,10 @@ runtime_targets:
     version: 0.0.14
     description: "Amazon Q Business 知识问答"
     category: search
+    sensitivity: medium
+    sensitive_reasons:
+      - "qbusiness:ChatSync 调用 Q Business 对话（写会话状态 + 计费）"
+      - "可读取 Q Business 历史消息"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -671,6 +746,7 @@ runtime_targets:
     version: 0.0.9
     description: "VPC 网络管理"
     category: networking
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -692,6 +768,7 @@ runtime_targets:
     version: 0.1.11
     description: "AppSync GraphQL 管理"
     category: networking
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -713,6 +790,9 @@ runtime_targets:
     version: 0.0.34
     description: "HealthOmics 基因组处理"
     category: industry
+    sensitivity: medium
+    sensitive_reasons:
+      - "可读取基因组工作流、序列存储内容（医疗级数据）"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -734,6 +814,9 @@ runtime_targets:
     version: 0.0.10
     description: "HealthLake FHIR 医疗数据"
     category: industry
+    sensitivity: medium
+    sensitive_reasons:
+      - "读取 FHIR 医疗记录（HIPAA 范畴，患者隐私数据）"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -752,6 +835,9 @@ runtime_targets:
     version: 11.0.14
     description: "IoT SiteWise 工业数据"
     category: industry
+    sensitivity: medium
+    sensitive_reasons:
+      - "读取工业资产的时序测量值（生产数据）"
     iam_policy:
       Statement:
         - Effect: Allow
@@ -773,6 +859,7 @@ runtime_targets:
     version: 2.0.15
     description: "Location Service 地图服务"
     category: industry
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -794,6 +881,7 @@ runtime_targets:
     version: 0.1.27
     description: "Glue ETL 工作流"
     category: data
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -817,6 +905,7 @@ runtime_targets:
     version: 1.0.15
     description: "合成测试数据生成"
     category: data
+    sensitivity: low
     iam_policy: null  # Generates synthetic data locally, no AWS API calls
 
   # ━━━ 开发工具 ━━━
@@ -827,6 +916,7 @@ runtime_targets:
     version: 1.0.23
     description: "AWS 架构图自动生成"
     category: devtools
+    sensitivity: low
     iam_policy: null  # Generates diagrams locally, no AWS API calls
 
   - name: code-doc-gen
@@ -836,6 +926,7 @@ runtime_targets:
     version: 1.0.10
     description: "代码文档自动生成"
     category: devtools
+    sensitivity: low
     iam_policy: null  # Code generation, no AWS API calls
 
   - name: openapi
@@ -845,6 +936,7 @@ runtime_targets:
     version: 0.2.15
     description: "OpenAPI 规范处理"
     category: devtools
+    sensitivity: low
     iam_policy: null  # Transforms OpenAPI specs, no AWS API calls
 
   # ━━━ 运维支持 ━━━
@@ -855,6 +947,7 @@ runtime_targets:
     version: 0.1.19
     description: "AWS Support 工单管理"
     category: operations
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
