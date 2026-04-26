@@ -47,7 +47,11 @@ const IAM_REQUIRED_TARGETS: Record<string, string[]> = {
   ],
   cloudtrail: ["cloudtrail:LookupEvents", "cloudtrail:StartQuery", "cloudtrail:GetQueryResults"],
   iam: ["iam:GetUser", "iam:GetRole", "iam:ListRoles", "iam:ListPolicies"],
-  "nova-canvas": ["bedrock:InvokeModel"],
+  ec2: ["ec2:Describe*"],
+  lambda: ["lambda:GetFunction", "lambda:ListFunctions", "lambda:GetPolicy"],
+  ecs: ["ecs:Describe*", "ecs:List*"],
+  eks: ["eks:Describe*", "eks:List*"],
+  "well-architected": ["wellarchitected:Get*", "wellarchitected:List*"],
 };
 
 export default function McpTargetSelector({ selectedTargets, onChange, hasLegacyConfig }: McpTargetSelectorProps) {
