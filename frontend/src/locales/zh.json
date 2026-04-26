@@ -1140,6 +1140,8 @@
       "episodesHint": "完整的交互片段，用于回忆过去类似的处理方式"
     },
     "delete": "删除",
+    "deleteTitle": "删除记忆",
+    "deleteMessage": "此条记忆将被永久删除，此操作不可撤销。",
     "confirm": "确认",
     "cancel": "取消",
     "forgetAll": "清除此 Agent 对我的全部记忆",

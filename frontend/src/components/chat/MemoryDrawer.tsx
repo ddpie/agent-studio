@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { X, Trash2, Loader2, Heart, BookOpen, MessageSquare, Clapperboard, ChevronDown, ChevronRight } from "lucide-react";
 import { useMemoryStore } from "../../stores/memory-store";
 import type { MemoryRecord, MemoryStrategy } from "../../lib/api-client";
+import ConfirmDialog from "../ui/ConfirmDialog";
 
 interface MemoryDrawerProps {
   open: boolean;
@@ -105,6 +106,7 @@ export default function MemoryDrawer({ open, onClose, workspaceId, agentId }: Me
   const { byAgent, fetchMemories, loadMore, deleteRecord, forgetAll } = useMemoryStore();
   const bucket = byAgent[agentId];
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; strategy: MemoryStrategy } | null>(null);
   const [forgetAllConfirm, setForgetAllConfirm] = useState(false);
   const [forgetting, setForgetting] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Set<MemoryStrategy>>(new Set());
@@ -122,10 +124,13 @@ export default function MemoryDrawer({ open, onClose, workspaceId, agentId }: Me
     if (open && agentId) fetchMemories(workspaceId, agentId);
   }, [open, agentId, workspaceId, fetchMemories]);
 
-  const handleDelete = async (recordId: string, strategy: MemoryStrategy) => {
-    setDeletingId(recordId);
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const { id, strategy } = pendingDelete;
+    setPendingDelete(null);
+    setDeletingId(id);
     try {
-      await deleteRecord(workspaceId, agentId, recordId, strategy);
+      await deleteRecord(workspaceId, agentId, id, strategy);
     } finally {
       setDeletingId(null);
     }
@@ -187,7 +192,7 @@ export default function MemoryDrawer({ open, onClose, workspaceId, agentId }: Me
                     key={record.id}
                     record={record}
                     deleting={deletingId === record.id}
-                    onDelete={() => handleDelete(record.id, strategy)}
+                    onDelete={() => setPendingDelete({ id: record.id, strategy })}
                     t={t}
                   />
                 ))}
@@ -293,6 +298,16 @@ export default function MemoryDrawer({ open, onClose, workspaceId, agentId }: Me
           )}
         </div>
       </div>
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title={t("memory.deleteTitle")}
+        message={t("memory.deleteMessage")}
+        confirmLabel={t("memory.delete")}
+        cancelLabel={t("memory.cancel")}
+        danger
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </>
   );
 }
