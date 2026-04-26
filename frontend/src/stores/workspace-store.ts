@@ -14,6 +14,9 @@ export interface WorkspaceSummary {
   description?: string;
   role: WorkspaceRole;
   created_at?: string;
+  owner_id?: string;
+  owner_name?: string;
+  owner_email?: string;
 }
 
 interface WorkspaceState {

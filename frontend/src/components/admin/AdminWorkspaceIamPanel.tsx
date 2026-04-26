@@ -203,6 +203,11 @@ function WorkspaceListItem({
           <span className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" title={t("admin.noRole")} />
         )}
       </div>
+      {(ws.owner_name || ws.owner_email) && (
+        <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">
+          {t("admin.owner")}: {ws.owner_name || ws.owner_email}
+        </div>
+      )}
       <div className="flex items-center gap-2 mt-0.5">
         <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">
           {truncatedId}

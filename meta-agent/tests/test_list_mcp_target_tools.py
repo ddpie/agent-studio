@@ -76,16 +76,16 @@ def test_applicationsignals_exact_name_still_works(monkeypatch):
 
 
 def test_hyphen_normalization_still_works(monkeypatch):
-    """'nova_canvas' should still match 'mcp-nova-canvas.json'."""
+    """'cloudtrail' should still match 'mcp-cloudtrail.json'."""
     import boto3
     from tools import list_mcp_target_tools as mod
     s3 = _make_s3_mock(
-        ["mcp-nova-canvas"],
-        {"mcp-nova-canvas": [{"name": "generate_image", "description": "..."}]},
+        ["mcp-cloudtrail"],
+        {"mcp-cloudtrail": [{"name": "LookupEvents", "description": "..."}]},
     )
     monkeypatch.setattr(boto3, "client", lambda *a, **kw: s3)
-    out = json.loads(mod.list_mcp_target_tools("nova_canvas"))
-    assert out["manifest_key"] == "mcp-nova-canvas.json"
+    out = json.loads(mod.list_mcp_target_tools("cloudtrail"))
+    assert out["manifest_key"] == "mcp-cloudtrail.json"
 
 
 def test_unknown_target_returns_empty_with_hint(monkeypatch):

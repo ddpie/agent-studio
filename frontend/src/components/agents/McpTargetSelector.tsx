@@ -120,7 +120,7 @@ export default function McpTargetSelector({ selectedTargets, onChange, hasLegacy
 
   // Normalize selectedTargets by stripping the "mcp-" prefix — the contract
   // for this field (and for workspace policy, backend mcp_targets_list, and
-  // runtime resolution) is the short name ("cloudwatch", "nova-canvas").
+  // runtime resolution) is the short name ("cloudwatch", "cloudtrail").
   // Proposals authored before list_mcp_servers was fixed to return short
   // names may still carry "mcp-" prefixed values; normalize on render so
   // those drafts don't silently drop targets from the selector.

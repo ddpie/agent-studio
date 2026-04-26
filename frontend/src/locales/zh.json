@@ -1213,6 +1213,7 @@
     "selectWorkspace": "选择一个工作区",
     "workspaceSearch": "搜索工作区...",
     "workspaceCount": "{{count}} 个工作区",
+    "owner": "所有者",
     "hasRole": "已绑定 IAM 角色",
     "noRole": "未绑定角色",
     "goToAdmin": "前往管理后台操作"
