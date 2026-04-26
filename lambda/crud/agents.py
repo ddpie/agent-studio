@@ -55,7 +55,7 @@ def _validate_memory_enable(*, memory_enabled: bool, workspace_memory_id: str | 
 ALLOWED_AGENT_FIELDS = {
     "name", "display_name", "description", "model_id", "default_model_id",
     "template_id", "supports_images", "welcome_message", "suggestions",
-    "tool_names", "skill_ids", "skills", "mcp_targets",
+    "tool_names", "skill_ids", "skills", "mcp_targets", "memory",
 }
 
 

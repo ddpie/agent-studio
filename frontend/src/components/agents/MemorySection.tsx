@@ -1,30 +1,60 @@
+import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Brain } from "lucide-react";
+import { Brain, Loader2, Check } from "lucide-react";
 import Section from "./shared/Section";
+import { updateAgent } from "../../lib/api-client";
+import { toast } from "../../lib/toast";
 
 interface MemorySectionProps {
+  agentId?: string;
   value: { enabled: boolean; strategies: string[] };
   onChange: (v: { enabled: boolean; strategies: string[] }) => void;
   workspaceMemoryAvailable: boolean;
 }
 
 export default function MemorySection({
+  agentId,
   value,
   onChange,
   workspaceMemoryAvailable,
 }: MemorySectionProps) {
   const { t } = useTranslation();
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const handleToggle = (enabled: boolean) => {
-    onChange({ ...value, enabled });
+    const next = { ...value, enabled };
+    onChange(next);
+    autoSave(next);
   };
 
   const handleStrategyToggle = (strategy: string) => {
     const strategies = value.strategies.includes(strategy)
       ? value.strategies.filter((s) => s !== strategy)
       : [...value.strategies, strategy];
-    onChange({ ...value, strategies });
+    const next = { ...value, strategies };
+    onChange(next);
+    autoSave(next);
   };
+
+  const autoSave = useCallback(
+    async (mem: { enabled: boolean; strategies: string[] }) => {
+      if (!agentId) return;
+      setSaving(true);
+      setSaved(false);
+      try {
+        await updateAgent(agentId, { memory: mem });
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Save failed";
+        toast.error(msg);
+      } finally {
+        setSaving(false);
+      }
+    },
+    [agentId],
+  );
 
   const strategies = [
     { key: "userPreference", label: t("memory.builder.strategyPreferences"), hint: t("memory.section.preferencesHint") },
@@ -34,7 +64,17 @@ export default function MemorySection({
   ];
 
   return (
-    <Section title={t("memory.builder.title")} icon={<Brain className="w-3.5 h-3.5" />}>
+    <Section
+      title={t("memory.builder.title")}
+      icon={<Brain className="w-3.5 h-3.5" />}
+      action={
+        saving ? (
+          <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
+        ) : saved ? (
+          <Check className="w-3 h-3 text-green-500" />
+        ) : null
+      }
+    >
       {!workspaceMemoryAvailable && (
         <div className="text-xs text-amber-600 dark:text-amber-400 mb-3">
           {t("memory.builder.unavailable")}

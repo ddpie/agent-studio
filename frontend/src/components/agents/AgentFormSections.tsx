@@ -213,6 +213,7 @@ export default function AgentFormSections({
       {/* Memory */}
       {!isCreateMode && (
         <MemorySection
+          agentId={agentId}
           value={formData.memory || { enabled: false, strategies: [] }}
           onChange={(memory) => updateField("memory", memory)}
           workspaceMemoryAvailable={true}
