@@ -11,7 +11,7 @@ Usage in route files:
         ...
 """
 from aws_lambda_powertools import Logger
-from shared.auth import verify_jwt, get_membership, check_permission
+from shared.auth import verify_jwt, get_membership, check_permission, is_platform_admin
 from shared.response import forbidden
 from shared.validators import validate_id
 
@@ -49,3 +49,20 @@ def auth_check(event, min_role: str = "viewer", require_ws: bool = True, ws_id: 
         logger.warning("auth_check: permission denied user=%s ws=%s role=%s min=%s", user_id, ws_id, member.get("role") if member else None, min_role)
         return None, None, None, forbidden()
     return user_id, ws_id, member, None
+
+
+def check_platform_admin(event) -> tuple[str | None, bool, object | None]:
+    """Check if the caller is a platform admin.
+
+    Returns (user_id, is_admin, error_response).
+    If error_response is not None, return it from the handler.
+    """
+    auth_header = event.get_header_value("Authorization") or ""
+    if not auth_header.startswith("Bearer "):
+        return None, False, forbidden()
+    try:
+        claims = verify_jwt(auth_header[7:])
+        user_id = claims["sub"]
+    except Exception:
+        return None, False, forbidden()
+    return user_id, is_platform_admin(claims), None

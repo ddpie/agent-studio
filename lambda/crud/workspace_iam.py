@@ -12,7 +12,7 @@ from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler.api_gateway import Router
 
 from shared.config import REGION, WORKSPACES_TABLE, ACCOUNT_ID, WORKSPACE_BOUNDARY_ARN
-from shared.middleware import auth_check
+from shared.middleware import auth_check, check_platform_admin
 from shared.response import success, bad_request, forbidden, internal_error, not_found
 
 router = Router()
@@ -89,15 +89,353 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             }
         ]
     },
-    "nova-canvas": {
+    "ec2": {
         "Statement": [
             {
-                "Sid": "McpNovaCanvas",
+                "Sid": "McpEc2",
                 "Effect": "Allow",
-                "Action": ["bedrock:InvokeModel"],
-                "Resource": "arn:aws:bedrock:*::foundation-model/amazon.nova-canvas-v1:0",
+                "Action": ["ec2:Describe*"],
+                "Resource": "*",
             }
         ]
+    },
+    "lambda": {
+        "Statement": [
+            {
+                "Sid": "McpLambda",
+                "Effect": "Allow",
+                "Action": [
+                    "lambda:GetFunction",
+                    "lambda:ListFunctions",
+                    "lambda:GetPolicy",
+                ],
+                "Resource": "*",
+            }
+        ]
+    },
+    "ecs": {
+        "Statement": [
+            {
+                "Sid": "McpEcs",
+                "Effect": "Allow",
+                "Action": ["ecs:Describe*", "ecs:List*"],
+                "Resource": "*",
+            }
+        ]
+    },
+    "eks": {
+        "Statement": [
+            {
+                "Sid": "McpEks",
+                "Effect": "Allow",
+                "Action": ["eks:Describe*", "eks:List*"],
+                "Resource": "*",
+            }
+        ]
+    },
+    "well-architected": {
+        "Statement": [{
+            "Sid": "McpWellArchitected",
+            "Effect": "Allow",
+            "Action": ["wellarchitected:Get*", "wellarchitected:List*"],
+            "Resource": "*",
+        }]
+    },
+    "rds": {
+        "Statement": [{
+            "Sid": "McpRds",
+            "Effect": "Allow",
+            "Action": ["rds:Describe*", "rds:List*"],
+            "Resource": "*",
+        }]
+    },
+    "s3-readonly": {
+        "Statement": [{
+            "Sid": "McpS3ReadOnly",
+            "Effect": "Allow",
+            "Action": ["s3:GetBucketLocation", "s3:GetBucketTagging", "s3:ListAllMyBuckets", "s3:ListBucket"],
+            "Resource": "*",
+        }]
+    },
+    "dynamodb-readonly": {
+        "Statement": [{
+            "Sid": "McpDynamoDBReadOnly",
+            "Effect": "Allow",
+            "Action": ["dynamodb:Describe*", "dynamodb:List*"],
+            "Resource": "*",
+        }]
+    },
+    "sns": {
+        "Statement": [{
+            "Sid": "McpSns",
+            "Effect": "Allow",
+            "Action": ["sns:Get*", "sns:List*"],
+            "Resource": "*",
+        }]
+    },
+    "sqs": {
+        "Statement": [{
+            "Sid": "McpSqs",
+            "Effect": "Allow",
+            "Action": ["sqs:Get*", "sqs:List*"],
+            "Resource": "*",
+        }]
+    },
+    "route53": {
+        "Statement": [{
+            "Sid": "McpRoute53",
+            "Effect": "Allow",
+            "Action": ["route53:Get*", "route53:List*"],
+            "Resource": "*",
+        }]
+    },
+    "elasticache": {
+        "Statement": [{
+            "Sid": "McpElastiCache",
+            "Effect": "Allow",
+            "Action": ["elasticache:Describe*", "elasticache:List*"],
+            "Resource": "*",
+        }]
+    },
+    "cloudformation": {
+        "Statement": [{
+            "Sid": "McpCloudFormation",
+            "Effect": "Allow",
+            "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplate", "cloudformation:GetTemplateSummary"],
+            "Resource": "*",
+        }]
+    },
+    "cost-explorer": {
+        "Statement": [{
+            "Sid": "McpCostExplorer",
+            "Effect": "Allow",
+            "Action": ["ce:Get*", "ce:Describe*", "ce:List*"],
+            "Resource": "*",
+        }]
+    },
+    "ssm": {
+        "Statement": [{
+            "Sid": "McpSsm",
+            "Effect": "Allow",
+            "Action": ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:DescribeParameters", "ssm:List*"],
+            "Resource": "*",
+        }]
+    },
+    "sts": {
+        "Statement": [{
+            "Sid": "McpSts",
+            "Effect": "Allow",
+            "Action": ["sts:GetCallerIdentity"],
+            "Resource": "*",
+        }]
+    },
+    "eventbridge": {
+        "Statement": [{
+            "Sid": "McpEventBridge",
+            "Effect": "Allow",
+            "Action": ["events:Describe*", "events:List*"],
+            "Resource": "*",
+        }]
+    },
+    "step-functions": {
+        "Statement": [{
+            "Sid": "McpStepFunctions",
+            "Effect": "Allow",
+            "Action": ["states:Describe*", "states:List*", "states:GetExecutionHistory"],
+            "Resource": "*",
+        }]
+    },
+    "elb": {
+        "Statement": [{
+            "Sid": "McpElb",
+            "Effect": "Allow",
+            "Action": ["elasticloadbalancing:Describe*"],
+            "Resource": "*",
+        }]
+    },
+    "api-gateway": {
+        "Statement": [{
+            "Sid": "McpApiGateway",
+            "Effect": "Allow",
+            "Action": ["apigateway:GET"],
+            "Resource": "*",
+        }]
+    },
+    "cloudfront": {
+        "Statement": [{
+            "Sid": "McpCloudFront",
+            "Effect": "Allow",
+            "Action": ["cloudfront:Get*", "cloudfront:List*"],
+            "Resource": "*",
+        }]
+    },
+    "kms": {
+        "Statement": [{
+            "Sid": "McpKms",
+            "Effect": "Allow",
+            "Action": ["kms:Describe*", "kms:List*", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus"],
+            "Resource": "*",
+        }]
+    },
+    "acm": {
+        "Statement": [{
+            "Sid": "McpAcm",
+            "Effect": "Allow",
+            "Action": ["acm:Describe*", "acm:List*", "acm:GetCertificate"],
+            "Resource": "*",
+        }]
+    },
+    "guardduty": {
+        "Statement": [{
+            "Sid": "McpGuardDuty",
+            "Effect": "Allow",
+            "Action": ["guardduty:Get*", "guardduty:List*"],
+            "Resource": "*",
+        }]
+    },
+    "security-hub": {
+        "Statement": [{
+            "Sid": "McpSecurityHub",
+            "Effect": "Allow",
+            "Action": ["securityhub:Get*", "securityhub:List*", "securityhub:BatchGet*"],
+            "Resource": "*",
+        }]
+    },
+    "inspector": {
+        "Statement": [{
+            "Sid": "McpInspector",
+            "Effect": "Allow",
+            "Action": ["inspector2:Get*", "inspector2:List*", "inspector2:BatchGet*"],
+            "Resource": "*",
+        }]
+    },
+    "config": {
+        "Statement": [{
+            "Sid": "McpConfig",
+            "Effect": "Allow",
+            "Action": ["config:Describe*", "config:Get*", "config:List*"],
+            "Resource": "*",
+        }]
+    },
+    "ecr": {
+        "Statement": [{
+            "Sid": "McpEcr",
+            "Effect": "Allow",
+            "Action": ["ecr:Describe*", "ecr:List*", "ecr:BatchGetImage"],
+            "Resource": "*",
+        }]
+    },
+    "athena": {
+        "Statement": [{
+            "Sid": "McpAthena",
+            "Effect": "Allow",
+            "Action": ["athena:Get*", "athena:List*", "athena:BatchGet*"],
+            "Resource": "*",
+        }]
+    },
+    "glue": {
+        "Statement": [{
+            "Sid": "McpGlue",
+            "Effect": "Allow",
+            "Action": ["glue:Get*", "glue:List*", "glue:BatchGet*"],
+            "Resource": "*",
+        }]
+    },
+    "redshift": {
+        "Statement": [{
+            "Sid": "McpRedshift",
+            "Effect": "Allow",
+            "Action": ["redshift:Describe*", "redshift:List*"],
+            "Resource": "*",
+        }]
+    },
+    "opensearch": {
+        "Statement": [{
+            "Sid": "McpOpenSearch",
+            "Effect": "Allow",
+            "Action": ["es:Describe*", "es:List*"],
+            "Resource": "*",
+        }]
+    },
+    "kinesis": {
+        "Statement": [{
+            "Sid": "McpKinesis",
+            "Effect": "Allow",
+            "Action": ["kinesis:Describe*", "kinesis:List*", "kinesis:Get*"],
+            "Resource": "*",
+        }]
+    },
+    "sagemaker": {
+        "Statement": [{
+            "Sid": "McpSageMaker",
+            "Effect": "Allow",
+            "Action": ["sagemaker:Describe*", "sagemaker:List*"],
+            "Resource": "*",
+        }]
+    },
+    "bedrock-readonly": {
+        "Statement": [{
+            "Sid": "McpBedrockReadOnly",
+            "Effect": "Allow",
+            "Action": ["bedrock:Get*", "bedrock:List*"],
+            "Resource": "*",
+        }]
+    },
+    "cognito": {
+        "Statement": [{
+            "Sid": "McpCognito",
+            "Effect": "Allow",
+            "Action": ["cognito-idp:Describe*", "cognito-idp:List*"],
+            "Resource": "*",
+        }]
+    },
+    "backup": {
+        "Statement": [{
+            "Sid": "McpBackup",
+            "Effect": "Allow",
+            "Action": ["backup:Describe*", "backup:Get*", "backup:List*"],
+            "Resource": "*",
+        }]
+    },
+    "health": {
+        "Statement": [{
+            "Sid": "McpHealth",
+            "Effect": "Allow",
+            "Action": ["health:Describe*"],
+            "Resource": "*",
+        }]
+    },
+    "service-quotas": {
+        "Statement": [{
+            "Sid": "McpServiceQuotas",
+            "Effect": "Allow",
+            "Action": ["servicequotas:Get*", "servicequotas:List*"],
+            "Resource": "*",
+        }]
+    },
+    "compute-optimizer": {
+        "Statement": [{
+            "Sid": "McpComputeOptimizer",
+            "Effect": "Allow",
+            "Action": ["compute-optimizer:Get*"],
+            "Resource": "*",
+        }]
+    },
+    "efs": {
+        "Statement": [{
+            "Sid": "McpEfs",
+            "Effect": "Allow",
+            "Action": ["elasticfilesystem:Describe*"],
+            "Resource": "*",
+        }]
+    },
+    "autoscaling": {
+        "Statement": [{
+            "Sid": "McpAutoScaling",
+            "Effect": "Allow",
+            "Action": ["autoscaling:Describe*"],
+            "Resource": "*",
+        }]
     },
 }
 
@@ -318,13 +656,18 @@ def _write_mcp_policy(role_name: str, mcp_grants: list[str]) -> int:
 # ─── POST /api/workspaces/{wsId}/role ───
 @router.post("/api/workspaces/<wsId>/role")
 def create_workspace_role(wsId: str):
-    """Create a per-workspace IAM role with permission boundary. Admin-only.
+    """Create a per-workspace IAM role with permission boundary.
 
-    Idempotent: if the role already exists, returns the existing roleArn.
+    Requires platform-admins Cognito group membership.
     """
     user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
+    _, is_admin, admin_err = check_platform_admin(router.current_event)
+    if admin_err:
+        return admin_err
+    if not is_admin:
+        return forbidden()
 
     if not ACCOUNT_ID:
         return internal_error("AGENT_STUDIO_ACCOUNT_ID not configured")
@@ -414,15 +757,19 @@ def create_workspace_role(wsId: str):
 # ─── POST /api/workspaces/{wsId}/grant-mcp ───
 @router.post("/api/workspaces/<wsId>/grant-mcp")
 def grant_mcp(wsId: str):
-    """Grant MCP target permissions to a workspace role. Admin-only.
+    """Grant MCP target permissions to a workspace role.
 
+    Requires platform-admins Cognito group membership.
     Body: {"targets": ["cloudwatch", "cloudtrail"]}
-    Rebuild-from-truth: DDB mcpGrants is the source of truth; the IAM
-    MCP-Access inline policy is rebuilt from it on every mutation.
     """
     user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
+    _, is_admin, admin_err = check_platform_admin(router.current_event)
+    if admin_err:
+        return admin_err
+    if not is_admin:
+        return forbidden()
 
     body = router.current_event.json_body or {}
     targets = body.get("targets", [])
@@ -602,3 +949,290 @@ def get_permissions(wsId: str):
         "roleArn": role_arn,
         "results": results,
     })
+
+
+# ─── Internal helpers for approval execution ───
+
+def _execute_create_role(ws_id: str, meta: dict) -> dict:
+    """Create IAM role for a workspace. Returns {"roleArn": ...} or {"error": ...}."""
+    existing = meta.get("roleArn")
+    if existing:
+        return {"roleArn": existing, "roleName": meta.get("roleName", "")}
+
+    role_name = _role_name_for_workspace(ws_id)
+    iam_client = _get_iam()
+    table = _get_table()
+
+    try:
+        resp = iam_client.get_role(RoleName=role_name)
+        role_arn = resp["Role"]["Arn"]
+    except iam_client.exceptions.NoSuchEntityException:
+        try:
+            resp = iam_client.create_role(
+                RoleName=role_name,
+                AssumeRolePolicyDocument=json.dumps(_build_trust_policy()),
+                PermissionsBoundary=WORKSPACE_BOUNDARY_ARN,
+                Tags=[
+                    {"Key": "agent-studio:workspace", "Value": ws_id},
+                    {"Key": "ManagedBy", "Value": "agent-studio"},
+                ],
+            )
+            role_arn = resp["Role"]["Arn"]
+            iam_client.put_role_policy(
+                RoleName=role_name,
+                PolicyName="DefaultMinimal",
+                PolicyDocument=json.dumps(_build_default_minimal_policy()),
+            )
+        except Exception as e:
+            return {"error": str(e)}
+
+    now = datetime.utcnow().isoformat() + "Z"
+    try:
+        table.update_item(
+            Key={"workspaceId": ws_id, "sk": "META"},
+            UpdateExpression="SET roleArn = :arn, roleName = :rn, updated_at = :now",
+            ExpressionAttributeValues={":arn": role_arn, ":rn": role_name, ":now": now},
+            ConditionExpression="attribute_exists(workspaceId) AND attribute_not_exists(roleArn)",
+        )
+    except Exception:
+        pass  # Race condition — another approval got there first; that's fine.
+
+    return {"roleArn": role_arn, "roleName": role_name}
+
+
+def _execute_grant_mcp(ws_id: str, meta: dict, targets: list[str]) -> dict:
+    """Grant MCP targets to a workspace role. Returns {} or {"error": ...}."""
+    if not meta.get("roleArn"):
+        return {"error": "Workspace has no IAM role"}
+
+    role_name = meta["roleName"]
+    current_grants = list(meta.get("mcpGrants", []) or [])
+    updated_grants = sorted(set(current_grants) | set(targets))
+
+    table = _get_table()
+    try:
+        table.update_item(
+            Key={"workspaceId": ws_id, "sk": "META"},
+            UpdateExpression="SET mcpGrants = :g, updated_at = :now",
+            ExpressionAttributeValues={
+                ":g": updated_grants,
+                ":now": datetime.utcnow().isoformat() + "Z",
+                ":old": current_grants if current_grants else None,
+            },
+            ConditionExpression=(
+                "mcpGrants = :old" if current_grants
+                else "(attribute_not_exists(mcpGrants) OR mcpGrants = :old)"
+            ),
+        )
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        return {"error": "Concurrent modification"}
+
+    try:
+        _write_mcp_policy(role_name, updated_grants)
+    except Exception as e:
+        return {"error": str(e)}
+
+    return {"mcpGrants": updated_grants}
+
+
+# ─── Approval flow ───
+# Workspace admins request IAM changes; platform admins approve.
+# Pending requests stored in workspace META row as `pendingIamRequests`.
+
+@router.post("/api/workspaces/<wsId>/iam-requests")
+def request_iam_change(wsId: str):
+    """Workspace admin requests an IAM change (role creation or service grant).
+
+    Body: {"type": "create_role"} or {"type": "grant_mcp", "targets": ["ec2", "rds"]}
+    """
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
+    if err:
+        return err
+
+    body = router.current_event.json_body or {}
+    req_type = body.get("type", "")
+    if req_type not in ("create_role", "grant_mcp"):
+        return bad_request("type must be 'create_role' or 'grant_mcp'")
+
+    targets = body.get("targets", [])
+    if req_type == "grant_mcp":
+        if not targets or not isinstance(targets, list):
+            return bad_request("targets required for grant_mcp requests")
+        known = set(MCP_IAM_POLICIES.keys()) | _NO_IAM_TARGETS
+        unknown = [t for t in targets if t not in known]
+        if unknown:
+            return bad_request(f"Unknown targets: {', '.join(unknown)}")
+
+    now = datetime.utcnow().isoformat() + "Z"
+    request_item = {
+        "type": req_type,
+        "requestedBy": user_id,
+        "requestedAt": now,
+        "status": "pending",
+    }
+    if targets:
+        request_item["targets"] = targets
+
+    table = _get_table()
+    meta = _get_workspace_meta(ws_id)
+    if not meta:
+        return not_found()
+
+    pending = list(meta.get("pendingIamRequests") or [])
+    # Deduplicate: don't add if identical pending request exists.
+    for p in pending:
+        if p.get("type") == req_type and p.get("status") == "pending":
+            if req_type == "create_role":
+                return success({"message": "Request already pending", "request": p})
+            if req_type == "grant_mcp" and set(p.get("targets", [])) == set(targets):
+                return success({"message": "Request already pending", "request": p})
+
+    pending.append(request_item)
+    table.update_item(
+        Key={"workspaceId": ws_id, "sk": "META"},
+        UpdateExpression="SET pendingIamRequests = :p",
+        ExpressionAttributeValues={":p": pending},
+    )
+
+    return success({"message": "Request submitted", "request": request_item}, status_code=201)
+
+
+@router.get("/api/iam-requests")
+def list_pending_requests():
+    """Platform admin lists all pending IAM requests across workspaces."""
+    _, is_admin, admin_err = check_platform_admin(router.current_event)
+    if admin_err:
+        return admin_err
+    if not is_admin:
+        return forbidden()
+
+    table = _get_table()
+    # Scan all workspaces for pending requests. In a large deployment this
+    # should use a GSI, but for single-tenant (<100 workspaces) scan is fine.
+    resp = table.scan(
+        FilterExpression="attribute_exists(pendingIamRequests) AND sk = :meta",
+        ExpressionAttributeValues={":meta": "META"},
+        ProjectionExpression="workspaceId, #n, pendingIamRequests",
+        ExpressionAttributeNames={"#n": "name"},
+    )
+    results = []
+    for item in resp.get("Items", []):
+        pending = item.get("pendingIamRequests") or []
+        for req in pending:
+            if req.get("status") == "pending":
+                results.append({
+                    "workspaceId": item["workspaceId"],
+                    "workspaceName": item.get("name", ""),
+                    **req,
+                })
+    return success({"requests": results})
+
+
+@router.post("/api/workspaces/<wsId>/iam-requests/approve")
+def approve_iam_request(wsId: str):
+    """Platform admin approves a pending IAM request.
+
+    Body: {"type": "create_role"} or {"type": "grant_mcp", "targets": [...]}
+    Executes the approved action immediately, then marks the request as approved.
+    """
+    _, is_admin, admin_err = check_platform_admin(router.current_event)
+    if admin_err:
+        return admin_err
+    if not is_admin:
+        return forbidden()
+    # Also need workspace membership check for ws_id validation.
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="viewer", ws_id=wsId)
+    if err:
+        # Platform admin might not be a workspace member — skip membership check.
+        ws_id = wsId
+
+    body = router.current_event.json_body or {}
+    req_type = body.get("type", "")
+
+    table = _get_table()
+    meta = _get_workspace_meta(ws_id)
+    if not meta:
+        return not_found()
+
+    pending = list(meta.get("pendingIamRequests") or [])
+    matched = None
+    for i, req in enumerate(pending):
+        if req.get("type") == req_type and req.get("status") == "pending":
+            if req_type == "grant_mcp":
+                req_targets = set(req.get("targets", []))
+                body_targets = set(body.get("targets", []))
+                if req_targets != body_targets:
+                    continue
+            matched = i
+            break
+
+    if matched is None:
+        return not_found("No matching pending request found")
+
+    now = datetime.utcnow().isoformat() + "Z"
+
+    # Execute the approved action.
+    if req_type == "create_role":
+        # Delegate to the existing role creation logic (minus the platform admin check).
+        if not ACCOUNT_ID or not WORKSPACE_BOUNDARY_ARN:
+            return internal_error("IAM configuration missing")
+        result = _execute_create_role(ws_id, meta)
+        if "error" in result:
+            return internal_error(result["error"])
+    elif req_type == "grant_mcp":
+        targets = body.get("targets", [])
+        result = _execute_grant_mcp(ws_id, meta, targets)
+        if "error" in result:
+            return internal_error(result["error"])
+    else:
+        return bad_request(f"Unknown request type: {req_type}")
+
+    # Mark as approved.
+    pending[matched]["status"] = "approved"
+    pending[matched]["approvedBy"] = user_id
+    pending[matched]["approvedAt"] = now
+    table.update_item(
+        Key={"workspaceId": ws_id, "sk": "META"},
+        UpdateExpression="SET pendingIamRequests = :p",
+        ExpressionAttributeValues={":p": pending},
+    )
+
+    return success({"message": "Approved and executed", "request": pending[matched]})
+
+
+@router.post("/api/workspaces/<wsId>/iam-requests/reject")
+def reject_iam_request(wsId: str):
+    """Platform admin rejects a pending IAM request."""
+    user_id, is_admin, admin_err = check_platform_admin(router.current_event)
+    if admin_err:
+        return admin_err
+    if not is_admin:
+        return forbidden()
+
+    body = router.current_event.json_body or {}
+    req_type = body.get("type", "")
+    ws_id = wsId
+
+    table = _get_table()
+    meta = _get_workspace_meta(ws_id)
+    if not meta:
+        return not_found()
+
+    pending = list(meta.get("pendingIamRequests") or [])
+    matched = None
+    for i, req in enumerate(pending):
+        if req.get("type") == req_type and req.get("status") == "pending":
+            matched = i
+            break
+    if matched is None:
+        return not_found("No matching pending request found")
+
+    now = datetime.utcnow().isoformat() + "Z"
+    pending[matched]["status"] = "rejected"
+    pending[matched]["rejectedAt"] = now
+    table.update_item(
+        Key={"workspaceId": ws_id, "sk": "META"},
+        UpdateExpression="SET pendingIamRequests = :p",
+        ExpressionAttributeValues={":p": pending},
+    )
+    return success({"message": "Rejected", "request": pending[matched]})

@@ -70,3 +70,12 @@ def check_permission(member: dict | None, min_role: str) -> bool:
     if not member:
         return False
     return ROLE_LEVEL.get(member.get("role", ""), -1) >= ROLE_LEVEL.get(min_role, 99)
+
+
+PLATFORM_ADMIN_GROUP = "platform-admins"
+
+
+def is_platform_admin(claims: dict) -> bool:
+    """Check if the JWT claims include the platform-admins Cognito group."""
+    groups = claims.get("cognito:groups") or []
+    return PLATFORM_ADMIN_GROUP in groups
