@@ -36,7 +36,7 @@ graph LR
     Agents --> LLM[Bedrock LLMs]
     Agents --> Ext[Skills · Tools · MCP]
     Agents <-->|记忆| Mem[AgentCore Memory]
-    Agents -.observability.-> Obs[Traces · Evaluations<br/>Costs · Dashboard]
+    Agents -.observability.-> Obs[Traces · Evaluations<br/>Costs]
 ```
 
 完整系统图（CloudFront / Lambda / EventBridge / Evaluator 等）与关键设计说明见 [docs/architecture.md](docs/architecture.md)。
@@ -107,7 +107,7 @@ An agent orchestration platform on AWS Bedrock AgentCore. Describe what you need
 - **Scheduled triggers** — Visual cron builder; every run is archived as a card with a click-through to full run details.
 - **MCP toolbelt** — The full AWS-official MCP catalog, enable what you need.
 - **Cross-session memory** — Powered by AgentCore Memory: agents remember user preferences and facts across sessions and devices. Users can view and manage memories from the chat drawer.
-- **Platform-level observability** — Trace timeline, latency percentiles, error rates, and token costs aggregated per agent and per workspace in a single-screen dashboard.
+- **Platform-level observability** — Trace timeline, latency percentiles, error rates, and token costs aggregated per agent and per workspace on a single screen.
 - **Marketplace** — Publish and clone agents / skills / tools across workspaces; metadata is public, source stays private until cloned.
 
 ## Architecture
@@ -130,7 +130,7 @@ graph LR
     Agents --> LLM[Bedrock LLMs]
     Agents --> Ext[Skills · Tools · MCP]
     Agents <-->|memory| Mem[AgentCore Memory]
-    Agents -.observability.-> Obs[Traces · Evaluations<br/>Costs · Dashboard]
+    Agents -.observability.-> Obs[Traces · Evaluations<br/>Costs]
 ```
 
 Full system diagram (CloudFront / Lambda / EventBridge / Evaluator, …) and key design notes live in [docs/architecture.md](docs/architecture.md).

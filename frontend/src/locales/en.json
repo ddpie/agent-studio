@@ -376,6 +376,7 @@
     "tabGeneral": "General",
     "tabAccount": "Account",
     "tabWorkspace": "Workspace",
+    "tabIam": "IAM Permissions",
     "interface": "Interface",
     "sidebarWidth": "Sidebar width",
     "currentValue": "Current: {{value}}px",
