@@ -321,8 +321,7 @@ export default function IamPermissionsTab() {
         </div>
       </div>
 
-      {/* Permission Boundary detail (expandable) */}
-      <BoundaryDetail />
+      {/* Permission Boundary */}
 
       {/* MCP authorization list */}
       <div>

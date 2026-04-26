@@ -78,6 +78,7 @@ export async function fetchAgentMetadataLight(agentId: string): Promise<AgentMet
       mcp_targets: item.mcp_targets || [],
       gateway_url: item.gateway_url,
       linked_agents: item.linked_agents || [],
+      memory: item.memory,
     } as AgentMetadata;
   } catch (err) {
     console.error("fetchAgentMetadataLight error:", err);
@@ -124,6 +125,7 @@ export async function fetchAgentMetadata(agentId: string): Promise<AgentMetadata
       mcp_targets: item.mcp_targets || [],
       gateway_url: item.gateway_url,
       linked_agents: item.linked_agents || [],
+      memory: item.memory,
     } as AgentMetadata;
   } catch (err) {
     console.error("fetchAgentMetadata error:", err);
