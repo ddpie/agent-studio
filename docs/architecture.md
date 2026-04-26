@@ -194,8 +194,7 @@ aws/spans
     ├── StatsStrip 消费（调用数 / 错误率 / p95 延迟 / 平均延迟 + sparkline）
     ├── Runs 页签消费（每行按 session id 分类为 定时/手动/聊天）
     ├── Evaluations 页签消费（通过 OnlineEvaluationConfig）
-    ├── Costs 页签消费（token / 调用次数聚合）
-    └── Dashboard 页消费（workspace 级成本总览 + Agent 排行）
+    └── Costs 页签消费（token / 调用次数聚合）
 
 runtime log groups
     └── Logs 页签 + Runs 响应卡片消费
@@ -211,8 +210,7 @@ runtime log groups
 
 Agent 详情页采用 sticky 侧栏 + IntersectionObserver lazy-mount。**顶部首位是 StatsStrip**（4 指标卡片 + sparkline，24h/7d 切换），下方依次为 Traces（首位页签）、Schedules、Evaluations、Costs、Integration；底部 Advanced 折叠组：Deployments、Endpoints、Secrets、Logs。单个运行可通过 `/agents/:id/runs/:sessionId` 直接分享。
 
-新增页面：
-- **Dashboard**（`/#/dashboard`）—— workspace 级成本总览，4 统计卡片 + Agent 排行表，24h/7d/30d 切换
+新增组件：
 - **记忆抽屉**（ChatPanel 右侧 💭 按钮）—— 列出 4 种策略的记忆条目，支持单条删除和全部清除
 
 ## 基础设施（AWS CDK, TypeScript）
@@ -474,8 +472,7 @@ aws/spans
     ├── consumed by StatsStrip (invocations / error rate / p95 / avg latency + sparklines)
     ├── consumed by Runs tab (each row tagged scheduled / manual / chat by session id)
     ├── consumed by Evaluations tab (via OnlineEvaluationConfig)
-    ├── consumed by Costs tab (token / invocation aggregates)
-    └── consumed by Dashboard page (workspace-level cost overview + agent ranking)
+    └── consumed by Costs tab (token / invocation aggregates)
 
 runtime log groups
     └── consumed by Logs tab + Runs response card
@@ -497,9 +494,7 @@ Evaluations → Costs → Integration; a collapsed Advanced group at the
 bottom contains Deployments / Endpoints / Secrets / Logs. A single run
 is shareable via `/agents/:id/runs/:sessionId`.
 
-New pages:
-- **Dashboard** (`/#/dashboard`) — workspace-level cost overview with
-  4 stat cards + agent ranking table, 24h/7d/30d toggle.
+New components:
 - **Memory drawer** (💭 button in ChatPanel) — lists memory records
   across 4 strategies, supports single delete and forget-all.
 

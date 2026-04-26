@@ -141,6 +141,7 @@ import json, os, sys
 import boto3
 
 region = os.environ["REGION"]
+account_id = os.environ["ACCOUNT_ID"]
 registry_file = os.environ["REGISTRY_FILE"]
 
 import yaml
@@ -194,12 +195,35 @@ else:
                 "Statement": [{
                     "Effect": "Allow",
                     "Principal": {"Service": "bedrock-agentcore.amazonaws.com"},
-                    "Action": "sts:AssumeRole"
+                    "Action": "sts:AssumeRole",
+                    "Condition": {
+                        "StringEquals": {
+                            "aws:SourceAccount": account_id
+                        }
+                    }
                 }]
             }),
         )
         import time as _time
         _time.sleep(10)  # Wait for IAM propagation
+
+    # Converge trust policy (idempotent — ensures aws:SourceAccount condition)
+    iam.update_assume_role_policy(
+        RoleName=role_name,
+        PolicyDocument=json.dumps({
+            "Version": "2012-10-17",
+            "Statement": [{
+                "Effect": "Allow",
+                "Principal": {"Service": "bedrock-agentcore.amazonaws.com"},
+                "Action": "sts:AssumeRole",
+                "Condition": {
+                    "StringEquals": {
+                        "aws:SourceAccount": account_id
+                    }
+                }
+            }]
+        }),
+    )
 
     # Ensure policy exists (idempotent — covers both new and existing roles)
     iam.put_role_policy(
@@ -535,10 +559,13 @@ import boto3
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 
+import yaml as _yaml
+
 region = os.environ["REGION"]
 account_id = os.environ["ACCOUNT_ID"]
 gateway_id = os.environ["GATEWAY_ID"]
 gateway_role_arn = os.environ["GATEWAY_ROLE_ARN"]
+registry_file = os.environ["REGISTRY_FILE"]
 rt_name = "$RT_NAME"
 rt_version = "$RT_VERSION"
 ecr_uri = "$ECR_URI"
@@ -571,13 +598,26 @@ try:
 except Exception as e:
     print(f"    WARNING: list_agent_runtimes failed: {e}", file=sys.stderr)
 
-# Canonical execution role — single source of truth for both create and
-# update paths. Do NOT read the role back from an existing runtime and
-# transparently re-submit it; that's how we ended up with 37 runtimes
-# pinned to `AgentStudioSubAgentRole-us-east-1` long after CDK deleted
-# that role (commit 12a9fc8). Any subsequent re-run must converge the
-# role back to this constant.
-execution_role = f"arn:aws:iam::{account_id}:role/AgentStudioSubAgent-basic-{region}"
+# Per-target execution role: if the target declares an iam_policy in the
+# registry, use the CDK-managed per-target role (AgentStudioMCP-{name}-{region}).
+# Otherwise fall back to the shared basic role. This replaces the old
+# single-canonical-role approach (see commit 12a9fc8 for history).
+with open(registry_file) as _rf:
+    _registry = _yaml.safe_load(_rf)
+_target_has_iam_policy = False
+for _t in _registry.get("runtime_targets", []):
+    if _t.get("name") == rt_name:
+        _ip = _t.get("iam_policy")
+        if _ip and isinstance(_ip, dict) and _ip.get("Statement"):
+            _target_has_iam_policy = True
+        break
+
+if _target_has_iam_policy:
+    execution_role = f"arn:aws:iam::{account_id}:role/AgentStudioMCP-{rt_name}-{region}"
+    print(f"    Using per-target role: {execution_role.split('/')[-1]}", file=sys.stderr)
+else:
+    execution_role = f"arn:aws:iam::{account_id}:role/AgentStudioSubAgent-basic-{region}"
+    print(f"    Using shared basic role: {execution_role.split('/')[-1]}", file=sys.stderr)
 
 if runtime_id:
     print(f"    Found existing runtime: {runtime_id}", file=sys.stderr)

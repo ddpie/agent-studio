@@ -156,7 +156,10 @@
     "stats": {
       "title": "Aggregate stats",
       "rangeLabel": "Time range",
-      "range": { "24h": "24h", "7d": "7d" },
+      "range": {
+        "24h": "24h",
+        "7d": "7d"
+      },
       "requests": "Requests",
       "errors": "Errors",
       "p95": "p95 latency",
@@ -1129,5 +1132,34 @@
       "strategyEpisodes": "Remember past scenarios (episodes)",
       "unavailable": "Memory unavailable — ask workspace owner to run repair."
     }
+  },
+  "iam": {
+    "title": "IAM Permissions",
+    "noRoleDesc": "This workspace has no custom IAM role. Create one to use AWS service tools such as CloudWatch, CloudTrail, and IAM.",
+    "createRole": "Create IAM role",
+    "creating": "Creating...",
+    "roleCreated": "IAM role created",
+    "createFailed": "Failed to create IAM role",
+    "roleArn": "IAM Role ARN",
+    "permissionBoundary": "Permission Boundary",
+    "mcpAuth": "MCP Tool Authorization",
+    "scpNote": "Permissions are checked via SimulatePrincipalPolicy. If the account uses Organization SCPs, results may not be accurate.",
+    "noExtraPerms": "No extra permissions needed",
+    "allPermsGranted": "All permissions granted",
+    "missingPerms": "Missing {{count}} permission(s)",
+    "autoGrant": "Auto-grant",
+    "manual": "Manual",
+    "missingActions": "Missing Actions",
+    "cliCommand": "AWS CLI Command",
+    "copied": "Copied",
+    "consoleSteps": "AWS Console Steps",
+    "consoleStep1": "Open the IAM Console and navigate to Roles",
+    "consoleStep2": "Find and open role \"{{roleName}}\"",
+    "consoleStep3": "Click \"Add permissions\" > \"Create inline policy\"",
+    "consoleStep4": "Paste the JSON policy document and save",
+    "refresh": "Refresh permission status",
+    "grantSuccess": "Permissions granted for {{target}}",
+    "grantFailed": "Failed to grant permissions",
+    "mcpIamRequired": "This MCP target requires workspace IAM authorization"
   }
 }

@@ -1,25 +1,32 @@
-import { Settings, Download, Trash2, Shield, Sun, Moon, Monitor, Languages, Users, UserCog } from "lucide-react";
+import { Settings, Download, Trash2, Shield, Sun, Moon, Monitor, Languages, Users, UserCog, KeyRound } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
 import { useUISettings } from "../../stores/ui-settings-store";
+import { useWorkspaceStore } from "../../stores/workspace-store";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import WorkspaceMembersTab from "./WorkspaceMembersTab";
 import WorkspaceSettingsTab from "./WorkspaceSettingsTab";
 import AccountSettingsTab from "./AccountSettingsTab";
+import IamPermissionsTab from "./IamPermissionsTab";
 
-type TabId = "general" | "account" | "workspace";
+type TabId = "general" | "account" | "workspace" | "iam";
+
+const VALID_TABS: TabId[] = ["general", "account", "workspace", "iam"];
 
 export default function SettingsPage() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const { currentWorkspace } = useWorkspaceStore();
+  const role = currentWorkspace?.role;
+  const canSeeIam = role === "admin" || role === "owner";
   // URL is the source of truth for the active tab. ?tab=workspace deep-
   // links to the workspace tab (Kiro-key banner CTA), and clicking a
   // tab header writes back with `replace:true` so we don't flood the
   // history stack with one entry per click.
   const rawTab = searchParams.get("tab") as TabId | null;
-  const tab: TabId = rawTab && ["general", "account", "workspace"].includes(rawTab)
+  const tab: TabId = rawTab && VALID_TABS.includes(rawTab)
     ? rawTab
     : "general";
   const setTab = (id: TabId) => {
@@ -62,6 +69,7 @@ export default function SettingsPage() {
           { id: "general" as const, icon: Settings, label: t("settings.tabGeneral") },
           { id: "account" as const, icon: UserCog, label: t("settings.tabAccount") },
           { id: "workspace" as const, icon: Users, label: t("settings.tabWorkspace") },
+          ...(canSeeIam ? [{ id: "iam" as const, icon: KeyRound, label: t("settings.tabIam") }] : []),
         ]).map(({ id, icon: Icon, label }) => (
           <button
             key={id}
@@ -76,6 +84,8 @@ export default function SettingsPage() {
           </button>
         ))}
       </div>
+
+      {tab === "iam" && canSeeIam && <IamPermissionsTab />}
 
       {tab === "account" && <AccountSettingsTab />}
 

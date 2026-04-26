@@ -12,7 +12,6 @@ import ToolDetail from "./components/pages/ToolDetail";
 import McpPage from "./components/pages/McpPage";
 import McpPolicyPage from "./components/pages/McpPolicyPage";
 import MarketplacePage from "./components/pages/MarketplacePage";
-import DashboardPage from "./components/pages/DashboardPage";
 import CostsPage from "./components/pages/CostsPage";
 import SettingsPage from "./components/pages/SettingsPage";
 import PageErrorBoundary from "./components/common/PageErrorBoundary";
@@ -31,7 +30,6 @@ export function createRoutes(
       element: <AppShell signOut={signOut} user={user} />,
       children: [
         { index: true, element: <Navigate to="/agents" replace /> },
-        { path: "dashboard", element: withBoundary(<DashboardPage />) },
         {
           path: "agents",
           element: <AgentsLayout />,
