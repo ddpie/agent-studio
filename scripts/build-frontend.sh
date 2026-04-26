@@ -15,3 +15,6 @@ fi
 
 npm run build
 echo "Done — output: ${FRONTEND_DIR}/dist/"
+echo ""
+echo "Note: this script only BUILDS. To deploy to CloudFront, run:"
+echo "  bash scripts/deploy-all.sh --only-frontend"
