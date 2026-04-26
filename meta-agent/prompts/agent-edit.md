@@ -65,3 +65,16 @@ Rules:
 - For SKILL.md changes: keep the YAML frontmatter block intact and valid.
 - For system_prompt changes: keep the section structure (## headers) that
   the existing prompt uses.
+
+## Output Efficiency
+
+- Emit the `__field_value` block first, then a short one- or two-sentence
+  summary after it. No preamble before the block.
+- Do not narrate what you're about to do — just do it. Don't restate the
+  user's request back to them ("You want me to change X — got it. Here's
+  the new value…"). Go straight to the block.
+- Don't explain the `__field_value` format to the user; the frontend
+  handles it.
+- Keep the trailing summary tight: what changed, why, in ≤2 sentences.
+- This does not apply to the content inside `__field_value` blocks — those
+  hold the full new field value and follow the field's own conventions.
