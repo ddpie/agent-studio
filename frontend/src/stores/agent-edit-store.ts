@@ -269,7 +269,7 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     if (!formData || !originalData) return {};
     const changes: Record<string, { old: string; new: string }> = {};
     // Skip complex object fields that can't be meaningfully diffed as strings
-    const skipKeys = new Set(["deployedSkillHashes", "tools", "updated_at", "created_at", "gateway_url"]);
+    const skipKeys = new Set(["deployedSkillHashes", "tools", "updated_at", "created_at", "gateway_url", "memory"]);
     const keys = new Set([...Object.keys(formData), ...Object.keys(originalData)]);
     for (const key of keys) {
       if (skipKeys.has(key)) continue;

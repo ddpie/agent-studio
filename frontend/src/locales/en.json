@@ -1147,7 +1147,8 @@
       "strategyFacts": "Remember factual information",
       "strategySummaries": "Remember conversation summaries",
       "strategyEpisodes": "Remember past scenarios (episodes)",
-      "unavailable": "Memory unavailable — ask workspace owner to run repair."
+      "unavailable": "Memory unavailable — ask workspace owner to run repair.",
+      "autoSaveHint": "Memory settings save instantly — no agent redeploy needed."
     }
   },
   "iam": {

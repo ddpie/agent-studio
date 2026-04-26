@@ -95,6 +95,9 @@ export default function MemorySection({
           <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
             {t("memory.builder.toggleHint")}
           </div>
+          <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 italic">
+            {t("memory.builder.autoSaveHint")}
+          </div>
         </div>
       </label>
 
