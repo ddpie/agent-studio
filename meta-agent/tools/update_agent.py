@@ -86,7 +86,6 @@ def update_agent(
     mcp_targets: str = "",
     supports_images: bool = False,
     staging_key: str = "",
-    force_redeploy: bool = False,
 ) -> str:
     """Update an existing agent's code and configuration without deleting and recreating.
 
@@ -120,7 +119,6 @@ def update_agent(
         mcp_targets: Comma-separated MCP target names (e.g. "cloudwatch,iam"). Validated against workspace policy.
         supports_images: Whether this agent can process image inputs.
         staging_key: S3 key to a JSON file containing all update parameters.
-        force_redeploy: Force a full redeploy even if no fields changed. Use when the agent template has been updated and the agent needs to pick up the new main.py.
 
     Returns:
         JSON with update status.
@@ -255,19 +253,9 @@ def update_agent(
         if mcp_targets_list and not mcp_endpoints:
             mcp_endpoints = _resolve_mcp_endpoints(mcp_targets_list)
 
-    # Diff: check if any redeploy-triggering field actually changed
-    needs_redeploy = bool(force_redeploy)
-    if system_prompt and system_prompt != existing_metadata.get("system_prompt", ""):
-        needs_redeploy = True
-    if tool_definitions:
-        needs_redeploy = True
-    if tool_names and tool_names != ",".join(existing_metadata.get("tools", [])):
-        needs_redeploy = True
-    # template_id changes no longer trigger a redeploy — the field is
-    # retired (see _REDEPLOY_FIELDS). Left here as a comment so future
-    # readers know the omission is deliberate, not an oversight.
-    if mcp_targets and mcp_targets != ",".join(existing_metadata.get("mcp_targets", [])):
-        needs_redeploy = True
+    # Always redeploy — ensures the agent picks up the latest template
+    # (memory bootstrap, stream_utils, builtin_tools) on every update.
+    needs_redeploy = True
 
     status = "metadata_only"
     # Captured for the background redeploy thread and the final metadata write.
