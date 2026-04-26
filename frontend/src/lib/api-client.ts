@@ -1547,6 +1547,74 @@ export interface AgentCostsResponse {
   rangeEnd: number;
 }
 
+// ── Workspace IAM role management ──
+
+export interface CreateWorkspaceRoleResponse {
+  roleArn: string;
+  roleName: string;
+  created: boolean;
+}
+
+export async function createWorkspaceRole(wsId: string): Promise<CreateWorkspaceRoleResponse> {
+  return apiPostRaw<CreateWorkspaceRoleResponse>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/role`,
+    {},
+  );
+}
+
+export interface WorkspacePermissionResult {
+  action: string;
+  allowed: boolean;
+}
+
+export interface GetWorkspacePermissionsResponse {
+  hasRole: boolean;
+  roleArn?: string;
+  results?: WorkspacePermissionResult[];
+}
+
+export async function getWorkspacePermissions(
+  wsId: string,
+  actions: string[],
+): Promise<GetWorkspacePermissionsResponse> {
+  const params = new URLSearchParams();
+  params.set("actions", actions.join(","));
+  return apiGetRaw<GetWorkspacePermissionsResponse>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/permissions?${params.toString()}`,
+  );
+}
+
+export interface GrantMcpTargetsResponse {
+  mcpGrants: string[];
+  policySize: number;
+}
+
+export async function grantMcpTargets(
+  wsId: string,
+  targets: string[],
+): Promise<GrantMcpTargetsResponse> {
+  return apiPostRaw<GrantMcpTargetsResponse>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/grant-mcp`,
+    { targets },
+  );
+}
+
+export interface RevokeMcpTargetsResponse {
+  mcpGrants: string[];
+}
+
+export async function revokeMcpTargets(
+  wsId: string,
+  targets: string[],
+): Promise<RevokeMcpTargetsResponse> {
+  return apiPostRaw<RevokeMcpTargetsResponse>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/revoke-mcp`,
+    { targets },
+  );
+}
+
+// ── Costs / usage ──
+
 export async function fetchWorkspaceCosts(range: CostRange = "7d") {
   return apiGet<WorkspaceCostsResponse>(`/costs?range=${encodeURIComponent(range)}`);
 }

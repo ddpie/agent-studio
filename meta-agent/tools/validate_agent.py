@@ -425,6 +425,64 @@ def validate_agent(
     mcp_tool_names = _get_mcp_tool_names(mcp_target_names)
     mcp_tool_names_set = set(mcp_tool_names)
 
+    # 2c. MCP target IAM permission check
+    # For each mcp_target in the proposal, verify the workspace role has
+    # the required IAM permissions declared in mcp-registry.yaml.
+    if mcp_target_names:
+        try:
+            from tools.list_mcp_servers import (
+                _load_registry_iam_policies,
+                _get_workspace_role_arn,
+                _check_iam_permissions,
+            )
+            from tools._scope import current_workspace
+
+            iam_policies = _load_registry_iam_policies()
+            ws_id = current_workspace()
+            workspace_role_arn = _get_workspace_role_arn(ws_id) if ws_id else None
+
+            for target in mcp_target_names:
+                iam_policy = iam_policies.get(target)
+                if iam_policy is None:
+                    # No IAM policy declared — platform tool, always allowed
+                    continue
+
+                if not workspace_role_arn:
+                    # Target requires IAM permissions but workspace has no custom role
+                    actions = []
+                    for stmt in iam_policy.get("Statement", []):
+                        a = stmt.get("Action", [])
+                        actions.extend(a if isinstance(a, list) else [a])
+                    errors.append(
+                        f"MCP target '{target}' requires IAM permissions "
+                        f"({', '.join(actions)}) but this workspace has no "
+                        f"custom IAM role. Create one in Settings → Workspace → "
+                        f"IAM Role, then grant permissions for '{target}'."
+                    )
+                    continue
+
+                # Workspace has a role — check if it has the required permissions
+                result = _check_iam_permissions(workspace_role_arn, iam_policy)
+                if not result["granted"]:
+                    missing = result.get("missing_actions", [])
+                    # Extract role name from ARN for CLI command
+                    role_name = workspace_role_arn.rsplit("/", 1)[-1] if "/" in workspace_role_arn else workspace_role_arn
+                    policy_json = json.dumps(iam_policy, separators=(",", ":"))
+                    cli_cmd = (
+                        f"aws iam put-role-policy "
+                        f"--role-name {role_name} "
+                        f"--policy-name MCP-{target} "
+                        f"--policy-document '{policy_json}'"
+                    )
+                    errors.append(
+                        f"MCP target '{target}' requires IAM permissions that "
+                        f"the workspace role is missing: [{', '.join(missing)}]. "
+                        f"Grant via Settings → IAM Permissions → one-click authorize, "
+                        f"or run:\n{cli_cmd}"
+                    )
+        except Exception as e:
+            warnings.append(f"MCP IAM permission check skipped: {e}")
+
     if defined_funcs and declared_names:
         defined_set = set(defined_funcs)
         declared_set = set(declared_names)

@@ -15,6 +15,8 @@ from shared.middleware import auth_check
 from shared.response import success, paginated, forbidden, not_found, bad_request, version_conflict, internal_error
 from shared.validators import validate_id, parse_pagination
 
+_iam_client = None
+
 router = Router()
 logger = Logger(child=True)
 
@@ -392,6 +394,52 @@ def update_workspace(wsId: str):
     })
 
 
+# ─── Workspace IAM role cleanup ───
+
+def _get_iam_client():
+    global _iam_client
+    if _iam_client is None:
+        _iam_client = boto3.client("iam", region_name=REGION)
+    return _iam_client
+
+
+def _delete_workspace_iam_role(workspace_meta: dict) -> None:
+    """Clean up IAM role when a workspace is deleted.
+
+    Best-effort: failures are logged but do not block workspace deletion.
+    Follows the required IAM deletion order:
+      1. Delete all inline policies
+      2. Detach all managed policies
+      3. Delete the role
+    """
+    role_name = workspace_meta.get("roleName")
+    if not role_name:
+        return
+
+    iam = _get_iam_client()
+    try:
+        # 1. Delete all inline policies
+        policies = iam.list_role_policies(RoleName=role_name)
+        for policy_name in policies.get("PolicyNames", []):
+            iam.delete_role_policy(RoleName=role_name, PolicyName=policy_name)
+
+        # 2. Detach all managed policies
+        attached = iam.list_attached_role_policies(RoleName=role_name)
+        for policy in attached.get("AttachedPolicies", []):
+            iam.detach_role_policy(RoleName=role_name, PolicyArn=policy["PolicyArn"])
+
+        # 3. Delete the role
+        iam.delete_role(RoleName=role_name)
+        logger.info("Deleted workspace IAM role", extra={"roleName": role_name})
+    except iam.exceptions.NoSuchEntityException:
+        pass  # Role already deleted
+    except Exception as e:
+        logger.warning(
+            "Failed to delete workspace IAM role",
+            extra={"roleName": role_name, "error": str(e)},
+        )
+
+
 # ─── DELETE /api/workspaces/{wsId} ───
 @router.delete("/api/workspaces/<wsId>")
 def delete_workspace(wsId: str):
@@ -401,10 +449,13 @@ def delete_workspace(wsId: str):
 
     table = _get_table()
 
-    # Best-effort delete the AgentCore Memory resource before removing rows.
+    # Fetch workspace META for cleanup before purging DDB records.
     meta_resp = table.get_item(Key={"workspaceId": ws_id, "sk": "META"}, ConsistentRead=True)
-    meta = meta_resp.get("Item") or {}
-    _delete_workspace_memory(meta.get("memory_id", ""))
+    workspace_meta = meta_resp.get("Item") or {}
+
+    # Best-effort cleanup: Memory + IAM role (before DDB purge).
+    _delete_workspace_memory(workspace_meta.get("memory_id", ""))
+    _delete_workspace_iam_role(workspace_meta)
 
     last_key = None
     while True:

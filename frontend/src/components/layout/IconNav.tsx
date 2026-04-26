@@ -1,7 +1,7 @@
 // src/components/layout/IconNav.tsx
 import { NavLink } from "react-router";
 import { useTranslation } from "react-i18next";
-import { Bot, Package, Wrench, Plug, Store, DollarSign, Settings, BarChart3 } from "lucide-react";
+import { Bot, Package, Wrench, Plug, Store, DollarSign, Settings } from "lucide-react";
 
 const navItems = [
   { to: "/agents", icon: Bot, labelKey: "nav.agents" },
@@ -9,7 +9,6 @@ const navItems = [
   { to: "/tools", icon: Wrench, labelKey: "nav.tools" },
   { to: "/mcp", icon: Plug, labelKey: "nav.mcp" },
   { to: "/marketplace", icon: Store, labelKey: "nav.marketplace" },
-  { to: "/dashboard", icon: BarChart3, labelKey: "nav.dashboard" },
   { to: "/costs", icon: DollarSign, labelKey: "nav.costs" },
 ] as const;
 

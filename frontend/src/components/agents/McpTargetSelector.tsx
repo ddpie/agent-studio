@@ -10,8 +10,9 @@ import {
   Search,
   Wrench,
   ChevronRight,
+  Lock,
 } from "lucide-react";
-import { apiGet } from "../../lib/api-client";
+import { apiGet, getWorkspacePermissions, getWorkspaceId } from "../../lib/api-client";
 
 interface McpTarget {
   name: string;
@@ -37,6 +38,17 @@ const CATEGORIES = [
   "database", "messaging", "ai_ml", "search", "networking",
   "industry", "data", "devtools", "operations",
 ] as const;
+
+// Targets that require IAM permissions (maps target name to required actions)
+const IAM_REQUIRED_TARGETS: Record<string, string[]> = {
+  cloudwatch: [
+    "cloudwatch:DescribeAlarms", "cloudwatch:GetMetricData", "cloudwatch:GetMetricStatistics",
+    "logs:DescribeLogGroups", "logs:StartQuery", "logs:GetQueryResults",
+  ],
+  cloudtrail: ["cloudtrail:LookupEvents", "cloudtrail:StartQuery", "cloudtrail:GetQueryResults"],
+  iam: ["iam:GetUser", "iam:GetRole", "iam:ListRoles", "iam:ListPolicies"],
+  "nova-canvas": ["bedrock:InvokeModel"],
+};
 
 export default function McpTargetSelector({ selectedTargets, onChange, hasLegacyConfig }: McpTargetSelectorProps) {
   const { t } = useTranslation();
@@ -73,6 +85,34 @@ export default function McpTargetSelector({ selectedTargets, onChange, hasLegacy
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTargets.join(",")]);
 
+  // Track which targets with IAM requirements are not yet granted
+  const [deniedTargets, setDeniedTargets] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const allActions = Object.values(IAM_REQUIRED_TARGETS).flat();
+    if (allActions.length === 0) return;
+    const wsId = getWorkspaceId();
+    getWorkspacePermissions(wsId, [...new Set(allActions)])
+      .then((resp) => {
+        if (!resp.hasRole) {
+          // No role means all IAM-requiring targets are denied
+          setDeniedTargets(new Set(Object.keys(IAM_REQUIRED_TARGETS)));
+          return;
+        }
+        if (!resp.results) return;
+        const resultMap = new Map(resp.results.map((r) => [r.action, r.allowed]));
+        const denied = new Set<string>();
+        for (const [target, actions] of Object.entries(IAM_REQUIRED_TARGETS)) {
+          const hasMissing = actions.some((a) => !resultMap.get(a));
+          if (hasMissing) denied.add(target);
+        }
+        setDeniedTargets(denied);
+      })
+      .catch(() => {
+        // On error, don't block — just don't show lock icons
+      });
+  }, []);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-6">
@@ -103,6 +143,7 @@ export default function McpTargetSelector({ selectedTargets, onChange, hasLegacy
         const isExpanded = expandedTarget === target.name;
         const displayName = target.name.replace(/^mcp-/, "");
         const isRemote = target.type === "remote";
+        const isDenied = deniedTargets.has(target.name);
         return (
           <div
             key={target.name}
@@ -120,6 +161,11 @@ export default function McpTargetSelector({ selectedTargets, onChange, hasLegacy
               <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
                 {displayName}
               </span>
+              {isDenied && (
+                <span title={t("iam.mcpIamRequired")}>
+                  <Lock className="w-3 h-3 text-amber-500 shrink-0" />
+                </span>
+              )}
               <span className="text-[11px] text-gray-400 truncate flex-1">
                 {target.description}
               </span>
@@ -152,6 +198,7 @@ export default function McpTargetSelector({ selectedTargets, onChange, hasLegacy
         onClose={() => setPickerOpen(false)}
         allTargets={allTargets}
         selectedTargets={normalizedTargets}
+        deniedTargets={deniedTargets}
         onToggle={(name) => {
           if (selectedSet.has(name)) {
             onChange(normalizedTargets.filter((t) => t !== name));
@@ -171,12 +218,14 @@ function McpPicker({
   onClose,
   allTargets,
   selectedTargets,
+  deniedTargets,
   onToggle,
 }: {
   open: boolean;
   onClose: () => void;
   allTargets: McpTarget[];
   selectedTargets: string[];
+  deniedTargets: Set<string>;
   onToggle: (name: string) => void;
 }) {
   const { t } = useTranslation();
@@ -282,6 +331,7 @@ function McpPicker({
                 const isRemote = target.type === "remote";
                 const displayName = target.name.replace(/^mcp-/, "");
                 const isExpanded = expandedTarget === target.name;
+                const isDenied = deniedTargets.has(target.name);
 
                 return (
                   <div key={target.name} className={`rounded-lg border transition-all ${
@@ -303,6 +353,11 @@ function McpPicker({
                           <span className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
                             {displayName}
                           </span>
+                          {isDenied && (
+                            <span title={t("iam.mcpIamRequired")}>
+                              <Lock className="w-3 h-3 text-amber-500 shrink-0" />
+                            </span>
+                          )}
                           {isSelected && (
                             <span className="text-[10px] text-purple-500 shrink-0">{t("agentSkills.added")}</span>
                           )}

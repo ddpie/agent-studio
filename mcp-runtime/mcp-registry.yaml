@@ -15,6 +15,7 @@ remote_targets:
     endpoint: "https://aws-mcp.us-east-1.api.aws/mcp"
     auth: sigv4
     category: general
+    iam_policy: null  # Uses caller's own credentials; permissions depend on actual API called
 
   - name: aws-knowledge
     enabled: true
@@ -22,6 +23,7 @@ remote_targets:
     endpoint: "https://knowledge-mcp.global.api.aws"
     auth: none
     category: general
+    iam_policy: null  # Public endpoint, no IAM needed
 
 # ─── Runtime 部署：awslabs MCP Servers ───
 # 每个 target 部署为独立 Runtime，通过 mcp-proxy 桥接
@@ -40,6 +42,17 @@ runtime_targets:
     version: 0.0.24
     description: "CloudWatch 指标、日志、告警、调查技能"
     category: observability
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - cloudwatch:DescribeAlarms
+            - cloudwatch:GetMetricData
+            - cloudwatch:GetMetricStatistics
+            - logs:DescribeLogGroups
+            - logs:StartQuery
+            - logs:GetQueryResults
+          Resource: "*"
 
   - name: cloudwatch-applicationsignals
     enabled: true
@@ -48,6 +61,21 @@ runtime_targets:
     version: 0.1.29
     description: "Application Signals 性能监控"
     category: observability
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - application-signals:GetService
+            - application-signals:ListServices
+            - application-signals:GetServiceLevelObjective
+            - application-signals:ListServiceLevelObjectives
+            - application-signals:ListServiceOperations
+            - application-signals:ListServiceDependencies
+            - application-signals:ListServiceDependents
+            - cloudwatch:DescribeAlarms
+            - cloudwatch:GetMetricData
+            - cloudwatch:GetMetricStatistics
+          Resource: "*"
 
   - name: cloudtrail
     enabled: true
@@ -56,6 +84,14 @@ runtime_targets:
     version: 0.0.12
     description: "CloudTrail 审计日志查询"
     category: observability
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - cloudtrail:LookupEvents
+            - cloudtrail:StartQuery
+            - cloudtrail:GetQueryResults
+          Resource: "*"
 
   - name: prometheus
     enabled: true
@@ -64,6 +100,17 @@ runtime_targets:
     version: 0.2.14
     description: "Managed Prometheus 指标查询"
     category: observability
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - aps:QueryMetrics
+            - aps:GetLabels
+            - aps:GetMetricMetadata
+            - aps:GetSeries
+            - aps:ListWorkspaces
+            - aps:DescribeWorkspace
+          Resource: "*"
 
   # ━━━ 安全与合规 ━━━
   - name: iam
@@ -73,6 +120,15 @@ runtime_targets:
     version: 1.0.17
     description: "IAM 权限管理和策略分析"
     category: security
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - iam:GetUser
+            - iam:GetRole
+            - iam:ListRoles
+            - iam:ListPolicies
+          Resource: "*"
 
   - name: well-architected-security
     enabled: true
@@ -81,6 +137,18 @@ runtime_targets:
     version: 0.1.7
     description: "Well-Architected 安全评估"
     category: security
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - wellarchitected:GetWorkload
+            - wellarchitected:GetLensReview
+            - wellarchitected:GetAnswer
+            - wellarchitected:ListWorkloads
+            - wellarchitected:ListLenses
+            - wellarchitected:ListLensReviews
+            - wellarchitected:ListAnswers
+          Resource: "*"
 
   # ━━━ 成本与计费 ━━━
   - name: billing-cost-management
@@ -90,6 +158,16 @@ runtime_targets:
     version: 0.0.17
     description: "账单和预算管理（cost-explorer 升级版）"
     category: cost
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - ce:GetCostAndUsage
+            - ce:GetCostForecast
+            - ce:DescribeCostCategoryDefinition
+            - budgets:ViewBudget
+            - budgets:DescribeBudget
+          Resource: "*"
 
   - name: aws-pricing
     enabled: true
@@ -98,6 +176,7 @@ runtime_targets:
     version: 1.0.27
     description: "AWS 定价查询"
     category: cost
+    iam_policy: null  # Uses pricing:GetProducts via caller's SigV4 credentials; no extra workspace IAM needed
 
   # ━━━ 计算 ━━━
   - name: ecs
@@ -107,6 +186,20 @@ runtime_targets:
     version: 0.1.28
     description: "ECS 服务管理 + Express Mode 一键部署"
     category: compute
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - ecs:DescribeClusters
+            - ecs:DescribeServices
+            - ecs:DescribeTasks
+            - ecs:DescribeTaskDefinition
+            - ecs:DescribeContainerInstances
+            - ecs:ListClusters
+            - ecs:ListServices
+            - ecs:ListTasks
+            - ecs:ListTaskDefinitions
+          Resource: "*"
 
   - name: eks
     enabled: true
@@ -115,6 +208,19 @@ runtime_targets:
     version: 0.1.27
     description: "EKS 集群和 K8s 资源管理"
     category: compute
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - eks:DescribeCluster
+            - eks:DescribeNodegroup
+            - eks:DescribeFargateProfile
+            - eks:DescribeAddon
+            - eks:ListClusters
+            - eks:ListNodegroups
+            - eks:ListFargateProfiles
+            - eks:ListAddons
+          Resource: "*"
 
   - name: lambda-tool
     enabled: true
@@ -123,6 +229,18 @@ runtime_targets:
     version: 2.0.16
     description: "Lambda 函数调用和日志查询"
     category: compute
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - lambda:GetFunction
+            - lambda:ListFunctions
+            - lambda:InvokeFunction
+            - lambda:GetPolicy
+            - logs:DescribeLogGroups
+            - logs:GetLogEvents
+            - logs:FilterLogEvents
+          Resource: "*"
 
   - name: stepfunctions-tool
     enabled: false  # registers state machines as tools — 0 state machines = 0 tools = Gateway rejects
@@ -131,6 +249,15 @@ runtime_targets:
     version: 0.1.21
     description: "Step Functions 状态机管理"
     category: compute
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - states:DescribeStateMachine
+            - states:ListStateMachines
+            - states:DescribeExecution
+            - states:ListExecutions
+          Resource: "*"
 
   # ━━━ 数据库（无需 VPC）━━━
   - name: dynamodb
@@ -140,6 +267,17 @@ runtime_targets:
     version: 2.0.24
     description: "DynamoDB 数据建模、schema 校验、CDK 代码生成"
     category: database
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - dynamodb:DescribeTable
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:BatchGetItem
+            - dynamodb:ListTables
+          Resource: "*"
 
   - name: s3-tables
     enabled: true
@@ -148,6 +286,18 @@ runtime_targets:
     version: 0.0.22
     description: "S3 Tables Iceberg 格式"
     category: database
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:ListBucket
+            - s3tables:GetTable
+            - s3tables:GetTableBucket
+            - s3tables:ListTables
+            - s3tables:ListTableBuckets
+            - s3tables:GetTableMetadataLocation
+          Resource: "*"
 
   # ━━━ 数据库（需要 VPC）━━━
   - name: postgres
@@ -158,6 +308,14 @@ runtime_targets:
     description: "RDS PostgreSQL 操作"
     category: database
     vpc_required: true
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - rds:DescribeDBInstances
+            - rds:DescribeDBClusters
+            - rds-db:connect
+          Resource: "*"
 
   - name: mysql
     enabled: false
@@ -167,6 +325,14 @@ runtime_targets:
     description: "RDS MySQL 操作"
     category: database
     vpc_required: true
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - rds:DescribeDBInstances
+            - rds:DescribeDBClusters
+            - rds-db:connect
+          Resource: "*"
 
   - name: documentdb
     enabled: false
@@ -176,6 +342,13 @@ runtime_targets:
     description: "DocumentDB 文档数据库操作"
     category: database
     vpc_required: true
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - rds:DescribeDBClusters
+            - rds:DescribeDBInstances
+          Resource: "*"
 
   - name: redshift
     enabled: false
@@ -185,6 +358,16 @@ runtime_targets:
     description: "Redshift 数据仓库查询"
     category: database
     vpc_required: true
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - redshift:DescribeClusters
+            - redshift:GetClusterCredentials
+            - redshift-data:ExecuteStatement
+            - redshift-data:DescribeStatement
+            - redshift-data:GetStatementResult
+          Resource: "*"
 
   - name: aurora-dsql
     enabled: false
@@ -194,6 +377,14 @@ runtime_targets:
     description: "Aurora DSQL 分布式 SQL"
     category: database
     vpc_required: true
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - dsql:DbConnectAdmin
+            - dsql:GetCluster
+            - dsql:ListClusters
+          Resource: "*"
 
   - name: neptune
     enabled: false
@@ -203,6 +394,14 @@ runtime_targets:
     description: "Neptune 图数据库查询"
     category: database
     vpc_required: true
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - neptune-db:ReadDataViaQuery
+            - rds:DescribeDBClusters
+            - rds:DescribeDBInstances
+          Resource: "*"
 
   - name: elasticache
     enabled: false
@@ -212,6 +411,14 @@ runtime_targets:
     description: "ElastiCache Redis/Memcached"
     category: database
     vpc_required: true
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - elasticache:DescribeCacheClusters
+            - elasticache:DescribeReplicationGroups
+            - elasticache:ListTagsForResource
+          Resource: "*"
 
   - name: valkey
     enabled: false
@@ -221,6 +428,14 @@ runtime_targets:
     description: "Valkey 缓存服务"
     category: database
     vpc_required: true
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - elasticache:DescribeReplicationGroups
+            - elasticache:DescribeServerlessCaches
+            - elasticache:ListTagsForResource
+          Resource: "*"
 
   - name: memcached
     enabled: false
@@ -230,6 +445,13 @@ runtime_targets:
     description: "Memcached 缓存操作"
     category: database
     vpc_required: true
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - elasticache:DescribeCacheClusters
+            - elasticache:ListTagsForResource
+          Resource: "*"
 
   - name: timestream-for-influxdb
     enabled: false
@@ -239,6 +461,17 @@ runtime_targets:
     description: "Timestream 时序数据"
     category: database
     vpc_required: true
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - timestream:DescribeEndpoints
+            - timestream:SelectValues
+            - timestream:DescribeDatabase
+            - timestream:DescribeTable
+            - timestream:ListDatabases
+            - timestream:ListTables
+          Resource: "*"
 
   # ━━━ 消息队列 ━━━
   - name: sns-sqs
@@ -248,6 +481,17 @@ runtime_targets:
     version: 2.0.17
     description: "SNS + SQS 消息管理"
     category: messaging
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - sns:ListTopics
+            - sns:GetTopicAttributes
+            - sns:ListSubscriptionsByTopic
+            - sqs:ListQueues
+            - sqs:GetQueueAttributes
+            - sqs:GetQueueUrl
+          Resource: "*"
 
   - name: amazon-mq
     enabled: true
@@ -256,6 +500,15 @@ runtime_targets:
     version: 2.0.19
     description: "Amazon MQ 消息代理"
     category: messaging
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - mq:DescribeBroker
+            - mq:ListBrokers
+            - mq:DescribeConfiguration
+            - mq:ListConfigurations
+          Resource: "*"
 
   - name: msk
     enabled: true
@@ -264,6 +517,18 @@ runtime_targets:
     version: 0.0.17
     description: "MSK (Kafka) 集群管理"
     category: messaging
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - kafka:DescribeCluster
+            - kafka:DescribeClusterV2
+            - kafka:ListClusters
+            - kafka:ListClustersV2
+            - kafka:GetBootstrapBrokers
+            - kafka:ListNodes
+            - kafka:DescribeConfiguration
+          Resource: "*"
 
   # ━━━ AI/ML ━━━
   - name: bedrock-kb-retrieval
@@ -273,6 +538,15 @@ runtime_targets:
     version: 1.0.19
     description: "Bedrock 知识库 RAG 检索"
     category: ai_ml
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - bedrock:Retrieve
+            - bedrock:RetrieveAndGenerate
+            - bedrock:ListKnowledgeBases
+            - bedrock:GetKnowledgeBase
+          Resource: "*"
 
   - name: nova-canvas
     enabled: true
@@ -281,6 +555,12 @@ runtime_targets:
     version: 1.0.15
     description: "Nova Canvas 图像生成"
     category: ai_ml
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - bedrock:InvokeModel
+          Resource: "arn:aws:bedrock:*::foundation-model/amazon.nova-canvas-v1:0"
 
   - name: sagemaker-ai
     enabled: false  # package bug: PydanticUserError in manage_hyperpod_stacks (DeployStackResponse not defined)
@@ -289,6 +569,18 @@ runtime_targets:
     version: 1.0.7
     description: "SageMaker 模型部署和推理"
     category: ai_ml
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - sagemaker:DescribeEndpoint
+            - sagemaker:DescribeEndpointConfig
+            - sagemaker:DescribeModel
+            - sagemaker:DescribeTrainingJob
+            - sagemaker:ListEndpoints
+            - sagemaker:ListModels
+            - sagemaker:ListTrainingJobs
+          Resource: "*"
 
   - name: bedrock-data-automation
     enabled: true
@@ -297,6 +589,15 @@ runtime_targets:
     version: 0.0.19
     description: "Bedrock 文档理解和数据提取"
     category: ai_ml
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - bedrock:InvokeModel
+            - bedrock:InvokeModelWithResponseStream
+            - s3:GetObject
+            - s3:PutObject
+          Resource: "*"
 
   - name: bedrock-agentcore
     enabled: true
@@ -305,6 +606,17 @@ runtime_targets:
     version: 0.0.16
     description: "AgentCore 资源管理和文档查询"
     category: ai_ml
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - bedrock-agentcore:ListAgentRuntimes
+            - bedrock-agentcore:GetAgentRuntime
+            - bedrock-agentcore:ListGateways
+            - bedrock-agentcore:GetGateway
+            - bedrock-agentcore:ListGatewayTargets
+            - bedrock-agentcore:GetGatewayTarget
+          Resource: "*"
 
   # ━━━ 搜索与知识 ━━━
   - name: kendra-index
@@ -314,6 +626,15 @@ runtime_targets:
     version: 1.0.15
     description: "Kendra 企业搜索"
     category: search
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - kendra:Query
+            - kendra:Retrieve
+            - kendra:DescribeIndex
+            - kendra:ListIndices
+          Resource: "*"
 
   - name: qindex
     enabled: true
@@ -323,6 +644,15 @@ runtime_targets:
     description: "Amazon Q Index 搜索"
     category: search
     extra_packages: "mypy-boto3-qbusiness"
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - qbusiness:ChatSync
+            - qbusiness:ListMessages
+            - qbusiness:ListApplications
+            - qbusiness:GetApplication
+          Resource: "*"
 
   - name: qbusiness-anonymous
     enabled: true
@@ -331,6 +661,15 @@ runtime_targets:
     version: 0.0.14
     description: "Amazon Q Business 知识问答"
     category: search
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - qbusiness:ChatSync
+            - qbusiness:ListMessages
+            - qbusiness:ListApplications
+            - qbusiness:GetApplication
+          Resource: "*"
 
   # ━━━ 网络 ━━━
   - name: network
@@ -340,6 +679,19 @@ runtime_targets:
     version: 0.0.9
     description: "VPC 网络管理"
     category: networking
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - ec2:DescribeVpcs
+            - ec2:DescribeSubnets
+            - ec2:DescribeSecurityGroups
+            - ec2:DescribeRouteTables
+            - ec2:DescribeNetworkInterfaces
+            - ec2:DescribeInternetGateways
+            - ec2:DescribeNatGateways
+            - ec2:DescribeVpcPeeringConnections
+          Resource: "*"
 
   - name: appsync
     enabled: true
@@ -348,6 +700,18 @@ runtime_targets:
     version: 0.1.11
     description: "AppSync GraphQL 管理"
     category: networking
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - appsync:GetGraphqlApi
+            - appsync:GetSchemaCreationStatus
+            - appsync:GetType
+            - appsync:ListGraphqlApis
+            - appsync:ListTypes
+            - appsync:ListResolvers
+            - appsync:ListDataSources
+          Resource: "*"
 
   # ━━━ 行业专用 ━━━
   - name: healthomics
@@ -357,6 +721,19 @@ runtime_targets:
     version: 0.0.34
     description: "HealthOmics 基因组处理"
     category: industry
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - omics:GetWorkflow
+            - omics:GetRun
+            - omics:GetRunTask
+            - omics:ListWorkflows
+            - omics:ListRuns
+            - omics:ListRunTasks
+            - omics:GetSequenceStore
+            - omics:ListSequenceStores
+          Resource: "*"
 
   - name: healthlake
     enabled: true
@@ -365,6 +742,16 @@ runtime_targets:
     version: 0.0.10
     description: "HealthLake FHIR 医疗数据"
     category: industry
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - healthlake:DescribeFHIRDatastore
+            - healthlake:ListFHIRDatastores
+            - healthlake:ReadResource
+            - healthlake:SearchWithGet
+            - healthlake:SearchWithPost
+          Resource: "*"
 
   - name: iot-sitewise
     enabled: true
@@ -373,6 +760,19 @@ runtime_targets:
     version: 11.0.14
     description: "IoT SiteWise 工业数据"
     category: industry
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - iotsitewise:DescribeAsset
+            - iotsitewise:DescribeAssetModel
+            - iotsitewise:DescribeAssetProperty
+            - iotsitewise:GetAssetPropertyValue
+            - iotsitewise:GetAssetPropertyValueHistory
+            - iotsitewise:ListAssets
+            - iotsitewise:ListAssetModels
+            - iotsitewise:BatchGetAssetPropertyValue
+          Resource: "*"
 
   - name: location
     enabled: true
@@ -381,6 +781,18 @@ runtime_targets:
     version: 2.0.15
     description: "Location Service 地图服务"
     category: industry
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - geo:SearchPlaceIndexForText
+            - geo:SearchPlaceIndexForPosition
+            - geo:SearchPlaceIndexForSuggestions
+            - geo:GetPlace
+            - geo:CalculateRoute
+            - geo:ListPlaceIndexes
+            - geo:ListRouteCalculators
+          Resource: "*"
 
   # ━━━ 数据处理 ━━━
   - name: dataprocessing
@@ -390,6 +802,21 @@ runtime_targets:
     version: 0.1.27
     description: "Glue ETL 工作流"
     category: data
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - glue:GetDatabase
+            - glue:GetDatabases
+            - glue:GetTable
+            - glue:GetTables
+            - glue:GetJob
+            - glue:GetJobs
+            - glue:GetJobRun
+            - glue:GetJobRuns
+            - glue:GetCrawler
+            - glue:GetCrawlers
+          Resource: "*"
 
   - name: syntheticdata
     enabled: true
@@ -398,6 +825,7 @@ runtime_targets:
     version: 1.0.15
     description: "合成测试数据生成"
     category: data
+    iam_policy: null  # Generates synthetic data locally, no AWS API calls
 
   # ━━━ 开发工具 ━━━
   - name: diagram
@@ -407,6 +835,7 @@ runtime_targets:
     version: 1.0.23
     description: "AWS 架构图自动生成"
     category: devtools
+    iam_policy: null  # Generates diagrams locally, no AWS API calls
 
   - name: code-doc-gen
     enabled: true
@@ -415,6 +844,7 @@ runtime_targets:
     version: 1.0.10
     description: "代码文档自动生成"
     category: devtools
+    iam_policy: null  # Code generation, no AWS API calls
 
   - name: openapi
     enabled: false  # requires api_spec_url env var — user-specific config
@@ -423,6 +853,7 @@ runtime_targets:
     version: 0.2.15
     description: "OpenAPI 规范处理"
     category: devtools
+    iam_policy: null  # Transforms OpenAPI specs, no AWS API calls
 
   # ━━━ 运维支持 ━━━
   - name: support
@@ -432,3 +863,13 @@ runtime_targets:
     version: 0.1.19
     description: "AWS Support 工单管理"
     category: operations
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - support:DescribeTrustedAdvisorChecks
+            - support:DescribeTrustedAdvisorCheckResult
+            - support:DescribeCases
+            - support:DescribeServices
+            - support:DescribeSeverityLevels
+          Resource: "*"

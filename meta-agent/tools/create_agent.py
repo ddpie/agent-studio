@@ -9,6 +9,7 @@ import boto3
 from strands import tool
 
 from config import MODEL_ID, REGION, S3_BUCKET, AGENTS_TABLE, PERMISSION_TIER_ROLES, DEFAULT_PERMISSION_TIER
+from tools._workspace import _get_agent_role_arn
 from deploy import build_deployment_package_v2, upload_deployment, create_runtime, wait_for_ready, validate_agent_files, build_skill_prompt_section
 from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_base_guidelines
@@ -197,13 +198,15 @@ def create_agent(
     skills_config = staged.get("skills", []) if staging_key else []
     skills_data = []
 
+    # Resolve workspace_id early — needed for MCP policy checks and IAM role selection.
+    workspace_id = staged.get("workspace_id", "") if staging_key else ""
+    if not workspace_id:
+        workspace_id = getattr(__import__('tools.create_agent', fromlist=['_workspace_id']), '_workspace_id', '')
+
     # Parse mcp_targets and validate against workspace policy
     mcp_targets_list = [t.strip() for t in mcp_targets.split(",") if t.strip()] if mcp_targets else []
     mcp_endpoints = []
     if mcp_targets_list:
-        workspace_id = staged.get("workspace_id", "") if staging_key else ""
-        if not workspace_id:
-            workspace_id = getattr(__import__('tools.create_agent', fromlist=['_workspace_id']), '_workspace_id', '')
         policy = _get_workspace_mcp_policy(workspace_id)
         denied = _check_mcp_policy(mcp_targets_list, policy)
         if denied:
@@ -313,8 +316,9 @@ def create_agent(
         return json.dumps({"error": "Code validation failed", "details": validation["errors"]})
 
     # Build, upload, deploy
+    # Workspace custom role takes precedence; fall back to shared role.
+    role_arn = _get_agent_role_arn(workspace_id)
     tier = permission_tier or DEFAULT_PERMISSION_TIER
-    role_arn = PERMISSION_TIER_ROLES.get(tier, PERMISSION_TIER_ROLES[DEFAULT_PERMISSION_TIER])
     package = build_deployment_package_v2(main_py, tools_py, prompt_txt, config_json)
     s3_key = upload_deployment(agent_name, package)
     result = create_runtime(agent_name, description, s3_key, role_arn)
@@ -380,10 +384,7 @@ def create_agent(
     # Write to DynamoDB
     ddb = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(AGENTS_TABLE)
-    # workspace_id from staging config, or from the invoke payload (set by main.py)
-    workspace_id = staged.get("workspace_id", "") if staging_key else ""
-    if not workspace_id:
-        workspace_id = getattr(__import__('tools.create_agent', fromlist=['_workspace_id']), '_workspace_id', '')
+    # workspace_id already resolved early (before MCP policy + role selection)
     now = datetime.now(timezone.utc).isoformat()
     caller = getattr(__import__('tools.create_agent', fromlist=['_caller_id']), '_caller_id', 'unknown')
     item = {
