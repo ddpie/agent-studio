@@ -407,46 +407,31 @@ export default function IamPermissionsTab() {
                     {target.displayName}
                   </span>
 
-                  {/* Status text */}
-                  <span className="flex-1 text-[11px] text-gray-400 dark:text-gray-500 truncate">
-                    {noIamNeeded
-                      ? t("iam.noExtraPerms")
-                      : isGranted
-                        ? t("iam.allPermsGranted")
-                        : t("iam.missingPerms", { count: missingCount })}
-                  </span>
+                  {/* Status text — clickable to expand details when denied */}
+                  {noIamNeeded || isGranted ? (
+                    <span className="flex-1 text-[12px] text-gray-400 dark:text-gray-500">
+                      {noIamNeeded ? t("iam.noExtraPerms") : t("iam.allPermsGranted")}
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => toggleExpanded(target.name)}
+                      className="flex-1 flex items-center gap-1 text-[12px] text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
+                    >
+                      {t("iam.missingPerms", { count: missingCount })}
+                      {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    </button>
+                  )}
 
-                  {/* Action buttons for denied targets */}
-                  {!isGranted && !noIamNeeded && (
-                    <>
-                      {isAdmin ? (
-                        <button
-                          onClick={() => handleGrant(target.name)}
-                          disabled={isGranting}
-                          className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded transition-colors disabled:opacity-50"
-                        >
-                          {isGranting ? (
-                            <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                          ) : null}
-                          {t("iam.autoGrant")}
-                        </button>
-                      ) : (
-                        <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
-                          <Lock className="w-2.5 h-2.5" /> {t("iam.contactAdmin")}
-                        </span>
-                      )}
-                      <button
-                        onClick={() => toggleExpanded(target.name)}
-                        className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"
-                      >
-                        {t("iam.manual")}
-                        {isExpanded ? (
-                          <ChevronDown className="w-2.5 h-2.5" />
-                        ) : (
-                          <ChevronRight className="w-2.5 h-2.5" />
-                        )}
-                      </button>
-                    </>
+                  {/* Auto-grant button for denied targets */}
+                  {!isGranted && !noIamNeeded && isAdmin && (
+                    <button
+                      onClick={() => handleGrant(target.name)}
+                      disabled={isGranting}
+                      className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-md transition-colors disabled:opacity-50"
+                    >
+                      {isGranting ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                      {t("iam.autoGrant")}
+                    </button>
                   )}
                 </div>
 
@@ -471,34 +456,56 @@ export default function IamPermissionsTab() {
                         </div>
                       </div>
 
-                      {/* CLI command */}
+                      {/* JSON Policy */}
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <p className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
-                            {t("iam.cliCommand")}
+                          <p className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                            {t("iam.jsonPolicy")}
                           </p>
                           <button
-                            onClick={() => copyToClipboard(buildCliCommand(target), target.name)}
-                            className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                            onClick={() => copyToClipboard(JSON.stringify({ Version: "2012-10-17", ...target.iamPolicy }, null, 2), target.name + "-json")}
+                            className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                           >
-                            {copiedTarget === target.name ? (
-                              <><Check className="w-2.5 h-2.5" /> {t("iam.copied")}</>
+                            {copiedTarget === target.name + "-json" ? (
+                              <><Check className="w-3 h-3" /> {t("iam.copied")}</>
                             ) : (
-                              <><Copy className="w-2.5 h-2.5" /> {t("common.copy")}</>
+                              <><Copy className="w-3 h-3" /> {t("common.copy")}</>
                             )}
                           </button>
                         </div>
-                        <pre className="text-[10px] font-mono bg-gray-900 dark:bg-gray-950 text-green-400 p-3 rounded-lg overflow-x-auto leading-relaxed whitespace-pre-wrap">
+                        <pre className="text-[11px] font-mono bg-gray-900 dark:bg-gray-950 text-blue-300 p-3 rounded-lg overflow-x-auto leading-relaxed whitespace-pre-wrap">
+                          {JSON.stringify({ Version: "2012-10-17", ...target.iamPolicy }, null, 2)}
+                        </pre>
+                      </div>
+
+                      {/* CLI command */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+                            {t("iam.cliCommand")}
+                          </p>
+                          <button
+                            onClick={() => copyToClipboard(buildCliCommand(target), target.name + "-cli")}
+                            className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                          >
+                            {copiedTarget === target.name + "-cli" ? (
+                              <><Check className="w-3 h-3" /> {t("iam.copied")}</>
+                            ) : (
+                              <><Copy className="w-3 h-3" /> {t("common.copy")}</>
+                            )}
+                          </button>
+                        </div>
+                        <pre className="text-[11px] font-mono bg-gray-900 dark:bg-gray-950 text-green-400 p-3 rounded-lg overflow-x-auto leading-relaxed whitespace-pre-wrap">
                           {buildCliCommand(target)}
                         </pre>
                       </div>
 
                       {/* Console steps */}
                       <div>
-                        <p className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
+                        <p className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
                           {t("iam.consoleSteps")}
                         </p>
-                        <ol className="text-[10px] text-gray-600 dark:text-gray-400 space-y-1 list-decimal list-inside">
+                        <ol className="text-[11px] text-gray-600 dark:text-gray-400 space-y-1 list-decimal list-inside">
                           <li>{t("iam.consoleStep1")}</li>
                           <li>{t("iam.consoleStep2", { roleName: roleArn?.split("/").pop() || "" })}</li>
                           <li>{t("iam.consoleStep3")}</li>
