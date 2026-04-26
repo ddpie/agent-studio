@@ -61,7 +61,14 @@ export class AgentCoreRoles extends Construct {
           "bedrock-agentcore:GetAgentRuntime",
           "bedrock-agentcore:DeleteAgentRuntime",
         ],
-        resources: [`arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*`],
+        // Invocations against ?qualifier=DEFAULT authorize against the
+        // runtime-endpoint ARN, not the runtime ARN — MCP runtime calls
+        // from sub-agents return 403 without the endpoint resource here.
+        // Match the pattern the scheduler target role already uses below.
+        resources: [
+          `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*`,
+          `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*/runtime-endpoint/*`,
+        ],
       }),
       // Read-only Gateway access so list_mcp_servers / list_mcp_target_tools
       // can enumerate MCP targets. Scoped to "*" because ListGateways has

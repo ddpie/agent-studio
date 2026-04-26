@@ -571,18 +571,29 @@ try:
 except Exception as e:
     print(f"    WARNING: list_agent_runtimes failed: {e}", file=sys.stderr)
 
+# Canonical execution role — single source of truth for both create and
+# update paths. Do NOT read the role back from an existing runtime and
+# transparently re-submit it; that's how we ended up with 37 runtimes
+# pinned to `AgentStudioSubAgentRole-us-east-1` long after CDK deleted
+# that role (commit 12a9fc8). Any subsequent re-run must converge the
+# role back to this constant.
+execution_role = f"arn:aws:iam::{account_id}:role/AgentStudioSubAgent-basic-{region}"
+
 if runtime_id:
     print(f"    Found existing runtime: {runtime_id}", file=sys.stderr)
     # Get current status
     rt_info = control.get_agent_runtime(agentRuntimeId=runtime_id)
     runtime_status = rt_info.get("status", "")
     runtime_arn = rt_info.get("agentRuntimeArn", "")
+    existing_role = rt_info.get("roleArn", "")
+    if existing_role and existing_role != execution_role:
+        print(f"    Existing runtime has drifted roleArn (was {existing_role}); resetting to {execution_role}", file=sys.stderr)
     # Update if already exists (new image version)
     if runtime_status in ("READY", "ACTIVE"):
         try:
             control.update_agent_runtime(
                 agentRuntimeId=runtime_id,
-                roleArn=rt_info["roleArn"],
+                roleArn=execution_role,
                 networkConfiguration={"networkMode": rt_info["networkConfiguration"]["networkMode"]},
                 protocolConfiguration={"serverProtocol": "MCP"},
                 agentRuntimeArtifact={
@@ -594,9 +605,7 @@ if runtime_id:
         except Exception as e:
             print(f"    WARNING: update failed, using existing: {e}", file=sys.stderr)
 else:
-    # Create new runtime
-    # Use the AgentCore default execution role
-    execution_role = f"arn:aws:iam::{account_id}:role/AgentStudioSubAgent-basic-{region}"
+    # Create new runtime using the canonical execution_role defined above
     try:
         resp = control.create_agent_runtime(
             agentRuntimeName=runtime_name,
@@ -867,6 +876,16 @@ if [[ $FAILED -gt 0 ]]; then
   echo "Some targets failed. Check logs above."
   exit 1
 fi
+
+# ============================================================
+# Step 7: Role-drift audit (converge any runtime whose roleArn
+# was left behind by a prior rename, e.g. commit 12a9fc8)
+# ============================================================
+echo ""
+echo "[7/7] MCP runtime role-drift audit"
+python3 "${SCRIPT_DIR}/check-mcp-runtime-roles.py" --region "$REGION" --fix || {
+  echo "WARNING: role-drift audit reported errors. Re-run scripts/check-mcp-runtime-roles.py manually."
+}
 
 echo ""
 echo "MCP Gateway deployment complete."
