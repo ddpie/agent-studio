@@ -537,6 +537,34 @@ def remove_member(wsId: str, memberId: str):
     return success({"removed": True})
 
 
+# ─── POST /api/workspaces/{wsId}/memory/repair ───
+@router.post("/api/workspaces/<wsId>/memory/repair")
+def repair_workspace_memory(wsId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="owner", ws_id=wsId)
+    if err:
+        return err
+
+    table = _get_table()
+    resp = table.get_item(Key={"workspaceId": wsId, "sk": "META"}, ConsistentRead=True)
+    if "Item" not in resp:
+        return not_found("workspace not found")
+
+    existing = resp["Item"].get("memory_id")
+    if existing:
+        return success({"memory_id": existing})
+
+    new_id = _create_workspace_memory(wsId)
+    if not new_id:
+        return internal_error("memory creation still failing")
+
+    table.update_item(
+        Key={"workspaceId": wsId, "sk": "META"},
+        UpdateExpression="SET memory_id = :m",
+        ExpressionAttributeValues={":m": new_id},
+    )
+    return success({"memory_id": new_id})
+
+
 # ─── POST /api/workspaces/{wsId}/leave — 自行退出 ───
 @router.post("/api/workspaces/<wsId>/leave")
 def leave_workspace(wsId: str):

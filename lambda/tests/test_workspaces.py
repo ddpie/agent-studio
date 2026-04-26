@@ -196,3 +196,68 @@ def test_delete_workspace_skips_memory_when_no_memory_id(
     resp = _invoke(_apigw("DELETE", "/api/workspaces/ws-d3", user_id))
     assert resp["statusCode"] == 200
     mock_agentcore_control.delete_memory.assert_not_called()
+
+
+# ── POST /api/workspaces/{wsId}/memory/repair ────────────────────
+
+
+@pytest.fixture
+def mock_membership_owner_for_repair():
+    """Mock get_membership so auth_check grants owner access for repair tests."""
+    with patch("shared.middleware.get_membership") as mock:
+        yield mock
+
+
+def _setup_repair_membership(mock_membership, ws_id, user_id):
+    mock_membership.return_value = {
+        "workspaceId": ws_id,
+        "sk": f"MEMBER#{user_id}",
+        "userId": user_id,
+        "role": "owner",
+    }
+
+
+def test_repair_noop_when_memory_id_present(
+    mock_jwt, mock_ws_table, mock_agentcore_control, mock_membership_owner_for_repair
+):
+    """If memory_id already set, return it without calling create_memory."""
+    user_id = mock_jwt.return_value["sub"]
+    _setup_repair_membership(mock_membership_owner_for_repair, "ws-r1", user_id)
+    mock_ws_table.get_item.return_value = {"Item": {
+        "workspaceId": "ws-r1", "sk": "META", "memory_id": "existing-mem"
+    }}
+    resp = _invoke(_apigw("POST", "/api/workspaces/ws-r1/memory/repair", user_id))
+    body = json.loads(resp["body"])
+    assert body["memory_id"] == "existing-mem"
+    mock_agentcore_control.create_memory.assert_not_called()
+
+
+def test_repair_creates_when_null(
+    mock_jwt, mock_ws_table, mock_agentcore_control, mock_membership_owner_for_repair
+):
+    """If memory_id is null, create and persist."""
+    user_id = mock_jwt.return_value["sub"]
+    _setup_repair_membership(mock_membership_owner_for_repair, "ws-r2", user_id)
+    mock_ws_table.get_item.return_value = {"Item": {
+        "workspaceId": "ws-r2", "sk": "META"
+    }}
+    mock_agentcore_control.create_memory.return_value = {"memory": {"id": "new-mem"}}
+    resp = _invoke(_apigw("POST", "/api/workspaces/ws-r2/memory/repair", user_id))
+    body = json.loads(resp["body"])
+    assert body["memory_id"] == "new-mem"
+    mock_agentcore_control.create_memory.assert_called_once()
+    mock_ws_table.update_item.assert_called_once()
+
+
+def test_repair_returns_error_when_creation_fails(
+    mock_jwt, mock_ws_table, mock_agentcore_control, mock_membership_owner_for_repair
+):
+    """If create_memory fails again, return 500."""
+    user_id = mock_jwt.return_value["sub"]
+    _setup_repair_membership(mock_membership_owner_for_repair, "ws-r3", user_id)
+    mock_ws_table.get_item.return_value = {"Item": {
+        "workspaceId": "ws-r3", "sk": "META"
+    }}
+    mock_agentcore_control.create_memory.side_effect = Exception("still broken")
+    resp = _invoke(_apigw("POST", "/api/workspaces/ws-r3/memory/repair", user_id))
+    assert resp["statusCode"] == 500
