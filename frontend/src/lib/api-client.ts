@@ -1423,6 +1423,83 @@ export async function deleteAgentSkillFiles(agentId: string, skillId: string, pa
   }
 }
 
+// ── Agent memories (AgentCore Memory) ──
+
+export interface MemoryRecord {
+  id: string;
+  content: { text?: string } | Record<string, unknown>;
+  createdAt: number;
+  namespace: string;
+}
+
+export interface MemorySection {
+  records: MemoryRecord[];
+  nextToken: string | null;
+}
+
+export interface MemoryBundle {
+  preferences: MemorySection;
+  facts: MemorySection;
+  summaries: MemorySection;
+  episodes: MemorySection;
+}
+
+export type MemoryStrategy = "preferences" | "facts" | "summaries" | "episodes";
+
+/** Fetch all 4 memory sections (first page of each) for the current user. */
+export async function listMyMemories(
+  workspaceId: string,
+  agentId: string,
+): Promise<MemoryBundle> {
+  // workspaceId is unused — apiGet auto-prefixes the active workspace.
+  // Kept in the signature for store-level symmetry with other memory calls.
+  void workspaceId;
+  return apiGet<MemoryBundle>(
+    `/agents/${encodeURIComponent(agentId)}/my-memories`,
+  );
+}
+
+/** Load additional records for a single strategy (pagination). */
+export async function loadMoreMemories(
+  workspaceId: string,
+  agentId: string,
+  strategy: MemoryStrategy,
+  nextToken: string,
+): Promise<MemorySection> {
+  void workspaceId;
+  const qs = new URLSearchParams({
+    strategy,
+    nextToken,
+    maxResults: "50",
+  });
+  return apiGet<MemorySection>(
+    `/agents/${encodeURIComponent(agentId)}/my-memories?${qs}`,
+  );
+}
+
+/** Delete a single memory record. */
+export async function deleteMyMemory(
+  workspaceId: string,
+  agentId: string,
+  recordId: string,
+): Promise<{ deleted: string }> {
+  void workspaceId;
+  return apiDelete<{ deleted: string }>(
+    `/agents/${encodeURIComponent(agentId)}/my-memories/${encodeURIComponent(recordId)}`,
+  );
+}
+
+/** Forget all memories for the current user on this agent. */
+export async function forgetAllMemories(
+  workspaceId: string,
+  agentId: string,
+): Promise<{ deleted: number; partial: boolean }> {
+  void workspaceId;
+  return apiDelete<{ deleted: number; partial: boolean }>(
+    `/agents/${encodeURIComponent(agentId)}/my-memories`,
+  );
+}
+
 // ── Costs / usage ──
 
 export type CostRange = "24h" | "7d" | "30d";
