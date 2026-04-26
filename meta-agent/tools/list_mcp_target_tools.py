@@ -41,22 +41,40 @@ def list_mcp_target_tools(target_name: str) -> str:
     s3 = boto3.client("s3", region_name=REGION)
     manifests = _list_all_manifests()
 
-    # Find best match: exact → contains → fuzzy
+    # Find best match: exact → prefix-equal → shortest fuzzy contains.
+    # Iteration order of the S3 listing is NOT stable across regions, and we
+    # previously returned the first "contains" match — which for target="cloudwatch"
+    # picked mcp-cloudwatch-applicationsignals (wrong runtime) over mcp-cloudwatch.
+    # Sort candidates by length so the most-specific match wins the tie.
     needle = target_name.lower().replace("-", "").replace("_", "")
     matched_key = None
 
+    # Pass 1: exact (normalized) or verbatim match
     for name, key in manifests.items():
         norm = name.lower().replace("-", "").replace("_", "")
         if norm == needle or name == target_name:
             matched_key = key
             break
 
+    # Pass 2: normalized name equals needle with an `mcp` prefix/suffix stripped.
+    # Catches user saying "cloudwatch" when the manifest is "mcp-cloudwatch".
     if not matched_key:
-        for name, key in manifests.items():
+        for name, key in sorted(manifests.items(), key=lambda kv: len(kv[0])):
             norm = name.lower().replace("-", "").replace("_", "")
-            if needle in norm or norm in needle:
+            stripped = norm.removeprefix("mcp")
+            if stripped == needle:
                 matched_key = key
                 break
+
+    # Pass 3: fuzzy contains — but prefer the shortest candidate so
+    # "cloudwatch" doesn't silently match "cloudwatch-applicationsignals".
+    if not matched_key:
+        candidates = [(name, key) for name, key in manifests.items()
+                      if needle in name.lower().replace("-", "").replace("_", "")
+                      or name.lower().replace("-", "").replace("_", "") in needle]
+        candidates.sort(key=lambda kv: len(kv[0]))
+        if candidates:
+            matched_key = candidates[0][1]
 
     if matched_key:
         try:
