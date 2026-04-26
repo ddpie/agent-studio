@@ -226,7 +226,8 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
     try {
       await grantMcpTargets(wsId, [targetName]);
       toast.success(t("iam.grantSuccess", { target: targetName }));
-      // Re-check permissions after grant
+      // IAM propagation takes a few seconds before SimulatePrincipalPolicy reflects the change
+      await new Promise((r) => setTimeout(r, 3000));
       await checkPermissions(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : t("iam.grantFailed");

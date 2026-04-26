@@ -40,6 +40,9 @@ function toSummary(raw: {
   description?: string;
   role?: string;
   created_at?: string;
+  owner_id?: string;
+  owner_name?: string;
+  owner_email?: string;
 }): WorkspaceSummary {
   return {
     workspaceId: raw.workspaceId,
@@ -47,6 +50,9 @@ function toSummary(raw: {
     description: raw.description,
     role: canonicaliseRole(raw.role),
     created_at: raw.created_at,
+    owner_id: raw.owner_id,
+    owner_name: raw.owner_name,
+    owner_email: raw.owner_email,
   };
 }
 
