@@ -1185,6 +1185,7 @@
     "contactAdmin": "Contact platform admin",
     "manual": "Manual",
     "missingActions": "Missing Actions",
+    "jsonPolicy": "IAM Policy JSON",
     "cliCommand": "AWS CLI Command",
     "copied": "Copied",
     "consoleSteps": "AWS Console Steps",

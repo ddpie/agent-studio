@@ -1185,6 +1185,7 @@
     "contactAdmin": "请联系平台管理员",
     "manual": "手动",
     "missingActions": "缺少的操作",
+    "jsonPolicy": "IAM Policy JSON",
     "cliCommand": "AWS CLI 命令",
     "copied": "已复制",
     "consoleSteps": "AWS Console 操作步骤",
