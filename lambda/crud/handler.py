@@ -21,6 +21,7 @@ from crud.a2a_keys import router as a2a_keys_router
 from crud.schedules import router as schedules_router
 from crud.costs import router as costs_router
 from crud.logs import router as logs_router
+from crud.memories import router as memories_router
 from crud.runs import router as runs_router
 from crud.kiro_key import router as kiro_key_router
 from crud.chat import router as chat_router
@@ -49,6 +50,7 @@ app.include_router(a2a_keys_router)
 app.include_router(schedules_router)
 app.include_router(costs_router)
 app.include_router(logs_router)
+app.include_router(memories_router)
 app.include_router(runs_router)
 app.include_router(kiro_key_router)
 app.include_router(chat_router)
