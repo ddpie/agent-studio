@@ -694,6 +694,7 @@
     "proposalTemplate": "模板：",
     "proposalImages": "图片：",
     "proposalTools": "工具：",
+    "proposalSkills": "技能：",
     "proposalSuggestions": "建议：",
     "proposalSystemPrompt": "系统提示词",
     "proposalToolDefs": "工具定义",
