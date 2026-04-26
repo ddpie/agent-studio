@@ -222,6 +222,31 @@ Agent 详情页采用 sticky 侧栏 + IntersectionObserver lazy-mount。**顶部
 
 命名与安全规则由 CDK aspects 与 pre-commit hook 在代码层面强制执行，不依赖文档约束。详见 `infra/lib/aspects/public-access-guard.ts`。
 
+### Workspace IAM 隔离
+
+```
+Workspace (业务用户)              Workspace (运维团队)
+  │ 共享角色                         │ 自定义角色
+  │ AgentStudioSubAgent-basic        │ AgentStudio-ws-{id}
+  │                                  │   + Permission Boundary 封顶
+  │ 平台工具 ✅                       │   + MCP-Access inline policy
+  │ AWS 服务工具 🔒                   │
+  ▼                                  │ 平台工具 ✅
+Agent (web_search, chart, skills)   │ AWS 服务工具 ✅ (已授权的)
+                                     ▼
+                                    Agent (cloudwatch, cloudtrail MCP)
+                                     │
+                                     ▼
+                                    MCP Runtime (per-target 角色)
+                                    AgentStudioMCP-cloudwatch-{region}
+```
+
+- **按需 opt-in**：大多数 workspace 用共享角色，不创建额外 IAM 资源
+- **Permission Boundary**（`AgentStudioWorkspaceCeiling`）：定义 workspace 角色最大权限范围，`DenyEscalation` 阻止 IAM 变更 / STS 跨角色 / 横向移动
+- **工具过滤**：`iam_policy` 声明（IAM Policy 标准格式）→ `SimulatePrincipalPolicy` 探测 → `list_mcp_servers` 返回 `granted` / `denied` → `validate_agent` 部署前拦截
+- **一键授权**：CRUD Lambda 代执行 `iam:PutRolePolicy`（rebuild-from-truth，DDB 乐观锁），boundary 封顶保证安全
+- **Per-target MCP 角色**：CDK 从 `mcp-registry.yaml` 生成 `AgentStudioMCP-{name}` 角色，每个 MCP runtime 仅有其服务所需的最小权限
+
 ---
 
 # Architecture (English)
@@ -508,3 +533,11 @@ New components:
 Naming and security rules are enforced in code (CDK aspects plus a
 pre-commit hook) rather than relying on documentation to enforce them.
 See `infra/lib/aspects/public-access-guard.ts`.
+
+### Workspace IAM Isolation
+
+- **Opt-in per-workspace roles**: most workspaces use the shared `AgentStudioSubAgent-basic` role. Only workspaces needing AWS service access (CloudWatch, CloudTrail, IAM MCP) bind a custom `AgentStudio-ws-{id}` role.
+- **Permission Boundary** (`AgentStudioWorkspaceCeiling`): caps workspace role permissions; `DenyEscalation` blocks IAM mutation, all STS assume paths, and lateral movement services.
+- **Tool visibility filtering**: `iam_policy` declarations (standard IAM Policy format) in `mcp-registry.yaml` → `SimulatePrincipalPolicy` checks → `list_mcp_servers` returns `granted`/`denied` → `validate_agent` blocks unauthorized deploys.
+- **One-click MCP grant**: CRUD Lambda executes `iam:PutRolePolicy` using rebuild-from-truth (DDB optimistic lock), boundary caps what can take effect.
+- **Per-target MCP roles**: CDK generates `AgentStudioMCP-{name}` roles from the registry, each with only the downstream AWS permissions that MCP server needs.
