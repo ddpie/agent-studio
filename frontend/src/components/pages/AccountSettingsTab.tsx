@@ -39,9 +39,17 @@ function MfaSection() {
   useEffect(() => {
     fetchMFAPreference()
       .then((pref) => {
-        setMfaEnabled(pref.preferred === "TOTP" || pref.enabled?.includes("TOTP") || false);
+        // Amplify v6: { enabled?: ('TOTP'|'SMS')[], preferred?: 'TOTP'|'SMS' }
+        const hasTOTP =
+          pref?.preferred === "TOTP" ||
+          (Array.isArray(pref?.enabled) && pref.enabled.includes("TOTP"));
+        setMfaEnabled(!!hasTOTP);
       })
-      .catch(() => setMfaEnabled(false))
+      .catch((err) => {
+        // If MFA is REQUIRED and user has TOTP, they got past login — assume enabled.
+        console.warn("fetchMFAPreference failed, assuming TOTP enabled (MFA=REQUIRED):", err);
+        setMfaEnabled(true);
+      })
       .finally(() => setLoading(false));
   }, []);
 
