@@ -415,6 +415,18 @@
         "needsUpper": "密码必须包含大写字母。",
         "needsDigit": "密码必须包含数字。"
       },
+      "mfa": {
+        "title": "两步验证",
+        "desc": "启用 TOTP 两步验证，每次登录时除密码外还需输入 Authenticator App 生成的动态验证码。",
+        "setup": "设置 TOTP",
+        "active": "TOTP 已启用",
+        "reconfigure": "重新配置（如更换手机后）",
+        "scanPrompt": "使用 Authenticator App（Google Authenticator、1Password、Authy 等）扫描下方二维码，然后输入 6 位验证码。",
+        "showSecret": "无法扫码？显示密钥",
+        "verify": "验证",
+        "enabled": "两步验证已启用",
+        "invalidCode": "验证码无效，请重试。"
+      },
       "sessions": "会话",
       "signOutAll": "退出所有设备",
       "signOutAllDesc": "撤销你当前所有已登录设备的刷新令牌。当前浏览器也会退出。",

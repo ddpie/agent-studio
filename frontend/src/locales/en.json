@@ -415,6 +415,18 @@
         "needsUpper": "Password must contain an uppercase letter.",
         "needsDigit": "Password must contain a digit."
       },
+      "mfa": {
+        "title": "Two-Factor Authentication",
+        "desc": "Add a second layer of security by requiring a TOTP code from an authenticator app on every login.",
+        "setup": "Set up TOTP",
+        "active": "TOTP is enabled",
+        "reconfigure": "Reconfigure (e.g. after changing phone)",
+        "scanPrompt": "Scan this QR code with your authenticator app (Google Authenticator, 1Password, Authy, etc.), then enter the 6-digit code below.",
+        "showSecret": "Can't scan? Show secret key",
+        "verify": "Verify",
+        "enabled": "Two-factor authentication enabled",
+        "invalidCode": "Invalid code. Please try again."
+      },
       "sessions": "Sessions",
       "signOutAll": "Sign out of all devices",
       "signOutAllDesc": "Revoke refresh tokens everywhere you're currently signed in. You will be signed out of this browser as well.",
