@@ -357,7 +357,7 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
                     {target.sensitivity === "medium" && target.sensitiveReasons.length > 0 && (
                       <button
                         onClick={() => setSensitivityOpen(sensitivityOpen === target.name ? null : target.name)}
-                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] leading-tight font-medium rounded bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/40 cursor-pointer transition-colors"
+                        className="inline-flex items-center gap-0.5 text-[10px] leading-tight text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
                       >
                         <AlertTriangle className="w-2.5 h-2.5" /> {t("iam.sensitivityMedium")}
                       </button>
@@ -365,7 +365,7 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
                     {target.sensitivity === "high" && target.sensitiveReasons.length > 0 && (
                       <button
                         onClick={() => setSensitivityOpen(sensitivityOpen === target.name ? null : target.name)}
-                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] leading-tight font-medium rounded bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/40 cursor-pointer transition-colors"
+                        className="inline-flex items-center gap-0.5 text-[10px] leading-tight text-red-600 dark:text-red-400 hover:underline cursor-pointer"
                       >
                         <AlertTriangle className="w-2.5 h-2.5" /> {t("iam.sensitivityHigh")}
                       </button>
