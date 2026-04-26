@@ -62,7 +62,7 @@ def _resolve_mcp_endpoints(target_names: list) -> list:
 
     Args:
         target_names: List of short target names without the "mcp-" prefix
-            (e.g. ["cloudwatch", "aws-api", "nova-canvas"]).
+            (e.g. ["cloudwatch", "aws-api", "cloudtrail"]).
 
     Returns:
         List of endpoint dicts:

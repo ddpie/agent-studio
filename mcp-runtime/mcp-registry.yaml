@@ -558,20 +558,6 @@ runtime_targets:
             - bedrock:GetKnowledgeBase
           Resource: "*"
 
-  - name: nova-canvas
-    enabled: true
-    package: awslabs-nova-canvas-mcp-server
-    command: awslabs.nova-canvas-mcp-server
-    version: 1.0.15
-    description: "Nova Canvas 图像生成"
-    category: ai_ml
-    iam_policy:
-      Statement:
-        - Effect: Allow
-          Action:
-            - bedrock:InvokeModel
-          Resource: "arn:aws:bedrock:*::foundation-model/amazon.nova-canvas-v1:0"
-
   - name: sagemaker-ai
     enabled: false  # package bug: PydanticUserError in manage_hyperpod_stacks (DeployStackResponse not defined)
     package: awslabs-sagemaker-ai-mcp-server

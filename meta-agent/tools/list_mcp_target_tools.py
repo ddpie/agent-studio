@@ -15,8 +15,8 @@ def _list_all_manifests() -> dict[str, str]:
     try:
         resp = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix="mcp/target-tools/")
         for obj in resp.get("Contents", []):
-            key = obj["Key"]  # e.g. "mcp/target-tools/mcp-nova-canvas.json"
-            name = key.split("/")[-1].removesuffix(".json")  # "mcp-nova-canvas"
+            key = obj["Key"]  # e.g. "mcp/target-tools/mcp-cloudwatch.json"
+            name = key.split("/")[-1].removesuffix(".json")  # "mcp-cloudwatch"
             mapping[name] = key
     except Exception:
         pass
@@ -29,11 +29,11 @@ def list_mcp_target_tools(target_name: str) -> str:
 
     Use this BEFORE writing an agent's system_prompt to get the exact tool names
     and descriptions. This ensures the prompt references real tool names instead
-    of guessing. Supports fuzzy matching — e.g., "nova-canvas" will match
-    "mcp-nova-canvas".
+    of guessing. Supports fuzzy matching — e.g., "cloudtrail" will match
+    "mcp-cloudwatch".
 
     Args:
-        target_name: The MCP target name (e.g. "nova-canvas", "cloudwatch").
+        target_name: The MCP target name (e.g. "cloudwatch", "cloudtrail").
 
     Returns:
         JSON with the target's tool list: {target, tools: [{name, description}]}.

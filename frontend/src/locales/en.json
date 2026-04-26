@@ -1213,6 +1213,7 @@
     "selectWorkspace": "Select a workspace",
     "workspaceSearch": "Search workspaces...",
     "workspaceCount": "{{count}} workspaces",
+    "owner": "Owner",
     "hasRole": "IAM role bound",
     "noRole": "No IAM role",
     "goToAdmin": "Go to Admin Console to manage"

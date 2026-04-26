@@ -159,7 +159,31 @@ def list_workspaces():
                 "description": meta.get("description", ""),
                 "role": rec.get("role", "viewer"),
                 "created_at": meta.get("created_at", ""),
+                "owner_id": meta.get("owner_id", ""),
             })
+
+    # Hydrate owner display names
+    owner_ids = {w["owner_id"] for w in workspaces if w.get("owner_id")}
+    if owner_ids:
+        owner_map = {}
+        for uid in owner_ids:
+            cached = _identity_cache.get(uid)
+            if cached:
+                owner_map[uid] = cached
+            elif COGNITO_USER_POOL_ID:
+                try:
+                    resp = _get_cognito().admin_get_user(UserPoolId=COGNITO_USER_POOL_ID, Username=uid)
+                    attrs = {a["Name"]: a["Value"] for a in resp.get("UserAttributes", [])}
+                    info = {"display_name": attrs.get("name", attrs.get("email", uid[:8])), "email": attrs.get("email", "")}
+                    _identity_cache[uid] = info
+                    owner_map[uid] = info
+                except Exception:
+                    owner_map[uid] = {"display_name": uid[:8], "email": ""}
+        for w in workspaces:
+            info = owner_map.get(w.get("owner_id", ""))
+            if info:
+                w["owner_name"] = info["display_name"]
+                w["owner_email"] = info["email"]
 
     return success({"items": workspaces})
 

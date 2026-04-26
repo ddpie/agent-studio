@@ -440,7 +440,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
 }
 
 # Targets that exist but require no IAM permissions (pure HTTPS / no AWS API).
-_NO_IAM_TARGETS = {"aws-knowledge"}
+_NO_IAM_TARGETS = {"aws-knowledge", "aws-api"}
 
 # Maximum number of actions per SimulatePrincipalPolicy call.
 _SIMULATE_BATCH_SIZE = 25
