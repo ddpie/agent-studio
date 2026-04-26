@@ -752,7 +752,29 @@
     "mcp": "MCP",
     "marketplace": "市场",
     "costs": "用量",
+    "dashboard": "仪表盘",
     "settings": "设置"
+  },
+  "stats": {
+    "invocations": "调用次数",
+    "errorRate": "错误率",
+    "p95Latency": "p95 延迟",
+    "avgLatency": "平均延迟",
+    "noData": "暂无数据"
+  },
+  "dashboard": {
+    "title": "仪表盘",
+    "totalInvocations": "总调用次数",
+    "totalCost": "总成本",
+    "totalInputTokens": "输入 Token",
+    "totalOutputTokens": "输出 Token",
+    "agentName": "Agent",
+    "calls": "调用",
+    "cost": "成本",
+    "emptyState": "该时间段内暂无 Agent 活动记录。",
+    "range24h": "24小时",
+    "range7d": "7天",
+    "range30d": "30天"
   },
   "costs": {
     "title": "成本与用量",

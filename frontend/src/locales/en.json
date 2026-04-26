@@ -752,7 +752,29 @@
     "mcp": "MCP",
     "marketplace": "Marketplace",
     "costs": "Usage",
+    "dashboard": "Dashboard",
     "settings": "Settings"
+  },
+  "stats": {
+    "invocations": "Invocations",
+    "errorRate": "Error Rate",
+    "p95Latency": "p95 Latency",
+    "avgLatency": "Avg Latency",
+    "noData": "No data"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "totalInvocations": "Total Invocations",
+    "totalCost": "Total Cost",
+    "totalInputTokens": "Input Tokens",
+    "totalOutputTokens": "Output Tokens",
+    "agentName": "Agent",
+    "calls": "Calls",
+    "cost": "Cost",
+    "emptyState": "No agent activity recorded in this period.",
+    "range24h": "24h",
+    "range7d": "7d",
+    "range30d": "30d"
   },
   "costs": {
     "title": "Cost & Usage",
