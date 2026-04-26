@@ -11,7 +11,7 @@
 - **多模态输入** — 图片 / PDF / Excel / CSV / TSV 自动解析，无需额外配置
 - **定时触发** — 可视化 cron 构建器，每次执行留痕为卡片，可直接查看运行详情
 - **MCP 工具集** — AWS 官方 MCP 目录全量接入，按需启用；per-target IAM 角色，最小权限
-- **Workspace IAM 隔离** — 按需绑定 per-workspace IAM 角色 + Permission Boundary 封顶；一键 MCP 授权，`SimulatePrincipalPolicy` 实时权限检查；工具可见性自动过滤
+- **Workspace IAM 隔离** — 三层权限模型（Permission Boundary 天花板 → per-workspace 角色 → target 级授权）；Admin Console 一键授权，敏感 target 二次确认；`SimulatePrincipalPolicy` 实时检查，进度条展示每个 target 的已授权/缺失 action
 - **跨会话记忆** — 基于 AgentCore Memory，Agent 自动记住用户偏好与事实，跨 session、跨设备持续生效；用户可在记忆抽屉中查看和删除
 - **平台级可观测性** — 调用追踪、延迟分位数、错误率、Token 成本按 Agent 和 workspace 自动聚合，一屏总览
 - **Marketplace** — 跨 workspace 发布和克隆 Agent / Skill / Tool，元数据公开，源码克隆后才可见
