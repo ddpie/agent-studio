@@ -1,4 +1,6 @@
-"""Tests for crud/workspace_iam.py — workspace IAM role management."""
+"""Tests for crud/workspace_iam.py — workspace IAM role management,
+and workspace deletion IAM cleanup (in crud/workspaces.py).
+"""
 import json
 from unittest.mock import MagicMock, patch, call
 
@@ -447,3 +449,117 @@ class TestBuildMcpPolicy:
         assert policy is not None
         sids = [s["Sid"] for s in policy["Statement"]]
         assert sids.count("McpCloudWatch") == 1
+
+
+# ──────────────────────────────────────────────────────────
+# Workspace deletion IAM cleanup (crud/workspaces.py)
+# ──────────────────────────────────────────────────────────
+
+class TestDeleteWorkspaceIamRole:
+    """Verify _delete_workspace_iam_role follows correct IAM deletion order:
+    1. Delete all inline policies
+    2. Detach all managed policies
+    3. Delete the role
+    """
+
+    def test_deletes_role_in_correct_order(self):
+        from crud.workspaces import _delete_workspace_iam_role
+
+        fake_iam = MagicMock()
+        fake_iam.exceptions.NoSuchEntityException = type("NoSuchEntityException", (Exception,), {})
+        fake_iam.list_role_policies.return_value = {
+            "PolicyNames": ["DefaultMinimal", "MCP-Access"],
+        }
+        fake_iam.list_attached_role_policies.return_value = {
+            "AttachedPolicies": [
+                {"PolicyName": "SomeManaged", "PolicyArn": "arn:aws:iam::123456789012:policy/SomeManaged"},
+            ],
+        }
+
+        call_order = []
+        fake_iam.delete_role_policy.side_effect = lambda **kw: call_order.append(("delete_inline", kw["PolicyName"]))
+        fake_iam.detach_role_policy.side_effect = lambda **kw: call_order.append(("detach_managed", kw["PolicyArn"]))
+        fake_iam.delete_role.side_effect = lambda **kw: call_order.append(("delete_role", kw["RoleName"]))
+
+        workspace_meta = {"roleName": "AgentStudio-ws-test12345-us-east-1"}
+
+        with patch("crud.workspaces._get_iam_client", return_value=fake_iam):
+            _delete_workspace_iam_role(workspace_meta)
+
+        # Verify order: inline policies first, then managed policies, then delete role.
+        assert call_order == [
+            ("delete_inline", "DefaultMinimal"),
+            ("delete_inline", "MCP-Access"),
+            ("detach_managed", "arn:aws:iam::123456789012:policy/SomeManaged"),
+            ("delete_role", "AgentStudio-ws-test12345-us-east-1"),
+        ]
+
+    def test_noop_when_no_role_name(self):
+        from crud.workspaces import _delete_workspace_iam_role
+
+        fake_iam = MagicMock()
+        with patch("crud.workspaces._get_iam_client", return_value=fake_iam):
+            _delete_workspace_iam_role({})
+            _delete_workspace_iam_role({"roleName": ""})
+            _delete_workspace_iam_role({"roleName": None})
+
+        # IAM should never be called.
+        fake_iam.list_role_policies.assert_not_called()
+        fake_iam.delete_role.assert_not_called()
+
+    def test_ignores_nosuchentity(self):
+        from crud.workspaces import _delete_workspace_iam_role
+
+        fake_iam = MagicMock()
+        nse = type("NoSuchEntityException", (Exception,), {})
+        fake_iam.exceptions.NoSuchEntityException = nse
+        fake_iam.list_role_policies.side_effect = nse()
+
+        workspace_meta = {"roleName": "AgentStudio-ws-gone-us-east-1"}
+
+        with patch("crud.workspaces._get_iam_client", return_value=fake_iam):
+            # Should not raise.
+            _delete_workspace_iam_role(workspace_meta)
+
+    def test_best_effort_on_other_errors(self):
+        from crud.workspaces import _delete_workspace_iam_role
+
+        fake_iam = MagicMock()
+        fake_iam.exceptions.NoSuchEntityException = type("NoSuchEntityException", (Exception,), {})
+        fake_iam.list_role_policies.side_effect = RuntimeError("AccessDenied")
+
+        workspace_meta = {"roleName": "AgentStudio-ws-denied-us-east-1"}
+
+        with patch("crud.workspaces._get_iam_client", return_value=fake_iam):
+            # Should not raise — best-effort cleanup.
+            _delete_workspace_iam_role(workspace_meta)
+
+    def test_delete_endpoint_calls_cleanup(self, mock_jwt, user_id, workspace_id):
+        """DELETE /api/workspaces/{wsId} should call _delete_workspace_iam_role."""
+        from crud.handler import app
+
+        fake_table = MagicMock()
+        role_name = f"AgentStudio-ws-{workspace_id[:20]}-us-east-1"
+        meta_item = {
+            "workspaceId": workspace_id, "sk": "META",
+            "roleArn": f"arn:aws:iam::123456789012:role/{role_name}",
+            "roleName": role_name,
+        }
+        fake_table.get_item.return_value = {"Item": meta_item}
+        # query returns the META item, then empty on next iteration
+        fake_table.query.return_value = {
+            "Items": [{"workspaceId": workspace_id, "sk": "META"}],
+        }
+        fake_table.batch_writer.return_value.__enter__ = MagicMock()
+        fake_table.batch_writer.return_value.__exit__ = MagicMock(return_value=False)
+
+        with patch("crud.workspaces._get_table", return_value=fake_table), \
+             patch("crud.workspaces._delete_workspace_iam_role") as mock_cleanup, \
+             patch("crud.workspaces.auth_check") as auth:
+            auth.return_value = (user_id, workspace_id, {"role": "owner"}, None)
+            ev = _event("DELETE", f"/api/workspaces/{workspace_id}",
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+
+        assert resp["statusCode"] == 200
+        mock_cleanup.assert_called_once_with(meta_item)
