@@ -31,12 +31,17 @@ def workspace_id():
 
 @pytest.fixture
 def mock_jwt(user_id):
-    with patch("shared.auth.verify_jwt") as mock:
-        mock.return_value = {
-            "sub": user_id,
-            "email": "test@example.com",
-            "token_use": "id",
-        }
+    claims = {
+        "sub": user_id,
+        "email": "test@example.com",
+        "token_use": "id",
+    }
+    # Patch at BOTH the definition site (shared.auth) AND the call site
+    # (shared.middleware) because middleware does `from shared.auth import
+    # verify_jwt` at import time — the already-bound reference won't see
+    # a patch on the definition module alone.
+    with patch("shared.auth.verify_jwt", return_value=claims) as mock, \
+         patch("shared.middleware.verify_jwt", return_value=claims):
         yield mock
 
 
