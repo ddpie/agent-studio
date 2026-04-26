@@ -694,6 +694,7 @@
     "proposalTemplate": "Template:",
     "proposalImages": "Images:",
     "proposalTools": "Tools:",
+    "proposalSkills": "Skills:",
     "proposalSuggestions": "Suggestions:",
     "proposalSystemPrompt": "System Prompt",
     "proposalToolDefs": "Tool Definitions",

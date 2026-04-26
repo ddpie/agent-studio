@@ -1,13 +1,18 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { Loader2 } from "lucide-react";
 import { useAgentEditStore } from "../../stores/agent-edit-store";
+import type { SkillIndexEntry } from "../../lib/skill-storage";
+import { fetchSkills } from "../../lib/api-client";
+import { readGlobalSkillFiles } from "../../lib/agent-skill-storage";
 import type { AgentMetadata } from "../../lib/agent-metadata";
 
 export default function AgentProposalCard({ json }: { json: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { openNewWithData } = useAgentEditStore();
+  const { openNewWithData, addSkill, setPendingSkillFiles, initSkillFiles } = useAgentEditStore();
+  const [attaching, setAttaching] = useState(false);
   let proposal: Record<string, unknown> | null = null;
   let parseError = "";
   try {
@@ -66,9 +71,14 @@ export default function AgentProposalCard({ json }: { json: string }) {
     : typeof proposal.mcp_targets === "string" && proposal.mcp_targets
       ? (proposal.mcp_targets as string).split(",").map(s => s.trim()).filter(Boolean)
       : [];
+  const skillNames = Array.isArray(proposal.skills)
+    ? (proposal.skills as unknown[]).map(s => String(s).trim()).filter(Boolean)
+    : typeof proposal.skills === "string" && proposal.skills
+      ? (proposal.skills as string).split(",").map(s => s.trim()).filter(Boolean)
+      : [];
 
-  const handleEditAndCreate = () => {
-    console.log("[ProposalCard] mcp_targets from proposal:", proposal.mcp_targets, "→ mcpTargets:", mcpTargets);
+  const handleEditAndCreate = async () => {
+    if (attaching) return;
     const data = {
       name,
       display_name: name,
@@ -80,11 +90,71 @@ export default function AgentProposalCard({ json }: { json: string }) {
       welcome_message: welcome,
       suggestions,
       supports_images: supportsImages,
+      permission_tier: tier,
     } as Partial<AgentMetadata>;
-    console.log("[ProposalCard] openNewWithData data.mcp_targets:", data.mcp_targets);
     openNewWithData(data);
     const draftId = useAgentEditStore.getState().agentId;
-    console.log("[ProposalCard] after openNewWithData, store formData.mcp_targets:", useAgentEditStore.getState().formData?.mcp_targets);
+
+    // Attach proposed skills from the current workspace library. This matches
+    // the proposal spec in meta-agent.md: `skills` is a list of workspace
+    // library skill `name` values, resolved here against listSkills().
+    // Unknown names are silently skipped — the Meta-Agent prompt forbids
+    // inventing names, but we still don't want one stale suggestion to
+    // block the rest of the flow.
+    if (skillNames.length > 0) {
+      setAttaching(true);
+      try {
+        // listSkills() returns the first 100 skills ordered by GSI sort key
+        // (newest-first). Workspaces accumulate e2e/test-seed skills over
+        // time, so a legitimate library skill can easily fall past the
+        // first page. Fetch every page until the requested names are all
+        // resolved or pagination runs out.
+        const byName = new Map<string, SkillIndexEntry>();
+        const want = new Set(skillNames);
+        let cursor: string | undefined;
+        for (let page = 0; page < 20; page += 1) {
+          const resp = await fetchSkills(cursor, 100);
+          for (const raw of resp.items || []) {
+            const item = raw as Record<string, unknown>;
+            const skillId = String(item.skillId ?? "");
+            const name = String(item.name ?? "");
+            if (!skillId || !name) continue;
+            byName.set(name, {
+              id: skillId,
+              name,
+              description: String(item.description ?? ""),
+              contentHash: "",
+              files: [],
+            });
+            want.delete(name);
+          }
+          const nextCursor = (resp as { nextCursor?: string }).nextCursor;
+          if (want.size === 0 || !nextCursor) break;
+          cursor = nextCursor;
+        }
+
+        for (const skillName of skillNames) {
+          const globalSkill = byName.get(skillName);
+          if (!globalSkill) {
+            console.warn(`Skill "${skillName}" not found in workspace library`);
+            continue;
+          }
+          try {
+            const { entry, files } = await readGlobalSkillFiles(globalSkill);
+            addSkill(entry);
+            initSkillFiles(entry.id, {});
+            setPendingSkillFiles(entry.id, files);
+          } catch (err) {
+            console.warn(`Failed to attach skill "${skillName}":`, err);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load workspace skills for proposal:", err);
+      } finally {
+        setAttaching(false);
+      }
+    }
+
     if (draftId) navigate(`/agents/edit/${draftId}`);
   };
 
@@ -92,7 +162,6 @@ export default function AgentProposalCard({ json }: { json: string }) {
     <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/20 p-3 my-2 text-xs not-prose">
       <div className="flex items-center justify-between mb-2">
         <span className="font-semibold text-blue-900 dark:text-blue-100">{name}</span>
-        <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300 rounded">{tier}</span>
       </div>
       {desc && <p className="text-gray-600 dark:text-gray-400 mb-2">{desc}</p>}
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400 mb-2">
@@ -105,6 +174,11 @@ export default function AgentProposalCard({ json }: { json: string }) {
         {mcpTargets.length > 0 && (
           <div className="col-span-2">MCP {mcpTargets.map(t2 => (
             <span key={t2} className="inline-block px-1.5 py-0.5 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300 rounded text-[10px] mr-1">{t2}</span>
+          ))}</div>
+        )}
+        {skillNames.length > 0 && (
+          <div className="col-span-2">{t("chat.proposalSkills")} {skillNames.map(s => (
+            <span key={s} className="inline-block px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 rounded text-[10px] mr-1">{s}</span>
           ))}</div>
         )}
       </div>
@@ -127,8 +201,10 @@ export default function AgentProposalCard({ json }: { json: string }) {
       )}
       <button
         onClick={handleEditAndCreate}
-        className="w-full mt-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+        disabled={attaching}
+        className="w-full mt-1 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-70 flex items-center justify-center gap-1.5"
       >
+        {attaching && <Loader2 className="w-3 h-3 animate-spin" />}
         {t("chat.editAndCreate")}
       </button>
     </div>
