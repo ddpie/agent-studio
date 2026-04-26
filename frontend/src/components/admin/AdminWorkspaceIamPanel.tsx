@@ -203,9 +203,11 @@ function WorkspaceListItem({
           <span className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600 shrink-0" title={t("admin.noRole")} />
         )}
       </div>
-      {(ws.owner_name || ws.owner_email) && (
+      {(ws.owner_name || ws.owner_email || ws.owner_id) && (
         <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">
-          {t("admin.owner")}: {ws.owner_name || ws.owner_email}
+          {t("admin.owner")}: {ws.owner_name
+            ? (ws.owner_email ? `${ws.owner_name} (${ws.owner_email})` : ws.owner_name)
+            : ws.owner_email || ws.owner_id?.slice(0, 8) + "…"}
         </div>
       )}
       <div className="flex items-center gap-2 mt-0.5">

@@ -187,17 +187,17 @@ export class WorkspaceBoundary extends Construct {
             "es:Describe*", "es:List*",
             // Analytics
             "athena:Get*", "athena:List*", "athena:BatchGet*",
-            "glue:Get*", "glue:List*",
+            "glue:Get*", "glue:List*", "glue:BatchGet*",
             "kinesis:Describe*", "kinesis:List*", "kinesis:Get*",
             "firehose:Describe*", "firehose:List*",
             // Monitoring
             "cloudwatch:Describe*", "cloudwatch:Get*", "cloudwatch:List*",
             "logs:Describe*", "logs:Get*", "logs:StartQuery", "logs:StopQuery", "logs:FilterLogEvents",
-            "cloudtrail:LookupEvents", "cloudtrail:Get*", "cloudtrail:List*",
+            "cloudtrail:LookupEvents", "cloudtrail:Get*", "cloudtrail:List*", "cloudtrail:StartQuery",
             "pi:Describe*", "pi:Get*", "pi:List*",
             // Security
             "iam:Get*", "iam:List*", "iam:Simulate*",
-            "kms:Describe*", "kms:List*", "kms:GetKeyPolicy",
+            "kms:Describe*", "kms:List*", "kms:Get*",
             "acm:Describe*", "acm:List*", "acm:GetCertificate",
             "secretsmanager:Describe*", "secretsmanager:List*",
             "guardduty:Get*", "guardduty:List*",
@@ -207,6 +207,7 @@ export class WorkspaceBoundary extends Construct {
             // Networking
             "route53:Get*", "route53:List*",
             "elasticloadbalancing:Describe*",
+            "apigateway:GET",
             "cloudfront:Get*", "cloudfront:List*",
             // Messaging
             "sns:Get*", "sns:List*",
@@ -214,7 +215,7 @@ export class WorkspaceBoundary extends Construct {
             "events:Describe*", "events:List*",
             "states:Describe*", "states:List*",
             // Management
-            "cloudformation:Describe*", "cloudformation:List*",
+            "cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary",
             "ssm:DescribeParameters", "ssm:GetParameter", "ssm:GetParameters", "ssm:List*",
             "servicequotas:Get*", "servicequotas:List*",
             "tag:Get*", "health:Describe*",
