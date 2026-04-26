@@ -323,11 +323,49 @@ export default function IamPermissionsTab() {
             {roleArn}
           </span>
         </div>
-        <div className="flex justify-between gap-2 border-t border-gray-100 dark:border-gray-800 pt-2">
-          <span className="text-gray-500 dark:text-gray-400">{t("iam.permissionBoundary")}</span>
-          <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-            <CheckCircle2 className="w-3 h-3" /> AgentStudioWorkspaceCeiling
-          </span>
+        <div className="border-t border-gray-100 dark:border-gray-800 pt-2">
+          <div className="flex justify-between gap-2">
+            <span className="text-gray-500 dark:text-gray-400">{t("iam.permissionBoundary")}</span>
+            <button
+              onClick={() => setExpandedTargets((prev) => {
+                const next = new Set(prev);
+                if (next.has("__boundary__")) next.delete("__boundary__");
+                else next.add("__boundary__");
+                return next;
+              })}
+              className="flex items-center gap-1 text-green-600 dark:text-green-400 hover:underline cursor-pointer"
+            >
+              <CheckCircle2 className="w-3 h-3" /> AgentStudioWorkspaceCeiling
+              {expandedTargets.has("__boundary__") ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            </button>
+          </div>
+          {expandedTargets.has("__boundary__") && (
+            <div className="mt-2 p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg text-[10px] space-y-2">
+              <p className="text-gray-600 dark:text-gray-400 font-medium">{t("iam.boundaryDesc")}</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                {[
+                  { cat: t("iam.boundaryCat.compute"), items: "EC2, Lambda, ECS, EKS, Auto Scaling" },
+                  { cat: t("iam.boundaryCat.storage"), items: "S3 (list/location), EFS" },
+                  { cat: t("iam.boundaryCat.database"), items: "RDS, DynamoDB, ElastiCache, Redshift, OpenSearch" },
+                  { cat: t("iam.boundaryCat.security"), items: "IAM, KMS, ACM, GuardDuty, Security Hub, Inspector, Config" },
+                  { cat: t("iam.boundaryCat.networking"), items: "Route 53, ELB, CloudFront" },
+                  { cat: t("iam.boundaryCat.monitoring"), items: "CloudWatch, CloudTrail, Performance Insights" },
+                  { cat: t("iam.boundaryCat.messaging"), items: "SNS, SQS, EventBridge, Step Functions" },
+                  { cat: t("iam.boundaryCat.management"), items: "CloudFormation, SSM, Service Quotas, Health" },
+                  { cat: t("iam.boundaryCat.analytics"), items: "Athena, Glue, Kinesis, Firehose" },
+                  { cat: t("iam.boundaryCat.cost"), items: "Cost Explorer, Pricing, Budgets" },
+                  { cat: t("iam.boundaryCat.aiml"), items: "Bedrock, SageMaker" },
+                  { cat: t("iam.boundaryCat.other"), items: "Well-Architected, Cognito, Backup, STS" },
+                ].map(({ cat, items }) => (
+                  <div key={cat}>
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">{cat}: </span>
+                    <span className="text-gray-500 dark:text-gray-400">{items}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-gray-500 dark:text-gray-400 italic">{t("iam.boundaryReadOnly")}</p>
+            </div>
+          )}
         </div>
       </div>
 
