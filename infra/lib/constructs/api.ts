@@ -201,6 +201,33 @@ export class Api extends Construct {
       resources: ["*"],
     }));
 
+    // AgentCore Memory — control plane (CreateMemory used by workspace creation,
+    // DeleteMemory used by workspace deletion + repair endpoint).
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        "bedrock-agentcore-control:CreateMemory",
+        "bedrock-agentcore-control:DeleteMemory",
+        "bedrock-agentcore-control:GetMemory",
+        "bedrock-agentcore-control:ListMemories",
+      ],
+      resources: [
+        `arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:memory/*`,
+      ],
+    }));
+
+    // AgentCore Memory — data plane (end-user memory drawer: list/get/delete
+    // individual memory records in lambda/crud/memories.py).
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        "bedrock-agentcore:ListMemoryRecords",
+        "bedrock-agentcore:GetMemoryRecord",
+        "bedrock-agentcore:DeleteMemoryRecord",
+      ],
+      resources: [
+        `arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:memory/*`,
+      ],
+    }));
+
     // Sprint 3: inline agent log viewer (crud/logs.py). FilterLogEvents
     // on the sub-agent runtime log groups. The action requires BOTH the
     // log-group ARN and the log-stream (`:*`) ARN to be allowed — AWS
