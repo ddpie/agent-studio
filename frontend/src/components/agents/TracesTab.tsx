@@ -184,7 +184,7 @@ export default function TracesTab({ agentId, range }: Props) {
                             {session.sessionId.slice(0, 12)}...
                           </div>
                           <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {formatRelativeTime(session.timestamp)}
+                            {formatRelativeTime(session.startTime)}
                           </div>
                           <div className="flex items-center gap-2">
                             <StatusBadge status={session.status} />
