@@ -133,6 +133,17 @@ export async function enforceUserIdentity(): Promise<void> {
   }
 }
 
+export async function isPlatformAdmin(): Promise<boolean> {
+  try {
+    const session = await fetchAuthSession();
+    const groups = session.tokens?.idToken?.payload?.["cognito:groups"];
+    if (Array.isArray(groups)) return groups.includes("platform-admins");
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export class ApiError extends Error {
   status: number;
   body: { error?: string; code?: string };

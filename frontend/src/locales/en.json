@@ -1149,6 +1149,7 @@
     "allPermsGranted": "All permissions granted",
     "missingPerms": "Missing {{count}} permission(s)",
     "autoGrant": "Auto-grant",
+    "contactAdmin": "Contact platform admin",
     "manual": "Manual",
     "missingActions": "Missing Actions",
     "cliCommand": "AWS CLI Command",
