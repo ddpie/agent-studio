@@ -85,6 +85,20 @@ python3 -c "import boto3" 2>/dev/null || {
   echo "ERROR: boto3 not installed. Run 'pip install boto3'."; exit 1
 }
 
+# MCP runtime role-drift audit — non-fatal. Surfaces the 4/21 regression
+# class: MCP runtimes pinned to a deleted IAM role after CDK renames. The
+# fix is `scripts/check-mcp-runtime-roles.py --fix`, or just re-run
+# deploy-mcp.sh (which now always converges the canonical role).
+if [[ "$ONLY_FRONTEND" == false ]]; then
+  if ! python3 "${SCRIPT_DIR}/check-mcp-runtime-roles.py" --region "$REGION" >/dev/null 2>&1; then
+    echo ""
+    echo "WARNING: MCP runtime execution-role drift detected."
+    python3 "${SCRIPT_DIR}/check-mcp-runtime-roles.py" --region "$REGION" 2>&1 | sed 's/^/  /'
+    echo "  Fix with: bash scripts/deploy-mcp.sh   (or scripts/check-mcp-runtime-roles.py --fix)"
+    echo ""
+  fi
+fi
+
 # ORIGIN_VERIFY_SECRET — generate if not set, persist immediately
 if [[ -f "$PROJECT_ROOT/.env" ]]; then
   set -a; source "$PROJECT_ROOT/.env"; set +a
