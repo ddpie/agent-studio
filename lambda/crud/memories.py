@@ -72,7 +72,7 @@ def _list_one_section(memory_id: str, namespace: str, max_results: int,
     records = [{
         "id": r.get("memoryRecordId"),
         "content": r.get("content"),
-        "createdAt": r.get("createdAt"),
+        "createdAt": r.get("createdAt").isoformat() if hasattr(r.get("createdAt"), "isoformat") else r.get("createdAt"),
         "namespace": r.get("namespace"),
     } for r in resp.get("memoryRecordSummaries", [])]
     return {"records": records, "nextToken": resp.get("nextToken") or None}
