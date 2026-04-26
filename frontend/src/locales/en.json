@@ -1140,6 +1140,8 @@
       "episodesHint": "Complete interaction snippets for recalling similar past scenarios"
     },
     "delete": "Delete",
+    "deleteTitle": "Delete memory",
+    "deleteMessage": "This memory record will be permanently removed. This action cannot be undone.",
     "confirm": "Confirm",
     "cancel": "Cancel",
     "forgetAll": "Forget everything this Agent knows about me",
