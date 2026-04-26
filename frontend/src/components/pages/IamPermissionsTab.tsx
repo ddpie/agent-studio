@@ -54,6 +54,7 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
   const [expandedTargets, setExpandedTargets] = useState<Set<string>>(new Set());
   const [copiedTarget, setCopiedTarget] = useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<McpTargetDef | null>(null);
+  const [sensitivityOpen, setSensitivityOpen] = useState<string | null>(null);
 
   useEffect(() => { isPlatformAdmin().then(setIsAdmin); }, []);
 
@@ -354,26 +355,32 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
                   <span className="text-xs font-medium text-gray-800 dark:text-gray-200">
                     {target.displayName}
                   </span>
-                  {target.sensitivity === "medium" && (
-                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800" title={target.sensitiveReasons.join("; ")}>
+                  {target.sensitivity === "medium" && target.sensitiveReasons.length > 0 && (
+                    <button
+                      onClick={() => setSensitivityOpen(sensitivityOpen === target.name ? null : target.name)}
+                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/40 cursor-pointer transition-colors"
+                    >
                       <AlertTriangle className="w-2.5 h-2.5" /> {t("iam.sensitivityMedium")}
-                    </span>
+                    </button>
                   )}
-                  {target.sensitivity === "high" && (
-                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800" title={target.sensitiveReasons.join("; ")}>
+                  {target.sensitivity === "high" && target.sensitiveReasons.length > 0 && (
+                    <button
+                      onClick={() => setSensitivityOpen(sensitivityOpen === target.name ? null : target.name)}
+                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/40 cursor-pointer transition-colors"
+                    >
                       <AlertTriangle className="w-2.5 h-2.5" /> {t("iam.sensitivityHigh")}
-                    </span>
+                    </button>
                   )}
 
                   {/* Status text — clickable to expand details */}
                   {noIamNeeded ? (
-                    <span className="flex-1 text-[12px] text-gray-400 dark:text-gray-500">
+                    <span className="flex-1 text-[11px] text-gray-400 dark:text-gray-500">
                       {t("iam.noExtraPerms")}
                     </span>
                   ) : (
                     <button
                       onClick={() => toggleExpanded(target.name)}
-                      className={`flex-1 flex items-center gap-1 text-[12px] hover:underline cursor-pointer ${
+                      className={`flex-1 flex items-center gap-1 text-[11px] hover:underline cursor-pointer ${
                         isGranted
                           ? "text-green-600 dark:text-green-400"
                           : "text-amber-600 dark:text-amber-400"
@@ -406,6 +413,28 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
                     </a>
                   )}
                 </div>
+
+                {/* Sensitivity reasons popover */}
+                {sensitivityOpen === target.name && target.sensitiveReasons.length > 0 && (
+                  <div className={`px-3 py-2 border-t text-[11px] ${
+                    target.sensitivity === "high"
+                      ? "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30"
+                      : "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30"
+                  }`}>
+                    <ul className="space-y-1">
+                      {target.sensitiveReasons.map((reason, i) => (
+                        <li key={i} className={`flex items-start gap-1.5 ${
+                          target.sensitivity === "high"
+                            ? "text-red-700 dark:text-red-300"
+                            : "text-amber-700 dark:text-amber-300"
+                        }`}>
+                          <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                          <span>{reason}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {/* Expanded detail section */}
                 {isExpanded && !noIamNeeded && target.iamPolicy && (
