@@ -357,17 +357,17 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
                     {target.sensitivity === "medium" && target.sensitiveReasons.length > 0 && (
                       <button
                         onClick={() => setSensitivityOpen(sensitivityOpen === target.name ? null : target.name)}
-                        className="inline-flex items-center gap-0.5 px-1 py-px text-[9px] leading-none font-medium rounded bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/40 cursor-pointer transition-colors"
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] leading-tight font-medium rounded bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/40 cursor-pointer transition-colors"
                       >
-                        <AlertTriangle className="w-2 h-2" /> {t("iam.sensitivityMedium")}
+                        <AlertTriangle className="w-2.5 h-2.5" /> {t("iam.sensitivityMedium")}
                       </button>
                     )}
                     {target.sensitivity === "high" && target.sensitiveReasons.length > 0 && (
                       <button
                         onClick={() => setSensitivityOpen(sensitivityOpen === target.name ? null : target.name)}
-                        className="inline-flex items-center gap-0.5 px-1 py-px text-[9px] leading-none font-medium rounded bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/40 cursor-pointer transition-colors"
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] leading-tight font-medium rounded bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/40 cursor-pointer transition-colors"
                       >
-                        <AlertTriangle className="w-2 h-2" /> {t("iam.sensitivityHigh")}
+                        <AlertTriangle className="w-2.5 h-2.5" /> {t("iam.sensitivityHigh")}
                       </button>
                     )}
                     <span className="flex-1" />
@@ -375,14 +375,14 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
                       <button
                         onClick={() => requestGrant(target)}
                         disabled={isGranting}
-                        className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] leading-none font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1 px-2 py-0.5 text-[11px] leading-tight font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded-md transition-colors disabled:opacity-50"
                       >
-                        {isGranting ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : null}
+                        {isGranting ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
                         {t("iam.autoGrant")}
                       </button>
                     )}
                     {!isGranted && !noIamNeeded && readOnly && (
-                      <a href="#/admin" className="text-[9px] text-blue-600 dark:text-blue-400 hover:underline">
+                      <a href="#/admin" className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline">
                         {t("iam.goToAdmin")}
                       </a>
                     )}
