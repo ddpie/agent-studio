@@ -1,6 +1,7 @@
 """create_agent — Generate code, package, and deploy a new Agent to AgentCore Runtime."""
 
 import json
+import os
 import re
 from datetime import datetime, timezone
 
@@ -280,6 +281,30 @@ def create_agent(
         config_data["mcp_endpoints"] = mcp_endpoints
     if mcp_targets_list:
         config_data["mcp_targets"] = mcp_targets_list
+
+    # Memory config — read from staging data if present (CRUD Lambda writes it)
+    _mem = staged.get("memory") if staging_key and staged else None
+    if _mem and _mem.get("enabled"):
+        from tools._scope import current_workspace
+        _ws_id = current_workspace()
+        _ws_memory_id = ""
+        if _ws_id:
+            try:
+                _ddb = boto3.resource("dynamodb", region_name=REGION)
+                _ws_table = _ddb.Table(os.environ.get("AGENT_STUDIO_WORKSPACES_TABLE", "agent-studio-workspaces"))
+                _ws_item = _ws_table.get_item(Key={"workspaceId": _ws_id, "sk": "META"}).get("Item", {})
+                _ws_memory_id = _ws_item.get("memory_id", "")
+            except Exception as _e:
+                import sys
+                print(f"WARNING: workspace memory_id lookup failed: {_e}", file=sys.stderr)
+        if _ws_memory_id:
+            config_data["memory"] = {
+                "enabled": True,
+                "memory_id": _ws_memory_id,
+                "strategies": _mem.get("strategies", []),
+                "agent_id": agent_name,
+            }
+
     config_json = json.dumps(config_data, indent=2, ensure_ascii=False)
 
     # Validate each file independently

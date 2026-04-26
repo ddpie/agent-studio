@@ -178,3 +178,40 @@ class MemoryContext:
                 return "[]"
 
         return recall_episodes
+
+
+def _format_memory_block(prefs: list, sums: list) -> str:
+    """Format retrieved memory into a prompt block.
+
+    Args:
+        prefs: List of user preference records
+        sums: List of conversation summary records
+
+    Returns:
+        Formatted string to append to system prompt
+    """
+    if not prefs and not sums:
+        return ""
+    lines = ["", "## What you remember about this user", ""]
+    if prefs:
+        lines.append("### Their preferences")
+        _sorted = sorted(prefs, key=lambda r: r.get("createdAt", 0), reverse=True)[:20]
+        for r in _sorted:
+            text = (r.get("content") or {}).get("text") or ""
+            if text:
+                lines.append(f"- {text}")
+        lines.append("")
+    if sums:
+        lines.append("### Recent conversation summaries (possibly relevant)")
+        for r in sums[:3]:
+            text = (r.get("content") or {}).get("text") or ""
+            if text:
+                lines.append(f"- {text}")
+        lines.append("")
+    # TODO(memory-tone): make this builder-configurable
+    lines.append(
+        'Use this context silently — never say "according to my memory". '
+        'Call recall_facts(query) or recall_episodes(query) if you need '
+        "specific information you don't see above."
+    )
+    return "\n".join(lines)
