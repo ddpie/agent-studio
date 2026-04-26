@@ -184,29 +184,47 @@ def upload_tool_catalog():
     table = _get_tools_table()
     now = __import__("datetime").datetime.utcnow().isoformat() + "Z"
 
-    # 1. Seed built-in tools to DDB (only if not already present)
+    # 1. Upsert built-in tools to DDB. Prior behaviour was put_item with
+    #    attribute_not_exists(toolId), which only ever seeded a brand-new
+    #    table — so code fixes in tools_library/ never reached DDB, and a
+    #    couple of tools that were accidentally saved as user-owned in April
+    #    2026 silently stayed missing from list_tools for every other
+    #    workspace. Now: UpdateItem conditioned on (new row) OR (already a
+    #    builtin) OR (owner == __builtin__). This lets Meta-Agent re-sync
+    #    its own catalog on every restart while still refusing to clobber a
+    #    genuine user tool that happens to share a builtin's function name.
     for mod in _ALL_TOOLS:
         meta = mod.TOOL_META
         for func_name in [n.strip() for n in mod.TOOL_NAMES.split(",") if n.strip()]:
             try:
-                ddb.put_item(
+                ddb.update_item(
                     TableName=table,
-                    Item={
-                        "toolId": {"S": func_name},
-                        "name": {"S": meta["name"]},
-                        "description": {"S": meta["description"]},
-                        "category": {"S": meta["category"]},
-                        "code": {"S": mod.TOOL_CODE.strip()},
-                        "builtin": {"BOOL": True},
-                        "owner": {"S": "__builtin__"},
-                        "visibility": {"S": "shared"},
-                        "created_at": {"S": now},
-                        "updated_at": {"S": now},
+                    Key={"toolId": {"S": func_name}},
+                    UpdateExpression=(
+                        "SET #n = :n, description = :d, category = :c, code = :code, "
+                        "builtin = :t, #o = :o, visibility = :v, "
+                        "created_at = if_not_exists(created_at, :u), updated_at = :u "
+                        "REMOVE workspace_id"
+                    ),
+                    ConditionExpression=(
+                        "attribute_not_exists(toolId) OR "
+                        "builtin = :t OR "
+                        "#o = :o"
+                    ),
+                    ExpressionAttributeNames={"#n": "name", "#o": "owner"},
+                    ExpressionAttributeValues={
+                        ":n": {"S": meta["name"]},
+                        ":d": {"S": meta["description"]},
+                        ":c": {"S": meta["category"]},
+                        ":code": {"S": mod.TOOL_CODE.strip()},
+                        ":t": {"BOOL": True},
+                        ":o": {"S": "__builtin__"},
+                        ":v": {"S": "shared"},
+                        ":u": {"S": now},
                     },
-                    ConditionExpression="attribute_not_exists(toolId)",
                 )
             except ddb.exceptions.ConditionalCheckFailedException:
-                # User has a tool with the same name — don't overwrite
+                # A real user tool owns this function name; leave it alone.
                 pass
             except Exception as e:
                 print(f"Warning: Failed to upsert tool '{func_name}' to DDB: {e}")
