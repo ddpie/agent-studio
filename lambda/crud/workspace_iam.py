@@ -33,7 +33,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     "cloudwatch": {
         "Statement": [
             {
-                "Sid": "McpCloudWatch",
+                "Sid": "CloudWatch",
                 "Effect": "Allow",
                 "Action": [
                     "cloudwatch:DescribeAlarms",
@@ -50,7 +50,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     "cloudtrail": {
         "Statement": [
             {
-                "Sid": "McpCloudTrail",
+                "Sid": "CloudTrail",
                 "Effect": "Allow",
                 "Action": [
                     "cloudtrail:LookupEvents",
@@ -64,7 +64,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     "iam": {
         "Statement": [
             {
-                "Sid": "McpIam",
+                "Sid": "Iam",
                 "Effect": "Allow",
                 "Action": [
                     "iam:GetUser",
@@ -79,7 +79,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     "aws-pricing": {
         "Statement": [
             {
-                "Sid": "McpPricing",
+                "Sid": "Pricing",
                 "Effect": "Allow",
                 "Action": [
                     "pricing:GetProducts",
@@ -92,7 +92,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     "ec2": {
         "Statement": [
             {
-                "Sid": "McpEc2",
+                "Sid": "Ec2",
                 "Effect": "Allow",
                 "Action": ["ec2:Describe*"],
                 "Resource": "*",
@@ -102,7 +102,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     "lambda": {
         "Statement": [
             {
-                "Sid": "McpLambda",
+                "Sid": "Lambda",
                 "Effect": "Allow",
                 "Action": [
                     "lambda:GetFunction",
@@ -116,7 +116,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     "ecs": {
         "Statement": [
             {
-                "Sid": "McpEcs",
+                "Sid": "Ecs",
                 "Effect": "Allow",
                 "Action": ["ecs:Describe*", "ecs:List*"],
                 "Resource": "*",
@@ -126,7 +126,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     "eks": {
         "Statement": [
             {
-                "Sid": "McpEks",
+                "Sid": "Eks",
                 "Effect": "Allow",
                 "Action": ["eks:Describe*", "eks:List*"],
                 "Resource": "*",
@@ -135,7 +135,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "well-architected": {
         "Statement": [{
-            "Sid": "McpWellArchitected",
+            "Sid": "WellArchitected",
             "Effect": "Allow",
             "Action": ["wellarchitected:Get*", "wellarchitected:List*"],
             "Resource": "*",
@@ -143,7 +143,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "rds": {
         "Statement": [{
-            "Sid": "McpRds",
+            "Sid": "Rds",
             "Effect": "Allow",
             "Action": ["rds:Describe*", "rds:List*"],
             "Resource": "*",
@@ -151,7 +151,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "s3-readonly": {
         "Statement": [{
-            "Sid": "McpS3ReadOnly",
+            "Sid": "S3ReadOnly",
             "Effect": "Allow",
             "Action": ["s3:GetBucketLocation", "s3:GetBucketTagging", "s3:ListAllMyBuckets", "s3:ListBucket"],
             "Resource": "*",
@@ -159,7 +159,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "dynamodb-readonly": {
         "Statement": [{
-            "Sid": "McpDynamoDBReadOnly",
+            "Sid": "DynamoDBReadOnly",
             "Effect": "Allow",
             "Action": ["dynamodb:Describe*", "dynamodb:List*"],
             "Resource": "*",
@@ -167,7 +167,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "sns": {
         "Statement": [{
-            "Sid": "McpSns",
+            "Sid": "Sns",
             "Effect": "Allow",
             "Action": ["sns:Get*", "sns:List*"],
             "Resource": "*",
@@ -175,7 +175,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "sqs": {
         "Statement": [{
-            "Sid": "McpSqs",
+            "Sid": "Sqs",
             "Effect": "Allow",
             "Action": ["sqs:Get*", "sqs:List*"],
             "Resource": "*",
@@ -183,7 +183,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "route53": {
         "Statement": [{
-            "Sid": "McpRoute53",
+            "Sid": "Route53",
             "Effect": "Allow",
             "Action": ["route53:Get*", "route53:List*"],
             "Resource": "*",
@@ -191,7 +191,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "elasticache": {
         "Statement": [{
-            "Sid": "McpElastiCache",
+            "Sid": "ElastiCache",
             "Effect": "Allow",
             "Action": ["elasticache:Describe*", "elasticache:List*"],
             "Resource": "*",
@@ -199,7 +199,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "cloudformation": {
         "Statement": [{
-            "Sid": "McpCloudFormation",
+            "Sid": "CloudFormation",
             "Effect": "Allow",
             "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"],
             "Resource": "*",
@@ -207,7 +207,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "cost-explorer": {
         "Statement": [{
-            "Sid": "McpCostExplorer",
+            "Sid": "CostExplorer",
             "Effect": "Allow",
             "Action": ["ce:Get*", "ce:Describe*", "ce:List*"],
             "Resource": "*",
@@ -215,7 +215,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "ssm": {
         "Statement": [{
-            "Sid": "McpSsm",
+            "Sid": "Ssm",
             "Effect": "Allow",
             "Action": ["ssm:DescribeParameters", "ssm:GetParameter", "ssm:GetParameters", "ssm:List*"],
             "Resource": "*",
@@ -223,7 +223,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "sts": {
         "Statement": [{
-            "Sid": "McpSts",
+            "Sid": "Sts",
             "Effect": "Allow",
             "Action": ["sts:GetCallerIdentity"],
             "Resource": "*",
@@ -231,7 +231,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "eventbridge": {
         "Statement": [{
-            "Sid": "McpEventBridge",
+            "Sid": "EventBridge",
             "Effect": "Allow",
             "Action": ["events:Describe*", "events:List*"],
             "Resource": "*",
@@ -239,7 +239,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "step-functions": {
         "Statement": [{
-            "Sid": "McpStepFunctions",
+            "Sid": "StepFunctions",
             "Effect": "Allow",
             "Action": ["states:Describe*", "states:List*", "states:GetExecutionHistory"],
             "Resource": "*",
@@ -247,7 +247,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "elb": {
         "Statement": [{
-            "Sid": "McpElb",
+            "Sid": "Elb",
             "Effect": "Allow",
             "Action": ["elasticloadbalancing:Describe*"],
             "Resource": "*",
@@ -255,7 +255,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "api-gateway": {
         "Statement": [{
-            "Sid": "McpApiGateway",
+            "Sid": "ApiGateway",
             "Effect": "Allow",
             "Action": ["apigateway:GET"],
             "Resource": "*",
@@ -263,7 +263,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "cloudfront": {
         "Statement": [{
-            "Sid": "McpCloudFront",
+            "Sid": "CloudFront",
             "Effect": "Allow",
             "Action": ["cloudfront:Get*", "cloudfront:List*"],
             "Resource": "*",
@@ -271,7 +271,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "kms": {
         "Statement": [{
-            "Sid": "McpKms",
+            "Sid": "Kms",
             "Effect": "Allow",
             "Action": ["kms:Describe*", "kms:List*", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus"],
             "Resource": "*",
@@ -279,7 +279,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "acm": {
         "Statement": [{
-            "Sid": "McpAcm",
+            "Sid": "Acm",
             "Effect": "Allow",
             "Action": ["acm:Describe*", "acm:List*", "acm:GetCertificate"],
             "Resource": "*",
@@ -287,7 +287,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "guardduty": {
         "Statement": [{
-            "Sid": "McpGuardDuty",
+            "Sid": "GuardDuty",
             "Effect": "Allow",
             "Action": ["guardduty:Get*", "guardduty:List*"],
             "Resource": "*",
@@ -295,7 +295,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "security-hub": {
         "Statement": [{
-            "Sid": "McpSecurityHub",
+            "Sid": "SecurityHub",
             "Effect": "Allow",
             "Action": ["securityhub:Get*", "securityhub:List*", "securityhub:BatchGet*"],
             "Resource": "*",
@@ -303,7 +303,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "inspector": {
         "Statement": [{
-            "Sid": "McpInspector",
+            "Sid": "Inspector",
             "Effect": "Allow",
             "Action": ["inspector2:Get*", "inspector2:List*", "inspector2:BatchGet*"],
             "Resource": "*",
@@ -311,7 +311,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "config": {
         "Statement": [{
-            "Sid": "McpConfig",
+            "Sid": "Config",
             "Effect": "Allow",
             "Action": ["config:Describe*", "config:Get*", "config:List*"],
             "Resource": "*",
@@ -319,7 +319,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "ecr": {
         "Statement": [{
-            "Sid": "McpEcr",
+            "Sid": "Ecr",
             "Effect": "Allow",
             "Action": ["ecr:Describe*", "ecr:List*", "ecr:BatchGetImage"],
             "Resource": "*",
@@ -327,7 +327,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "athena": {
         "Statement": [{
-            "Sid": "McpAthena",
+            "Sid": "Athena",
             "Effect": "Allow",
             "Action": ["athena:Get*", "athena:List*", "athena:BatchGet*"],
             "Resource": "*",
@@ -335,7 +335,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "glue": {
         "Statement": [{
-            "Sid": "McpGlue",
+            "Sid": "Glue",
             "Effect": "Allow",
             "Action": ["glue:Get*", "glue:List*", "glue:BatchGet*"],
             "Resource": "*",
@@ -343,7 +343,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "redshift": {
         "Statement": [{
-            "Sid": "McpRedshift",
+            "Sid": "Redshift",
             "Effect": "Allow",
             "Action": ["redshift:Describe*", "redshift:List*"],
             "Resource": "*",
@@ -351,7 +351,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "opensearch": {
         "Statement": [{
-            "Sid": "McpOpenSearch",
+            "Sid": "OpenSearch",
             "Effect": "Allow",
             "Action": ["es:Describe*", "es:List*"],
             "Resource": "*",
@@ -359,7 +359,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "kinesis": {
         "Statement": [{
-            "Sid": "McpKinesis",
+            "Sid": "Kinesis",
             "Effect": "Allow",
             "Action": ["kinesis:Describe*", "kinesis:List*", "kinesis:Get*"],
             "Resource": "*",
@@ -367,7 +367,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "sagemaker": {
         "Statement": [{
-            "Sid": "McpSageMaker",
+            "Sid": "SageMaker",
             "Effect": "Allow",
             "Action": ["sagemaker:Describe*", "sagemaker:List*"],
             "Resource": "*",
@@ -375,7 +375,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "bedrock-readonly": {
         "Statement": [{
-            "Sid": "McpBedrockReadOnly",
+            "Sid": "BedrockReadOnly",
             "Effect": "Allow",
             "Action": ["bedrock:Get*", "bedrock:List*"],
             "Resource": "*",
@@ -383,7 +383,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "cognito": {
         "Statement": [{
-            "Sid": "McpCognito",
+            "Sid": "Cognito",
             "Effect": "Allow",
             "Action": ["cognito-idp:Describe*", "cognito-idp:List*"],
             "Resource": "*",
@@ -391,7 +391,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "backup": {
         "Statement": [{
-            "Sid": "McpBackup",
+            "Sid": "Backup",
             "Effect": "Allow",
             "Action": ["backup:Describe*", "backup:Get*", "backup:List*"],
             "Resource": "*",
@@ -399,7 +399,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "health": {
         "Statement": [{
-            "Sid": "McpHealth",
+            "Sid": "Health",
             "Effect": "Allow",
             "Action": ["health:Describe*"],
             "Resource": "*",
@@ -407,7 +407,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "service-quotas": {
         "Statement": [{
-            "Sid": "McpServiceQuotas",
+            "Sid": "ServiceQuotas",
             "Effect": "Allow",
             "Action": ["servicequotas:Get*", "servicequotas:List*"],
             "Resource": "*",
@@ -415,7 +415,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "compute-optimizer": {
         "Statement": [{
-            "Sid": "McpComputeOptimizer",
+            "Sid": "ComputeOptimizer",
             "Effect": "Allow",
             "Action": ["compute-optimizer:Get*"],
             "Resource": "*",
@@ -423,7 +423,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "efs": {
         "Statement": [{
-            "Sid": "McpEfs",
+            "Sid": "Efs",
             "Effect": "Allow",
             "Action": ["elasticfilesystem:Describe*"],
             "Resource": "*",
@@ -431,7 +431,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
     },
     "autoscaling": {
         "Statement": [{
-            "Sid": "McpAutoScaling",
+            "Sid": "AutoScaling",
             "Effect": "Allow",
             "Action": ["autoscaling:Describe*"],
             "Resource": "*",
@@ -630,7 +630,7 @@ def _build_mcp_policy(mcp_grants: list[str]) -> dict | None:
 
 
 def _write_mcp_policy(role_name: str, mcp_grants: list[str]) -> int:
-    """Rebuild and write the MCP-Access inline policy. Returns policy size."""
+    """Rebuild and write the WorkspaceGrants inline policy. Returns policy size."""
     iam_client = _get_iam()
     merged = _build_mcp_policy(mcp_grants)
     if merged is None:
@@ -638,7 +638,7 @@ def _write_mcp_policy(role_name: str, mcp_grants: list[str]) -> int:
         try:
             iam_client.delete_role_policy(
                 RoleName=role_name,
-                PolicyName="MCP-Access",
+                PolicyName="WorkspaceGrants",
             )
         except iam_client.exceptions.NoSuchEntityException:
             pass
@@ -647,7 +647,7 @@ def _write_mcp_policy(role_name: str, mcp_grants: list[str]) -> int:
     policy_doc = json.dumps(merged)
     iam_client.put_role_policy(
         RoleName=role_name,
-        PolicyName="MCP-Access",
+        PolicyName="WorkspaceGrants",
         PolicyDocument=policy_doc,
     )
     return len(policy_doc)
@@ -812,7 +812,7 @@ def grant_mcp(wsId: str):
     try:
         policy_size = _write_mcp_policy(role_name, updated_grants)
     except Exception as e:
-        logger.exception("Failed to write MCP-Access policy", extra={"roleName": role_name})
+        logger.exception("Failed to write WorkspaceGrants policy", extra={"roleName": role_name})
         # Attempt to roll back DDB (best-effort).
         try:
             table.update_item(
@@ -881,7 +881,7 @@ def revoke_mcp(wsId: str):
     try:
         policy_size = _write_mcp_policy(role_name, updated_grants)
     except Exception as e:
-        logger.exception("Failed to write MCP-Access policy", extra={"roleName": role_name})
+        logger.exception("Failed to write WorkspaceGrants policy", extra={"roleName": role_name})
         try:
             table.update_item(
                 Key={"workspaceId": ws_id, "sk": "META"},
@@ -921,12 +921,11 @@ def get_permissions(wsId: str):
 
     qp = router.current_event.query_string_parameters or {}
     actions_str = qp.get("actions", "")
-    if not actions_str:
-        return bad_request("actions query parameter is required (comma-separated IAM actions)")
-
     action_list = [a.strip() for a in actions_str.split(",") if a.strip()]
+
+    # Empty actions = just probe whether the role exists
     if not action_list:
-        return bad_request("actions must contain at least one IAM action")
+        return success({"hasRole": True, "roleArn": role_arn, "results": []})
 
     iam_client = _get_iam()
     results = []
