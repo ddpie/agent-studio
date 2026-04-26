@@ -1,5 +1,6 @@
-"""End-user memory management endpoints (GET; DELETE added in later tasks)."""
+"""End-user memory management endpoints (GET + DELETE single record)."""
 import asyncio
+import re
 
 import boto3
 from aws_lambda_powertools import Logger
@@ -9,7 +10,7 @@ from shared.config import WORKSPACES_TABLE, REGION
 from shared.memory_actor import build_actor_id
 from shared.memory_strategies import STRATEGY_NAMESPACE_PREFIX
 from shared.middleware import auth_check
-from shared.response import success, bad_request, not_found
+from shared.response import success, bad_request, not_found, forbidden, internal_error
 
 router = Router()
 logger = Logger(child=True)
@@ -138,3 +139,58 @@ def list_my_memories(wsId: str, agentId: str):
     if not result:
         return not_found()
     return success(result)
+
+
+# ---------------------------------------------------------------------------
+# DELETE /my-memories/<recordId>
+# ---------------------------------------------------------------------------
+
+class MemoryForbidden(Exception):
+    """Caller does not own the memory record."""
+
+
+_NAMESPACE_ACTOR_RE = re.compile(r"^/users/([^/]+)/")
+
+
+def _extract_actor_id_from_namespace(namespace: str) -> str:
+    m = _NAMESPACE_ACTOR_RE.match(namespace)
+    if not m:
+        raise ValueError(f"unparseable namespace: {namespace}")
+    return m.group(1)
+
+
+def _delete_record_impl(*, workspace_id: str, agent_id: str, caller_id: str,
+                        record_id: str) -> None:
+    memory_id = _get_workspace_memory_id(workspace_id)
+    if not memory_id:
+        raise ValueError("workspace has no memory")
+
+    expected_actor = build_actor_id(agent_id, caller_id)
+
+    resp = _get_data().get_memory_record(memoryId=memory_id, memoryRecordId=record_id)
+    record = resp["memoryRecord"]
+    actual_actor = _extract_actor_id_from_namespace(record["namespace"])
+    if actual_actor != expected_actor:
+        raise MemoryForbidden(
+            f"record actor {actual_actor} does not match caller {expected_actor}")
+
+    _get_data().delete_memory_record(memoryId=memory_id, memoryRecordId=record_id)
+
+
+@router.delete("/api/workspaces/<wsId>/agents/<agentId>/my-memories/<recordId>")
+def delete_my_memory(wsId: str, agentId: str, recordId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="viewer", ws_id=wsId)
+    if err:
+        return err
+    try:
+        _delete_record_impl(workspace_id=wsId, agent_id=agentId,
+                            caller_id=user_id, record_id=recordId)
+    except MemoryForbidden as e:
+        logger.warning("cross-user delete blocked: %s", e)
+        return forbidden()
+    except ValueError as e:
+        return bad_request(str(e))
+    except Exception as e:
+        logger.exception("delete_my_memory failed")
+        return internal_error(f"delete failed: {e}")
+    return success({"deleted": recordId})

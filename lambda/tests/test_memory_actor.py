@@ -33,3 +33,8 @@ def test_parse_actor_id_handles_user_with_underscore():
     # The helper must split on the FIRST underscore.
     user = parse_actor_id("agent-abc_user_with_under", expected_agent_id="agent-abc")
     assert user == "user_with_under"
+
+
+def test_parse_actor_id_rejects_empty_expected_agent():
+    with pytest.raises(ValueError):
+        parse_actor_id("foo_bar", expected_agent_id="")

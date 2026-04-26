@@ -23,6 +23,8 @@ def parse_actor_id(actor_id: str, *, expected_agent_id: str) -> str:
     but caller_ids are Cognito subs which may legally contain any
     pattern. Being conservative.
     """
+    if not expected_agent_id:
+        raise ValueError("expected_agent_id required to parse actor_id")
     if not actor_id.startswith(expected_agent_id + "_"):
         raise ValueError(
             f"actor_id prefix does not match expected agent: "

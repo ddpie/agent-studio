@@ -98,3 +98,62 @@ def test_list_unknown_strategy_raises(mock_agentcore_data, mock_ws_table):
         _list_my_memories_impl(
             workspace_id="ws1", agent_id="a", caller_id="u",
             strategy="bogus", next_token=None)
+
+
+def test_delete_record_success(mock_agentcore_data, mock_ws_table):
+    from crud.memories import _delete_record_impl
+    mock_agentcore_data.get_memory_record.return_value = {
+        "memoryRecord": {
+            "memoryRecordId": "mem-123",
+            "namespace": "/users/agent-X_user-Y/facts/",
+        }
+    }
+    mock_agentcore_data.delete_memory_record.return_value = {"memoryRecordId": "mem-123"}
+    _delete_record_impl(
+        workspace_id="ws1", agent_id="agent-X", caller_id="user-Y",
+        record_id="mem-123")
+    mock_agentcore_data.delete_memory_record.assert_called_once_with(
+        memoryId="mem-abc", memoryRecordId="mem-123")
+
+
+def test_delete_record_cross_user_denied(mock_agentcore_data, mock_ws_table):
+    from crud.memories import _delete_record_impl, MemoryForbidden
+    mock_agentcore_data.get_memory_record.return_value = {
+        "memoryRecord": {
+            "memoryRecordId": "mem-OTHER",
+            "namespace": "/users/agent-X_user-OTHER/facts/",
+        }
+    }
+    with pytest.raises(MemoryForbidden):
+        _delete_record_impl(
+            workspace_id="ws1", agent_id="agent-X", caller_id="user-Y",
+            record_id="mem-OTHER")
+    mock_agentcore_data.delete_memory_record.assert_not_called()
+
+
+def test_delete_record_cross_agent_denied(mock_agentcore_data, mock_ws_table):
+    from crud.memories import _delete_record_impl, MemoryForbidden
+    mock_agentcore_data.get_memory_record.return_value = {
+        "memoryRecord": {
+            "memoryRecordId": "mem-1",
+            "namespace": "/users/agent-OTHER_user-Y/facts/",
+        }
+    }
+    with pytest.raises(MemoryForbidden):
+        _delete_record_impl(
+            workspace_id="ws1", agent_id="agent-X", caller_id="user-Y",
+            record_id="mem-1")
+
+
+def test_delete_record_unparseable_namespace(mock_agentcore_data, mock_ws_table):
+    from crud.memories import _delete_record_impl
+    mock_agentcore_data.get_memory_record.return_value = {
+        "memoryRecord": {
+            "memoryRecordId": "mem-bad",
+            "namespace": "/weird/path/",
+        }
+    }
+    with pytest.raises(ValueError, match="unparseable"):
+        _delete_record_impl(
+            workspace_id="ws1", agent_id="agent-X", caller_id="user-Y",
+            record_id="mem-bad")
