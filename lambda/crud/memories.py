@@ -161,16 +161,22 @@ def _extract_actor_id_from_namespace(namespace: str) -> str:
 
 def _delete_record_impl(*, workspace_id: str, agent_id: str, caller_id: str,
                         record_id: str, strategy: str | None = None) -> None:
+    """Idempotent delete. If the record isn't in the caller's namespace
+    (either cross-user attempt or already deleted + stale list cache),
+    return success — "delete X" and "X isn't there" have the same
+    outcome from the caller's perspective. True cross-user attempts
+    never touch delete_memory_record so no data escapes.
+
+    AgentCore's list_memory_records is eventually consistent, so a record
+    just deleted may still appear for a short window; ResourceNotFound
+    from delete is also swallowed for the same idempotency reason.
+    """
     memory_id = _get_workspace_memory_id(workspace_id)
     if not memory_id:
-        raise ValueError("workspace has no memory")
+        return
 
     actor_id = build_actor_id(agent_id, caller_id)
 
-    # AgentCore delete_memory_record doesn't scope by actor — a caller who
-    # knows some OTHER user's record_id could delete it without this gate.
-    # So before delete we list the caller's own namespace(s) and require
-    # the target record_id to appear there. Cost: one extra list call.
     data = _get_data()
     strategies_to_check = [strategy] if strategy else list(_STRATEGY_PLURAL_TO_KEY.keys())
     found = False
@@ -197,10 +203,17 @@ def _delete_record_impl(*, workspace_id: str, agent_id: str, caller_id: str,
             break
 
     if not found:
-        raise MemoryForbidden(
-            f"record {record_id} not found in caller's namespaces")
+        # Either cross-user (can't-touch) or already-deleted (idempotent).
+        # Both return success; caller can't distinguish and that's fine.
+        return
 
-    data.delete_memory_record(memoryId=memory_id, memoryRecordId=record_id)
+    try:
+        data.delete_memory_record(memoryId=memory_id, memoryRecordId=record_id)
+    except data.exceptions.ResourceNotFoundException:
+        # Race: list saw it, someone else (or another browser tab) deleted
+        # it between list and delete. Still a successful "it's gone" from
+        # this caller's perspective.
+        pass
 
 
 @router.delete("/api/workspaces/<wsId>/agents/<agentId>/my-memories/<recordId>")
