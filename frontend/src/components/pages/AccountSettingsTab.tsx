@@ -5,8 +5,11 @@ import {
   updateUserAttributes,
   updatePassword,
   signOut,
+  setUpTOTP,
+  verifyTOTPSetup,
+  fetchMFAPreference,
 } from "aws-amplify/auth";
-import { User, KeyRound, LogOut, Mail, Loader2 } from "lucide-react";
+import { User, KeyRound, LogOut, Mail, Loader2, ShieldCheck, QrCode } from "lucide-react";
 import { toast } from "../../lib/toast";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import { clearUserScopedLocalData } from "../../lib/api-client";
@@ -21,6 +24,150 @@ function validateNewPassword(pw: string): string | null {
   if (!/[A-Z]/.test(pw)) return "needsUpper";
   if (!/\d/.test(pw)) return "needsDigit";
   return null;
+}
+
+function MfaSection() {
+  const { t } = useTranslation();
+  const [mfaEnabled, setMfaEnabled] = useState<boolean | null>(null);
+  const [setupMode, setSetupMode] = useState(false);
+  const [secret, setSecret] = useState<string>("");
+  const [qrUri, setQrUri] = useState<string>("");
+  const [code, setCode] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchMFAPreference()
+      .then((pref) => {
+        setMfaEnabled(pref.preferred === "TOTP" || pref.enabled?.includes("TOTP") || false);
+      })
+      .catch(() => setMfaEnabled(false))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSetup = async () => {
+    try {
+      const output = await setUpTOTP();
+      const secretKey = output.sharedSecret;
+      setSecret(secretKey);
+      // Build otpauth URI for QR code
+      const email = (await fetchUserAttributes()).email || "user";
+      setQrUri(`otpauth://totp/AgentStudio:${email}?secret=${secretKey}&issuer=AgentStudio`);
+      setSetupMode(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to set up TOTP");
+    }
+  };
+
+  const handleVerify = async () => {
+    if (!code || code.length < 6) return;
+    setVerifying(true);
+    try {
+      await verifyTOTPSetup({ code });
+      setMfaEnabled(true);
+      setSetupMode(false);
+      setCode("");
+      toast.success(t("settings.account.mfa.enabled"));
+    } catch (err) {
+      toast.error(t("settings.account.mfa.invalidCode"));
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> {t("common.loading")}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+      <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+        <ShieldCheck className="w-3.5 h-3.5" /> {t("settings.account.mfa.title")}
+      </h3>
+
+      {mfaEnabled && !setupMode && (
+        <div className="space-y-2">
+          <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+            <ShieldCheck className="w-3 h-3" /> {t("settings.account.mfa.active")}
+          </p>
+          <button
+            onClick={handleSetup}
+            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            {t("settings.account.mfa.reconfigure")}
+          </button>
+        </div>
+      )}
+
+      {!mfaEnabled && !setupMode && (
+        <div className="space-y-2">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {t("settings.account.mfa.desc")}
+          </p>
+          <button
+            onClick={handleSetup}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+          >
+            <QrCode className="w-3.5 h-3.5" /> {t("settings.account.mfa.setup")}
+          </button>
+        </div>
+      )}
+
+      {setupMode && (
+        <div className="space-y-3">
+          <p className="text-xs text-gray-600 dark:text-gray-300">
+            {t("settings.account.mfa.scanPrompt")}
+          </p>
+
+          {/* QR code as an img using a public QR API — avoids adding a qrcode npm dep */}
+          {qrUri && (
+            <div className="flex flex-col items-center gap-2">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrUri)}`}
+                alt="TOTP QR Code"
+                className="w-40 h-40 rounded border border-gray-200 dark:border-gray-700"
+              />
+              <details className="text-[10px] text-gray-400">
+                <summary className="cursor-pointer">{t("settings.account.mfa.showSecret")}</summary>
+                <code className="block mt-1 font-mono text-gray-600 dark:text-gray-300 break-all select-all">{secret}</code>
+              </details>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+              placeholder="000000"
+              className="w-28 px-2 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-mono text-center focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none dark:bg-gray-800 dark:text-gray-100"
+            />
+            <button
+              onClick={handleVerify}
+              disabled={verifying || code.length < 6}
+              className="px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50"
+            >
+              {verifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t("settings.account.mfa.verify")}
+            </button>
+            <button
+              onClick={() => { setSetupMode(false); setCode(""); }}
+              className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              {t("common.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }
 
 export default function AccountSettingsTab() {
@@ -252,6 +399,9 @@ export default function AccountSettingsTab() {
           </div>
         </div>
       </section>
+
+      {/* MFA / TOTP */}
+      <MfaSection />
 
       {/* Sessions */}
       <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">

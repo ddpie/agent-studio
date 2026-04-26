@@ -29,7 +29,7 @@ export class Auth extends Construct {
           action: "setUserPoolMfaConfig",
           parameters: {
             UserPoolId: props.existingUserPoolId,
-            MfaConfiguration: "OPTIONAL",
+            MfaConfiguration: "ON",
             SoftwareTokenMfaConfiguration: { Enabled: true },
           },
           physicalResourceId: cr.PhysicalResourceId.of(`${props.existingUserPoolId}-mfa`),
@@ -39,7 +39,7 @@ export class Auth extends Construct {
           action: "setUserPoolMfaConfig",
           parameters: {
             UserPoolId: props.existingUserPoolId,
-            MfaConfiguration: "OPTIONAL",
+            MfaConfiguration: "ON",
             SoftwareTokenMfaConfiguration: { Enabled: true },
           },
           physicalResourceId: cr.PhysicalResourceId.of(`${props.existingUserPoolId}-mfa`),
@@ -75,7 +75,7 @@ export class Auth extends Construct {
       selfSignUpEnabled: true,
       signInAliases: { email: true },
       autoVerify: { email: true },
-      mfa: cognito.Mfa.OPTIONAL,
+      mfa: cognito.Mfa.REQUIRED,
       mfaSecondFactor: { otp: true, sms: false },
       standardAttributes: {
         email: { required: true, mutable: false },
