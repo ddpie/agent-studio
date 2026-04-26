@@ -42,12 +42,15 @@ from strands import Agent
 from strands.models import BedrockModel
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from stream_utils import _stream_with_tools, _build_input, _stream_and_record
+import boto3
+import os, sys
 
 app = BedrockAgentCoreApp()
 
 _config = json.loads(Path("config.json").read_text())
 MODEL_ID = _config["model_id"]
 SYSTEM_PROMPT = Path("prompt.txt").read_text(encoding="utf-8")
+REGION = os.getenv("AWS_REGION", "us-east-1")
 
 def _get_max_tokens(mid):
     mid = mid.lower()
