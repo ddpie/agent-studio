@@ -37,17 +37,18 @@ function MfaSection() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // MFA is REQUIRED on the Cognito pool. If the user is logged in, they
+    // have already configured TOTP (otherwise Amplify wouldn't let them
+    // past the login screen). fetchMFAPreference can return empty in
+    // REQUIRED mode, so we use it as a hint but default to true.
     fetchMFAPreference()
-      .then((pref) => {
-        // Amplify v6: { enabled?: ('TOTP'|'SMS')[], preferred?: 'TOTP'|'SMS' }
-        const hasTOTP =
-          pref?.preferred === "TOTP" ||
-          (Array.isArray(pref?.enabled) && pref.enabled.includes("TOTP"));
-        setMfaEnabled(!!hasTOTP);
+      .then(() => {
+        // MFA=REQUIRED: user is logged in → must have TOTP configured.
+        // fetchMFAPreference may return empty in REQUIRED mode; always
+        // treat as enabled since Amplify wouldn't let them past login without it.
+        setMfaEnabled(true);
       })
-      .catch((err) => {
-        // If MFA is REQUIRED and user has TOTP, they got past login — assume enabled.
-        console.warn("fetchMFAPreference failed, assuming TOTP enabled (MFA=REQUIRED):", err);
+      .catch(() => {
         setMfaEnabled(true);
       })
       .finally(() => setLoading(false));
