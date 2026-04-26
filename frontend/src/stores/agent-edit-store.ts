@@ -99,7 +99,11 @@ async function injectBuiltinToolCode(data: Partial<AgentMetadata>): Promise<void
     const resp = await fetchTools(undefined, 100);
     const codeParts: string[] = [];
     for (const name of missing) {
-      const tool = resp.items.find((t: any) => t.name === name);
+      // tool_names holds function names (e.g. "web_search") — the ToolItem's
+      // `toolId` is the function name, `name` is the display label ("Web
+      // Search"). Match on toolId; fall back to name for hand-authored cases.
+      const tool = resp.items.find((t: any) => t.toolId === name)
+        ?? resp.items.find((t: any) => t.name === name);
       if (tool?.code) {
         codeParts.push(tool.code);
       }

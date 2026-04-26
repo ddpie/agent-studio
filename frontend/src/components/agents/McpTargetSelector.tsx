@@ -52,6 +52,27 @@ export default function McpTargetSelector({ selectedTargets, onChange, hasLegacy
       .finally(() => setLoading(false));
   }, []);
 
+  // Normalize selectedTargets by stripping the "mcp-" prefix — the contract
+  // for this field (and for workspace policy, backend mcp_targets_list, and
+  // runtime resolution) is the short name ("cloudwatch", "nova-canvas").
+  // Proposals authored before list_mcp_servers was fixed to return short
+  // names may still carry "mcp-" prefixed values; normalize on render so
+  // those drafts don't silently drop targets from the selector.
+  const normalizedTargets = selectedTargets.map((n) =>
+    n.startsWith("mcp-") ? n.slice("mcp-".length) : n,
+  );
+
+  // If normalization changed the array, propagate it up so persisted state
+  // matches what the selector is displaying. Must be declared before any
+  // conditional return to keep hook order stable across renders.
+  useEffect(() => {
+    const changed =
+      normalizedTargets.length !== selectedTargets.length ||
+      normalizedTargets.some((n, i) => n !== selectedTargets[i]);
+    if (changed) onChange(normalizedTargets);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTargets.join(",")]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-6">
@@ -68,11 +89,11 @@ export default function McpTargetSelector({ selectedTargets, onChange, hasLegacy
     );
   }
 
-  const selectedSet = new Set(selectedTargets);
+  const selectedSet = new Set(normalizedTargets);
   const selectedItems = allTargets.filter((t) => selectedSet.has(t.name));
 
   const removeTarget = (name: string) => {
-    onChange(selectedTargets.filter((t) => t !== name));
+    onChange(normalizedTargets.filter((t) => t !== name));
   };
 
   return (
@@ -130,12 +151,12 @@ export default function McpTargetSelector({ selectedTargets, onChange, hasLegacy
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         allTargets={allTargets}
-        selectedTargets={selectedTargets}
+        selectedTargets={normalizedTargets}
         onToggle={(name) => {
           if (selectedSet.has(name)) {
-            onChange(selectedTargets.filter((t) => t !== name));
+            onChange(normalizedTargets.filter((t) => t !== name));
           } else {
-            onChange([...selectedTargets, name]);
+            onChange([...normalizedTargets, name]);
           }
         }}
       />
