@@ -159,7 +159,8 @@ export class WorkspaceBoundary extends Construct {
           resources: ["*"],
         }),
 
-        // ─── Extensible ceiling: read-only access for MCP target AWS services ───
+        // ─── Extensible ceiling: read-only for MCP-backed AWS services ───
+        // Only services with actual MCP targets. Add more as targets onboard.
         new iam.PolicyStatement({
           sid: "AWSServicesReadCeiling",
           actions: [
@@ -169,42 +170,29 @@ export class WorkspaceBoundary extends Construct {
             "iam:GetUser", "iam:GetRole", "iam:GetPolicy", "iam:GetPolicyVersion",
             "iam:ListRoles", "iam:ListPolicies", "iam:ListAttachedRolePolicies",
             "ec2:Describe*",
-            "lambda:GetFunction", "lambda:ListFunctions", "lambda:GetPolicy",
+            "lambda:GetFunction", "lambda:ListFunctions",
             "ecs:Describe*", "ecs:List*",
             "eks:Describe*", "eks:List*",
+            "dynamodb:Describe*", "dynamodb:List*", "dynamodb:Query", "dynamodb:Scan", "dynamodb:GetItem", "dynamodb:BatchGetItem",
+            "sns:Get*", "sns:List*",
+            "sqs:Get*", "sqs:List*",
+            "states:Describe*", "states:List*",
             "pricing:GetProducts", "pricing:DescribeServices",
             "wellarchitected:Get*", "wellarchitected:List*",
+            "support:DescribeTrustedAdvisor*",
+            "bedrock:InvokeModel",
           ],
           resources: ["*"],
         }),
 
-        // ─── Belt-and-suspenders deny ───
-        // Primary protection comes from the Allow whitelist (unlisted actions
-        // are implicitly denied by the boundary). This explicit Deny guards
-        // against future accidental widening of the Allow set.
+        // ─── Belt-and-suspenders deny (compact wildcards) ───
         new iam.PolicyStatement({
           sid: "DenyEscalation",
           effect: iam.Effect.DENY,
           actions: [
-            // IAM mutations
-            "iam:CreateRole", "iam:DeleteRole",
-            "iam:AttachRolePolicy", "iam:DetachRolePolicy",
-            "iam:PutRolePolicy", "iam:DeleteRolePolicy",
-            "iam:PutRolePermissionsBoundary", "iam:DeleteRolePermissionsBoundary",
-            "iam:CreatePolicyVersion", "iam:SetDefaultPolicyVersion",
-            "iam:CreateUser", "iam:CreateAccessKey", "iam:PassRole",
-            "iam:UpdateAssumeRolePolicy", "iam:CreateServiceLinkedRole",
-            "iam:AddUserToGroup", "iam:UpdateLoginProfile", "iam:CreateLoginProfile",
-            "iam:CreateOpenIDConnectProvider", "iam:CreateSAMLProvider",
-            // STS — all role assumption paths
-            "sts:AssumeRole", "sts:AssumeRoleWithSAML", "sts:AssumeRoleWithWebIdentity",
-            "sts:GetFederationToken", "sts:GetSessionToken",
-            // Lateral movement services
-            "ssm:SendCommand", "ssm:StartSession",
-            "cloudformation:CreateStack", "cloudformation:UpdateStack",
-            "events:PutRule", "events:PutTargets",
-            "states:CreateStateMachine",
-            // Organization-level
+            "iam:Create*", "iam:Delete*", "iam:Put*", "iam:Attach*",
+            "iam:Detach*", "iam:Update*", "iam:Add*", "iam:PassRole",
+            "sts:AssumeRole*", "sts:GetFederationToken", "sts:GetSessionToken",
             "organizations:*", "account:*",
           ],
           resources: ["*"],
