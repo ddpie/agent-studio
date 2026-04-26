@@ -160,95 +160,75 @@ export class WorkspaceBoundary extends Construct {
         }),
 
         // ─── Extensible ceiling: read-only access for AWS services ───
-        // Permission boundary ceiling — not a grant. Workspace roles still need
-        // an explicit inline policy. Manually maintained per MCP target onboarding.
+        // Boundary ceiling — not a grant. Keep under 6,144 chars after synthesis.
+        // Removed: cloudformation:GetTemplate (leaks secrets in templates),
+        // ssm:Get* scoped to DescribeParameters + GetParameter (not GetParametersByPath).
+        // Trimmed: lightsail, fsx, memorydb, synthetics, resiliencehub, savingsplans,
+        // cost-optimization-hub, apprunner, batch (re-add when MCP targets exist).
         new iam.PolicyStatement({
           sid: "AWSServicesReadCeiling",
           actions: [
             // Compute
-            "ec2:Describe*", "ec2:Get*", "ec2:List*",
+            "ec2:Describe*",
             "lambda:Get*", "lambda:List*",
             "ecs:Describe*", "ecs:List*",
             "eks:Describe*", "eks:List*",
-            "apprunner:Describe*", "apprunner:List*",
-            "lightsail:Get*",
             "autoscaling:Describe*",
-            "elasticbeanstalk:Describe*", "elasticbeanstalk:List*",
-            "batch:Describe*", "batch:List*",
-            // Containers & images
+            // Containers
             "ecr:Describe*", "ecr:List*", "ecr:BatchGetImage",
             // Storage
             "s3:GetBucketLocation", "s3:GetBucketTagging", "s3:ListAllMyBuckets", "s3:ListBucket",
             "elasticfilesystem:Describe*",
-            "fsx:Describe*", "fsx:List*",
             // Database
             "rds:Describe*", "rds:List*",
             "dynamodb:Describe*", "dynamodb:List*",
             "elasticache:Describe*", "elasticache:List*",
-            "memorydb:Describe*", "memorydb:List*",
             "redshift:Describe*", "redshift:List*",
             "es:Describe*", "es:List*",
             // Analytics
             "athena:Get*", "athena:List*", "athena:BatchGet*",
-            "glue:Get*", "glue:List*", "glue:BatchGet*",
+            "glue:Get*", "glue:List*",
             "kinesis:Describe*", "kinesis:List*", "kinesis:Get*",
             "firehose:Describe*", "firehose:List*",
-            "elasticmapreduce:Describe*", "elasticmapreduce:List*",
-            // Monitoring & observability
+            // Monitoring
             "cloudwatch:Describe*", "cloudwatch:Get*", "cloudwatch:List*",
             "logs:Describe*", "logs:Get*", "logs:StartQuery", "logs:StopQuery", "logs:FilterLogEvents",
-            "cloudtrail:LookupEvents", "cloudtrail:Get*", "cloudtrail:List*", "cloudtrail:StartQuery",
-            "xray:Get*", "xray:List*", "xray:BatchGet*",
-            "application-autoscaling:Describe*",
-            "pi:Get*", "pi:Describe*", "pi:List*",
-            "synthetics:Describe*", "synthetics:Get*", "synthetics:List*",
-            // Security & identity
+            "cloudtrail:LookupEvents", "cloudtrail:Get*", "cloudtrail:List*",
+            "pi:Describe*", "pi:Get*", "pi:List*",
+            // Security
             "iam:Get*", "iam:List*", "iam:Simulate*",
-            "kms:Describe*", "kms:List*", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus",
+            "kms:Describe*", "kms:List*", "kms:GetKeyPolicy",
             "acm:Describe*", "acm:List*", "acm:GetCertificate",
-            "secretsmanager:Describe*", "secretsmanager:List*", "secretsmanager:GetResourcePolicy",
+            "secretsmanager:Describe*", "secretsmanager:List*",
             "guardduty:Get*", "guardduty:List*",
             "securityhub:Get*", "securityhub:List*", "securityhub:BatchGet*",
             "inspector2:Get*", "inspector2:List*", "inspector2:BatchGet*",
-            "access-analyzer:Get*", "access-analyzer:List*",
             "config:Describe*", "config:Get*", "config:List*",
             // Networking
             "route53:Get*", "route53:List*",
-            "route53resolver:Get*", "route53resolver:List*",
             "elasticloadbalancing:Describe*",
-            "apigateway:GET",
             "cloudfront:Get*", "cloudfront:List*",
-            // Messaging & integration
+            // Messaging
             "sns:Get*", "sns:List*",
             "sqs:Get*", "sqs:List*",
             "events:Describe*", "events:List*",
-            "states:Describe*", "states:List*", "states:GetExecutionHistory",
-            "scheduler:Get*", "scheduler:List*",
-            // Management & governance
-            "cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplate", "cloudformation:GetTemplateSummary",
-            "ssm:Describe*", "ssm:Get*", "ssm:List*",
+            "states:Describe*", "states:List*",
+            // Management
+            "cloudformation:Describe*", "cloudformation:List*",
+            "ssm:DescribeParameters", "ssm:GetParameter", "ssm:GetParameters", "ssm:List*",
             "servicequotas:Get*", "servicequotas:List*",
-            "resource-groups:Get*", "resource-groups:List*",
-            "tag:Get*",
-            "health:Describe*",
-            "support:DescribeTrustedAdvisor*",
-            "compute-optimizer:Get*",
-            "resiliencehub:Describe*", "resiliencehub:List*",
+            "tag:Get*", "health:Describe*",
             // Cost
-            "ce:Get*", "ce:Describe*", "ce:List*",
+            "ce:Get*", "ce:List*",
             "pricing:GetProducts", "pricing:DescribeServices",
             "budgets:Describe*", "budgets:View*",
-            "savingsplans:Describe*", "savingsplans:List*",
-            "cost-optimization-hub:Get*", "cost-optimization-hub:List*",
             // AI/ML
             "bedrock:Get*", "bedrock:List*",
             "sagemaker:Describe*", "sagemaker:List*",
-            // Architecture
+            // Other
             "wellarchitected:Get*", "wellarchitected:List*",
-            // Identity
             "sts:GetCallerIdentity",
             "cognito-idp:Describe*", "cognito-idp:List*",
-            // Backup
             "backup:Describe*", "backup:Get*", "backup:List*",
           ],
           resources: ["*"],

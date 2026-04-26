@@ -201,7 +201,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
         "Statement": [{
             "Sid": "McpCloudFormation",
             "Effect": "Allow",
-            "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplate", "cloudformation:GetTemplateSummary"],
+            "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"],
             "Resource": "*",
         }]
     },
@@ -217,7 +217,7 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
         "Statement": [{
             "Sid": "McpSsm",
             "Effect": "Allow",
-            "Action": ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:DescribeParameters", "ssm:List*"],
+            "Action": ["ssm:DescribeParameters", "ssm:GetParameter", "ssm:GetParameters", "ssm:List*"],
             "Resource": "*",
         }]
     },
@@ -834,14 +834,19 @@ def grant_mcp(wsId: str):
 # ─── POST /api/workspaces/{wsId}/revoke-mcp ───
 @router.post("/api/workspaces/<wsId>/revoke-mcp")
 def revoke_mcp(wsId: str):
-    """Revoke MCP target permissions from a workspace role. Admin-only.
+    """Revoke MCP target permissions from a workspace role.
 
+    Requires platform-admins Cognito group membership.
     Body: {"targets": ["iam"]}
-    Same rebuild-from-truth pattern as grant-mcp.
     """
     user_id, ws_id, member, err = auth_check(router.current_event, min_role="admin", ws_id=wsId)
     if err:
         return err
+    _, is_admin, admin_err = check_platform_admin(router.current_event)
+    if admin_err:
+        return admin_err
+    if not is_admin:
+        return forbidden()
 
     body = router.current_event.json_body or {}
     targets = body.get("targets", [])

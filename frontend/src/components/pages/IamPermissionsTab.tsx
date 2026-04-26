@@ -75,8 +75,8 @@ const MCP_TARGETS: McpTargetDef[] = [
   t_("eventbridge", "EventBridge", ["events:Describe*", "events:List*"]),
   t_("step-functions", "Step Functions", ["states:Describe*", "states:List*", "states:GetExecutionHistory"]),
   // Management & governance
-  t_("cloudformation", "CloudFormation", ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplate", "cloudformation:GetTemplateSummary"]),
-  t_("ssm", "Systems Manager", ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:DescribeParameters", "ssm:List*"]),
+  t_("cloudformation", "CloudFormation", ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"]),
+  t_("ssm", "Systems Manager", ["ssm:DescribeParameters", "ssm:GetParameter", "ssm:GetParameters", "ssm:List*"]),
   t_("service-quotas", "Service Quotas", ["servicequotas:Get*", "servicequotas:List*"]),
   t_("health", "AWS Health", ["health:Describe*"]),
   t_("compute-optimizer", "Compute Optimizer", ["compute-optimizer:Get*"]),
