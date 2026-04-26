@@ -15,7 +15,6 @@ import {
   createWorkspaceRole,
   getWorkspacePermissions,
   grantMcpTargets,
-  type WorkspacePermissionResult,
 } from "../../lib/api-client";
 import { toast } from "../../lib/toast";
 import { useWorkspaceStore } from "../../stores/workspace-store";
