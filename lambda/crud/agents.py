@@ -107,6 +107,7 @@ def _agent_response(item: dict) -> dict:
         "created_at": item.get("created_at", ""),
         "updated_at": item.get("updated_at", ""),
         "mcp_targets": item.get("mcp_targets", []),
+        "memory": item.get("memory"),
     }
 
 
