@@ -59,7 +59,8 @@ def _resolve_mcp_endpoints(target_names: list) -> list:
     Remote targets get their URL stored directly.
 
     Args:
-        target_names: List of target names (e.g. ["mcp-cloudwatch", "aws-api"]).
+        target_names: List of short target names without the "mcp-" prefix
+            (e.g. ["cloudwatch", "aws-api", "nova-canvas"]).
 
     Returns:
         List of endpoint dicts:
