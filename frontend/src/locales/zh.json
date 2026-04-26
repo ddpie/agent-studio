@@ -1113,9 +1113,13 @@
     "emptyState": "此类别暂无记忆。",
     "section": {
       "preferences": "偏好",
+      "preferencesHint": "用户的语言、格式、风格等个人偏好",
       "facts": "事实",
+      "factsHint": "用户提到的客观信息，如姓名、角色、项目名称",
       "summaries": "摘要",
-      "episodes": "场景"
+      "summariesHint": "历史对话的要点总结，帮助 Agent 延续上下文",
+      "episodes": "场景",
+      "episodesHint": "完整的交互片段，用于回忆过去类似的处理方式"
     },
     "delete": "删除",
     "confirm": "确认",

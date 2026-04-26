@@ -27,10 +27,10 @@ export default function MemorySection({
   };
 
   const strategies = [
-    { key: "userPreference", label: t("memory.builder.strategyPreferences") },
-    { key: "semantic", label: t("memory.builder.strategyFacts") },
-    { key: "summary", label: t("memory.builder.strategySummaries") },
-    { key: "episodic", label: t("memory.builder.strategyEpisodes") },
+    { key: "userPreference", label: t("memory.builder.strategyPreferences"), hint: t("memory.section.preferencesHint") },
+    { key: "semantic", label: t("memory.builder.strategyFacts"), hint: t("memory.section.factsHint") },
+    { key: "summary", label: t("memory.builder.strategySummaries"), hint: t("memory.section.summariesHint") },
+    { key: "episodic", label: t("memory.builder.strategyEpisodes"), hint: t("memory.section.episodesHint") },
   ];
 
   return (
@@ -61,16 +61,19 @@ export default function MemorySection({
       {/* Strategy checkboxes */}
       {value.enabled && (
         <div className="ml-6 mt-3 space-y-2">
-          {strategies.map(({ key, label }) => (
-            <label key={key} className="flex items-center gap-2 cursor-pointer">
+          {strategies.map(({ key, label, hint }) => (
+            <label key={key} className="flex items-start gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={value.strategies.includes(key)}
                 onChange={() => handleStrategyToggle(key)}
                 disabled={!value.enabled || !workspaceMemoryAvailable}
-                className="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="mt-0.5 w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
               />
-              <span className="text-[13px] text-gray-700 dark:text-gray-300">{label}</span>
+              <div>
+                <span className="text-[13px] text-gray-700 dark:text-gray-300">{label}</span>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{hint}</p>
+              </div>
             </label>
           ))}
         </div>
