@@ -11,6 +11,7 @@ import {
   DollarSign,
   Share2,
   Clock,
+  Activity,
 } from "lucide-react";
 import { fetchAgent, publishAgent, unpublishAgent } from "../../lib/api-client";
 import { useWorkspaceStore } from "../../stores/workspace-store";
@@ -18,7 +19,8 @@ import DeploymentsTab from "../agents/DeploymentsTab";
 import LogsTab from "../agents/LogsTab";
 import EndpointsTab from "../agents/EndpointsTab";
 import SecretsTab from "../agents/SecretsTab";
-
+import StatsStrip from "../agents/StatsStrip";
+import TracesTab from "../agents/TracesTab";
 import AgentCostsSection from "../agents/AgentCostsSection";
 import IntegrationTab from "../agents/IntegrationTab";
 import SchedulesTab from "../agents/SchedulesTab";
@@ -34,10 +36,12 @@ export default function AgentDetailPage() {
   const { currentWorkspace } = useWorkspaceStore();
   const [agent, setAgent] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const [statsRange, setStatsRange] = useState<string>("24h");
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
 
   const navItems: NavEntry[] = useMemo(
     () => [
+      { id: "traces-section", label: t("traces.title"), icon: <Activity className="w-3.5 h-3.5" /> },
       { id: "schedules-section", label: t("schedules.title"), icon: <Clock className="w-3.5 h-3.5" /> },
 
       { id: "costs-section", label: t("costs.title"), icon: <DollarSign className="w-3.5 h-3.5" /> },
@@ -176,6 +180,35 @@ export default function AgentDetailPage() {
               onNavigate={handleNavNavigate}
             />
             <div className="flex-1 min-w-0 space-y-8">
+              {agentId && (
+                <div className="mb-2">
+                  <div className="flex items-center justify-end gap-2 mb-2">
+                    {["24h", "7d"].map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => setStatsRange(r)}
+                        className={`text-xs px-2 py-0.5 rounded ${
+                          statsRange === r
+                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                            : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                  <StatsStrip agentId={agentId} range={statsRange} />
+                </div>
+              )}
+              {agentId && (
+                <LazySection
+                  id="traces-section"
+                  testId="traces-section"
+                  rootRef={scrollRootRef}
+                >
+                  <TracesTab agentId={agentId} range={statsRange} />
+                </LazySection>
+              )}
               {agentId && (
                 <LazySection
                   id="schedules-section"
