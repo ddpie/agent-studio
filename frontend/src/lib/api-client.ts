@@ -1493,10 +1493,12 @@ export async function deleteMyMemory(
   workspaceId: string,
   agentId: string,
   recordId: string,
+  strategy?: string,
 ): Promise<{ deleted: string }> {
   void workspaceId;
+  const qs = strategy ? `?strategy=${encodeURIComponent(strategy)}` : "";
   return apiDelete<{ deleted: string }>(
-    `/agents/${encodeURIComponent(agentId)}/my-memories/${encodeURIComponent(recordId)}`,
+    `/agents/${encodeURIComponent(agentId)}/my-memories/${encodeURIComponent(recordId)}${qs}`,
   );
 }
 
