@@ -366,6 +366,7 @@
     "tabGeneral": "常规",
     "tabAccount": "账户",
     "tabWorkspace": "工作区",
+    "tabIam": "IAM 权限",
     "interface": "界面",
     "sidebarWidth": "侧边栏宽度",
     "currentValue": "当前：{{value}}px",
@@ -1071,5 +1072,34 @@
       "show": "查看最近执行",
       "hide": "收起最近执行"
     }
+  },
+  "iam": {
+    "title": "IAM 权限",
+    "noRoleDesc": "此工作区未绑定 IAM 角色。绑定后可使用 CloudWatch、CloudTrail 等 AWS 服务工具。",
+    "createRole": "创建 IAM 角色",
+    "creating": "创建中...",
+    "roleCreated": "IAM 角色已创建",
+    "createFailed": "创建 IAM 角色失败",
+    "roleArn": "IAM 角色 ARN",
+    "permissionBoundary": "权限边界",
+    "mcpAuth": "MCP 工具授权",
+    "scpNote": "权限通过 SimulatePrincipalPolicy 检查。若账户使用了 Organization SCP，模拟结果可能不准确。",
+    "noExtraPerms": "无需额外权限",
+    "allPermsGranted": "已授予所有权限",
+    "missingPerms": "缺少 {{count}} 个权限",
+    "autoGrant": "一键授权",
+    "manual": "手动",
+    "missingActions": "缺少的操作",
+    "cliCommand": "AWS CLI 命令",
+    "copied": "已复制",
+    "consoleSteps": "AWS Console 操作步骤",
+    "consoleStep1": "打开 IAM 控制台，导航到「角色」",
+    "consoleStep2": "找到并打开角色「{{roleName}}」",
+    "consoleStep3": "点击「添加权限」>「创建内联策略」",
+    "consoleStep4": "粘贴 JSON 策略文档并保存",
+    "refresh": "刷新权限状态",
+    "grantSuccess": "已授权 {{target}} 的权限",
+    "grantFailed": "授权失败",
+    "mcpIamRequired": "此 MCP 工具需要工作区 IAM 授权"
   }
 }
