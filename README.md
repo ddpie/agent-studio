@@ -11,7 +11,8 @@
 - **多模态输入** — 图片 / PDF / Excel / CSV / TSV 自动解析，无需额外配置
 - **定时触发** — 可视化 cron 构建器，每次执行留痕为卡片，可直接查看运行详情
 - **MCP 工具集** — AWS 官方 MCP 目录全量接入，按需启用
-- **平台级可观测性** — Token 成本、调用次数、日志按 Agent / workspace 自动聚合，不用在 CloudWatch 里拼十几个标签页
+- **跨会话记忆** — 基于 AgentCore Memory，Agent 自动记住用户偏好与事实，跨 session、跨设备持续生效；用户可在记忆抽屉中查看和删除
+- **平台级可观测性** — 调用追踪、延迟分位数、错误率、Token 成本按 Agent 和 workspace 自动聚合，一屏总览
 - **Marketplace** — 跨 workspace 发布和克隆 Agent / Skill / Tool，元数据公开，源码克隆后才可见
 
 ## 架构
@@ -33,7 +34,8 @@ graph LR
     Cron -.触发.-> Agents
     Agents --> LLM[Bedrock LLMs]
     Agents --> Ext[Skills · Tools · MCP]
-    Agents -.observability.-> Obs[Logs · Traces<br/>Evaluations · Costs]
+    Agents <-->|记忆| Mem[AgentCore Memory]
+    Agents -.observability.-> Obs[Traces · Evaluations<br/>Costs · Dashboard]
 ```
 
 完整系统图（CloudFront / Lambda / EventBridge / Evaluator 等）与关键设计说明见 [docs/architecture.md](docs/architecture.md)。
@@ -103,7 +105,8 @@ An agent orchestration platform on AWS Bedrock AgentCore. Describe what you need
 - **Multimodal input** — Images / PDF / Excel / CSV / TSV parsed out of the box, no extra setup.
 - **Scheduled triggers** — Visual cron builder; every run is archived as a card with a click-through to full run details.
 - **MCP toolbelt** — The full AWS-official MCP catalog, enable what you need.
-- **Platform-level observability** — Token spend, invocation counts, and logs aggregated per agent and per workspace — no need to pivot between CloudWatch tabs by hand.
+- **Cross-session memory** — Powered by AgentCore Memory: agents remember user preferences and facts across sessions and devices. Users can view and manage memories from the chat drawer.
+- **Platform-level observability** — Trace timeline, latency percentiles, error rates, and token costs aggregated per agent and per workspace in a single-screen dashboard.
 - **Marketplace** — Publish and clone agents / skills / tools across workspaces; metadata is public, source stays private until cloned.
 
 ## Architecture
@@ -125,7 +128,8 @@ graph LR
     Cron -.fire.-> Agents
     Agents --> LLM[Bedrock LLMs]
     Agents --> Ext[Skills · Tools · MCP]
-    Agents -.observability.-> Obs[Logs · Traces<br/>Evaluations · Costs]
+    Agents <-->|memory| Mem[AgentCore Memory]
+    Agents -.observability.-> Obs[Traces · Evaluations<br/>Costs · Dashboard]
 ```
 
 Full system diagram (CloudFront / Lambda / EventBridge / Evaluator, …) and key design notes live in [docs/architecture.md](docs/architecture.md).
