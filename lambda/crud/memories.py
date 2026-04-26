@@ -167,13 +167,40 @@ def _delete_record_impl(*, workspace_id: str, agent_id: str, caller_id: str,
 
     actor_id = build_actor_id(agent_id, caller_id)
 
-    if strategy:
-        ns = _namespace_for(strategy, actor_id)
-        _get_data().delete_memory_record(
-            memoryId=memory_id, memoryRecordId=record_id, namespace=ns)
-    else:
-        _get_data().delete_memory_record(
-            memoryId=memory_id, memoryRecordId=record_id)
+    # AgentCore delete_memory_record doesn't scope by actor — a caller who
+    # knows some OTHER user's record_id could delete it without this gate.
+    # So before delete we list the caller's own namespace(s) and require
+    # the target record_id to appear there. Cost: one extra list call.
+    data = _get_data()
+    strategies_to_check = [strategy] if strategy else list(_STRATEGY_PLURAL_TO_KEY.keys())
+    found = False
+    for s in strategies_to_check:
+        ns = _namespace_for(s, actor_id)
+        next_tok = None
+        while True:
+            kwargs = {"memoryId": memory_id, "namespace": ns, "maxResults": 100}
+            if next_tok:
+                kwargs["nextToken"] = next_tok
+            try:
+                resp = data.list_memory_records(**kwargs)
+            except Exception as e:
+                logger.warning("ownership list failed ns=%s: %s", ns, e)
+                break
+            if any(r.get("memoryRecordId") == record_id
+                   for r in resp.get("memoryRecordSummaries", [])):
+                found = True
+                break
+            next_tok = resp.get("nextToken")
+            if not next_tok:
+                break
+        if found:
+            break
+
+    if not found:
+        raise MemoryForbidden(
+            f"record {record_id} not found in caller's namespaces")
+
+    data.delete_memory_record(memoryId=memory_id, memoryRecordId=record_id)
 
 
 @router.delete("/api/workspaces/<wsId>/agents/<agentId>/my-memories/<recordId>")
