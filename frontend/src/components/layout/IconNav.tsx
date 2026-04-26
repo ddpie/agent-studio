@@ -1,7 +1,9 @@
 // src/components/layout/IconNav.tsx
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router";
 import { useTranslation } from "react-i18next";
-import { Bot, Package, Wrench, Plug, Store, DollarSign, Settings } from "lucide-react";
+import { Bot, Package, Wrench, Plug, Store, DollarSign, Settings, ShieldCheck } from "lucide-react";
+import { isPlatformAdmin } from "../../lib/api-client";
 
 const navItems = [
   { to: "/agents", icon: Bot, labelKey: "nav.agents" },
@@ -14,6 +16,12 @@ const navItems = [
 
 export default function IconNav() {
   const { t } = useTranslation();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    isPlatformAdmin().then(setIsAdmin);
+  }, []);
+
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
       isActive ? "bg-blue-600 text-white" : "text-gray-400 hover:text-white hover:bg-gray-800"
@@ -26,7 +34,12 @@ export default function IconNav() {
           <Icon className="w-5 h-5" />
         </NavLink>
       ))}
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col items-center gap-1">
+        {isAdmin && (
+          <NavLink to="/admin" className={linkClass} title={t("nav.admin")}>
+            <ShieldCheck className="w-5 h-5" />
+          </NavLink>
+        )}
         <NavLink to="/settings" className={linkClass} title={t("nav.settings")}>
           <Settings className="w-5 h-5" />
         </NavLink>

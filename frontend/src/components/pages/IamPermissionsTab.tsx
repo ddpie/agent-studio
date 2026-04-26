@@ -108,10 +108,18 @@ interface TargetStatus {
   loading: boolean;
 }
 
-export default function IamPermissionsTab() {
+interface IamPermissionsTabProps {
+  readOnly?: boolean;
+  /** When provided, operate on this workspace instead of the store's currentWorkspace. */
+  workspaceId?: string;
+  /** Callback fired after a workspace IAM role is successfully created. */
+  onRoleCreated?: () => void;
+}
+
+export default function IamPermissionsTab({ readOnly = false, workspaceId, onRoleCreated }: IamPermissionsTabProps) {
   const { t } = useTranslation();
   const { currentWorkspace } = useWorkspaceStore();
-  const wsId = currentWorkspace?.workspaceId;
+  const wsId = workspaceId ?? currentWorkspace?.workspaceId;
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [roleArn, setRoleArn] = useState<string | null>(null);
@@ -201,6 +209,7 @@ export default function IamPermissionsTab() {
       setRoleArn(resp.roleArn);
       setHasRole(true);
       toast.success(t("iam.roleCreated"));
+      onRoleCreated?.();
       // Re-check permissions after role creation
       await checkPermissions();
     } catch (err) {
@@ -285,7 +294,12 @@ export default function IamPermissionsTab() {
           <p className="text-xs text-gray-700 dark:text-gray-300 mb-3">
             {t("iam.noRoleDesc")}
           </p>
-          {isAdmin ? (
+          {readOnly ? (
+            <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
+              <Lock className="w-3 h-3" />
+              <a href="#/admin" className="hover:underline">{t("iam.goToAdmin")}</a>
+            </p>
+          ) : isAdmin ? (
             <button
               onClick={handleCreateRole}
               disabled={creating}
@@ -427,7 +441,7 @@ export default function IamPermissionsTab() {
                   )}
 
                   {/* Auto-grant button for denied targets */}
-                  {!isGranted && !noIamNeeded && isAdmin && (
+                  {!isGranted && !noIamNeeded && !readOnly && isAdmin && (
                     <button
                       onClick={() => handleGrant(target.name)}
                       disabled={isGranting}
@@ -436,6 +450,14 @@ export default function IamPermissionsTab() {
                       {isGranting ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
                       {t("iam.autoGrant")}
                     </button>
+                  )}
+                  {!isGranted && !noIamNeeded && readOnly && (
+                    <a
+                      href="#/admin"
+                      className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline"
+                    >
+                      {t("iam.goToAdmin")}
+                    </a>
                   )}
                 </div>
 

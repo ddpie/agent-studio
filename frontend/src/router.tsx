@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { lazy, type ReactNode } from "react";
 import { createHashRouter, Navigate } from "react-router";
 import AppShell from "./components/layout/AppShell";
 import AgentsLayout from "./components/layout/AgentsLayout";
@@ -15,6 +15,8 @@ import MarketplacePage from "./components/pages/MarketplacePage";
 import CostsPage from "./components/pages/CostsPage";
 import SettingsPage from "./components/pages/SettingsPage";
 import PageErrorBoundary from "./components/common/PageErrorBoundary";
+
+const AdminConsolePage = lazy(() => import("./components/pages/AdminConsolePage"));
 
 function withBoundary(element: ReactNode) {
   return <PageErrorBoundary>{element}</PageErrorBoundary>;
@@ -51,6 +53,7 @@ export function createRoutes(
         { path: "marketplace", element: withBoundary(<MarketplacePage />) },
         { path: "marketplace/:tab", element: withBoundary(<MarketplacePage />) },
         { path: "costs", element: withBoundary(<CostsPage />) },
+        { path: "admin", element: withBoundary(<AdminConsolePage />) },
         { path: "settings", element: withBoundary(<SettingsPage />) },
       ],
     },
