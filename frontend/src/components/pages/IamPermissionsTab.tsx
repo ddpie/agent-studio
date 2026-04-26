@@ -355,20 +355,22 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
                       {target.displayName}
                     </span>
                     {target.sensitivity === "medium" && target.sensitiveReasons.length > 0 && (
-                      <button
+                      <span
+                        role="button"
                         onClick={() => setSensitivityOpen(sensitivityOpen === target.name ? null : target.name)}
                         className="inline-flex items-center gap-0.5 text-[10px] leading-tight text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
                       >
                         <AlertTriangle className="w-2.5 h-2.5" /> {t("iam.sensitivityMedium")}
-                      </button>
+                      </span>
                     )}
                     {target.sensitivity === "high" && target.sensitiveReasons.length > 0 && (
-                      <button
+                      <span
+                        role="button"
                         onClick={() => setSensitivityOpen(sensitivityOpen === target.name ? null : target.name)}
                         className="inline-flex items-center gap-0.5 text-[10px] leading-tight text-red-600 dark:text-red-400 hover:underline cursor-pointer"
                       >
                         <AlertTriangle className="w-2.5 h-2.5" /> {t("iam.sensitivityHigh")}
-                      </button>
+                      </span>
                     )}
                     <span className="flex-1" />
                     {!isGranted && !noIamNeeded && !readOnly && isAdmin && (
