@@ -245,6 +245,23 @@ export class AgentCoreRoles extends Construct {
         StringEquals: { "iam:PassedToService": "bedrock-agentcore.amazonaws.com" },
       },
     }));
+    // ─── Workspace IAM role support ───
+    // Meta-Agent passes dynamically-created workspace roles to AgentCore
+    // when deploying agents bound to a workspace with a custom role.
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["iam:PassRole"],
+      resources: [`arn:aws:iam::${props.accountId}:role/AgentStudio-ws-*`],
+      conditions: {
+        StringEquals: { "iam:PassedToService": "bedrock-agentcore.amazonaws.com" },
+      },
+    }));
+    // SimulatePrincipalPolicy lets check_workspace_permissions verify
+    // what actions a workspace role is allowed to perform before deploy.
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["iam:SimulatePrincipalPolicy"],
+      resources: [`arn:aws:iam::${props.accountId}:role/AgentStudio-ws-*`],
+    }));
+
     // create_schedule hands schedulerTargetRoleArn to EventBridge Scheduler
     // so the service can assume it when firing a scheduled agent invocation.
     // Separate statement because the PassedToService string is different and

@@ -8,6 +8,7 @@ import boto3
 from strands import tool
 
 from config import MODEL_ID, REGION, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE, SUB_AGENT_ROLE_ARN
+from tools._workspace import _get_agent_role_arn
 from deploy import build_deployment_package_v2, upload_deployment, validate_agent_files, build_skill_prompt_section, _shared_env_vars
 from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_base_guidelines
@@ -152,13 +153,15 @@ def update_agent(
     skills_config = staged.get("skills", []) if staging_key else []
     skills_data = []
 
+    # Resolve workspace_id early — needed for MCP policy checks and IAM role selection.
+    workspace_id = staged.get("workspace_id", "") if staging_key else ""
+    if not workspace_id:
+        workspace_id = getattr(__import__('tools.create_agent', fromlist=['_workspace_id']), '_workspace_id', '')
+
     # Parse mcp_targets and validate against workspace policy
     mcp_targets_list = [t.strip() for t in mcp_targets.split(",") if t.strip()] if mcp_targets else []
     mcp_endpoints = []
     if mcp_targets_list:
-        workspace_id = staged.get("workspace_id", "") if staging_key else ""
-        if not workspace_id:
-            workspace_id = getattr(__import__('tools.create_agent', fromlist=['_workspace_id']), '_workspace_id', '')
         policy = _get_workspace_mcp_policy(workspace_id)
         denied = _check_mcp_policy(mcp_targets_list, policy)
         if denied:
@@ -337,6 +340,12 @@ def update_agent(
         # the caller polls get_agent_detail to observe READY.
         import threading
 
+        # Capture role_arn BEFORE the thread starts. The DDB record for the
+        # workspace could change between now and when the thread executes;
+        # we want the value the caller saw at validation time, not a lazy
+        # lookup inside the thread.
+        role_arn = _get_agent_role_arn(workspace_id)
+
         def _do_redeploy():
             try:
                 package = build_deployment_package_v2(main_py, tools_py, prompt_txt, config_json)
@@ -344,7 +353,7 @@ def update_agent(
                 control = boto3.client("bedrock-agentcore-control", region_name=REGION)
                 control.update_agent_runtime(
                     agentRuntimeId=agent_id,
-                    roleArn=SUB_AGENT_ROLE_ARN,
+                    roleArn=role_arn,
                     agentRuntimeArtifact={
                         "codeConfiguration": {
                             "code": {"s3": {"bucket": S3_BUCKET, "prefix": s3_key}},

@@ -126,6 +126,7 @@ from tools.create_schedule import create_schedule
 from tools.validate_agent import validate_agent
 from tools.preview_code import preview_assembled_code
 from tools.link_agent import link_agent, unlink_agent
+from tools.check_workspace_permissions import check_workspace_permissions
 
 _log_phase("all tools imported")
 
@@ -217,6 +218,7 @@ ALL_TOOLS = [
     delete_agent_secret,
     link_agent,
     unlink_agent,
+    check_workspace_permissions,
 ]
 
 # Path to the meta-agent package root. Passed to the MCP stdio subprocess

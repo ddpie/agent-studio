@@ -15,6 +15,7 @@ remote_targets:
     endpoint: "https://aws-mcp.us-east-1.api.aws/mcp"
     auth: sigv4
     category: general
+    iam_policy: null  # Uses caller's own credentials; permissions depend on actual API called
 
   - name: aws-knowledge
     enabled: true
@@ -22,6 +23,7 @@ remote_targets:
     endpoint: "https://knowledge-mcp.global.api.aws"
     auth: none
     category: general
+    iam_policy: null  # Public endpoint, no IAM needed
 
 # ─── Runtime 部署：awslabs MCP Servers ───
 # 每个 target 部署为独立 Runtime，通过 mcp-proxy 桥接
@@ -40,6 +42,17 @@ runtime_targets:
     version: 0.0.24
     description: "CloudWatch 指标、日志、告警、调查技能"
     category: observability
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - cloudwatch:DescribeAlarms
+            - cloudwatch:GetMetricData
+            - cloudwatch:GetMetricStatistics
+            - logs:DescribeLogGroups
+            - logs:StartQuery
+            - logs:GetQueryResults
+          Resource: "*"
 
   - name: cloudwatch-applicationsignals
     enabled: true
@@ -56,6 +69,14 @@ runtime_targets:
     version: 0.0.12
     description: "CloudTrail 审计日志查询"
     category: observability
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - cloudtrail:LookupEvents
+            - cloudtrail:StartQuery
+            - cloudtrail:GetQueryResults
+          Resource: "*"
 
   - name: prometheus
     enabled: true
@@ -73,6 +94,15 @@ runtime_targets:
     version: 1.0.17
     description: "IAM 权限管理和策略分析"
     category: security
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - iam:GetUser
+            - iam:GetRole
+            - iam:ListRoles
+            - iam:ListPolicies
+          Resource: "*"
 
   - name: well-architected-security
     enabled: true
@@ -98,6 +128,7 @@ runtime_targets:
     version: 1.0.27
     description: "AWS 定价查询"
     category: cost
+    iam_policy: null  # Uses pricing:GetProducts via caller's SigV4 credentials; no extra workspace IAM needed
 
   # ━━━ 计算 ━━━
   - name: ecs
@@ -281,6 +312,12 @@ runtime_targets:
     version: 1.0.15
     description: "Nova Canvas 图像生成"
     category: ai_ml
+    iam_policy:
+      Statement:
+        - Effect: Allow
+          Action:
+            - bedrock:InvokeModel
+          Resource: "arn:aws:bedrock:*::foundation-model/amazon.nova-canvas-v1:0"
 
   - name: sagemaker-ai
     enabled: false  # package bug: PydanticUserError in manage_hyperpod_stacks (DeployStackResponse not defined)
