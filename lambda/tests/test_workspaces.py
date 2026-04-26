@@ -130,3 +130,69 @@ def test_create_workspace_memory_returns_none_on_error(mock_agentcore_control):
     from crud.workspaces import _create_workspace_memory
     result = _create_workspace_memory("ws-xyz")
     assert result is None
+
+
+# ── DELETE /api/workspaces/{wsId} — memory cleanup ──────────────
+
+
+@pytest.fixture
+def mock_membership_owner_for_delete():
+    """Mock get_membership where middleware imports it so auth_check grants owner access."""
+    with patch("shared.middleware.get_membership") as mock:
+        yield mock
+
+
+def _setup_delete_mocks(mock_ws_table, mock_membership, ws_id, user_id, memory_id=None):
+    """Wire up mocks so delete_workspace can proceed past auth + query loop."""
+    meta_item = {"workspaceId": ws_id, "sk": "META", "owner_id": user_id}
+    if memory_id:
+        meta_item["memory_id"] = memory_id
+    mock_ws_table.get_item.return_value = {"Item": meta_item}
+    mock_ws_table.query.return_value = {"Items": [
+        {"workspaceId": ws_id, "sk": "META"},
+        {"workspaceId": ws_id, "sk": f"MEMBER#{user_id}"},
+    ]}
+    mock_membership.return_value = {
+        "workspaceId": ws_id,
+        "sk": f"MEMBER#{user_id}",
+        "userId": user_id,
+        "role": "owner",
+    }
+    # batch_writer context manager
+    batch = MagicMock()
+    mock_ws_table.batch_writer.return_value.__enter__ = MagicMock(return_value=batch)
+    mock_ws_table.batch_writer.return_value.__exit__ = MagicMock(return_value=False)
+
+
+def test_delete_workspace_calls_delete_memory(
+    mock_jwt, mock_ws_table, mock_agentcore_control, mock_membership_owner_for_delete
+):
+    """delete_workspace attempts to delete the Memory resource."""
+    user_id = mock_jwt.return_value["sub"]
+    _setup_delete_mocks(mock_ws_table, mock_membership_owner_for_delete, "ws-d1", user_id, "mem-d1")
+    mock_agentcore_control.delete_memory.return_value = {}
+    resp = _invoke(_apigw("DELETE", "/api/workspaces/ws-d1", user_id))
+    assert resp["statusCode"] == 200
+    mock_agentcore_control.delete_memory.assert_called_once_with(memoryId="mem-d1")
+
+
+def test_delete_workspace_memory_failure_does_not_block(
+    mock_jwt, mock_ws_table, mock_agentcore_control, mock_membership_owner_for_delete
+):
+    """When delete_memory fails, workspace deletion still proceeds."""
+    user_id = mock_jwt.return_value["sub"]
+    _setup_delete_mocks(mock_ws_table, mock_membership_owner_for_delete, "ws-d2", user_id, "mem-d2")
+    mock_agentcore_control.delete_memory.side_effect = Exception("not found")
+    resp = _invoke(_apigw("DELETE", "/api/workspaces/ws-d2", user_id))
+    assert resp["statusCode"] == 200
+
+
+def test_delete_workspace_skips_memory_when_no_memory_id(
+    mock_jwt, mock_ws_table, mock_agentcore_control, mock_membership_owner_for_delete
+):
+    """No memory_id → delete_memory is not called."""
+    user_id = mock_jwt.return_value["sub"]
+    _setup_delete_mocks(mock_ws_table, mock_membership_owner_for_delete, "ws-d3", user_id)
+    resp = _invoke(_apigw("DELETE", "/api/workspaces/ws-d3", user_id))
+    assert resp["statusCode"] == 200
+    mock_agentcore_control.delete_memory.assert_not_called()

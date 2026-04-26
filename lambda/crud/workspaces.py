@@ -48,6 +48,16 @@ def _get_control():
     return _control
 
 
+def _delete_workspace_memory(memory_id: str) -> None:
+    """Best-effort delete of AgentCore Memory resource. Logs on failure."""
+    if not memory_id:
+        return
+    try:
+        _get_control().delete_memory(memoryId=memory_id)
+    except Exception as e:
+        logger.warning("delete_memory failed for %s: %s", memory_id, e)
+
+
 def _create_workspace_memory(workspace_id: str) -> str | None:
     """Best-effort create an AgentCore Memory for the workspace.
 
@@ -390,6 +400,12 @@ def delete_workspace(wsId: str):
         return err
 
     table = _get_table()
+
+    # Best-effort delete the AgentCore Memory resource before removing rows.
+    meta_resp = table.get_item(Key={"workspaceId": ws_id, "sk": "META"}, ConsistentRead=True)
+    meta = meta_resp.get("Item") or {}
+    _delete_workspace_memory(meta.get("memory_id", ""))
+
     last_key = None
     while True:
         query_kwargs = {
