@@ -41,17 +41,67 @@ const CATEGORIES = [
 
 // Targets that require IAM permissions (maps target name to required actions)
 const IAM_REQUIRED_TARGETS: Record<string, string[]> = {
-  cloudwatch: [
-    "cloudwatch:DescribeAlarms", "cloudwatch:GetMetricData", "cloudwatch:GetMetricStatistics",
-    "logs:DescribeLogGroups", "logs:StartQuery", "logs:GetQueryResults",
-  ],
+  // Monitoring
+  cloudwatch: ["cloudwatch:DescribeAlarms", "cloudwatch:GetMetricData", "cloudwatch:GetMetricStatistics", "logs:DescribeLogGroups", "logs:StartQuery", "logs:GetQueryResults"],
   cloudtrail: ["cloudtrail:LookupEvents", "cloudtrail:StartQuery", "cloudtrail:GetQueryResults"],
+  // Security
   iam: ["iam:GetUser", "iam:GetRole", "iam:ListRoles", "iam:ListPolicies"],
+  kms: ["kms:Describe*", "kms:List*", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus"],
+  acm: ["acm:Describe*", "acm:List*", "acm:GetCertificate"],
+  guardduty: ["guardduty:Get*", "guardduty:List*"],
+  "security-hub": ["securityhub:Get*", "securityhub:List*", "securityhub:BatchGet*"],
+  inspector: ["inspector2:Get*", "inspector2:List*", "inspector2:BatchGet*"],
+  config: ["config:Describe*", "config:Get*", "config:List*"],
+  sts: ["sts:GetCallerIdentity"],
+  // Compute
   ec2: ["ec2:Describe*"],
   lambda: ["lambda:GetFunction", "lambda:ListFunctions", "lambda:GetPolicy"],
   ecs: ["ecs:Describe*", "ecs:List*"],
   eks: ["eks:Describe*", "eks:List*"],
+  autoscaling: ["autoscaling:Describe*"],
+  // Storage
+  "s3-readonly": ["s3:GetBucketLocation", "s3:GetBucketTagging", "s3:ListAllMyBuckets", "s3:ListBucket"],
+  efs: ["elasticfilesystem:Describe*"],
+  // Database
+  rds: ["rds:Describe*", "rds:List*"],
+  "dynamodb-readonly": ["dynamodb:Describe*", "dynamodb:List*"],
+  elasticache: ["elasticache:Describe*", "elasticache:List*"],
+  redshift: ["redshift:Describe*", "redshift:List*"],
+  opensearch: ["es:Describe*", "es:List*"],
+  // Networking
+  route53: ["route53:Get*", "route53:List*"],
+  elb: ["elasticloadbalancing:Describe*"],
+  "api-gateway": ["apigateway:GET"],
+  cloudfront: ["cloudfront:Get*", "cloudfront:List*"],
+  // Messaging
+  sns: ["sns:Get*", "sns:List*"],
+  sqs: ["sqs:Get*", "sqs:List*"],
+  eventbridge: ["events:Describe*", "events:List*"],
+  "step-functions": ["states:Describe*", "states:List*", "states:GetExecutionHistory"],
+  // Management
+  cloudformation: ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"],
+  ssm: ["ssm:DescribeParameters", "ssm:GetParameter", "ssm:GetParameters", "ssm:List*"],
+  "service-quotas": ["servicequotas:Get*", "servicequotas:List*"],
+  health: ["health:Describe*"],
+  "compute-optimizer": ["compute-optimizer:Get*"],
+  // Cost
+  "cost-explorer": ["ce:Get*", "ce:Describe*", "ce:List*"],
+  "aws-pricing": ["pricing:GetProducts", "pricing:DescribeServices"],
+  // Analytics
+  athena: ["athena:Get*", "athena:List*", "athena:BatchGet*"],
+  glue: ["glue:Get*", "glue:List*", "glue:BatchGet*"],
+  kinesis: ["kinesis:Describe*", "kinesis:List*", "kinesis:Get*"],
+  // AI/ML
+  sagemaker: ["sagemaker:Describe*", "sagemaker:List*"],
+  "bedrock-readonly": ["bedrock:Get*", "bedrock:List*"],
+  // Identity
+  cognito: ["cognito-idp:Describe*", "cognito-idp:List*"],
+  // Backup
+  backup: ["backup:Describe*", "backup:Get*", "backup:List*"],
+  // Architecture
   "well-architected": ["wellarchitected:Get*", "wellarchitected:List*"],
+  // Containers
+  ecr: ["ecr:Describe*", "ecr:List*", "ecr:BatchGetImage"],
 };
 
 export default function McpTargetSelector({ selectedTargets, onChange, hasLegacyConfig }: McpTargetSelectorProps) {
