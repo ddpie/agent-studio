@@ -15,6 +15,7 @@ import {
   createWorkspaceRole,
   getWorkspacePermissions,
   grantMcpTargets,
+  isPlatformAdmin,
 } from "../../lib/api-client";
 import { toast } from "../../lib/toast";
 import { useWorkspaceStore } from "../../stores/workspace-store";
@@ -112,6 +113,7 @@ export default function IamPermissionsTab() {
   const { currentWorkspace } = useWorkspaceStore();
   const wsId = currentWorkspace?.workspaceId;
 
+  const [isAdmin, setIsAdmin] = useState(false);
   const [roleArn, setRoleArn] = useState<string | null>(null);
   const [hasRole, setHasRole] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -121,6 +123,8 @@ export default function IamPermissionsTab() {
   const [grantingTargets, setGrantingTargets] = useState<Set<string>>(new Set());
   const [expandedTargets, setExpandedTargets] = useState<Set<string>>(new Set());
   const [copiedTarget, setCopiedTarget] = useState<string | null>(null);
+
+  useEffect(() => { isPlatformAdmin().then(setIsAdmin); }, []);
 
   // Collect all actions from all targets that have iamPolicy
   const getAllActions = useCallback((): string[] => {
@@ -281,18 +285,24 @@ export default function IamPermissionsTab() {
           <p className="text-xs text-gray-700 dark:text-gray-300 mb-3">
             {t("iam.noRoleDesc")}
           </p>
-          <button
-            onClick={handleCreateRole}
-            disabled={creating}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {creating ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Shield className="w-3.5 h-3.5" />
-            )}
-            {creating ? t("iam.creating") : t("iam.createRole")}
-          </button>
+          {isAdmin ? (
+            <button
+              onClick={handleCreateRole}
+              disabled={creating}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {creating ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Shield className="w-3.5 h-3.5" />
+              )}
+              {creating ? t("iam.creating") : t("iam.createRole")}
+            </button>
+          ) : (
+            <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1">
+              <Lock className="w-3 h-3" /> {t("iam.contactAdmin")}
+            </p>
+          )}
         </div>
       </section>
     );
@@ -371,16 +381,22 @@ export default function IamPermissionsTab() {
                   {/* Action buttons for denied targets */}
                   {!isGranted && !noIamNeeded && (
                     <>
-                      <button
-                        onClick={() => handleGrant(target.name)}
-                        disabled={isGranting}
-                        className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded transition-colors disabled:opacity-50"
-                      >
-                        {isGranting ? (
-                          <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                        ) : null}
-                        {t("iam.autoGrant")}
-                      </button>
+                      {isAdmin ? (
+                        <button
+                          onClick={() => handleGrant(target.name)}
+                          disabled={isGranting}
+                          className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 rounded transition-colors disabled:opacity-50"
+                        >
+                          {isGranting ? (
+                            <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                          ) : null}
+                          {t("iam.autoGrant")}
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
+                          <Lock className="w-2.5 h-2.5" /> {t("iam.contactAdmin")}
+                        </span>
+                      )}
                       <button
                         onClick={() => toggleExpanded(target.name)}
                         className="flex items-center gap-0.5 px-2 py-0.5 text-[10px] font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded transition-colors"

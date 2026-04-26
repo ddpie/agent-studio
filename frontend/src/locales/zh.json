@@ -1149,6 +1149,7 @@
     "allPermsGranted": "已授予所有权限",
     "missingPerms": "缺少 {{count}} 个权限",
     "autoGrant": "一键授权",
+    "contactAdmin": "请联系平台管理员",
     "manual": "手动",
     "missingActions": "缺少的操作",
     "cliCommand": "AWS CLI 命令",
