@@ -801,7 +801,7 @@ def grant_mcp(wsId: str):
             ExpressionAttributeValues={
                 ":g": updated_grants,
                 ":now": datetime.utcnow().isoformat() + "Z",
-                ":old": current_grants if current_grants else None,
+                ":old": current_grants or [],
             },
             ConditionExpression=(
                 "mcpGrants = :old"
@@ -822,7 +822,7 @@ def grant_mcp(wsId: str):
             table.update_item(
                 Key={"workspaceId": ws_id, "sk": "META"},
                 UpdateExpression="SET mcpGrants = :g",
-                ExpressionAttributeValues={":g": current_grants if current_grants else None},
+                ExpressionAttributeValues={":g": current_grants or []},
             )
         except Exception:
             pass
@@ -870,9 +870,9 @@ def revoke_mcp(wsId: str):
             Key={"workspaceId": ws_id, "sk": "META"},
             UpdateExpression="SET mcpGrants = :g, updated_at = :now",
             ExpressionAttributeValues={
-                ":g": updated_grants if updated_grants else None,
+                ":g": updated_grants or [],
                 ":now": datetime.utcnow().isoformat() + "Z",
-                ":old": current_grants if current_grants else None,
+                ":old": current_grants or [],
             },
             ConditionExpression=(
                 "mcpGrants = :old"
@@ -892,7 +892,7 @@ def revoke_mcp(wsId: str):
             table.update_item(
                 Key={"workspaceId": ws_id, "sk": "META"},
                 UpdateExpression="SET mcpGrants = :g",
-                ExpressionAttributeValues={":g": current_grants if current_grants else None},
+                ExpressionAttributeValues={":g": current_grants or []},
             )
         except Exception:
             pass

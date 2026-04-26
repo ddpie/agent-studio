@@ -56,7 +56,6 @@ app.include_router(workspace_iam_router)
 app.include_router(runs_router)
 app.include_router(kiro_key_router)
 app.include_router(chat_router)
-app.include_router(workspace_iam_router)
 
 
 @app.get("/api/health")

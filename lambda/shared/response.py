@@ -39,8 +39,8 @@ def forbidden() -> Response:
     return error("Forbidden", "PERMISSION_DENIED", 403)
 
 
-def not_found() -> Response:
-    return error("Not found", "NOT_FOUND", 404)
+def not_found(message: str = "Not found") -> Response:
+    return error(message, "NOT_FOUND", 404)
 
 
 def bad_request(message: str) -> Response:
