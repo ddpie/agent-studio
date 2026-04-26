@@ -250,15 +250,13 @@ runtime_targets:
           Resource: "*"
 
   - name: lambda-tool
-    enabled: false  # disabled: core capability (InvokeFunction) is a HIGH-risk write; MCP useless without it
+    enabled: false  # disabled: core capability (InvokeFunction) removed from boundary; MCP useless without it
     package: awslabs-lambda-tool-mcp-server
     command: awslabs.lambda-tool-mcp-server
     version: 2.0.16
     description: "Lambda 函数调用和日志查询"
     category: compute
-    sensitivity: high
-    sensitive_reasons:
-      - "lambda:InvokeFunction 会直接执行任意 Lambda（有副作用）"
+    sensitivity: low
     iam_policy:
       Statement:
         - Effect: Allow
@@ -636,16 +634,15 @@ runtime_targets:
           Resource: "*"
 
   - name: bedrock-data-automation
-    enabled: false  # disabled: core capability requires bedrock:InvokeModel + s3:PutObject (HIGH-risk writes)
+    enabled: false  # disabled: core capability (InvokeModel + PutObject) removed from boundary
     package: awslabs-aws-bedrock-data-automation-mcp-server
     command: awslabs.aws-bedrock-data-automation-mcp-server
     version: 0.0.19
     description: "Bedrock 文档理解和数据提取"
     category: ai_ml
-    sensitivity: high
+    sensitivity: medium
     sensitive_reasons:
-      - "bedrock:InvokeModel 调用模型，按 token 计费"
-      - "s3:PutObject 向 S3 写入文件"
+      - "s3:GetObject 可读取任意 S3 对象内容"
     iam_policy:
       Statement:
         - Effect: Allow

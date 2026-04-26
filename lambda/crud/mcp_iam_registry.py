@@ -3,7 +3,7 @@
 Source of truth: mcp-runtime/mcp-registry.yaml
 Regenerate:     python scripts/sync-mcp-iam-policies.py
 """
-# SYNC_HASH: 62af13e4f1b9
+# SYNC_HASH: b94a3684665b
 
 
 MCP_IAM_POLICIES: dict[str, dict | None] = {
