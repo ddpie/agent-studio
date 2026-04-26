@@ -1,15 +1,9 @@
-"""Regression test: update_agent must not crash on metadata-only updates.
+"""Regression test: update_agent always redeploys.
 
-Caught 2026-04-24 when sync_agent_skill → update_agent hand-off raised
-``UnboundLocalError: local variable 'tool_names_list' referenced before
-assignment``. tool_names_list was initialized only inside the
-``if needs_redeploy:`` branch but referenced unconditionally at the end
-of the function when building the DDB update expression.
-
-This test stands up the minimum mocks needed to drive update_agent
-through a description-only change — no system_prompt, no tool_names,
-no template_id — so needs_redeploy stays False and the function takes
-the path that previously crashed.
+Since 5d0e86d the metadata-only shortcut was removed — every update_agent
+call now triggers a full repackage + update_agent_runtime. This test
+verifies that a description-only change still succeeds (it exercises the
+full redeploy path, not a metadata-only fallback).
 """
 import json
 import sys
@@ -79,14 +73,12 @@ def _existing_metadata(tools=("s3_read", "generate_chart")):
     }
 
 
-def test_update_agent_metadata_only_does_not_crash_on_tool_names_list():
-    """Description-only update must succeed; prior to the fix this raised
-    UnboundLocalError because tool_names_list wasn't initialized before
-    the final DDB update_item built its expression."""
+def test_update_agent_description_only_triggers_full_redeploy():
+    """Description-only update must succeed and trigger a full redeploy
+    (no metadata-only shortcut exists any more)."""
     meta = _existing_metadata()
 
     class _FakeTable:
-        """DDB table stub — drives both agents + metadata update paths."""
         def __init__(self):
             self.update_calls: list[dict] = []
         def update_item(self, **kwargs):
@@ -94,7 +86,6 @@ def test_update_agent_metadata_only_does_not_crash_on_tool_names_list():
 
     fake_table = _FakeTable()
     fake_s3 = MagicMock()
-    # metadata.json round-trip
     fake_s3.get_object.return_value = {
         "Body": MagicMock(read=lambda: json.dumps(meta).encode("utf-8")),
     }
@@ -107,30 +98,31 @@ def test_update_agent_metadata_only_does_not_crash_on_tool_names_list():
     ddb_resource = MagicMock()
     ddb_resource.Table = MagicMock(return_value=fake_table)
 
-    # ensure_agent_in_workspace is imported lazily inside update_agent,
-    # so we patch it on tools._scope (the import source) rather than on
-    # tools.update_agent (the call site — the name isn't bound there at
-    # module load time).
     with patch("tools.update_agent.boto3.client", side_effect=_boto3_client), \
          patch("tools.update_agent.boto3.resource", return_value=ddb_resource), \
          patch("tools._scope.ensure_agent_in_workspace",
-               return_value=({"agentId": AGENT_ID, "workspace_id": WS_ID, "agentName": "DataAnalyst"}, None)):
+               return_value=({"agentId": AGENT_ID, "workspace_id": WS_ID, "agentName": "DataAnalyst"}, None)), \
+         patch("tools.update_agent.validate_agent_files",
+               return_value={"valid": True, "errors": []}), \
+         patch("tools.update_agent.build_deployment_package_v2", return_value=b"fake-zip"), \
+         patch("tools.update_agent.upload_deployment", return_value=f"agents/{AGENT_ID}/deployment.zip"), \
+         patch("tools.update_agent._get_agent_role_arn", return_value="arn:aws:iam::000:role/r"), \
+         patch("tools.update_agent.build_skill_prompt_section", return_value=""), \
+         patch("tools.update_agent.get_base_guidelines", return_value=""), \
+         patch("tools._scope.current_creator_language", return_value="en"), \
+         patch("threading.Thread") as mock_thread:
+
         out = json.loads(_ua_mod.update_agent(
             agent_id=AGENT_ID,
             agent_name="DataAnalyst",
             description="new description",
         ))
 
-    # Previously raised UnboundLocalError — if it returns at all the fix
-    # is working. Assert the result shape is consistent with a metadata-
-    # only update (no redeploy triggered).
     assert "error" not in out, f"unexpected error: {out}"
-    assert out.get("action") == "metadata_updated"
-    assert out.get("needs_redeploy") is False
-    # DDB update must have fired for description but must NOT include
-    # tool_names on a metadata-only path (initialized to [] and skipped
-    # via `if tool_names_list:`).
+    assert out.get("action") == "redeployed"
+    assert out.get("needs_redeploy") is True
+    assert out.get("status") == "QUEUED"
+    assert mock_thread.called, "expected background redeploy thread to be started"
     assert fake_table.update_calls, "expected a DDB update_item call"
     last = fake_table.update_calls[-1]
     assert "description = :desc" in last["UpdateExpression"]
-    assert ":tn" not in last.get("ExpressionAttributeValues", {})
