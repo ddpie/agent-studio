@@ -63,13 +63,22 @@ def list_mcp_servers() -> str:
         catalog = _load_catalog()
         targets = _list_gateway_targets()
 
-        # Merge gateway status with catalog metadata
+        # Merge gateway status with catalog metadata.
+        # Strip the "mcp-" prefix that gateway targets carry — the short name
+        # (e.g. "cloudwatch") is the contract everywhere else: the frontend
+        # /mcp/targets API returns short names, workspace policy stores short
+        # names, and _resolve_mcp_endpoints expects short names so it can map
+        # "nova-canvas" → runtime "nova_canvas". Leaving the prefix on here
+        # caused Meta-Agent to write "mcp-cloudwatch" into proposals, which
+        # then failed to match the selector's short names in the editor and
+        # would have 404'd at runtime resolution.
         merged = []
         for t in targets:
-            name = t["target_name"]
-            cat_entry = catalog.get(name.replace("mcp-", ""), {})
+            gw_name = t["target_name"]
+            short = gw_name[len("mcp-"):] if gw_name.startswith("mcp-") else gw_name
+            cat_entry = catalog.get(short, {})
             merged.append({
-                "name": name,
+                "name": short,
                 "description": cat_entry.get("description", ""),
                 "category": cat_entry.get("category", "general"),
                 "status": t["status"],
