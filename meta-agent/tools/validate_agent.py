@@ -453,6 +453,55 @@ def validate_agent(
             if func_name not in prompt_lower and readable_name not in prompt_lower:
                 warnings.append(f"Tool '{func_name}' is not mentioned in system_prompt. The agent may not know when to use it.")
 
+    # 4b. Ghost-tool detection — names the prompt references in backticks that
+    # don't exist in any known tool surface. This is the check that would have
+    # caught the `audit_services` hallucination in AWSCloudOpsAssistant.
+    # Only flag snake_case identifiers in backticks to avoid false positives
+    # on AWS service names, English phrases, or MCP target/category names.
+    if system_prompt:
+        # Extract `snake_case_ident` tokens — same shape as real tool names
+        backtick_tokens = set(re.findall(r'`([a-z][a-z0-9_]*[a-z0-9])`', system_prompt))
+        # Known tool surfaces the agent will actually have at runtime
+        known = set(defined_funcs or []) | set(declared_names) | set(builtin_names) | mcp_tool_names_set
+        # Skill-provided @tool functions (if staging_key tells us about skills)
+        if staging_key:
+            try:
+                for skill_entry in staged.get("skills", []) or []:
+                    sid = skill_entry.get("id", "")
+                    if not sid:
+                        continue
+                    # Re-use S3 client from step 2 if present; cheap to rebuild if not
+                    s3_scan = boto3.client("s3", region_name=REGION)
+                    prefix = f"agents/{staged.get('agent_id', agent_name)}/skills/{sid}/scripts/"
+                    try:
+                        resp = s3_scan.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix)
+                        for obj in resp.get("Contents", []):
+                            if obj["Key"].endswith(".py"):
+                                code = s3_scan.get_object(Bucket=S3_BUCKET, Key=obj["Key"])["Body"].read().decode("utf-8", errors="ignore")
+                                known.update(re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', code))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        # Runtime builtins that every agent gets (see agent_template_v2.py:275)
+        known.update({
+            "load_skill", "run_command", "upload_to_s3", "read_document",
+            "browser_use", "run_skill_script", "check_capabilities",
+        })
+        # Common Python/English terms that shouldn't count even in backticks
+        allowlist = {
+            "true", "false", "none", "null", "json", "str", "int", "bool",
+            "list", "dict", "yes", "no",
+        }
+        ghost = {t for t in backtick_tokens if t not in known and t not in allowlist and "_" in t}
+        if ghost:
+            errors.append(
+                f"system_prompt references tool name(s) {sorted(ghost)} in backticks but "
+                f"they aren't in tool_names, tool_definitions, attached skills, or the MCP "
+                f"target manifests. Either remove the reference, fix the name (call "
+                f"list_mcp_target_tools to see real names), or add the tool."
+            )
+
     # Check for overly long system_prompt
     if system_prompt and len(system_prompt) > 10000:
         warnings.append(f"System prompt is very long ({len(system_prompt)} chars). Consider trimming for better performance.")

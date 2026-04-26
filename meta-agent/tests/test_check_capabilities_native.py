@@ -68,6 +68,32 @@ def test_check_capabilities_reports_missing_ci_id(monkeypatch):
     assert data["agent_id"] == "test-agent"
 
 
+def test_check_capabilities_exposes_registered_tools(monkeypatch):
+    """register_tool_registry()'s snapshot must show up in check_capabilities.
+
+    This is the affordance the Meta-Agent's generated agent relies on to
+    self-diagnose when its system_prompt promises a tool that isn't actually
+    wired up — see the audit_services regression.
+    """
+    monkeypatch.delenv("AGENT_STUDIO_CODE_INTERPRETER_ID", raising=False)
+    s3 = _mock_s3_manifest("test-agent", [])
+    ns = _exec_builtin("test-agent")
+    ns["_s3"] = s3
+
+    ns["register_tool_registry"](
+        custom=["web_search", "generate_chart"],
+        mcp=["get_active_alarms", "describe_log_groups"],
+        mcp_errors=[{"target": "cloudtrail", "error": "TimeoutError: 30s"}],
+        builtin=["load_skill", "run_command", "check_capabilities"],
+    )
+
+    data = json.loads(ns["check_capabilities"]())
+    assert data["tools"]["custom"] == ["web_search", "generate_chart"]
+    assert data["tools"]["mcp"] == ["get_active_alarms", "describe_log_groups"]
+    assert data["tools"]["builtin"] == ["load_skill", "run_command", "check_capabilities"]
+    assert data["tools"]["mcp_errors"] == [{"target": "cloudtrail", "error": "TimeoutError: 30s"}]
+
+
 def test_check_capabilities_reports_no_session(monkeypatch):
     """CI id is configured but run_command has not been called yet."""
     monkeypatch.setenv("AGENT_STUDIO_CODE_INTERPRETER_ID", "ci-test")

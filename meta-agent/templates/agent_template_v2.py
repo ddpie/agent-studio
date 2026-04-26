@@ -212,8 +212,10 @@ def _resolve_runtime_url(target_name):
     return None
 
 def _build_mcp_clients():
-    """Build MCPClient list from config, lazy-resolving runtime URLs."""
-    clients = []
+    """Build (endpoint, MCPClient|None) pairs from config. None entries
+    preserve alignment with the original endpoint list so check_capabilities
+    can attribute connect errors back to the target name that failed."""
+    pairs = []
     for ep in _config.get("mcp_endpoints", []):
         ep_type = ep.get("type", "runtime")
         auth = _AUTH_MAP.get(ep.get("auth", ep_type))
@@ -222,16 +224,18 @@ def _build_mcp_clients():
             url = _resolve_runtime_url(ep["target_name"])
             if not url:
                 print(f"WARNING: Skipping unresolvable MCP target: {ep['target_name']}", file=sys.stderr)
+                pairs.append((ep, None, "unresolvable target — not found in list_agent_runtimes"))
                 continue
         else:
             url = ep["url"]
 
-        clients.append(MCPClient(
+        client = MCPClient(
             lambda u=url, a=auth: streamablehttp_client(u, auth=a, timeout=30),
-        ))
-    return clients
+        )
+        pairs.append((ep, client, None))
+    return pairs
 
-_mcp_clients = _build_mcp_clients()
+_mcp_client_pairs = _build_mcp_clients()
 
 # Import all @tool functions from tools.py
 import tools as _tools_module
@@ -263,16 +267,32 @@ async def invoke(payload, context):
     prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
     with contextlib.ExitStack() as stack:
         mcp_tools = []
-        for client in _mcp_clients:
+        mcp_errors = []
+        for ep, client, skip_reason in _mcp_client_pairs:
+            target = ep.get("name") or ep.get("target_name") or "(unknown)"
+            if client is None:
+                mcp_errors.append({"target": target, "error": skip_reason or "client not constructed"})
+                continue
             try:
                 ctx = stack.enter_context(client)
                 mcp_tools.extend(ctx.list_tools_sync())
             except Exception as _mcp_err:
-                print(f"WARNING: MCP client failed to connect, skipping: {_mcp_err}", file=sys.stderr)
+                err_str = f"{type(_mcp_err).__name__}: {_mcp_err}"
+                print(f"WARNING: MCP client for {target} failed to connect, skipping: {err_str}", file=sys.stderr)
+                mcp_errors.append({"target": target, "error": err_str})
+        builtin_fns = [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use, _builtin.run_skill_script, _builtin.check_capabilities]
+        # Publish the actual runtime registry so check_capabilities can
+        # show the agent what it really has (vs. what its prompt claims).
+        _builtin.register_tool_registry(
+            custom=[getattr(t, "__name__", str(t)) for t in _ALL_TOOLS],
+            mcp=[getattr(t, "tool_name", getattr(t, "__name__", str(t))) for t in mcp_tools],
+            mcp_errors=mcp_errors,
+            builtin=[t.__name__ for t in builtin_fns],
+        )
         agent = Agent(
             model=BedrockModel(model_id=model_id, max_tokens=_get_max_tokens(model_id)),
             system_prompt=prompt,
-            tools=_ALL_TOOLS + mcp_tools + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use, _builtin.run_skill_script, _builtin.check_capabilities],
+            tools=_ALL_TOOLS + mcp_tools + builtin_fns,
         )
         async for chunk in _stream_and_record(agent, payload):
             yield chunk
@@ -932,6 +952,21 @@ _CACHED_SKILLS: set = set()
 # metadata.json under agents/{AGENT_ID}/, not the workspace-global skills
 # index — agents only see skills explicitly attached to them.
 _SKILLS_MANIFEST: list | None = None
+
+# Runtime registry snapshot — populated from main.py after MCP clients
+# initialize. check_capabilities() reads this so the agent can introspect
+# what it actually has (vs. what its prompt claims). Not frozen at import
+# because MCP tool discovery is per-invocation.
+_TOOL_REGISTRY_SNAPSHOT: dict = {"custom": [], "mcp": [], "mcp_errors": [], "builtin": []}
+
+
+def register_tool_registry(custom: list, mcp: list, mcp_errors: list, builtin: list) -> None:
+    """Called once per invocation by main.py after MCP init. Safe to call
+    multiple times — later calls overwrite the snapshot."""
+    _TOOL_REGISTRY_SNAPSHOT["custom"] = list(custom)
+    _TOOL_REGISTRY_SNAPSHOT["mcp"] = list(mcp)
+    _TOOL_REGISTRY_SNAPSHOT["mcp_errors"] = list(mcp_errors)
+    _TOOL_REGISTRY_SNAPSHOT["builtin"] = list(builtin)
 
 
 def _agent_s3_prefix() -> str:
@@ -1845,6 +1880,14 @@ def check_capabilities() -> str:
         into the local cache this invocation.
       - ``agent_id`` — the runtime id used to scope S3 skill lookups,
         or null if the environment didn't expose it.
+      - ``tools`` — {"custom": [names from tool_definitions], "mcp":
+        [names actually fetched from MCP servers this invocation],
+        "builtin": [platform tools like load_skill/run_command], and
+        "mcp_errors": [{"target": str, "error": str}]} for MCP servers
+        that failed to initialize}. If you see the user asking about a
+        tool that's not in any of these lists, the system_prompt is
+        lying about its capabilities — tell them honestly rather than
+        fabricating output.
 
     Skills and CI runtime are probed independently. Safe to call
     multiple times; cheap after the first call (local in-memory caches).
@@ -1853,6 +1896,12 @@ def check_capabilities() -> str:
         "code_interpreter": {"ready": False},
         "skills": [],
         "agent_id": _AGENT_ID or None,
+        "tools": {
+            "custom": list(_TOOL_REGISTRY_SNAPSHOT.get("custom", [])),
+            "mcp": list(_TOOL_REGISTRY_SNAPSHOT.get("mcp", [])),
+            "builtin": list(_TOOL_REGISTRY_SNAPSHOT.get("builtin", [])),
+            "mcp_errors": list(_TOOL_REGISTRY_SNAPSHOT.get("mcp_errors", [])),
+        },
     }
 
     ci_id = _os.environ.get("AGENT_STUDIO_CODE_INTERPRETER_ID")

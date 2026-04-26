@@ -218,8 +218,26 @@ IMPORTANT — MCP target selection:
 Before designing the agent, consider whether any MCP targets would enhance its capabilities.
 If the agent's purpose aligns with available MCP servers (e.g., image generation → nova-canvas,
 cost analysis → aws-pricing), include them in the proposal's `mcp_targets` field.
-When you include MCP targets, ALWAYS call list_mcp_target_tools for each target FIRST to get
-the exact tool names and descriptions, then reference those real tool names in the system_prompt.
+
+**HARD RULE — MCP tool names must come from list_mcp_target_tools, never from memory:**
+For every target in `mcp_targets`, you MUST call `list_mcp_target_tools(target)` FIRST,
+then reference ONLY names returned by that call in the system_prompt. Do NOT invent tool
+names from what "sounds reasonable" — MCP servers expose specific, versioned APIs and the
+wrong name causes the deployed agent to hit "Unknown tool: X" at runtime.
+
+WRONG: User asks for an AWS ops agent → you write "use `audit_services` for health checks"
+       without calling list_mcp_target_tools("cloudwatch"). The real cloudwatch MCP has
+       `get_active_alarms`, `describe_log_groups`, `analyze_metric` — no `audit_services`.
+       The deployed agent then tells the user "MCP is not integrated" because every tool
+       call fails.
+CORRECT: Call list_mcp_target_tools("cloudwatch") → see the 25 real tools → write
+       "use `get_active_alarms` when the user asks about alarm status; use
+       `describe_log_groups` when they ask about available log groups; use `analyze_metric`
+       for trend analysis on a specific metric."
+
+If list_mcp_target_tools returns `tool_count: 0` (target name didn't match any manifest),
+fix the target name using the `available_targets` hint before proceeding — do NOT guess
+tool names to fill the gap.
 
 CRITICAL JSON RULES:
 - The JSON MUST be valid and parseable by JSON.parse()
