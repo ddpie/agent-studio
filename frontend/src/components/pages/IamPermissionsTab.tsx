@@ -443,24 +443,24 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
                       {/* Actions list — green for granted, red for missing */}
                       <div>
                         <p className="text-[11px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-1">
-                          {isGranted ? t("iam.grantedActions") : t("iam.missingActions")}
+                          {isGranted ? t("iam.grantedActions") : `${t("iam.grantedActions")} / ${t("iam.missingActions")}`}
                         </p>
                         <div className="flex flex-wrap gap-1">
-                          {(isGranted
-                            ? target.iamPolicy.Statement.flatMap((s) => s.Action)
-                            : status?.missingActions ?? []
-                          ).map((action) => (
-                            <span
-                              key={action}
-                              className={`px-1.5 py-0.5 text-[10px] font-mono rounded border ${
-                                isGranted
-                                  ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800"
-                                  : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800"
-                              }`}
-                            >
-                              {action}
-                            </span>
-                          ))}
+                          {target.iamPolicy.Statement.flatMap((s) => s.Action).map((action) => {
+                            const isMissing = status?.missingActions.includes(action);
+                            return (
+                              <span
+                                key={action}
+                                className={`px-1.5 py-0.5 text-[10px] font-mono rounded border ${
+                                  isMissing
+                                    ? "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800"
+                                    : "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800"
+                                }`}
+                              >
+                                {action}
+                              </span>
+                            );
+                          })}
                         </div>
                       </div>
 
