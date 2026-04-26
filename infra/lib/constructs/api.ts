@@ -302,9 +302,22 @@ export class Api extends Construct {
     // Note: this condition key is only evaluated by CreateRole and
     // PutRolePermissionsBoundary — other actions silently ignore it.
     // Security is still maintained because identity policy ∩ boundary.
+    // CreateRole with mandatory boundary — condition enforced by IAM
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["iam:CreateRole"],
+      resources: [`arn:aws:iam::${props.config.accountId}:role/AgentStudio-ws-*`],
+      conditions: {
+        StringEquals: {
+          "iam:PermissionsBoundary": props.workspaceBoundaryArn,
+        },
+      },
+    }));
+    // All other IAM actions — no condition (iam:PermissionsBoundary
+    // condition key is only valid for CreateRole/PutRolePermissionsBoundary;
+    // IAM denies requests where the condition key is absent from context).
+    // Security: boundary intersection caps effective permissions regardless.
     this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: [
-        "iam:CreateRole",
         "iam:DeleteRole",
         "iam:PutRolePolicy",
         "iam:DeleteRolePolicy",
@@ -313,16 +326,11 @@ export class Api extends Construct {
         "iam:TagRole",
         "iam:GetRole",
         "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
         "iam:SimulatePrincipalPolicy",
       ],
-      resources: [
-        `arn:aws:iam::${props.config.accountId}:role/AgentStudio-ws-*`,
-      ],
-      conditions: {
-        StringEquals: {
-          "iam:PermissionsBoundary": props.workspaceBoundaryArn,
-        },
-      },
+      resources: [`arn:aws:iam::${props.config.accountId}:role/AgentStudio-ws-*`],
     }));
 
     // REST API with Cognito authorizer
