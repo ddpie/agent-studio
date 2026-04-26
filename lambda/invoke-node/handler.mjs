@@ -250,8 +250,8 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
   // workspace_id is required by both meta-agent (for workspace-scoped tool calls)
   // and agents (for read_document's caller-workspace allowlist).
   payload.workspace_id = route.wsId;
+  payload.caller_id = auth.userId;
   if (route.type === "meta-agent") {
-    payload.caller_id = auth.userId;
     // `mode` selects which Kiro agent config handles the turn. The skill
     // editor sidebar sends "skill_edit" to swap to the tool-less variant;
     // empty / missing defaults to the full meta-agent. Only a short
@@ -313,6 +313,7 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
       return;
     }
     commandInput.runtimeSessionId = body.session_id;
+    payload.session_id = body.session_id;
   }
 
   // Force OTEL span sampling by supplying a W3C traceparent with the
