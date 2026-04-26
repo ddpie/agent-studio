@@ -151,6 +151,13 @@ try:
 except ImportError:
     _LATEST_BUILTIN_TOOLS = None
 
+# Load MemoryContext source to append to builtin_tools
+try:
+    from pathlib import Path as _Path
+    _MEMORY_CONTEXT_SRC = (_Path(__file__).parent / "templates" / "_memory_context_src.py").read_text()
+except Exception:
+    _MEMORY_CONTEXT_SRC = None
+
 
 def validate_agent_files(main_py: str, tools_py: str, prompt_txt: str, config_json: str) -> dict:
     """Validate agent files independently before deployment.
@@ -273,9 +280,12 @@ def build_deployment_package_v2(
             # Always inject latest stream_utils.py
             if _LATEST_STREAM_UTILS:
                 new_zip.writestr("stream_utils.py", _LATEST_STREAM_UTILS)
-            # Always inject latest builtin_tools.py
+            # Always inject latest builtin_tools.py + MemoryContext
             if _LATEST_BUILTIN_TOOLS:
-                new_zip.writestr("builtin_tools.py", _LATEST_BUILTIN_TOOLS)
+                bt_code = _LATEST_BUILTIN_TOOLS
+                if _MEMORY_CONTEXT_SRC:
+                    bt_code += "\n\n# --- MemoryContext (inlined from _memory_context_src.py) ---\n" + _MEMORY_CONTEXT_SRC
+                new_zip.writestr("builtin_tools.py", bt_code)
 
     return buf.getvalue()
 

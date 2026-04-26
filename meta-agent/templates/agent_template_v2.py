@@ -73,6 +73,20 @@ async def invoke(payload, context):
     model_id = payload.get("model_id", MODEL_ID)
     import builtin_tools as _builtin
     _builtin._workspace_id = payload.get("workspace_id", "")
+
+    # --- Memory bootstrap ---
+    _mem_cfg = _config.get("memory") or {}
+    _mem_ctx = None
+    if _mem_cfg.get("enabled") and _mem_cfg.get("memory_id"):
+        _actor_id = f"{_mem_cfg.get('agent_id', '')}_{payload.get('caller_id', 'anonymous')}"
+        _session_id = payload.get("session_id") or "default"
+        _mem_ctx = _builtin.MemoryContext(
+            memory_id=_mem_cfg["memory_id"],
+            actor_id=_actor_id,
+            session_id=_session_id,
+            strategies=_mem_cfg.get("strategies", []),
+        )
+
     skills_listing = _builtin.get_skills_listing()
     prompt = SYSTEM_PROMPT
     if skills_listing:
@@ -87,13 +101,42 @@ async def invoke(payload, context):
         )
     prompt += "\\n\\n## File Sharing\\nFiles you generate via run_command / run_skill_script live inside the Code Interpreter sandbox, NOT on your own filesystem. /mnt/workspace/ is the agent's session storage — it does NOT exist inside the CI sandbox, so passing `--output /mnt/workspace/foo.pptx` to a script will fail with PermissionError. Save outputs to a relative path (e.g. `output.pptx`) or /tmp/ inside the sandbox, then call upload_to_s3(local_path) with the SAME path — it automatically reads from the sandbox when the file isn't local. Never tell the user you cannot send files. The download button appears automatically after upload — do NOT create markdown links like [filename](url) for downloads."
     prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
+
+    # --- Memory pre-fetch (parallel) ---
+    if _mem_ctx:
+        import asyncio as _asyncio
+        _prefs_result, _sums_result = await _asyncio.gather(
+            _mem_ctx.list_preferences() if "userPreference" in _mem_ctx._strategies else _asyncio.sleep(0, result=[]),
+            _mem_ctx.retrieve_summaries(query=payload.get("prompt", "")) if "summary" in _mem_ctx._strategies else _asyncio.sleep(0, result=[]),
+            return_exceptions=True,
+        )
+        _prefs = _prefs_result if not isinstance(_prefs_result, BaseException) else []
+        _sums = _sums_result if not isinstance(_sums_result, BaseException) else []
+        prompt += _builtin._format_memory_block(_prefs, _sums)
+        _asyncio.create_task(_mem_ctx.record_user_turn(payload.get("prompt", "")))
+
+    _tool_list = _ALL_TOOLS + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use, _builtin.run_skill_script, _builtin.check_capabilities]
+    if _mem_ctx:
+        if "semantic" in _mem_ctx._strategies:
+            _tool_list.append(_mem_ctx.make_recall_facts_tool())
+        if "episodic" in _mem_ctx._strategies:
+            _tool_list.append(_mem_ctx.make_recall_episodes_tool())
+
     agent = Agent(
         model=BedrockModel(model_id=model_id, max_tokens=_get_max_tokens(model_id)),
         system_prompt=prompt,
-        tools=_ALL_TOOLS + [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use, _builtin.run_skill_script, _builtin.check_capabilities],
+        tools=_tool_list,
     )
     async for chunk in _stream_and_record(agent, payload):
         yield chunk
+
+    # --- Memory: fire-and-forget assistant turn ---
+    if _mem_ctx:
+        import asyncio as _asyncio
+        from stream_utils import _stream_and_record as _sar_ref
+        _asst_text = "".join(_sar_ref._last_text or [])
+        if _asst_text:
+            _asyncio.create_task(_mem_ctx.record_assistant_turn(_asst_text))
 
 if __name__ == "__main__":
     app.run()
@@ -251,6 +294,20 @@ async def invoke(payload, context):
     model_id = payload.get("model_id", MODEL_ID)
     import builtin_tools as _builtin
     _builtin._workspace_id = payload.get("workspace_id", "")
+
+    # --- Memory bootstrap ---
+    _mem_cfg = _config.get("memory") or {}
+    _mem_ctx = None
+    if _mem_cfg.get("enabled") and _mem_cfg.get("memory_id"):
+        _actor_id = f"{_mem_cfg.get('agent_id', '')}_{payload.get('caller_id', 'anonymous')}"
+        _session_id = payload.get("session_id") or "default"
+        _mem_ctx = _builtin.MemoryContext(
+            memory_id=_mem_cfg["memory_id"],
+            actor_id=_actor_id,
+            session_id=_session_id,
+            strategies=_mem_cfg.get("strategies", []),
+        )
+
     skills_listing = _builtin.get_skills_listing()
     prompt = SYSTEM_PROMPT
     if skills_listing:
@@ -265,6 +322,20 @@ async def invoke(payload, context):
         )
     prompt += "\\n\\n## File Sharing\\nFiles you generate via run_command / run_skill_script live inside the Code Interpreter sandbox, NOT on your own filesystem. /mnt/workspace/ is the agent's session storage — it does NOT exist inside the CI sandbox, so passing `--output /mnt/workspace/foo.pptx` to a script will fail with PermissionError. Save outputs to a relative path (e.g. `output.pptx`) or /tmp/ inside the sandbox, then call upload_to_s3(local_path) with the SAME path — it automatically reads from the sandbox when the file isn't local. Never tell the user you cannot send files. The download button appears automatically after upload — do NOT create markdown links like [filename](url) for downloads."
     prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
+
+    # --- Memory pre-fetch (parallel) ---
+    if _mem_ctx:
+        import asyncio as _asyncio
+        _prefs_result, _sums_result = await _asyncio.gather(
+            _mem_ctx.list_preferences() if "userPreference" in _mem_ctx._strategies else _asyncio.sleep(0, result=[]),
+            _mem_ctx.retrieve_summaries(query=payload.get("prompt", "")) if "summary" in _mem_ctx._strategies else _asyncio.sleep(0, result=[]),
+            return_exceptions=True,
+        )
+        _prefs = _prefs_result if not isinstance(_prefs_result, BaseException) else []
+        _sums = _sums_result if not isinstance(_sums_result, BaseException) else []
+        prompt += _builtin._format_memory_block(_prefs, _sums)
+        _asyncio.create_task(_mem_ctx.record_user_turn(payload.get("prompt", "")))
+
     with contextlib.ExitStack() as stack:
         mcp_tools = []
         mcp_errors = []
@@ -281,6 +352,14 @@ async def invoke(payload, context):
                 print(f"WARNING: MCP client for {target} failed to connect, skipping: {err_str}", file=sys.stderr)
                 mcp_errors.append({"target": target, "error": err_str})
         builtin_fns = [_builtin.load_skill, _builtin.run_command, _builtin.upload_to_s3, _builtin.read_document, _builtin.browser_use, _builtin.run_skill_script, _builtin.check_capabilities]
+
+        # Add memory recall tools if enabled
+        if _mem_ctx:
+            if "semantic" in _mem_ctx._strategies:
+                builtin_fns.append(_mem_ctx.make_recall_facts_tool())
+            if "episodic" in _mem_ctx._strategies:
+                builtin_fns.append(_mem_ctx.make_recall_episodes_tool())
+
         # Publish the actual runtime registry so check_capabilities can
         # show the agent what it really has (vs. what its prompt claims).
         _builtin.register_tool_registry(
@@ -297,6 +376,14 @@ async def invoke(payload, context):
         async for chunk in _stream_and_record(agent, payload):
             yield chunk
 
+        # --- Memory: fire-and-forget assistant turn ---
+        if _mem_ctx:
+            import asyncio as _asyncio
+            from stream_utils import _stream_and_record as _sar_ref
+            _asst_text = "".join(_sar_ref._last_text or [])
+            if _asst_text:
+                _asyncio.create_task(_mem_ctx.record_assistant_turn(_asst_text))
+
 if __name__ == "__main__":
     app.run()
 '''
@@ -307,6 +394,10 @@ STREAM_UTILS_CODE = '''\
 
 import json as _json
 import base64 as _b64
+
+
+# ── Assistant text accumulator (for memory writes) ──────────────────────
+_LAST_ASSISTANT_TEXT = []
 
 
 # ── Session tagging on spans ────────────────────────────────────────────
@@ -476,6 +567,7 @@ async def _stream_with_tools(agent, input_data, _retry_depth=0):
                     yield _json.dumps({"__tool": "end", "name": _current_tool})
                     _current_tool = None
                     _tool_input_buf = ""
+                _LAST_ASSISTANT_TEXT.append(event["data"])
                 yield event["data"]
     except Exception as _exc:
         import sys as _sys
@@ -744,6 +836,7 @@ def _write_run_failed(agent_id, run_id, error):
 
 async def _stream_and_record(agent, payload):
     """Wrap _stream_with_tools: for sched- sessions, record to DDB + S3."""
+    _LAST_ASSISTANT_TEXT.clear()
     session_id = payload.get("session_id", "")
     # Tag every span emitted during this invocation with the caller's
     # session_id so trace queries can find them. This replaces the
@@ -798,6 +891,9 @@ async def _stream_and_record(agent, payload):
                 _write_run_completed(_AGENT_ID, run_id, chunks, duration_ms=duration_ms)
             else:
                 _write_run_failed(_AGENT_ID, run_id, RuntimeError("stream disconnected before any output"))
+
+# Expose accumulated text as attribute for memory writes
+_stream_and_record._last_text = _LAST_ASSISTANT_TEXT
 '''
 
 # ── tools.py header ─────────────────────────────────────────────────────────
