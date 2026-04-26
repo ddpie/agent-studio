@@ -492,3 +492,59 @@ class TestMcpToolValidationIntegration:
         ))
         # No custom code, only MCP tool — should not warn about missing @tool
         assert not any("generate_image" in w for w in r["warnings"])
+
+
+class TestGhostToolDetection:
+    """system_prompt can reference tools that don't exist (LLM hallucination).
+
+    validate_agent should fail those before deployment so the Meta-Agent has
+    to fix the prompt — otherwise the deployed agent returns "Unknown tool"
+    at runtime (see the AWSCloudOpsAssistant / audit_services regression).
+    """
+
+    def test_ghost_backtick_tool_reports_error(self):
+        """Prompt references `audit_services` (snake_case, in backticks) but
+        it's not in tool_names, tool_definitions, skills, or MCP."""
+        r = _parse(validate_agent(
+            agent_name="Agent1",
+            system_prompt="For health checks, call `audit_services` first.",
+            tool_definitions="",
+            tool_names="web_search",
+            description="d",
+        ))
+        assert any("audit_services" in e for e in r["errors"]), r
+
+    @patch("tools.validate_agent._get_mcp_tool_names", return_value=["get_active_alarms"])
+    def test_real_mcp_tool_in_backticks_passes(self, _mock):
+        r = _parse(validate_agent(
+            agent_name="Agent1",
+            system_prompt="Call `get_active_alarms` to list alarms.",
+            tool_definitions="",
+            tool_names="",
+            description="d",
+            staging_key="",  # mcp_targets read from params, not S3
+        ))
+        # get_active_alarms is a real MCP tool — no ghost error
+        assert not any("get_active_alarms" in e for e in r["errors"])
+
+    def test_english_phrases_in_backticks_not_flagged(self):
+        """Backticks around prose / types / env names shouldn't trigger ghost."""
+        r = _parse(validate_agent(
+            agent_name="Agent1",
+            system_prompt="Return `json` output. Use `str` and `list` types.",
+            tool_definitions="",
+            tool_names="web_search",
+            description="d",
+        ))
+        assert not any("ghost" in e.lower() or "backtick" in e.lower() for e in r["errors"])
+
+    def test_builtin_tool_in_backticks_not_flagged(self):
+        """Runtime builtins (load_skill etc.) are always available."""
+        r = _parse(validate_agent(
+            agent_name="Agent1",
+            system_prompt="Use `load_skill` to pull the guide, then `run_command` to execute.",
+            tool_definitions="",
+            tool_names="web_search",
+            description="d",
+        ))
+        assert not any("load_skill" in e or "run_command" in e for e in r["errors"])
