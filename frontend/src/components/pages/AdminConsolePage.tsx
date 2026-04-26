@@ -55,13 +55,13 @@ export default function AdminConsolePage() {
   }
 
   return (
-    <div className="max-w-6xl p-6 overflow-y-auto">
-      <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2 mb-5">
+    <div className="flex flex-col h-full max-w-6xl p-6">
+      <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2 mb-5 shrink-0">
         <ShieldCheck className="w-4 h-4" /> {t("admin.title")}
       </h2>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 mb-4">
+      <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 mb-4 shrink-0">
         {([
           { id: "workspaces" as const, icon: Building2, label: t("admin.tabWorkspaces") },
         ]).map(({ id, icon: Icon, label }) => (
@@ -79,7 +79,9 @@ export default function AdminConsolePage() {
         ))}
       </div>
 
-      {tab === "workspaces" && <AdminWorkspaceIamPanel />}
+      <div className="flex-1 min-h-0">
+        {tab === "workspaces" && <AdminWorkspaceIamPanel />}
+      </div>
     </div>
   );
 }

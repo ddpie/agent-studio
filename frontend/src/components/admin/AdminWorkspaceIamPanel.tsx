@@ -81,7 +81,7 @@ export default function AdminWorkspaceIamPanel() {
   };
 
   return (
-    <div className="flex border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden" style={{ minHeight: 480 }}>
+    <div className="flex h-full border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
       {/* ── Left panel: workspace list ── */}
       <div className="w-[280px] shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col bg-white dark:bg-gray-900">
         {/* Search */}
