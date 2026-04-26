@@ -77,7 +77,7 @@ async def invoke(payload, context):
     # --- Memory bootstrap (read from DDB at runtime, not config.json) ---
     _mem_ctx = None
     _ws_id = payload.get("workspace_id", "")
-    _agent_id_for_mem = _AGENT_ID or _config.get("agent_name", "")
+    _agent_id_for_mem = _builtin._AGENT_ID or _config.get("agent_name", "")
     if _ws_id and _agent_id_for_mem:
         try:
             _ddb_mem = boto3.resource("dynamodb", region_name=REGION)
@@ -310,7 +310,7 @@ async def invoke(payload, context):
     # --- Memory bootstrap (read from DDB at runtime, not config.json) ---
     _mem_ctx = None
     _ws_id = payload.get("workspace_id", "")
-    _agent_id_for_mem = _AGENT_ID or _config.get("agent_name", "")
+    _agent_id_for_mem = _builtin._AGENT_ID or _config.get("agent_name", "")
     if _ws_id and _agent_id_for_mem:
         try:
             _ddb_mem = boto3.resource("dynamodb", region_name=REGION)
