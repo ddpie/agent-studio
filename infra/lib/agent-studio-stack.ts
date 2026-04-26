@@ -12,6 +12,7 @@ import { AgentCoreShared } from "./constructs/agentcore-shared";
 import { A2aProxy } from "./constructs/a2a-proxy";
 import { BaseDeployment } from "./constructs/base-deployment";
 import { ScheduleRunner } from "./constructs/schedule-runner";
+import { WorkspaceBoundary } from "./constructs/workspace-boundary";
 import * as path from "path";
 
 export interface AgentStudioStackProps extends cdk.StackProps {
@@ -36,6 +37,13 @@ export class AgentStudioStack extends cdk.Stack {
 
     // IAM Roles for Sub-Agent permission tiers
     const roles = new AgentCoreRoles(this, "Roles", {
+      region: config.region,
+      accountId: config.accountId,
+      s3Bucket: config.s3Bucket,
+    });
+
+    // Permission Boundary — caps workspace IAM role permissions
+    const workspaceBoundary = new WorkspaceBoundary(this, "WorkspaceBoundary", {
       region: config.region,
       accountId: config.accountId,
       s3Bucket: config.s3Bucket,
@@ -92,6 +100,7 @@ export class AgentStudioStack extends cdk.Stack {
       runsTable: database.runsTable,
       originVerifyValue,
       scheduleRunnerLambdaArn: scheduleRunner.lambda.functionArn,
+      workspaceBoundaryArn: workspaceBoundary.boundaryPolicyArn,
     });
 
     const invoke = new Invoke(this, "Invoke", {

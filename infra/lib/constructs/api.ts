@@ -24,6 +24,8 @@ export interface ApiProps {
   runsTable: dynamodb.Table;
   originVerifyValue: string;
   scheduleRunnerLambdaArn: string;
+  /** ARN of the AgentStudioWorkspaceCeiling permission boundary policy. */
+  workspaceBoundaryArn: string;
 }
 
 export class Api extends Construct {
@@ -74,6 +76,7 @@ export class Api extends Construct {
         // trust doesn't widen those roles' blast radius.
         SCHEDULER_TARGET_ROLE_ARN: props.schedulerTargetRoleArn,
         SCHEDULE_RUNNER_LAMBDA_ARN: props.scheduleRunnerLambdaArn,
+        WORKSPACE_BOUNDARY_ARN: props.workspaceBoundaryArn,
       },
     });
 
@@ -263,6 +266,37 @@ export class Api extends Construct {
       resources: [props.schedulerTargetRoleArn],
       conditions: {
         StringEquals: { "iam:PassedToService": "scheduler.amazonaws.com" },
+      },
+    }));
+
+    // ─── Workspace IAM role management ───
+    // CRUD Lambda creates/manages per-workspace IAM roles at runtime
+    // (POST /api/workspaces/{wsId}/role, grant-mcp, revoke-mcp).
+    // The iam:PermissionsBoundary condition ensures CreateRole can only
+    // create roles that have the WorkspaceCeiling boundary attached.
+    // Note: this condition key is only evaluated by CreateRole and
+    // PutRolePermissionsBoundary — other actions silently ignore it.
+    // Security is still maintained because identity policy ∩ boundary.
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:TagRole",
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:SimulatePrincipalPolicy",
+      ],
+      resources: [
+        `arn:aws:iam::${props.config.accountId}:role/AgentStudio-ws-*`,
+      ],
+      conditions: {
+        StringEquals: {
+          "iam:PermissionsBoundary": props.workspaceBoundaryArn,
+        },
       },
     }));
 
