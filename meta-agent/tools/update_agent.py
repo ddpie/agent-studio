@@ -86,6 +86,7 @@ def update_agent(
     mcp_targets: str = "",
     supports_images: bool = False,
     staging_key: str = "",
+    force_redeploy: bool = False,
 ) -> str:
     """Update an existing agent's code and configuration without deleting and recreating.
 
@@ -119,6 +120,7 @@ def update_agent(
         mcp_targets: Comma-separated MCP target names (e.g. "cloudwatch,iam"). Validated against workspace policy.
         supports_images: Whether this agent can process image inputs.
         staging_key: S3 key to a JSON file containing all update parameters.
+        force_redeploy: Force a full redeploy even if no fields changed. Use when the agent template has been updated and the agent needs to pick up the new main.py.
 
     Returns:
         JSON with update status.
@@ -254,7 +256,7 @@ def update_agent(
             mcp_endpoints = _resolve_mcp_endpoints(mcp_targets_list)
 
     # Diff: check if any redeploy-triggering field actually changed
-    needs_redeploy = False
+    needs_redeploy = bool(force_redeploy)
     if system_prompt and system_prompt != existing_metadata.get("system_prompt", ""):
         needs_redeploy = True
     if tool_definitions:
