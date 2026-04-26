@@ -157,3 +157,48 @@ def test_delete_record_unparseable_namespace(mock_agentcore_data, mock_ws_table)
         _delete_record_impl(
             workspace_id="ws1", agent_id="agent-X", caller_id="user-Y",
             record_id="mem-bad")
+
+
+# ---------------------------------------------------------------------------
+# forget-all (DELETE /my-memories)
+# ---------------------------------------------------------------------------
+
+
+def test_forget_all_under_limit(mock_agentcore_data, mock_ws_table):
+    from crud.memories import _forget_all_impl
+    mock_agentcore_data.list_memory_records.return_value = {
+        "memoryRecordSummaries": [
+            {"memoryRecordId": f"r{i}", "namespace": "/users/a_u/preferences/"}
+            for i in range(5)
+        ],
+        "nextToken": None,
+    }
+    mock_agentcore_data.delete_memory_record.return_value = {}
+    result = _forget_all_impl(workspace_id="ws1", agent_id="a", caller_id="u")
+    # 4 namespaces × 5 records = 20
+    assert result["deleted"] == 20
+    assert result["partial"] is False
+
+
+def test_forget_all_over_limit(mock_agentcore_data, mock_ws_table):
+    from crud.memories import _forget_all_impl
+    mock_agentcore_data.list_memory_records.return_value = {
+        "memoryRecordSummaries": [
+            {"memoryRecordId": f"r{i}", "namespace": "/users/a_u/preferences/"}
+            for i in range(300)
+        ],
+        "nextToken": None,
+    }
+    mock_agentcore_data.delete_memory_record.return_value = {}
+    result = _forget_all_impl(workspace_id="ws1", agent_id="a", caller_id="u")
+    assert result["deleted"] == 1000
+    assert result["partial"] is True
+
+
+def test_forget_all_no_memory_id(mock_agentcore_data, mock_ws_table):
+    from crud.memories import _forget_all_impl
+    mock_ws_table.get_item.return_value = {
+        "Item": {"workspaceId": "ws1", "sk": "META"}}
+    result = _forget_all_impl(workspace_id="ws1", agent_id="a", caller_id="u")
+    assert result == {"deleted": 0, "partial": False}
+    mock_agentcore_data.list_memory_records.assert_not_called()
