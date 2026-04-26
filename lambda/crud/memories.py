@@ -194,3 +194,72 @@ def delete_my_memory(wsId: str, agentId: str, recordId: str):
         logger.exception("delete_my_memory failed")
         return internal_error(f"delete failed: {e}")
     return success({"deleted": recordId})
+
+
+# ---------------------------------------------------------------------------
+# DELETE /my-memories  (forget-all)
+# ---------------------------------------------------------------------------
+
+_FORGET_ALL_HARD_CAP = 1000
+
+
+def _forget_all_impl(*, workspace_id: str, agent_id: str, caller_id: str) -> dict:
+    memory_id = _get_workspace_memory_id(workspace_id)
+    if not memory_id:
+        return {"deleted": 0, "partial": False}
+
+    actor_id = build_actor_id(agent_id, caller_id)
+    data = _get_data()
+    deleted = 0
+    partial = False
+
+    for strategy_plural in ("preferences", "facts", "summaries", "episodes"):
+        if deleted >= _FORGET_ALL_HARD_CAP:
+            partial = True
+            break
+        namespace = _namespace_for(strategy_plural, actor_id)
+        next_token = None
+        while deleted < _FORGET_ALL_HARD_CAP:
+            kwargs = {"memoryId": memory_id, "namespace": namespace, "maxResults": 100}
+            if next_token:
+                kwargs["nextToken"] = next_token
+            try:
+                resp = data.list_memory_records(**kwargs)
+            except Exception as e:
+                logger.warning("forget_all list failed ns=%s: %s", namespace, e)
+                break
+
+            records = resp.get("memoryRecordSummaries", [])
+            if not records:
+                break
+
+            for r in records:
+                if deleted >= _FORGET_ALL_HARD_CAP:
+                    partial = True
+                    break
+                try:
+                    data.delete_memory_record(
+                        memoryId=memory_id, memoryRecordId=r["memoryRecordId"])
+                    deleted += 1
+                except Exception as e:
+                    logger.warning("forget_all delete failed %s: %s",
+                                   r["memoryRecordId"], e)
+
+            next_token = resp.get("nextToken")
+            if not next_token:
+                break
+
+    return {"deleted": deleted, "partial": partial}
+
+
+@router.delete("/api/workspaces/<wsId>/agents/<agentId>/my-memories")
+def forget_all_my_memories(wsId: str, agentId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="viewer", ws_id=wsId)
+    if err:
+        return err
+    try:
+        result = _forget_all_impl(workspace_id=wsId, agent_id=agentId, caller_id=user_id)
+    except Exception as e:
+        logger.exception("forget_all failed")
+        return internal_error(f"forget_all failed: {e}")
+    return success(result)
