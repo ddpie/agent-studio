@@ -74,18 +74,30 @@ async def invoke(payload, context):
     import builtin_tools as _builtin
     _builtin._workspace_id = payload.get("workspace_id", "")
 
-    # --- Memory bootstrap ---
-    _mem_cfg = _config.get("memory") or {}
+    # --- Memory bootstrap (read from DDB at runtime, not config.json) ---
     _mem_ctx = None
-    if _mem_cfg.get("enabled") and _mem_cfg.get("memory_id"):
-        _actor_id = f"{_mem_cfg.get('agent_id', '')}_{payload.get('caller_id', 'anonymous')}"
-        _session_id = payload.get("session_id") or "default"
-        _mem_ctx = _builtin.MemoryContext(
-            memory_id=_mem_cfg["memory_id"],
-            actor_id=_actor_id,
-            session_id=_session_id,
-            strategies=_mem_cfg.get("strategies", []),
-        )
+    _ws_id = payload.get("workspace_id", "")
+    _agent_id_for_mem = _AGENT_ID or _config.get("agent_name", "")
+    if _ws_id and _agent_id_for_mem:
+        try:
+            _ddb_mem = boto3.resource("dynamodb", region_name=REGION)
+            _ws_tbl = _ddb_mem.Table(os.getenv("AGENT_STUDIO_WORKSPACES_TABLE", "agent-studio-workspaces"))
+            _ag_tbl = _ddb_mem.Table(os.getenv("AGENT_STUDIO_AGENTS_TABLE", "agent-studio-agents"))
+            _ws_item = _ws_tbl.get_item(Key={"workspaceId": _ws_id, "sk": "META"}).get("Item", {})
+            _ag_item = _ag_tbl.get_item(Key={"agentId": _agent_id_for_mem}).get("Item", {})
+            _mem_cfg = _ag_item.get("memory") or {}
+            _ws_memory_id = _ws_item.get("memory_id", "")
+            if _mem_cfg.get("enabled") and _ws_memory_id:
+                _actor_id = f"{_agent_id_for_mem}_{payload.get('caller_id', 'anonymous')}"
+                _session_id = payload.get("session_id") or "default"
+                _mem_ctx = _builtin.MemoryContext(
+                    memory_id=_ws_memory_id,
+                    actor_id=_actor_id,
+                    session_id=_session_id,
+                    strategies=_mem_cfg.get("strategies", []),
+                )
+        except Exception as _mem_err:
+            print(f"WARNING: memory bootstrap failed: {_mem_err}", file=sys.stderr)
 
     skills_listing = _builtin.get_skills_listing()
     prompt = SYSTEM_PROMPT
@@ -295,18 +307,30 @@ async def invoke(payload, context):
     import builtin_tools as _builtin
     _builtin._workspace_id = payload.get("workspace_id", "")
 
-    # --- Memory bootstrap ---
-    _mem_cfg = _config.get("memory") or {}
+    # --- Memory bootstrap (read from DDB at runtime, not config.json) ---
     _mem_ctx = None
-    if _mem_cfg.get("enabled") and _mem_cfg.get("memory_id"):
-        _actor_id = f"{_mem_cfg.get('agent_id', '')}_{payload.get('caller_id', 'anonymous')}"
-        _session_id = payload.get("session_id") or "default"
-        _mem_ctx = _builtin.MemoryContext(
-            memory_id=_mem_cfg["memory_id"],
-            actor_id=_actor_id,
-            session_id=_session_id,
-            strategies=_mem_cfg.get("strategies", []),
-        )
+    _ws_id = payload.get("workspace_id", "")
+    _agent_id_for_mem = _AGENT_ID or _config.get("agent_name", "")
+    if _ws_id and _agent_id_for_mem:
+        try:
+            _ddb_mem = boto3.resource("dynamodb", region_name=REGION)
+            _ws_tbl = _ddb_mem.Table(os.getenv("AGENT_STUDIO_WORKSPACES_TABLE", "agent-studio-workspaces"))
+            _ag_tbl = _ddb_mem.Table(os.getenv("AGENT_STUDIO_AGENTS_TABLE", "agent-studio-agents"))
+            _ws_item = _ws_tbl.get_item(Key={"workspaceId": _ws_id, "sk": "META"}).get("Item", {})
+            _ag_item = _ag_tbl.get_item(Key={"agentId": _agent_id_for_mem}).get("Item", {})
+            _mem_cfg = _ag_item.get("memory") or {}
+            _ws_memory_id = _ws_item.get("memory_id", "")
+            if _mem_cfg.get("enabled") and _ws_memory_id:
+                _actor_id = f"{_agent_id_for_mem}_{payload.get('caller_id', 'anonymous')}"
+                _session_id = payload.get("session_id") or "default"
+                _mem_ctx = _builtin.MemoryContext(
+                    memory_id=_ws_memory_id,
+                    actor_id=_actor_id,
+                    session_id=_session_id,
+                    strategies=_mem_cfg.get("strategies", []),
+                )
+        except Exception as _mem_err:
+            print(f"WARNING: memory bootstrap failed: {_mem_err}", file=sys.stderr)
 
     skills_listing = _builtin.get_skills_listing()
     prompt = SYSTEM_PROMPT
