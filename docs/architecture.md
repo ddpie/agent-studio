@@ -75,8 +75,11 @@ graph LR
     Agents --> Skills
     Agents --> Tools
     Agents --> MCP
+    Agents <-->|记忆| Memory[AgentCore Memory]
     Agents --- DDB
     Agents --- S3
+
+    API -.管理 Memory.-> Memory
 
     EB -.cron 触发.-> Agents
 
@@ -145,6 +148,25 @@ CRUD Lambda 在 `infra/lib/constructs/api.ts` 中对 `bedrock-agentcore:InvokeAg
 
 emit 的 span 中 `resource.attributes.service.name` 即 agent runtime id（如 `CustomerServiceBot-y3res08W8S`），Runs / Evaluations / Costs 页签均以此为过滤条件。
 
+### Memory（AgentCore Memory）
+每个 workspace 一个 AgentCore Memory 资源，workspace 创建时自动建立（`lambda/crud/workspaces.py`），内含 4 种内置策略：`userPreference`（偏好）、`semantic`（事实）、`summary`（摘要）、`episodic`（场景）。
+
+Actor 隔离模型：`actorId = "{agentId}_{callerId}"`，按 Agent × 用户粒度天然隔离，同一 workspace 内不同 Agent 的记忆互不可见。
+
+运行时行为（`meta-agent/templates/_memory_context_src.py`）：
+- **invoke 开始**：并行预取偏好（`ListMemoryRecords`）+ 摘要（`RetrieveMemoryRecords` 语义搜索），注入 system prompt
+- **invoke 结束**：fire-and-forget 写入用户 turn 和助手 turn（`CreateEvent`）
+- **按需检索**：`recall_facts` 和 `recall_episodes` 两个 tool，Agent 主动调用时走语义搜索
+
+Builder 通过 Agent 编辑页的 Memory section 开关功能并选择策略。End User 通过 ChatPanel 的 💭 记忆抽屉查看、单条删除或全部清除（`lambda/crud/memories.py`）。
+
+| 端点 | 用途 |
+|---|---|
+| `GET /agents/{id}/my-memories` | 列出当前用户在当前 Agent 下的记忆（分 4 种策略，支持分页） |
+| `DELETE /agents/{id}/my-memories/{recordId}` | 单条删除（含 actorId 归属校验） |
+| `DELETE /agents/{id}/my-memories` | 全部清除（hard cap 1000/次） |
+| `POST /workspaces/{id}/memory/repair` | Workspace owner 重建 Memory 资源 |
+
 ### Evaluator
 每个 Agent 对应一个 AgentCore OnlineEvaluationConfig 实例（AgentCore 限制 `serviceNames` 仅支持单元素，无法以 workspace 为粒度）。评估器按 service.name 过滤 `aws/spans`，对所有完成的会话执行 LLM-as-Judge（Correctness / Helpfulness / GoalSuccessRate）评分。结果写入 `/aws/bedrock-agentcore/evaluations/results/<config-id>`。
 
@@ -168,9 +190,12 @@ Agent 进程
             └── 流名：runtime-logs-<sessionId>-<uuid>
 
 aws/spans
-    ├── Runs 页签消费（会话列表 / 详情 / 统计，每行按 session id 分类为 定时/手动/聊天）
+    ├── Traces 页签消费（会话列表 + 展开详情，复用 RunDetail）
+    ├── StatsStrip 消费（调用数 / 错误率 / p95 延迟 / 平均延迟 + sparkline）
+    ├── Runs 页签消费（每行按 session id 分类为 定时/手动/聊天）
     ├── Evaluations 页签消费（通过 OnlineEvaluationConfig）
-    └── Costs 页签消费（token / 调用次数聚合）
+    ├── Costs 页签消费（token / 调用次数聚合）
+    └── Dashboard 页消费（workspace 级成本总览 + Agent 排行）
 
 runtime log groups
     └── Logs 页签 + Runs 响应卡片消费
@@ -184,7 +209,11 @@ runtime log groups
 - 所有代码编辑统一用 Monaco
 - Amplify Auth（Cognito）登录
 
-Agent 详情页采用 sticky 侧栏 + IntersectionObserver lazy-mount（Runs / Evaluations / Costs 不会在页面加载时全部打后端）。顶部 5 项：Runs（首位）、Schedules、Evaluations、Costs、Integration；底部 Advanced 折叠组：Deployments、Endpoints、Secrets、Logs。单个运行可通过 `/agents/:id/runs/:sessionId` 直接分享；Run 列表按 session id 前缀 `sched-`/`-manual-`/uuid 分类显示触发来源徽章。当前 section 按 agentId 持久化到 `sessionStorage`；Advanced 折叠组的展开/收起也同样持久化。
+Agent 详情页采用 sticky 侧栏 + IntersectionObserver lazy-mount。**顶部首位是 StatsStrip**（4 指标卡片 + sparkline，24h/7d 切换），下方依次为 Traces（首位页签）、Schedules、Evaluations、Costs、Integration；底部 Advanced 折叠组：Deployments、Endpoints、Secrets、Logs。单个运行可通过 `/agents/:id/runs/:sessionId` 直接分享。
+
+新增页面：
+- **Dashboard**（`/#/dashboard`）—— workspace 级成本总览，4 统计卡片 + Agent 排行表，24h/7d/30d 切换
+- **记忆抽屉**（ChatPanel 右侧 💭 按钮）—— 列出 4 种策略的记忆条目，支持单条删除和全部清除
 
 ## 基础设施（AWS CDK, TypeScript）
 
@@ -275,8 +304,11 @@ graph LR
     Agents --> Skills
     Agents --> Tools
     Agents --> MCP
+    Agents <-->|memory| Memory[AgentCore Memory]
     Agents --- DDB
     Agents --- S3
+
+    API -.manage Memory.-> Memory
 
     EB -.cron fire.-> Agents
 
@@ -371,6 +403,36 @@ Agent with:
 runtime id (e.g. `CustomerServiceBot-y3res08W8S`). This is the key the
 Runs / Evaluations / Costs tabs use to filter.
 
+### Memory (AgentCore Memory)
+One AgentCore Memory resource per workspace, created automatically on
+workspace creation (`lambda/crud/workspaces.py`). Four built-in
+strategies: `userPreference` (preferences), `semantic` (facts),
+`summary` (conversation summaries), `episodic` (structured episodes).
+
+Actor isolation: `actorId = "{agentId}_{callerId}"` — naturally scoped
+per Agent x User. Memories from different Agents in the same workspace
+are invisible to each other.
+
+Runtime behavior (`meta-agent/templates/_memory_context_src.py`):
+- **On invoke start:** parallel pre-fetch of preferences
+  (`ListMemoryRecords`) and summaries (`RetrieveMemoryRecords` semantic
+  search), injected into the system prompt.
+- **On invoke end:** fire-and-forget writes of user and assistant turns
+  via `CreateEvent`.
+- **On demand:** `recall_facts` and `recall_episodes` tools — the Agent
+  calls them when it needs specific historical information.
+
+Builders toggle memory and choose strategies in the Agent edit form.
+End users manage their memories from a drawer in ChatPanel
+(`lambda/crud/memories.py`).
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /agents/{id}/my-memories` | List current user's memories for this Agent (4 strategies, paginated) |
+| `DELETE /agents/{id}/my-memories/{recordId}` | Delete single record (actorId ownership check) |
+| `DELETE /agents/{id}/my-memories` | Forget all (hard cap 1000/request) |
+| `POST /workspaces/{id}/memory/repair` | Workspace owner re-creates Memory resource |
+
 ### Evaluator
 One AgentCore OnlineEvaluationConfig per agent (AgentCore restricts
 `serviceNames` to a single element, which rules out a workspace-wide
@@ -408,10 +470,12 @@ Agent process
             └── stream name: runtime-logs-<sessionId>-<uuid>
 
 aws/spans
-    ├── consumed by Runs tab (session list / detail / stats;
-    │   each row classified as scheduled / manual / chat by session id)
+    ├── consumed by Traces tab (session list + expandable detail, reuses RunDetail)
+    ├── consumed by StatsStrip (invocations / error rate / p95 / avg latency + sparklines)
+    ├── consumed by Runs tab (each row tagged scheduled / manual / chat by session id)
     ├── consumed by Evaluations tab (via OnlineEvaluationConfig)
-    └── consumed by Costs tab (token / invocation aggregates)
+    ├── consumed by Costs tab (token / invocation aggregates)
+    └── consumed by Dashboard page (workspace-level cost overview + agent ranking)
 
 runtime log groups
     └── consumed by Logs tab + Runs response card
@@ -427,15 +491,17 @@ runtime log groups
 - Amplify Auth (Cognito) for login
 
 Agent detail page uses a sticky side-nav + IntersectionObserver
-lazy-mount per section (Runs / Evaluations / Costs don't all hit their
-respective backends on page load). Top-level nav: Runs (first) →
-Schedules → Evaluations → Costs → Integration; a collapsed Advanced
-group at the bottom contains Deployments / Endpoints / Secrets / Logs.
-A single run is shareable via `/agents/:id/runs/:sessionId`, and Run
-rows are tagged with a trigger-source badge (scheduled / manual / chat)
-derived from the session-id prefix. Active section persisted per-agent
-in `sessionStorage`; Advanced group open/closed state persisted
-similarly.
+lazy-mount. **StatsStrip sits above all sections** (4 metric cards +
+sparklines, 24h/7d toggle). Below it: Traces (first tab) → Schedules →
+Evaluations → Costs → Integration; a collapsed Advanced group at the
+bottom contains Deployments / Endpoints / Secrets / Logs. A single run
+is shareable via `/agents/:id/runs/:sessionId`.
+
+New pages:
+- **Dashboard** (`/#/dashboard`) — workspace-level cost overview with
+  4 stat cards + agent ranking table, 24h/7d/30d toggle.
+- **Memory drawer** (💭 button in ChatPanel) — lists memory records
+  across 4 strategies, supports single delete and forget-all.
 
 ## Infrastructure (AWS CDK, TypeScript)
 
