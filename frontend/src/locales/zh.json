@@ -1147,7 +1147,8 @@
       "strategyFacts": "记住事实信息",
       "strategySummaries": "记住对话摘要",
       "strategyEpisodes": "记住过往场景",
-      "unavailable": "记忆功能不可用，请联系工作区所有者执行修复。"
+      "unavailable": "记忆功能不可用，请联系工作区所有者执行修复。",
+      "autoSaveHint": "记忆设置会自动实时保存，无需重新部署 Agent。"
     }
   },
   "iam": {
