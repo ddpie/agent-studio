@@ -10,6 +10,7 @@ import ToolsEditor from "./ToolsEditor";
 import SecretsSection from "./SecretsSection";
 import McpTargetSelector from "./McpTargetSelector";
 import LinkedAgentsSection from "./LinkedAgentsSection";
+import MemorySection from "./MemorySection";
 
 export const TEMPLATE_OPTIONS = [
   { id: "", label: "None" },
@@ -206,6 +207,15 @@ export default function AgentFormSections({
           agentId={agentId}
           linkedAgents={formData.linked_agents || []}
           onChange={(next) => updateField("linked_agents", next)}
+        />
+      )}
+
+      {/* Memory */}
+      {!isCreateMode && (
+        <MemorySection
+          value={formData.memory || { enabled: false, strategies: [] }}
+          onChange={(memory) => updateField("memory", memory)}
+          workspaceMemoryAvailable={true}
         />
       )}
 

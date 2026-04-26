@@ -5,14 +5,16 @@ import { useChatStore, useCurrentAgentChat } from "../../stores/chat-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { fetchAgentMetadataLight, type AgentMetadata } from "../../lib/agent-metadata";
 import { useUISettings } from "../../stores/ui-settings-store";
+import { useWorkspaceStore } from "../../stores/workspace-store";
 import { DEFAULT_MODEL_ID, DEFAULT_KIRO_MODEL_ID } from "../../lib/models";
 import "katex/dist/katex.min.css";
 import { Link } from "react-router";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Brain } from "lucide-react";
 import ChatHeader from "./ChatHeader";
 import MessageList from "./MessageList";
 import ChatInput, { type ChatInputHandle } from "./ChatInput";
 import useKiroKeyStatus from "../../hooks/useKiroKeyStatus";
+import MemoryDrawer from "./MemoryDrawer";
 
 export default function ChatPanel() {
   const { t } = useTranslation();
@@ -46,8 +48,10 @@ export default function ChatPanel() {
   const setSelectedModel = (id: string) => storeSetModel(id);
   const [metadata, setMetadata] = useState<AgentMetadata | null>(null);
   const { inputHeight, setInputHeight } = useUISettings();
+  const { currentWorkspace } = useWorkspaceStore();
   const prevStreamingRef = useRef(false);
   const chatInputRef = useRef<ChatInputHandle>(null);
+  const [memoryDrawerOpen, setMemoryDrawerOpen] = useState(false);
 
   const imagesAllowed = !agentId || metadata?.supports_images === true;
   const agentSessions = getAgentSessions();
@@ -114,7 +118,17 @@ export default function ChatPanel() {
         onDeleteSession={deleteSession}
         onNewSession={newSession}
         messages={messages}
-      />
+      >
+        {agentId && metadata?.memory?.enabled && (
+          <button
+            onClick={() => setMemoryDrawerOpen(true)}
+            className="p-1.5 text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+            title={t("memory.drawerTitle")}
+          >
+            <Brain size={16} />
+          </button>
+        )}
+      </ChatHeader>
       {showKiroBanner && (
         <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-900/60 text-[12px] text-amber-800 dark:text-amber-200">
           <AlertTriangle className="w-4 h-4 flex-shrink-0" />
@@ -147,6 +161,14 @@ export default function ChatPanel() {
         sentMessages={sentMessages}
         activeSessionId={activeSessionId}
       />
+      {agentId && currentWorkspace && (
+        <MemoryDrawer
+          open={memoryDrawerOpen}
+          onClose={() => setMemoryDrawerOpen(false)}
+          workspaceId={currentWorkspace.workspaceId}
+          agentId={agentId}
+        />
+      )}
     </div>
   );
 }

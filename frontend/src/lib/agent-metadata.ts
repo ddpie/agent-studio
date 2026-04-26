@@ -33,6 +33,10 @@ export interface AgentMetadata {
   mcp_targets?: string[];
   gateway_url?: string;
   linked_agents?: LinkedAgentEntry[];
+  memory?: {
+    enabled: boolean;
+    strategies: string[];
+  };
 }
 
 export interface LinkedAgentEntry {

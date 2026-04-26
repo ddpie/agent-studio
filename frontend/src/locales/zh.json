@@ -1071,5 +1071,34 @@
       "show": "查看最近执行",
       "hide": "收起最近执行"
     }
+  },
+  "memory": {
+    "drawerTitle": "记忆",
+    "close": "关闭",
+    "loading": "加载中...",
+    "loadMore": "加载更多",
+    "emptyState": "此类别暂无记忆。",
+    "section": {
+      "preferences": "偏好",
+      "facts": "事实",
+      "summaries": "摘要",
+      "episodes": "场景"
+    },
+    "delete": "删除",
+    "confirm": "确认",
+    "cancel": "取消",
+    "forgetAll": "清除此 Agent 对我的全部记忆",
+    "forgetAllConfirm": "删除此 Agent 学到的所有关于你的记忆？此操作不可撤销。",
+    "forgetAllDoIt": "确定，全部清除",
+    "builder": {
+      "title": "长期记忆",
+      "toggle": "启用长期记忆",
+      "toggleHint": "开启后，此 Agent 将跨会话记住用户的事实、偏好、摘要和场景。",
+      "strategyPreferences": "记住用户偏好",
+      "strategyFacts": "记住事实信息",
+      "strategySummaries": "记住对话摘要",
+      "strategyEpisodes": "记住过往场景",
+      "unavailable": "记忆功能不可用，请联系工作区所有者执行修复。"
+    }
   }
 }
