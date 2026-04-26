@@ -167,6 +167,19 @@ export class AgentCoreRoles extends Construct {
       ],
     }));
 
+    // AgentCore Memory — data plane (deployed Agents write CreateEvent,
+    // read ListMemoryRecords + RetrieveMemoryRecords in their invoke() flow).
+    subAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        "bedrock-agentcore:CreateEvent",
+        "bedrock-agentcore:ListMemoryRecords",
+        "bedrock-agentcore:RetrieveMemoryRecords",
+      ],
+      resources: [
+        `arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:memory/*`,
+      ],
+    }));
+
     // ─── Meta-Agent Role ───
     const metaAgentRole = new iam.Role(this, "MetaAgentRole", {
       roleName: `AgentStudioMetaAgent-${props.region}`,
