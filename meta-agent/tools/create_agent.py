@@ -420,6 +420,8 @@ def create_agent(
     }
     if workspace_id:
         item["workspace_id"] = workspace_id
+    if skills_config:
+        item["skills"] = skills_config
     table.put_item(Item=item)
 
     # Wait for ready
