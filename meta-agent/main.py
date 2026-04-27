@@ -107,6 +107,9 @@ from tools.delete_agent import delete_agent, restore_agent, purge_agent
 from tools.invoke_agent import invoke_agent
 from tools.get_agent_detail import get_agent_detail
 from tools.update_agent import update_agent
+from tools.create_harness_agent import create_harness_agent
+from tools.update_harness_agent import update_harness_agent
+from tools.delete_harness_agent import delete_harness_agent
 from tools.check_agent_logs import check_agent_logs
 from tools.create_skill import create_skill
 from tools.list_skills import list_skills
@@ -186,10 +189,13 @@ log = logging.getLogger("meta_agent")
 # mcp_stdio_server (which imports this module and reads ALL_TOOLS).
 ALL_TOOLS = [
     create_agent,
+    create_harness_agent,
     list_agents,
     get_agent_detail,
     update_agent,
+    update_harness_agent,
     delete_agent,
+    delete_harness_agent,
     restore_agent,
     purge_agent,
     invoke_agent,

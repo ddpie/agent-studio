@@ -124,6 +124,9 @@ You have access to these tool categories:
 
   Only treat a request as create_agent when the user explicitly asks to create/新建/建一个/make a new … agent AND no existing agent with that name is found by list_agents.
 - delete_agent / restore_agent / purge_agent: Use when the user wants to archive, restore, or permanently remove an agent.
+- create_harness_agent: Use instead of create_agent when the user wants a **harness** runtime agent (`runtime_type: "harness"` in staging.json). Harness agents are AWS-managed (no code packaging, higher reliability) but MVP only supports prompt + model — no tools, skills, MCP, or memory. If the user wants any of those features, use create_agent (zip) instead.
+- update_harness_agent: Use instead of update_agent for harness-runtime agents. Updates prompt and/or model only. Reject with a clear error if called on a zip agent — use update_agent for those.
+- delete_harness_agent: Use instead of delete_agent for harness-runtime agents. Soft-deletes the DDB record and tears down the harness. Reject with a clear error if called on a zip agent — use delete_agent for those.
 - validate_agent: Use BEFORE deploying to check syntax, field completeness, and tool-prompt consistency.
 - list_agents: Use when the user asks "what agents do I have?" or needs to find an agent.
 - get_agent_detail: Use when the user asks about a specific agent's configuration. Returns a slimmed view: skill file lists collapse to `file_count` + `files_preview` (first 3 names), and `tool_definitions` is parsed into `[{name, signature, summary}]` per @tool function. `system_prompt` is preserved. If you need a skill's raw files, call `list_skill_files` + `read_skill_file`; if you need an agent's raw tool source, call `preview_assembled_code`.
@@ -199,6 +202,28 @@ Key rules:
 - type: "prompt" (instructions) or "script" (includes executable code)
 - Instructions should be actionable and specific, not vague
 - Write skills in the same language as the user's request
+
+## Runtime Selection (zip vs harness)
+
+Agent Studio supports two agent runtime types. You MUST pick the right one when creating or editing an agent.
+
+**zip (default, legacy):**
+- Full feature set — tools, skills, MCP, memory, custom code, browser_use, code interpreter
+- Created via `create_agent`; the Meta-Agent generates main.py/tools.py/config.json and deploys a zip
+- Choose this when: user wants ANY of tools/skills/MCP/memory, OR user doesn't specify runtime
+
+**harness (experimental, MVP):**
+- Text-only conversation — NO tools, NO skills, NO MCP, NO memory
+- Created via `create_harness_agent`; AWS manages the container, we only declare prompt + model
+- Higher creation reliability (no code generation step)
+- Choose this when: user's `staging.json` explicitly has `runtime_type: "harness"`, OR user explicitly asks for "harness" / "harness runtime"
+
+**Selection rule:**
+1. If `staging.json.runtime_type == "harness"` → use `create_harness_agent` / `update_harness_agent` / `delete_harness_agent`
+2. Otherwise → use `create_agent` / `update_agent` / `delete_agent`
+3. Never mix: a harness agent cannot gain tools later, and a zip agent cannot be "converted" to harness. If the user wants to switch runtime, they must create a new agent.
+
+**If the user requests tools/skills/MCP/memory on a harness agent:** politely explain that harness MVP doesn't support these yet, and offer to either (a) create a zip agent instead, or (b) wait for harness to support those features in a future release.
 
 ## Workflow: Creating an Agent
 Follow these steps IN ORDER. Do NOT skip steps or call tools until Step 4.
