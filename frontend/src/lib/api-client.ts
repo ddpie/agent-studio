@@ -1104,6 +1104,28 @@ export async function fetchWorkspaces() {
   }>("/api/workspaces");
 }
 
+/**
+ * Platform-admin-only: list every workspace in the system.
+ * Returns 403 for non-admins. Paginates via `next` token.
+ */
+export async function fetchAllWorkspacesAsAdmin(next?: string) {
+  const path = next
+    ? `/api/admin/workspaces?next=${encodeURIComponent(next)}`
+    : "/api/admin/workspaces";
+  return apiGetRaw<{
+    items: Array<{
+      workspaceId: string;
+      name?: string;
+      description?: string;
+      created_at?: string;
+      owner_id?: string;
+      owner_name?: string;
+      owner_email?: string;
+    }>;
+    next?: string;
+  }>(path);
+}
+
 export async function createWorkspace(name: string, description?: string) {
   return apiPostRaw<{
     workspaceId: string;

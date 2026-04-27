@@ -1,41 +1,65 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Search, Shield, Loader2 } from "lucide-react";
-import { useWorkspaceStore, type WorkspaceSummary } from "../../stores/workspace-store";
-import { getWorkspacePermissions } from "../../lib/api-client";
+import type { WorkspaceSummary } from "../../stores/workspace-store";
+import { fetchAllWorkspacesAsAdmin, getWorkspacePermissions } from "../../lib/api-client";
 import IamPermissionsTab from "../pages/IamPermissionsTab";
 
 /**
  * Admin panel: left sidebar (workspace list) + right panel (IAM details).
- *
- * TODO: Replace workspace source with a dedicated admin endpoint
- * (`GET /api/admin/workspaces`) that returns ALL workspaces regardless
- * of membership. For now we use the workspace store, which only lists
- * workspaces the current user belongs to.
+ * Uses `/api/admin/workspaces`, which returns EVERY workspace regardless of
+ * membership. Non-admin callers get 403 at the API layer — this panel is
+ * only mounted after AdminConsolePage verifies platform-admin status.
  */
 export default function AdminWorkspaceIamPanel() {
   const { t } = useTranslation();
-  const { workspaces, loading: wsLoading, loaded, refreshWorkspaces } = useWorkspaceStore();
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  // Per-workspace role status cache: wsId -> boolean (true = has role)
   const [roleStatusCache, setRoleStatusCache] = useState<Record<string, boolean | null>>({});
 
-  // Ensure workspaces are loaded
   useEffect(() => {
-    if (!loaded && !wsLoading) {
-      refreshWorkspaces();
-    }
-  }, [loaded, wsLoading, refreshWorkspaces]);
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
+    fetchAllWorkspacesAsAdmin()
+      .then((resp) => {
+        if (cancelled) return;
+        const items: WorkspaceSummary[] = resp.items.map((w) => ({
+          workspaceId: w.workspaceId,
+          name: w.name,
+          description: w.description,
+          // admin view isn't a member-scoped list; role is unknown here
+          role: "viewer",
+          created_at: w.created_at,
+          owner_id: w.owner_id,
+          owner_name: w.owner_name,
+          owner_email: w.owner_email,
+        }));
+        setWorkspaces(items);
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadError(err?.body?.error ?? String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  // Probe each workspace's role status (lightweight: request with empty actions list)
+  // Probe each workspace's role status (lightweight: request with empty actions list).
+  // The /permissions endpoint grants platform-admin access, so this works for
+  // workspaces the admin isn't a member of.
   useEffect(() => {
-    if (!loaded) return;
+    if (loading) return;
     let cancelled = false;
     for (const ws of workspaces) {
       if (roleStatusCache[ws.workspaceId] !== undefined) continue;
-      // Mark as loading (null = pending)
       setRoleStatusCache((prev) => ({ ...prev, [ws.workspaceId]: null }));
       getWorkspacePermissions(ws.workspaceId, [])
         .then((resp) => {
@@ -58,11 +82,9 @@ export default function AdminWorkspaceIamPanel() {
     return () => {
       cancelled = true;
     };
-    // Only re-run when workspace list changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, workspaces.length]);
+  }, [loading, workspaces.length]);
 
-  // Filter workspaces by search text
   const filtered = useMemo(() => {
     if (!search.trim()) return workspaces;
     const q = search.toLowerCase();
@@ -75,7 +97,6 @@ export default function AdminWorkspaceIamPanel() {
 
   const selected = workspaces.find((ws) => ws.workspaceId === selectedId) ?? null;
 
-  // Callback for child to signal role was created — update our cache
   const handleRoleCreated = (wsId: string) => {
     setRoleStatusCache((prev) => ({ ...prev, [wsId]: true }));
   };
@@ -102,10 +123,14 @@ export default function AdminWorkspaceIamPanel() {
 
         {/* List */}
         <div className="flex-1 overflow-y-auto">
-          {wsLoading && !loaded ? (
+          {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
             </div>
+          ) : loadError ? (
+            <p className="text-xs text-red-600 dark:text-red-400 text-center py-6 px-3">
+              {loadError}
+            </p>
           ) : filtered.length === 0 ? (
             <p className="text-xs text-gray-400 dark:text-gray-500 text-center py-6">
               {t("common.noResults")}

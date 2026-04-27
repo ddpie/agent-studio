@@ -261,3 +261,79 @@ def test_repair_returns_error_when_creation_fails(
     mock_agentcore_control.create_memory.side_effect = Exception("still broken")
     resp = _invoke(_apigw("POST", "/api/workspaces/ws-r3/memory/repair", user_id))
     assert resp["statusCode"] == 500
+
+
+# ── GET /api/admin/workspaces ───────────────────────────────────
+
+
+@pytest.fixture
+def mock_admin_check():
+    """Patch check_platform_admin at the workspaces module's import site."""
+    with patch("crud.workspaces.check_platform_admin") as mock:
+        yield mock
+
+
+def test_list_all_workspaces_requires_platform_admin(mock_jwt, mock_ws_table, mock_admin_check):
+    """Non-admin callers get 403."""
+    mock_admin_check.return_value = ("u1", False, None)
+    resp = _invoke(_apigw("GET", "/api/admin/workspaces"))
+    assert resp["statusCode"] == 403
+    mock_ws_table.scan.assert_not_called()
+
+
+def test_list_all_workspaces_returns_every_workspace(mock_jwt, mock_ws_table, mock_admin_check):
+    """Admin sees workspaces regardless of membership."""
+    mock_admin_check.return_value = ("admin-uid", True, None)
+    mock_ws_table.scan.return_value = {
+        "Items": [
+            {"workspaceId": "ws-a", "sk": "META", "name": "Alice WS", "owner_id": "uid-a", "created_at": "t1"},
+            {"workspaceId": "ws-b", "sk": "META", "name": "Bob WS", "owner_id": "uid-b", "created_at": "t2"},
+        ]
+    }
+    # Cognito hydration is best-effort — make it a no-op by pretending pool isn't set
+    with patch("crud.workspaces.COGNITO_USER_POOL_ID", ""):
+        resp = _invoke(_apigw("GET", "/api/admin/workspaces"))
+    assert resp["statusCode"] == 200
+    body = json.loads(resp["body"])
+    ids = sorted(w["workspaceId"] for w in body["items"])
+    assert ids == ["ws-a", "ws-b"]
+    # Scan must filter on META rows, not return MEMBER/INVITE junk
+    scan_kwargs = mock_ws_table.scan.call_args.kwargs
+    assert scan_kwargs["ExpressionAttributeValues"][":sk"] == "META"
+    assert "next" not in body  # no LastEvaluatedKey
+
+
+def test_list_all_workspaces_passes_pagination_token(mock_jwt, mock_ws_table, mock_admin_check):
+    """LastEvaluatedKey is echoed back as an opaque `next` token and round-trips."""
+    import base64
+    mock_admin_check.return_value = ("admin-uid", True, None)
+    mock_ws_table.scan.return_value = {
+        "Items": [{"workspaceId": "ws-1", "sk": "META", "name": "One"}],
+        "LastEvaluatedKey": {"workspaceId": "ws-1", "sk": "META"},
+    }
+    with patch("crud.workspaces.COGNITO_USER_POOL_ID", ""):
+        resp = _invoke(_apigw("GET", "/api/admin/workspaces"))
+    body = json.loads(resp["body"])
+    assert "next" in body
+    # Round-trip: decoded token matches LastEvaluatedKey
+    decoded = json.loads(base64.urlsafe_b64decode(body["next"].encode()).decode())
+    assert decoded == {"workspaceId": "ws-1", "sk": "META"}
+
+    # Second page request resumes via ExclusiveStartKey
+    mock_ws_table.scan.reset_mock()
+    mock_ws_table.scan.return_value = {"Items": []}
+    event = _apigw("GET", "/api/admin/workspaces")
+    event["queryStringParameters"] = {"next": body["next"]}
+    with patch("crud.workspaces.COGNITO_USER_POOL_ID", ""):
+        resp2 = _invoke(event)
+    assert resp2["statusCode"] == 200
+    assert mock_ws_table.scan.call_args.kwargs["ExclusiveStartKey"] == decoded
+
+
+def test_list_all_workspaces_rejects_invalid_next_token(mock_jwt, mock_ws_table, mock_admin_check):
+    mock_admin_check.return_value = ("admin-uid", True, None)
+    event = _apigw("GET", "/api/admin/workspaces")
+    event["queryStringParameters"] = {"next": "not-base64!!!"}
+    resp = _invoke(event)
+    assert resp["statusCode"] == 400
+    mock_ws_table.scan.assert_not_called()

@@ -11,7 +11,7 @@ from boto3.dynamodb.conditions import Key
 from shared.auth import verify_jwt, get_membership, check_permission, ROLE_LEVEL
 from shared.config import WORKSPACES_TABLE, REGION, COGNITO_USER_POOL_ID
 from shared.memory_strategies import DEFAULT_MEMORY_STRATEGIES
-from shared.middleware import auth_check
+from shared.middleware import auth_check, check_platform_admin
 from shared.response import success, paginated, forbidden, not_found, bad_request, version_conflict, internal_error
 from shared.validators import validate_id, parse_pagination
 
@@ -133,6 +133,36 @@ def _hydrate_member_identities(members: list) -> list:
     return hydrated
 
 
+def _hydrate_owner_identities(workspaces: list) -> None:
+    """Annotate each workspace dict with `owner_name` / `owner_email` in-place.
+
+    Per-user failures fall back to a truncated user id; they must never
+    break the whole list.
+    """
+    owner_ids = {w["owner_id"] for w in workspaces if w.get("owner_id")}
+    if not owner_ids:
+        return
+    owner_map: dict = {}
+    for uid in owner_ids:
+        cached = _identity_cache.get(uid)
+        if cached:
+            owner_map[uid] = cached
+        elif COGNITO_USER_POOL_ID:
+            try:
+                resp = _get_cognito().admin_get_user(UserPoolId=COGNITO_USER_POOL_ID, Username=uid)
+                attrs = {a["Name"]: a["Value"] for a in resp.get("UserAttributes", [])}
+                info = {"display_name": attrs.get("name", attrs.get("email", uid[:8])), "email": attrs.get("email", "")}
+                _identity_cache[uid] = info
+                owner_map[uid] = info
+            except Exception:
+                owner_map[uid] = {"display_name": uid[:8], "email": ""}
+    for w in workspaces:
+        info = owner_map.get(w.get("owner_id", ""))
+        if info:
+            w["owner_name"] = info["display_name"]
+            w["owner_email"] = info["email"]
+
+
 # ─── GET /api/workspaces ───
 @router.get("/api/workspaces")
 def list_workspaces():
@@ -162,30 +192,63 @@ def list_workspaces():
                 "owner_id": meta.get("owner_id", ""),
             })
 
-    # Hydrate owner display names
-    owner_ids = {w["owner_id"] for w in workspaces if w.get("owner_id")}
-    if owner_ids:
-        owner_map = {}
-        for uid in owner_ids:
-            cached = _identity_cache.get(uid)
-            if cached:
-                owner_map[uid] = cached
-            elif COGNITO_USER_POOL_ID:
-                try:
-                    resp = _get_cognito().admin_get_user(UserPoolId=COGNITO_USER_POOL_ID, Username=uid)
-                    attrs = {a["Name"]: a["Value"] for a in resp.get("UserAttributes", [])}
-                    info = {"display_name": attrs.get("name", attrs.get("email", uid[:8])), "email": attrs.get("email", "")}
-                    _identity_cache[uid] = info
-                    owner_map[uid] = info
-                except Exception:
-                    owner_map[uid] = {"display_name": uid[:8], "email": ""}
-        for w in workspaces:
-            info = owner_map.get(w.get("owner_id", ""))
-            if info:
-                w["owner_name"] = info["display_name"]
-                w["owner_email"] = info["email"]
-
+    _hydrate_owner_identities(workspaces)
     return success({"items": workspaces})
+
+
+# ─── GET /api/admin/workspaces ───
+@router.get("/api/admin/workspaces")
+def list_all_workspaces_as_admin():
+    """Platform-admin-only: list every workspace in the system.
+
+    Scans the workspaces table for `sk = "META"` rows. Pagination follows
+    DDB's native LastEvaluatedKey: callers pass `?next=<base64>` to resume.
+    `role` is omitted because the admin may not be a member — `AdminWorkspaceIamPanel`
+    doesn't use it.
+    """
+    _, is_admin, admin_err = check_platform_admin(router.current_event)
+    if admin_err:
+        return admin_err
+    if not is_admin:
+        return forbidden()
+
+    qp = router.current_event.query_string_parameters or {}
+    next_token = qp.get("next")
+
+    import base64
+    start_key = None
+    if next_token:
+        try:
+            start_key = json.loads(base64.urlsafe_b64decode(next_token.encode()).decode())
+        except Exception:
+            return bad_request("invalid next token")
+
+    table = _get_table()
+    scan_kwargs = {
+        "FilterExpression": "sk = :sk",
+        "ExpressionAttributeValues": {":sk": "META"},
+    }
+    if start_key:
+        scan_kwargs["ExclusiveStartKey"] = start_key
+    resp = table.scan(**scan_kwargs)
+
+    workspaces = []
+    for meta in resp.get("Items", []):
+        workspaces.append({
+            "workspaceId": meta["workspaceId"],
+            "name": meta.get("name", ""),
+            "description": meta.get("description", ""),
+            "created_at": meta.get("created_at", ""),
+            "owner_id": meta.get("owner_id", ""),
+        })
+
+    _hydrate_owner_identities(workspaces)
+
+    result = {"items": workspaces}
+    last_key = resp.get("LastEvaluatedKey")
+    if last_key:
+        result["next"] = base64.urlsafe_b64encode(json.dumps(last_key).encode()).decode()
+    return success(result)
 
 
 # ─── POST /api/workspaces ───
