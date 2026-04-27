@@ -26,7 +26,7 @@ graph LR
 
     subgraph Agents
         direction TB
-        A1[Agent A] <-->|A2A| A2[Agent B]
+        A1[Agent A] -->|A2A| A2[Agent B]
         A2 ~~~ A3[Agent C]
     end
 
@@ -137,7 +137,7 @@ graph LR
 
     subgraph Agents
         direction TB
-        A1[Agent A] <-->|A2A| A2[Agent B]
+        A1[Agent A] -->|A2A| A2[Agent B]
         A2 ~~~ A3[Agent C]
     end
 
