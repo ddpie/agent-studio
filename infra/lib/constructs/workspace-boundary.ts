@@ -134,8 +134,21 @@ export class WorkspaceBoundary extends Construct {
           actions: [
             "ecr:GetDownloadUrlForLayer",
             "ecr:GetAuthorizationToken",
+            "ecr:BatchGetImage",
+            // Harness images live on ECR Public.
+            "ecr-public:GetAuthorizationToken",
+            "ecr-public:BatchGetImage",
+            "ecr-public:GetDownloadUrlForLayer",
           ],
           resources: ["*"],
+        }),
+        new iam.PolicyStatement({
+          sid: "HarnessBearerToken",
+          actions: ["sts:GetServiceBearerToken"],
+          resources: ["*"],
+          conditions: {
+            StringEquals: { "sts:AWSServiceName": "bedrock-agentcore.amazonaws.com" },
+          },
         }),
 
         // ─── Extensible ceiling: read-only access for AWS services ───
