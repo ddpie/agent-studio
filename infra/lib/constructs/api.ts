@@ -208,8 +208,8 @@ export class Api extends Construct {
     // and repair endpoint; DeleteMemory used by workspace deletion).
     this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: [
-        "bedrock-agentcore-control:CreateMemory",
-        "bedrock-agentcore-control:DeleteMemory",
+        "bedrock-agentcore:CreateMemory",
+        "bedrock-agentcore:DeleteMemory",
       ],
       resources: [
         `arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:memory/*`,
