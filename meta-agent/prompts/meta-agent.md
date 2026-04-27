@@ -200,6 +200,130 @@ Key rules:
 - Instructions should be actionable and specific, not vague
 - Write skills in the same language as the user's request
 
+## Skill scripts: standalone CLI, NOT @tool
+
+Script skills run inside the agent's Code Interpreter sandbox via
+`run_skill_script(skill_name, script, args, cwd)`. The agent template
+dispatches to `runpy.run_module` (if the script sits in a package) or
+`runpy.run_path` (plain file). The sandbox is plain Python — NO
+`strands` module, and decorators like `@tool` are not recognized. The
+`@tool` + `from strands` shape is for **agent tool_definitions** (a
+totally different execution context: injected into the agent process at
+startup). Never mix the two.
+
+### Calling convention
+
+- `sys.argv` is set to `[script_abs_path, *shlex.split(args))]`, so
+  scripts read positional args from `sys.argv[1:]`. For flags use
+  `argparse`.
+- Output goes to **stdout**. Whatever the script prints becomes the
+  tool's return value the LLM sees. Write progress/debug to stderr.
+- Exit non-zero to signal failure (the tool wraps exceptions as
+  `is_error=true`).
+
+### File layout (files live under `skills/{skill_id}/`)
+
+Any tree shape is allowed. Pick one of these three based on complexity:
+
+- **Single-file skill** — `script.py` at the root. Simplest case.
+  Invoke with `script="script.py"`.
+- **Grouped scripts** — `scripts/foo.py`, `scripts/bar.py`. Invoke with
+  `script="scripts/foo.py"`.
+- **Python package** (only when you need relative imports between
+  helper modules) — a directory with `__init__.py`. Invoke with
+  `script="<pkg>/__main__.py"` or `script="<pkg>/entry.py"`; the tool
+  auto-detects the package via `__init__.py` walk and runs it with
+  `runpy.run_module` so `from .sibling import x` works.
+
+Bundled assets (templates, JSON configs, fonts) can go anywhere under
+the skill root, e.g. `assets/template.svg`. Scripts must read them with
+a path relative to the script file, NOT cwd:
+
+```python
+from pathlib import Path
+ASSETS = Path(__file__).parent.parent / "assets"   # robust across cwd choices
+```
+
+`cwd` defaults to the user's current directory (so relative paths in
+`args` like `./input.csv` point at user files), **not** the skill
+directory. Don't `open("assets/foo.svg")` assuming cwd is the skill.
+
+### Correct template (example: `csv-summary` skill)
+
+File layout:
+```
+skills/{skill_id}/
+├── SKILL.md
+└── script.py
+```
+
+`script.py`:
+```python
+"""Summarize a CSV file: row count, column stats.
+
+Invoke: run_skill_script(skill_name="csv-summary", script="script.py",
+                         args="./sales.csv")
+"""
+import csv
+import sys
+from pathlib import Path
+
+
+def summarize(path: Path) -> str:
+    with path.open(newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        header = next(reader, [])
+        rows = list(reader)
+    lines = [
+        f"File: {path.name}",
+        f"Rows: {len(rows)}",
+        f"Columns ({len(header)}): {', '.join(header)}",
+    ]
+    return "\n".join(lines)
+
+
+def main(argv: list[str]) -> int:
+    if not argv:
+        print("usage: script.py <csv-path>", file=sys.stderr)
+        return 2
+    path = Path(argv[0])
+    if not path.is_file():
+        print(f"error: file not found: {path}", file=sys.stderr)
+        return 1
+    print(summarize(path))   # stdout = what the LLM sees
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
+```
+
+Note the `cwd` default: since `run_skill_script` runs in the user's
+cwd, `args="./sales.csv"` resolves against wherever the user's file
+lives. If this script needed a bundled asset (e.g. a column-name
+dictionary), it would read it via `Path(__file__).parent / "columns.json"`,
+not by cwd-relative path.
+
+### Forbidden patterns
+
+- `from strands import tool` or `import strands` — not installed in CI.
+- `@tool` decorator on the entry function — no-op at best, exception at
+  worst (unresolved name).
+- SKILL.md wording like "call function X" or "use the solve tool" —
+  those phrasings imply the `@tool` calling convention and drive the
+  LLM to invoke the skill wrong. Always phrase invocation as
+  `run_skill_script(skill_name=..., script=..., args=...)`.
+- Hard-coded absolute paths. Use `Path(__file__).parent` relative.
+
+### SKILL.md checklist for script skills
+
+- `type: "script"` in frontmatter.
+- A `## 使用方法` / `## Usage` section showing the exact
+  `run_skill_script(...)` call, including each positional arg the
+  script expects.
+- A `## 输出格式` / `## Output` section describing what stdout looks
+  like so the LLM knows how to reformat it for the user.
+
 ## Workflow: Creating an Agent
 Follow these steps IN ORDER. Do NOT skip steps or call tools until Step 4.
 

@@ -49,9 +49,21 @@ def create_skill(
         skill_name: Unique identifier for the skill (kebab-case recommended).
         description: Brief description of what the skill does.
         skill_type: Either "prompt" or "script".
-        instructions: Markdown instructions for how the skill works.
+        instructions: Markdown instructions for how the skill works. For
+            ``skill_type="script"``, describe invocation as
+            ``run_skill_script(skill_name=..., script="script.py",
+            args=...)`` — do NOT phrase it as "call function X" (that's
+            a different calling convention that won't work).
         input_params: Description of input parameters the skill accepts.
-        script_code: For script-type skills, the Python code to include.
+        script_code: For ``skill_type="script"``, the Python code. MUST
+            be a standalone CLI script that reads ``sys.argv[1:]`` and
+            ``print``s results. Runs in Code Interpreter sandbox via
+            ``runpy.run_path``. Do NOT use ``@tool`` decorator or
+            ``from strands import tool`` — those are for agent
+            tool_definitions (a different execution context) and will
+            fail at runtime with ``ModuleNotFoundError: No module named
+            'strands'``. See meta-agent.md "Skill scripts: standalone
+            CLI, NOT @tool" for the full template and layout rules.
         source: Origin of the skill: "natural-language", "distilled", or "imported".
 
     Returns:
