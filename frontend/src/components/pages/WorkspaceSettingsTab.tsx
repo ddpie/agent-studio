@@ -6,6 +6,7 @@ import {
   ApiError,
   deleteWorkspace,
   fetchWorkspaceDetail,
+  repairWorkspaceMemory,
   transferWorkspaceOwnership,
   updateWorkspace,
   type WorkspaceDetail,
@@ -57,6 +58,9 @@ export default function WorkspaceSettingsTab() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteInput, setDeleteInput] = useState("");
   const [deleting, setDeleting] = useState(false);
+
+  // Memory repair
+  const [repairing, setRepairing] = useState(false);
 
   useEffect(() => {
     fetchUserAttributes()
@@ -198,6 +202,24 @@ export default function WorkspaceSettingsTab() {
     }
   };
 
+  const handleRepairMemory = async () => {
+    if (!wsId) return;
+    setRepairing(true);
+    try {
+      const resp = await repairWorkspaceMemory(wsId);
+      toast.success(t("workspace.settings.memoryRepaired"));
+      if (detail) setDetail({ ...detail, memory_id: resp.memory_id });
+    } catch (err) {
+      const msg =
+        err instanceof ApiError && err.body?.error
+          ? err.body.error
+          : t("workspace.settings.memoryRepairFailed");
+      toast.error(msg);
+    } finally {
+      setRepairing(false);
+    }
+  };
+
   if (!wsId) {
     return (
       <div className="text-xs text-gray-500 dark:text-gray-400 p-4">
@@ -304,6 +326,22 @@ export default function WorkspaceSettingsTab() {
                   <span className="text-gray-700 dark:text-gray-300">{formatDate(detail.updated_at)}</span>
                 </div>
               </div>
+
+              {isOwner && !detail.memory_id && (
+                <div className="flex items-center justify-between gap-3 rounded-md border border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 mt-1">
+                  <div className="text-[11px] text-amber-800 dark:text-amber-200 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    {t("workspace.settings.memoryMissing")}
+                  </div>
+                  <button
+                    onClick={handleRepairMemory}
+                    disabled={repairing}
+                    className="shrink-0 px-2.5 py-1 text-[11px] font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-md disabled:opacity-50"
+                  >
+                    {repairing ? t("workspace.settings.memoryRepairing") : t("workspace.settings.memoryRepair")}
+                  </button>
+                </div>
+              )}
 
               {canEdit && (
                 <div className="flex justify-end pt-1">

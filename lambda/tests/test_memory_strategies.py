@@ -2,13 +2,13 @@
 from shared.memory_strategies import DEFAULT_MEMORY_STRATEGIES, STRATEGY_NAMES
 
 
-def test_has_four_strategies():
-    assert len(DEFAULT_MEMORY_STRATEGIES) == 4
+def test_has_three_strategies():
+    assert len(DEFAULT_MEMORY_STRATEGIES) == 3
 
 
 def test_strategy_names_match_spec():
     assert sorted(STRATEGY_NAMES) == sorted([
-        "userPreference", "semantic", "summary", "episodic"
+        "userPreference", "semantic", "summary"
     ])
 
 
@@ -31,12 +31,6 @@ def test_summary_namespace_uses_actor_and_session():
     assert templates == ["/users/{actorId}/summaries/{sessionId}/"]
 
 
-def test_episodic_namespace_uses_actor_and_session():
-    entry = next(e for e in DEFAULT_MEMORY_STRATEGIES if "episodicMemoryStrategy" in e)
-    templates = entry["episodicMemoryStrategy"]["namespaceTemplates"]
-    assert templates == ["/users/{actorId}/episodes/{sessionId}/"]
-
-
 def test_namespace_prefix_keys_match_strategy_names():
     """Drift guard: the prefix map must have exactly one entry per strategy."""
     from shared.memory_strategies import STRATEGY_NAMES, STRATEGY_NAMESPACE_PREFIX
@@ -44,7 +38,7 @@ def test_namespace_prefix_keys_match_strategy_names():
 
 
 def test_namespace_prefix_drops_session_placeholder():
-    """Session-scoped strategies (summary, episodic) truncate {sessionId} so
+    """Session-scoped strategies (summary) truncate {sessionId} so
     list_memory_records with this prefix enumerates records across all sessions
     for the given actor."""
     from shared.memory_strategies import STRATEGY_NAMESPACE_PREFIX

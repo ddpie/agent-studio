@@ -1081,6 +1081,7 @@ export interface WorkspaceDetail {
   owner_id?: string;
   created_at?: string;
   updated_at?: string;
+  memory_id?: string;
   members: WorkspaceMember[];
 }
 
@@ -1138,6 +1139,12 @@ export async function createWorkspace(name: string, description?: string) {
 
 export async function fetchWorkspaceDetail(wsId: string): Promise<WorkspaceDetail> {
   return apiGetRaw<WorkspaceDetail>(`/api/workspaces/${encodeURIComponent(wsId)}`);
+}
+
+export async function repairWorkspaceMemory(wsId: string) {
+  return apiPostRaw<{ memory_id: string }>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/memory/repair`,
+  );
 }
 
 /**

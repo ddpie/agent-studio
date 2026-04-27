@@ -431,6 +431,7 @@ def get_workspace(wsId: str):
         "owner_id": meta.get("owner_id", ""),
         "created_at": meta.get("created_at", ""),
         "updated_at": meta.get("updated_at", ""),
+        "memory_id": meta.get("memory_id", ""),
         "members": members,
     })
 

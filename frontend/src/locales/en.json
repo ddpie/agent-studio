@@ -368,7 +368,12 @@
       "deleteConfirmBody": "This permanently removes the workspace and all data it contains. Type the workspace name below to confirm.",
       "deleteTypeLabel": "Type the workspace name to confirm",
       "deleteSuccess": "Workspace deleted",
-      "deleteFailed": "Failed to delete workspace"
+      "deleteFailed": "Failed to delete workspace",
+      "memoryMissing": "Agent memory is not configured for this workspace. Agents cannot save preferences or facts.",
+      "memoryRepair": "Create memory",
+      "memoryRepairing": "Creating…",
+      "memoryRepaired": "Agent memory created",
+      "memoryRepairFailed": "Failed to create agent memory"
     }
   },
   "settings": {
