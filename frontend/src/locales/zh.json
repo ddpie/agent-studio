@@ -240,6 +240,11 @@
     "copied": "已复制"
   },
   "runtime": {
+    "label": "运行时",
+    "zip": "zip（稳定）",
+    "harness": "harness（实验性）",
+    "helper": "harness 是新的托管 runtime，可靠性更高。MVP 阶段仅支持纯对话，不支持 tool / skill / MCP。",
+    "readonlyHint": "创建后不可更改",
     "status": {
       "ready": "就绪",
       "creating": "创建中",
@@ -625,6 +630,9 @@
     "updating": "更新中...",
     "creatingAgent": "创建 Agent...",
     "updatingAgent": "更新 Agent...",
+    "creatingHarness": "正在创建 harness agent...",
+    "updatingHarness": "正在更新 harness agent...",
+    "harnessDeployFailed": "harness 部署失败",
     "uploadingCode": "上传代码...",
     "deploying": "部署中...",
     "checkingStatus": "检查状态...",

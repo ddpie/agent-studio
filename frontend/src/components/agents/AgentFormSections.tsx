@@ -66,6 +66,21 @@ export default function AgentFormSections({
             />
           </Field>
         </div>
+        {/* Runtime selector — editable only at create time; locked afterwards. */}
+        <div className="grid grid-cols-2 gap-4">
+          <Field label={t("runtime.label")} hint={isCreateMode ? t("runtime.helper") : t("runtime.readonlyHint")}>
+            <select
+              value={formData.runtime_type || "zip"}
+              onChange={isCreateMode ? (e) => updateField("runtime_type", e.target.value as "zip" | "harness") : undefined}
+              disabled={!isCreateMode}
+              className={isCreateMode ? inputClass : disabledClass}
+            >
+              <option value="zip">{t("runtime.zip")}</option>
+              <option value="harness">{t("runtime.harness")}</option>
+            </select>
+          </Field>
+          <div />
+        </div>
         <Field label={t("agentEditor.description")} changed={!!changedFields.description} onOptimize={() => handleOptimizeField("description", "Description")}>
           <textarea
             value={formData.description || ""}
