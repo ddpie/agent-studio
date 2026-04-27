@@ -60,6 +60,12 @@ ALLOWED_AGENT_FIELDS = {
 
 
 def _build_agent_item(body: dict, ws_id: str, agent_id: str, user_id: str, now: str) -> dict:
+    # Coerce unknown runtime_type values to "zip" (defense in depth — the
+    # Meta-Agent's create_harness_agent tool is the canonical writer for
+    # "harness" records; anything else through CRUD defaults to zip).
+    requested_runtime = body.get("runtime_type", "zip")
+    runtime_type = requested_runtime if requested_runtime in ("zip", "harness") else "zip"
+
     item = {
         "agentId": agent_id,
         "workspace_id": ws_id,
@@ -76,12 +82,17 @@ def _build_agent_item(body: dict, ws_id: str, agent_id: str, user_id: str, now: 
         "skill_ids": body.get("skill_ids", []),
         "skills": body.get("skills", []),
         "mcp_targets": body.get("mcp_targets", []),
+        "runtime_type": runtime_type,
         "status": "active",
         "visibility": "private",
         "created_by": user_id,
         "created_at": now,
         "updated_at": now,
     }
+    # harness_arn is only populated for harness runtimes; typically written by
+    # the Meta-Agent's create_harness_agent tool rather than this CRUD path.
+    if body.get("harness_arn"):
+        item["harness_arn"] = body["harness_arn"]
     return item
 
 
@@ -108,6 +119,8 @@ def _agent_response(item: dict) -> dict:
         "updated_at": item.get("updated_at", ""),
         "mcp_targets": item.get("mcp_targets", []),
         "memory": item.get("memory"),
+        "runtime_type": item.get("runtime_type", "zip"),
+        "harness_arn": item.get("harness_arn", ""),
     }
 
 
