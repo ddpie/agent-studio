@@ -250,6 +250,8 @@ export interface AgentListItem {
   model_id?: string;
   created_at?: string;
   updated_at?: string;
+  runtime_type?: "zip" | "harness";
+  harness_arn?: string;
 }
 
 export interface ToolItem {

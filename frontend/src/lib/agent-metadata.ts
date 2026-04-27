@@ -37,6 +37,8 @@ export interface AgentMetadata {
     enabled: boolean;
     strategies: string[];
   };
+  runtime_type?: "zip" | "harness";
+  harness_arn?: string;
 }
 
 export interface LinkedAgentEntry {
