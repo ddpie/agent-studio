@@ -261,7 +261,11 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
 
     const sseHeaders = {
       statusCode: 200,
-      headers: { "content-type": "text/event-stream", "cache-control": "no-cache" },
+      headers: {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        "x-accel-buffering": "no",
+      },
     };
     responseStream = awslambda.HttpResponseStream.from(responseStream, sseHeaders);
 
@@ -277,6 +281,7 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
         responseStream.write(chunk);
       }
     } catch (err) {
+      console.error("harness invoke error:", err);
       const msg = String(err?.message || err || "harness invoke failed");
       responseStream.write(`data: ${JSON.stringify({ __error: msg })}\n\n`);
     } finally {
