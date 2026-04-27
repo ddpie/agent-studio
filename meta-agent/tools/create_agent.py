@@ -306,6 +306,37 @@ def create_agent(
 
     agent_id = result["agent_id"]
 
+    # Relocate skill files from the staging namespace to the real agent id.
+    # The frontend writes skill files to agents/{draft-id}/skills/ before the
+    # runtime exists — now that we have the real agent_id we server-side copy
+    # them so load_skill / run_skill_script find them at runtime.
+    if skills_config and staging_key:
+        src_agent = staged.get("agent_id", agent_name)
+        if src_agent and src_agent != agent_id:
+            s3_copy = boto3.client("s3", region_name=REGION)
+            for skill_entry in skills_config:
+                sid = skill_entry.get("id", "")
+                if not sid:
+                    continue
+                src_prefix = f"agents/{src_agent}/skills/{sid}/"
+                dst_prefix = f"agents/{agent_id}/skills/{sid}/"
+                try:
+                    paginator = s3_copy.get_paginator("list_objects_v2")
+                    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=src_prefix):
+                        for obj in page.get("Contents", []):
+                            key = obj["Key"]
+                            rel = key[len(src_prefix):]
+                            if not rel:
+                                continue
+                            s3_copy.copy_object(
+                                Bucket=S3_BUCKET,
+                                CopySource={"Bucket": S3_BUCKET, "Key": key},
+                                Key=f"{dst_prefix}{rel}",
+                            )
+                except Exception as e:
+                    import sys
+                    print(f"WARNING: Failed to copy skill {sid} files to {agent_id}: {e}", file=sys.stderr)
+
     # Save metadata.json
     suggestion_list = [s.strip() for s in suggestions.split("|") if s.strip()] if suggestions else []
 
