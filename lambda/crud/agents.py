@@ -52,6 +52,11 @@ def _validate_memory_enable(*, memory_enabled: bool, workspace_memory_id: str | 
         )
 
 
+# Fields PUT /agents/{id} is allowed to mutate. runtime_type and harness_arn
+# are deliberately excluded — they're set exactly once at create time and
+# mutating them would break the Meta-Agent's harness lifecycle. Silently
+# dropping them (not erroring) keeps the API forgiving for clients that
+# send the full agent body unchanged.
 ALLOWED_AGENT_FIELDS = {
     "name", "display_name", "description", "model_id", "default_model_id",
     "template_id", "supports_images", "welcome_message", "suggestions",

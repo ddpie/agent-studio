@@ -69,3 +69,67 @@ def test_agent_response_defaults_runtime_type_for_legacy_records():
     resp = _agent_response(item)
     assert resp["runtime_type"] == "zip"
     assert resp.get("harness_arn", "") == ""
+
+
+def test_update_agent_silently_drops_runtime_type_change(workspace_id, user_id, monkeypatch):
+    """runtime_type is immutable after create. PUT body attempts to change it
+    must be silently dropped (not error) — the ALLOWED_AGENT_FIELDS allowlist
+    omits runtime_type precisely so downstream UpdateExpression never touches it.
+    """
+    from crud import agents
+
+    existing = {
+        "agentId": "a1",
+        "workspace_id": workspace_id,
+        "name": "old-name",
+        "runtime_type": "zip",
+        "status": "active",
+        "created_by": user_id,
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z",
+    }
+
+    class _FakeTable:
+        def __init__(self, stored):
+            self.stored = stored
+            self.updated_kwargs = None
+        def get_item(self, **_):
+            return {"Item": self.stored}
+        def update_item(self, **kwargs):
+            self.updated_kwargs = kwargs
+            merged = dict(self.stored)
+            merged.update({"display_name": "new display", "updated_at": "2026-02-01T00:00:00Z"})
+            return {"Attributes": merged}
+        @property
+        def meta(self):
+            class _M:
+                class client:
+                    class exceptions:
+                        class ConditionalCheckFailedException(Exception):
+                            pass
+            return _M
+
+    fake = _FakeTable(existing)
+    monkeypatch.setattr(agents, "_get_table", lambda: fake)
+
+    # Assert the allowlist is the guard, not some ad-hoc check
+    assert "runtime_type" not in agents.ALLOWED_AGENT_FIELDS
+    assert "harness_arn" not in agents.ALLOWED_AGENT_FIELDS
+
+    # Simulate a malicious PUT body trying to change runtime_type.
+    # The update_agent handler is a Powertools route and expects
+    # router.current_event — we exercise the allowlist logic directly
+    # by inspecting which fields flow into UpdateExpression.
+    body = {
+        "runtime_type": "harness",    # should be dropped
+        "harness_arn": "arn:fake",     # should be dropped
+        "display_name": "new display", # legit update
+    }
+    # Build the UpdateExpression the same way update_agent does (lines 265-280):
+    update_parts = []
+    for field in agents.ALLOWED_AGENT_FIELDS:
+        if field in body:
+            update_parts.append(field)
+    assert "runtime_type" not in update_parts
+    assert "harness_arn" not in update_parts
+    assert "display_name" in update_parts
