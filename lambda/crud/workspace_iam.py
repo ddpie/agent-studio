@@ -71,7 +71,10 @@ def _build_trust_policy() -> dict:
                         "aws:SourceAccount": ACCOUNT_ID,
                     },
                     "ArnLike": {
-                        "aws:SourceArn": f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:runtime/*",
+                        "aws:SourceArn": [
+                            f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:runtime/*",
+                            f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:harness/*",
+                        ],
                     },
                 },
             }
@@ -187,8 +190,20 @@ def _build_default_minimal_policy() -> dict:
                     "ecr:BatchGetImage",
                     "ecr:GetDownloadUrlForLayer",
                     "ecr:GetAuthorizationToken",
+                    "ecr-public:GetAuthorizationToken",
+                    "ecr-public:BatchGetImage",
+                    "ecr-public:GetDownloadUrlForLayer",
                 ],
                 "Resource": "*",
+            },
+            {
+                "Sid": "HarnessBearerToken",
+                "Effect": "Allow",
+                "Action": ["sts:GetServiceBearerToken"],
+                "Resource": "*",
+                "Condition": {
+                    "StringEquals": {"sts:AWSServiceName": "bedrock-agentcore.amazonaws.com"}
+                },
             },
         ],
     }
