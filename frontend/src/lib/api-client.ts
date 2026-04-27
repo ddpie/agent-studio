@@ -1626,6 +1626,158 @@ export async function revokeMcpTargets(
   );
 }
 
+// ──────────────────────────────────────────────────────────────────
+// Per-workspace MCP lifecycle (spec §6)
+// ──────────────────────────────────────────────────────────────────
+
+export type McpRuntimeStatus =
+  | "CREATING" | "READY" | "ACTIVE" | "UPDATING" | "FAILED" | "DELETING" | "DELETED";
+
+export interface McpRuntimeEntry {
+  runtime_id?: string;
+  runtime_arn?: string;
+  runtime_name?: string;
+  runtime_endpoint?: string;
+  status: McpRuntimeStatus;
+  image_version?: string;
+  image_uri?: string;
+  created_at?: string;
+  updated_at?: string;
+  last_error?: string | null;
+  created_by?: string;
+  inflight_action?: string | null;
+  inflight_actor?: string | null;
+  resource_policy_set?: boolean;
+}
+
+export interface McpCatalogTarget {
+  name: string;
+  displayName: string;
+  description: string;
+  category: string;
+  sensitivity: "low" | "medium" | "high";
+  sensitiveReasons: string[];
+  latestVersion: string;
+  enabled: boolean;
+  runtime: McpRuntimeEntry | null;
+}
+
+export interface McpCatalog {
+  workspaceRoleExists: boolean;
+  targets: McpCatalogTarget[];
+}
+
+export async function getMcpCatalog(wsId: string): Promise<McpCatalog> {
+  return apiGet<McpCatalog>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/mcp/catalog`,
+  );
+}
+
+export interface McpActionError {
+  error: string;
+  message: string;
+  missing_actions?: string[];
+  inflight_action?: string;
+  inflight_actor?: string;
+  admins?: Array<{ userId: string; email: string }>;
+  adminConsoleUrl?: string;
+}
+
+/**
+ * Enable an MCP target. Returns 202 CREATING payload on success, or a
+ * structured error (400/403/409/412/413/424/507) thrown as an exception
+ * with a `code` attached.
+ */
+export async function enableMcp(
+  wsId: string,
+  target: string,
+  env?: Record<string, string>,
+): Promise<McpRuntimeEntry & { status: McpRuntimeStatus }> {
+  return apiPostRaw<McpRuntimeEntry & { status: McpRuntimeStatus }>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/mcp/${encodeURIComponent(target)}`,
+    env ? { env } : {},
+  );
+}
+
+export async function disableMcp(
+  wsId: string,
+  target: string,
+): Promise<{ status: string }> {
+  return apiDelete<{ status: string }>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/mcp/${encodeURIComponent(target)}`,
+  );
+}
+
+export async function upgradeMcp(
+  wsId: string,
+  target: string,
+): Promise<{ status: McpRuntimeStatus; image_version: string }> {
+  return apiPostRaw<{ status: McpRuntimeStatus; image_version: string }>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/mcp/${encodeURIComponent(target)}/upgrade`,
+    {},
+  );
+}
+
+export async function getMcpStatus(
+  wsId: string,
+  target: string,
+): Promise<McpRuntimeEntry & { status: McpRuntimeStatus }> {
+  return apiGet<McpRuntimeEntry & { status: McpRuntimeStatus }>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/mcp/${encodeURIComponent(target)}`,
+  );
+}
+
+export async function setMcpEnv(
+  wsId: string,
+  target: string,
+  env: Record<string, string>,
+): Promise<{ rotationRequired?: boolean }> {
+  return apiPut<{ rotationRequired?: boolean }>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/mcp/${encodeURIComponent(target)}/env`,
+    env,
+  );
+}
+
+export interface AgentUsingMcp {
+  agentId: string;
+  name: string;
+  lastInvokedAt?: string;
+}
+
+export async function getAgentsUsingMcp(
+  wsId: string,
+  target: string,
+): Promise<{ agents: AgentUsingMcp[] }> {
+  return apiGet<{ agents: AgentUsingMcp[] }>(
+    `/api/workspaces/${encodeURIComponent(wsId)}/mcp/agents-using/${encodeURIComponent(target)}`,
+  );
+}
+
+// ── Admin fleet / broadcast ──
+
+export interface McpFleetRow {
+  workspaceId: string;
+  workspaceName: string;
+  target: string;
+  status: McpRuntimeStatus;
+  imageVersion?: string;
+  updatedAt?: string;
+  lastError?: string | null;
+}
+
+export async function adminGetMcpFleet(): Promise<{ rows: McpFleetRow[] }> {
+  return apiGet<{ rows: McpFleetRow[] }>("/api/admin/mcp/fleet");
+}
+
+export async function adminBroadcastUpgrade(
+  target: string,
+): Promise<{ target: string; upgraded: number; errors: unknown[]; total: number }> {
+  return apiPostRaw(
+    "/api/admin/mcp/broadcast-upgrade",
+    { target },
+  );
+}
+
 // ── Costs / usage ──
 
 export async function fetchWorkspaceCosts(range: CostRange = "7d") {

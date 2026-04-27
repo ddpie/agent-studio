@@ -14,6 +14,10 @@ import { BaseDeployment } from "./constructs/base-deployment";
 import { ScheduleRunner } from "./constructs/schedule-runner";
 import { WorkspaceBoundary } from "./constructs/workspace-boundary";
 import { McpRoles } from "./constructs/mcp-roles";
+import { AuditTable } from "./constructs/audit";
+import { McpDrain } from "./constructs/mcp-drain";
+import { McpReconciler } from "./constructs/mcp-reconciler";
+import { EnforceBoundaryImmutability } from "./aspects/enforce-boundary-immutability";
 import * as path from "path";
 
 export interface AgentStudioStackProps extends cdk.StackProps {
@@ -85,6 +89,21 @@ export class AgentStudioStack extends cdk.Stack {
       existingToolsTableName: "agent-studio-tools",
     });
 
+    // Platform audit table (spec D13 — broadcast-upgrade, role recreate).
+    const audit = new AuditTable(this, "Audit");
+
+    // Async workspace-delete drain (spec D14).
+    const mcpDrain = new McpDrain(this, "McpDrain", {
+      config,
+      workspacesTable: database.workspacesTable,
+    });
+
+    // Hourly reconciler for stuck MCP runtime states (spec §6.5).
+    new McpReconciler(this, "McpReconciler", {
+      config,
+      workspacesTable: database.workspacesTable,
+    });
+
     const originVerifyValue = process.env.ORIGIN_VERIFY_SECRET;
     if (!originVerifyValue) throw new Error("Missing ORIGIN_VERIFY_SECRET env var — generate with: openssl rand -hex 32");
 
@@ -109,6 +128,9 @@ export class AgentStudioStack extends cdk.Stack {
       originVerifyValue,
       scheduleRunnerLambdaArn: scheduleRunner.lambda.functionArn,
       workspaceBoundaryArn: workspaceBoundary.boundaryPolicyArn,
+      auditTable: audit.table,
+      mcpDrainQueueUrl: mcpDrain.queue.queueUrl,
+      mcpDrainQueueArn: mcpDrain.queue.queueArn,
     });
 
     const invoke = new Invoke(this, "Invoke", {

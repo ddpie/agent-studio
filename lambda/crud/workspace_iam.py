@@ -57,8 +57,30 @@ def _role_name_for_workspace(ws_id: str) -> str:
     return f"AgentStudio-ws-{ws_id[:20]}-{REGION}"
 
 
-def _build_trust_policy() -> dict:
-    """Build the trust policy for a workspace IAM role."""
+def _ws_hash12(ws_id: str) -> str:
+    """12-hex runtime-name prefix (spec D6). Duplicated from mcp_runtime_manager
+    to avoid circular import during role creation."""
+    import hashlib
+    return hashlib.sha256(ws_id.encode()).hexdigest()[:12]
+
+
+def _build_trust_policy(ws_id: str = "") -> dict:
+    """Build the trust policy for a workspace IAM role.
+
+    v4 additive (T1.10a): ArnLike includes both the legacy `runtime/*` pattern
+    (for currently deployed Agents) AND the per-workspace `runtime/asmcp_{ws12}_*`
+    pattern (for new MCP runtimes). Phase 7 T1.10b narrows this to asmcp_ + Agent
+    runtimes only, after all Agents have been redeployed with endpoint literal.
+    """
+    arn_patterns = [
+        f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:runtime/*",
+    ]
+    if ws_id:
+        ws12 = _ws_hash12(ws_id)
+        arn_patterns.insert(
+            0,
+            f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:runtime/asmcp_{ws12}_*",
+        )
     return {
         "Version": "2012-10-17",
         "Statement": [
@@ -71,7 +93,7 @@ def _build_trust_policy() -> dict:
                         "aws:SourceAccount": ACCOUNT_ID,
                     },
                     "ArnLike": {
-                        "aws:SourceArn": f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:runtime/*",
+                        "aws:SourceArn": arn_patterns,
                     },
                 },
             }
@@ -79,7 +101,7 @@ def _build_trust_policy() -> dict:
     }
 
 
-def _build_default_minimal_policy() -> dict:
+def _build_default_minimal_policy(ws_id: str = "") -> dict:
     """Build the DefaultMinimal inline policy for a new workspace role.
 
     Replicates the baseline permissions from AgentStudioSubAgent-basic,
@@ -102,6 +124,10 @@ def _build_default_minimal_policy() -> dict:
                     f"arn:aws:bedrock:*:{ACCOUNT_ID}:inference-profile/*",
                 ],
             },
+            # v4 additive (T1.10a): asmcp_{ws12}_* included alongside existing
+            # runtime/* for Agents that still use list_agent_runtimes. Phase 7
+            # T1.10b narrows to asmcp_ + Agent runtime patterns only, after
+            # Agent redeploy (spec §4.2.1/§4.2.2).
             {
                 "Sid": "AgentCoreRuntime",
                 "Effect": "Allow",
@@ -113,7 +139,10 @@ def _build_default_minimal_policy() -> dict:
                 "Resource": [
                     f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:runtime/*",
                     f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:runtime/*/runtime-endpoint/*",
-                ],
+                ] + ([
+                    f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:runtime/asmcp_{_ws_hash12(ws_id)}_*",
+                    f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:runtime/asmcp_{_ws_hash12(ws_id)}_*/runtime-endpoint/*",
+                ] if ws_id else []),
             },
             {
                 "Sid": "AgentCoreServices",
@@ -194,10 +223,39 @@ def _build_default_minimal_policy() -> dict:
     }
 
 
+INLINE_POLICY_SOFT_LIMIT = 9500  # IAM hard limit is 10240; leave headroom
+
+
+def _dedup_statements(statements: list[dict]) -> list[dict]:
+    """De-duplicate by (Effect, frozenset(Action), canonical Resource, canonical Condition).
+
+    Spec §9.3 / feasibility F2. Saves 10–20% of merged size.
+    """
+    seen: set[tuple] = set()
+    out = []
+    for s in statements:
+        actions = s.get("Action", [])
+        if isinstance(actions, str):
+            actions = [actions]
+        resource = s.get("Resource", "*")
+        if isinstance(resource, list):
+            resource = tuple(sorted(resource))
+        else:
+            resource = (str(resource),)
+        condition = json.dumps(s.get("Condition", {}), sort_keys=True)
+        key = (s.get("Effect", "Allow"), frozenset(actions), resource, condition)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(s)
+    return out
+
+
 def _build_mcp_policy(mcp_grants: list[str]) -> dict | None:
     """Merge IAM statements for all granted MCP targets into one policy.
 
     Returns None if no targets require IAM permissions.
+    De-duplicates overlapping statements to save bytes.
     """
     statements = []
     for target in sorted(set(mcp_grants)):
@@ -206,11 +264,23 @@ def _build_mcp_policy(mcp_grants: list[str]) -> dict | None:
             statements.extend(policy["Statement"])
     if not statements:
         return None
+    statements = _dedup_statements(statements)
     return {"Version": "2012-10-17", "Statement": statements}
 
 
+class PolicySizeExceeded(Exception):
+    """Raised when WorkspaceGrants inline policy would exceed the soft limit."""
+    def __init__(self, size: int, limit: int = INLINE_POLICY_SOFT_LIMIT):
+        self.size = size
+        self.limit = limit
+        super().__init__(f"WorkspaceGrants policy is {size} bytes, limit {limit}")
+
+
 def _write_mcp_policy(role_name: str, mcp_grants: list[str]) -> int:
-    """Rebuild and write the WorkspaceGrants inline policy. Returns policy size."""
+    """Rebuild and write the WorkspaceGrants inline policy. Returns policy size.
+
+    Raises PolicySizeExceeded if the merged policy exceeds the soft limit.
+    """
     iam_client = _get_iam()
     merged = _build_mcp_policy(mcp_grants)
     if merged is None:
@@ -225,6 +295,8 @@ def _write_mcp_policy(role_name: str, mcp_grants: list[str]) -> int:
         return 0
 
     policy_doc = json.dumps(merged)
+    if len(policy_doc) > INLINE_POLICY_SOFT_LIMIT:
+        raise PolicySizeExceeded(len(policy_doc))
     iam_client.put_role_policy(
         RoleName=role_name,
         PolicyName="WorkspaceGrants",
@@ -279,7 +351,7 @@ def create_workspace_role(wsId: str):
         try:
             resp = iam_client.create_role(
                 RoleName=role_name,
-                AssumeRolePolicyDocument=json.dumps(_build_trust_policy()),
+                AssumeRolePolicyDocument=json.dumps(_build_trust_policy(ws_id)),
                 PermissionsBoundary=WORKSPACE_BOUNDARY_ARN,
                 Tags=[
                     {"Key": "agent-studio:workspace", "Value": ws_id},
@@ -296,7 +368,7 @@ def create_workspace_role(wsId: str):
             iam_client.put_role_policy(
                 RoleName=role_name,
                 PolicyName="DefaultMinimal",
-                PolicyDocument=json.dumps(_build_default_minimal_policy()),
+                PolicyDocument=json.dumps(_build_default_minimal_policy(ws_id)),
             )
         except Exception as e:
             logger.exception("Failed to attach DefaultMinimal policy", extra={"roleName": role_name})

@@ -145,10 +145,24 @@ You have access to these tool categories:
 - attach_agent_skill: Use when the user wants to add a library skill to an agent that doesn't have it yet ("给 X agent 加上 Y skill"/"add ppt-generator to DataAnalyst"). Copies files from the library into the agent's private space, appends to the skills manifest, and redeploys. Refuses if the skill name is already attached — in that case use sync_agent_skill.
 - list_tool_library: Use when selecting tools for a new agent — ALWAYS check built-in tools first.
 - get_tool_library_code: Use after list_tool_library to get the source code for built-in tools.
-- list_mcp_servers: Use when the user asks about available MCP tool servers from Gateway.
+- list_mcp_servers: Use when the user asks what MCP tool servers are available in the current workspace.
+  Shows per-target `enabled` flag and `runtime.status` (READY|CREATING|FAILED|…). Only READY targets
+  can be referenced by new agents.
 - list_mcp_target_tools: Use to get the exact tool names and descriptions for a specific MCP target.
   ALWAYS call this before writing system_prompt for agents with MCP targets, so you can reference
   the real tool names (e.g., "generate_image") instead of guessing.
+- enable_mcp(target): Use when the user wants to enable an MCP target not yet provisioned in the
+  workspace. Creates a per-workspace AgentCore runtime (~3–5 min). Returns immediately with
+  status=CREATING. Low+medium sensitivity requires editor role; high requires admin.
+- disable_mcp(target): Use when the user wants to remove an MCP from the workspace. Deletes the
+  runtime and shrinks the workspace IAM role's WorkspaceGrants inline policy. Agents that still
+  reference the target will fail at invoke time. Editor role required.
+- upgrade_mcp(target): Use when the user wants to pull the latest image version from registry.
+  Re-checks current-registry sensitivity (may have risen since enable — admin required if high).
+- get_mcp_status(target): One-shot status check. Heals DDB if control-plane state has advanced.
+  When a user asks to use an MCP that's still CREATING, call this every 30s (up to ~10 calls /
+  ~5 min) while narrating elapsed time. After ~10 min, tell the user to open /#/mcp or come back
+  later instead of hanging the conversation.
 
 **Operations:**
 - check_workspace_permissions: Use to verify IAM actions the workspace role can perform before creating/updating agents with MCP targets. Pass comma-separated IAM actions. Returns {has_role, role_arn, results: [{action, allowed}]} or {has_role: false} if no custom role is bound to the workspace. Results are cached for 5 minutes.

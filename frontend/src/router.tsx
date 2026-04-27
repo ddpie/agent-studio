@@ -9,8 +9,8 @@ import SkillsPage from "./components/pages/SkillsPage";
 import SkillDetail from "./components/pages/SkillDetail";
 import ToolLibraryPage from "./components/pages/ToolLibraryPage";
 import ToolDetail from "./components/pages/ToolDetail";
-import McpPage from "./components/pages/McpPage";
-import McpPolicyPage from "./components/pages/McpPolicyPage";
+import McpServersPage from "./components/mcp/McpServersPage";
+import AdminMcpFleetPage from "./components/admin/AdminMcpFleetPage";
 import MarketplacePage from "./components/pages/MarketplacePage";
 import CostsPage from "./components/pages/CostsPage";
 import SettingsPage from "./components/pages/SettingsPage";
@@ -48,8 +48,8 @@ export function createRoutes(
         { path: "skills/:skillId", element: withBoundary(<SkillDetail />) },
         { path: "tools", element: withBoundary(<ToolLibraryPage />) },
         { path: "tools/:toolId", element: withBoundary(<ToolDetail />) },
-        { path: "mcp", element: withBoundary(<McpPage />) },
-        { path: "mcp-policy", element: withBoundary(<McpPolicyPage />) },
+        { path: "mcp", element: withBoundary(<McpServersPage />) },
+        { path: "admin/mcp-fleet", element: withBoundary(<AdminMcpFleetPage />) },
         { path: "marketplace", element: withBoundary(<MarketplacePage />) },
         { path: "marketplace/:tab", element: withBoundary(<MarketplacePage />) },
         { path: "costs", element: withBoundary(<CostsPage />) },

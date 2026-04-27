@@ -369,7 +369,8 @@
       "deleteTypeLabel": "Type the workspace name to confirm",
       "deleteSuccess": "Workspace deleted",
       "deleteFailed": "Failed to delete workspace"
-    }
+    },
+    "selectFirst": "Select a workspace first."
   },
   "settings": {
     "title": "Settings",
@@ -774,8 +775,27 @@
   },
   "admin": {
     "title": "Admin Console",
-    "tabWorkspaces": "Workspaces",
-    "noAccess": "You don't have admin access."
+    "noAccess": "You do not have permission to access the admin console.",
+    "tabWorkspaces": "Workspace Management",
+    "selectWorkspace": "Select a workspace",
+    "workspaceSearch": "Search workspaces...",
+    "workspaceCount": "{{count}} workspaces",
+    "owner": "Owner",
+    "hasRole": "IAM role bound",
+    "noRole": "No IAM role",
+    "goToAdmin": "Go to Admin Console to manage",
+    "role": {
+      "title": "Workspace IAM Role",
+      "exists": "Role exists",
+      "notCreatedDesc": "This workspace does not yet have a custom IAM role. Until created, agents can only use platform tools. The role is bound to AgentStudioWorkspaceCeiling, which caps it to read-only AWS actions.",
+      "createBtn": "Create workspace role",
+      "boundaryNote": "Bound to AgentStudioWorkspaceCeiling. Effective permissions = role identity policy ∩ boundary.",
+      "manageMcps": "Manage MCP Servers",
+      "manageMcpsHint": "Grants are now managed via the per-workspace MCP page. Each enable writes the target's IAM policy to the workspace role's WorkspaceGrants inline policy.",
+      "goToMcps": "Open /#/mcp"
+    },
+    "notAuthorized": "You do not have platform-admin privileges.",
+    "mcpFleet": "MCP Fleet"
   },
   "stats": {
     "invocations": "Invocations",
@@ -1214,16 +1234,130 @@
     "confirmGrantBtn": "Confirm grant",
     "confirmGrantCancel": "Cancel"
   },
-  "admin": {
-    "title": "Admin Console",
-    "noAccess": "You do not have permission to access the admin console.",
-    "tabWorkspaces": "Workspace Management",
-    "selectWorkspace": "Select a workspace",
-    "workspaceSearch": "Search workspaces...",
-    "workspaceCount": "{{count}} workspaces",
-    "owner": "Owner",
-    "hasRole": "IAM role bound",
-    "noRole": "No IAM role",
-    "goToAdmin": "Go to Admin Console to manage"
+  "mcp": {
+    "page": {
+      "title": "MCP Servers",
+      "subtitle": "Per-workspace Model Context Protocol runtimes — enable tools your Agents can call.",
+      "enabledCount": "{{count}} server(s) enabled"
+    },
+    "empty": {
+      "noRole": {
+        "title": "Workspace role required",
+        "body": "MCP servers run under the workspace's IAM role. An admin must create the role before you can enable any MCP.",
+        "goToAdmin": "Go to Admin Console",
+        "contactAdmin": "Ask an admin to create the workspace role."
+      },
+      "noTargets": "No MCP targets in the registry."
+    },
+    "catalog": {
+      "refresh": "Refresh",
+      "category": {
+        "general": "General",
+        "observability": "Observability",
+        "security": "Security",
+        "cost": "Cost",
+        "compute": "Compute",
+        "storage": "Storage",
+        "database": "Database",
+        "networking": "Networking",
+        "messaging": "Messaging",
+        "search": "Search",
+        "analytics": "Analytics",
+        "data": "Data",
+        "ai_ml": "AI / ML",
+        "industry": "Industry",
+        "devtools": "Dev Tools",
+        "operations": "Operations",
+        "management": "Management"
+      }
+    },
+    "status": {
+      "creating": "Creating",
+      "ready": "Ready",
+      "updating": "Updating",
+      "failed": "Failed",
+      "deleting": "Deleting",
+      "deleted": "Deleted"
+    },
+    "action": {
+      "enable": "Enable",
+      "disable": "Disable",
+      "upgrade": "Upgrade",
+      "setEnv": "Set env"
+    },
+    "sensitivity": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "enableConfirm": {
+      "title": "Enable MCP",
+      "bodyLow": "Enabling this MCP creates a per-workspace runtime and grants the workspace role the target's declared IAM actions. Low-sensitivity targets are read-mostly.",
+      "bodyMed": "Enabling this MCP creates a per-workspace runtime. Medium-sensitivity targets may expose account data (audit logs, IAM roles, billing). Review the risks below before continuing.",
+      "bodyHigh": "⚠ High-sensitivity MCP. Admin role required. Grants may include write or credential-adjacent actions. Strongly review the listed reasons.",
+      "requiresAdmin": "This target requires admin role to enable. Ask a workspace admin."
+    },
+    "disableConfirm": {
+      "title": "Disable MCP",
+      "body": "Disabling removes this MCP's per-workspace runtime and revokes its grants. Future invocations fail.",
+      "affectedAgents": "This will break {{count}} Agent(s) using this target until they are redeployed.",
+      "redeployHint": "After re-enabling later, redeploy affected Agents so they pick up the new runtime endpoint.",
+      "noAffectedAgents": "No Agents currently reference this target."
+    },
+    "upgrade": {
+      "confirmTitle": "Upgrade MCP",
+      "versionFromTo": "Upgrading from {{from}} to {{to}}.",
+      "sensitivityRose": "The new registry version raises this target's sensitivity. Admin role is now required."
+    },
+    "env": {
+      "title": "Environment variables",
+      "description": "Values are stored in Secrets Manager and injected into the runtime container.",
+      "keyLabel": "Key",
+      "valueLabel": "Value",
+      "rotationRequired": "Runtime must be updated for new env values to take effect."
+    },
+    "error": {
+      "roleMissing": "Workspace role not created.",
+      "imageMissing": "Container image not built. Ask platform admin to run build-mcp.sh.",
+      "envMissing": "This target requires environment variables. Env flow is not yet supported — contact platform admin.",
+      "inflight": "Another operation is in progress on this target.",
+      "upstream": "AgentCore control-plane error. Retry shortly.",
+      "boundaryGap": "Target requires actions not permitted by the workspace permission boundary.",
+      "quotaExceeded": "Near AgentCore agent-runtimes-per-account quota. Request a quota increase.",
+      "policyTooLarge": "Enabling this target would exceed the IAM inline-policy size limit. Disable another target first.",
+      "network": "Network error. Check your connection.",
+      "loadFailed": "Failed to load catalog"
+    },
+    "polling": {
+      "stillCreating": "Still creating…",
+      "longRunning": "Longer than usual",
+      "watching": "Watching: {{targets}}"
+    },
+    "image": "Image",
+    "updatedAt": "Updated",
+    "updateAvailable": "Update available",
+    "cost": {
+      "hint": "Each enabled MCP is a dedicated container that incurs AWS runtime cost.",
+      "hintShort": "Cost applies"
+    },
+    "toast": {
+      "enabled": "Enabled {{target}}",
+      "disabled": "Disabled {{target}}",
+      "upgraded": "Upgraded {{target}}",
+      "envSaved": "Env saved for {{target}}"
+    },
+    "fleet": {
+      "title": "MCP Fleet",
+      "subtitle": "All workspaces × enabled MCP targets. Broadcast upgrades from here when patching a CVE.",
+      "filterPlaceholder": "Filter by workspace or target…",
+      "empty": "No MCP runtimes enabled in any workspace.",
+      "broadcastUpgrade": "Broadcast upgrade",
+      "broadcastConfirm": "Upgrade {{target}} in {{count}} workspace(s)?",
+      "broadcastResult": "Upgraded {{upgraded}}/{{total}} workspaces for {{target}}.",
+      "colWorkspace": "Workspace",
+      "colStatus": "Status",
+      "colVersion": "Version",
+      "colUpdated": "Updated"
+    }
   }
 }

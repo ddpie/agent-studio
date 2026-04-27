@@ -22,10 +22,14 @@ export interface ApiProps {
   toolsTable: dynamodb.ITable;
   a2aKeysTable: dynamodb.Table;
   runsTable: dynamodb.Table;
+  auditTable?: dynamodb.Table;
   originVerifyValue: string;
   scheduleRunnerLambdaArn: string;
   /** ARN of the AgentStudioWorkspaceCeiling permission boundary policy. */
   workspaceBoundaryArn: string;
+  /** SQS drain queue URL for workspace-delete async flow. */
+  mcpDrainQueueUrl?: string;
+  mcpDrainQueueArn?: string;
 }
 
 export class Api extends Construct {
@@ -332,6 +336,87 @@ export class Api extends Construct {
       ],
       resources: [`arn:aws:iam::${props.config.accountId}:role/AgentStudio-ws-*`],
     }));
+
+    // ─── Per-workspace MCP runtime management (spec §9.3) ───
+    // Per-workspace MCP runtimes are created/updated/deleted by CRUD Lambda
+    // on enable/disable. Resource policy pins invokable principals per spec D12.
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      sid: "McpRuntimeLifecycle",
+      actions: [
+        "bedrock-agentcore:CreateAgentRuntime",
+        "bedrock-agentcore:UpdateAgentRuntime",
+        "bedrock-agentcore:DeleteAgentRuntime",
+        "bedrock-agentcore:GetAgentRuntime",
+        "bedrock-agentcore-control:CreateAgentRuntime",
+        "bedrock-agentcore-control:UpdateAgentRuntime",
+        "bedrock-agentcore-control:DeleteAgentRuntime",
+        "bedrock-agentcore-control:GetAgentRuntime",
+      ],
+      resources: [
+        `arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:runtime/asmcp_*`,
+      ],
+    }));
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      sid: "McpResourcePolicy",
+      actions: [
+        "bedrock-agentcore:PutResourcePolicy",
+        "bedrock-agentcore:GetResourcePolicy",
+        "bedrock-agentcore:DeleteResourcePolicy",
+        "bedrock-agentcore-control:PutResourcePolicy",
+        "bedrock-agentcore-control:GetResourcePolicy",
+        "bedrock-agentcore-control:DeleteResourcePolicy",
+      ],
+      resources: [
+        `arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:runtime/asmcp_*`,
+      ],
+    }));
+    // CreateAgentRuntime passes workspace role ARN as executionRole; IAM
+    // requires iam:PassRole. Scoped to AgentStudio-ws-* so CRUD cannot pass
+    // arbitrary roles into AgentCore.
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      sid: "PassWorkspaceRoleToAgentCore",
+      actions: ["iam:PassRole"],
+      resources: [`arn:aws:iam::${props.config.accountId}:role/AgentStudio-ws-*`],
+      conditions: {
+        StringEquals: { "iam:PassedToService": "bedrock-agentcore.amazonaws.com" },
+      },
+    }));
+    // Quota pre-check before create (spec §6.2 step 6, error code 507).
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      sid: "QuotaPrecheck",
+      actions: ["service-quotas:GetServiceQuota"],
+      resources: ["*"],
+    }));
+    // Ceiling hash drift check at startup (spec §9.4).
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      sid: "CeilingHashCheck",
+      actions: ["iam:GetPolicy", "iam:GetPolicyVersion"],
+      resources: [props.workspaceBoundaryArn],
+    }));
+    // ECR head-image for enable pre-check.
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      sid: "EcrHeadImage",
+      actions: ["ecr:DescribeImages", "ecr:BatchGetImage"],
+      resources: [
+        `arn:aws:ecr:${props.config.region}:${props.config.accountId}:repository/mcp-*`,
+      ],
+    }));
+
+    // SQS drain queue send (workspace-delete async flow, spec D14).
+    if (props.mcpDrainQueueArn) {
+      this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+        sid: "DrainEnqueue",
+        actions: ["sqs:SendMessage"],
+        resources: [props.mcpDrainQueueArn],
+      }));
+      this.crudLambda.addEnvironment("MCP_DRAIN_QUEUE_URL", props.mcpDrainQueueUrl || "");
+    }
+
+    // Audit table write (platform-admin broadcast-upgrade, spec D13).
+    if (props.auditTable) {
+      props.auditTable.grantWriteData(this.crudLambda);
+      this.crudLambda.addEnvironment("AUDIT_TABLE", props.auditTable.tableName);
+    }
 
     // REST API with Cognito authorizer
     const userPool = cognito.UserPool.fromUserPoolArn(this, "UserPool", props.cognitoUserPoolArn);

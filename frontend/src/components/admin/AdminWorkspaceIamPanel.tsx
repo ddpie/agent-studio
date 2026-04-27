@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Search, Shield, Loader2 } from "lucide-react";
 import { useWorkspaceStore, type WorkspaceSummary } from "../../stores/workspace-store";
 import { getWorkspacePermissions } from "../../lib/api-client";
-import IamPermissionsTab from "../pages/IamPermissionsTab";
+import AdminWorkspaceRoleCard from "./AdminWorkspaceRoleCard";
 
 /**
  * Admin panel: left sidebar (workspace list) + right panel (IAM details).
@@ -132,24 +132,13 @@ export default function AdminWorkspaceIamPanel() {
             <p className="text-xs">{t("admin.selectWorkspace")}</p>
           </div>
         ) : (
-          <div className="p-4">
-            {/* Workspace header */}
-            <div className="mb-4">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                {selected.name || t("workspace.unnamed")}
-              </h3>
-              <p className="text-[10px] text-gray-400 dark:text-gray-500 font-mono mt-0.5">
-                {selected.workspaceId}
-              </p>
-            </div>
-            {/* Reuse IamPermissionsTab with explicit workspaceId */}
-            <IamPermissionsTab
-              key={selected.workspaceId}
-              workspaceId={selected.workspaceId}
-              readOnly={false}
-              onRoleCreated={() => handleRoleCreated(selected.workspaceId)}
-            />
-          </div>
+          /* Slim role-status card (v4 refactor — grant management moved to /#/mcp) */
+          <AdminWorkspaceRoleCard
+            key={selected.workspaceId}
+            workspaceId={selected.workspaceId}
+            workspaceName={selected.name}
+            onRoleCreated={() => handleRoleCreated(selected.workspaceId)}
+          />
         )}
       </div>
     </div>

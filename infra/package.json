@@ -8,7 +8,11 @@
     "build": "tsc",
     "watch": "tsc -w",
     "test": "jest",
-    "cdk": "cdk"
+    "cdk": "cdk",
+    "sync-mcp": "python3 ../scripts/sync-mcp-iam-policies.py --export-ceiling",
+    "predeploy": "npm run sync-mcp",
+    "prediff": "npm run sync-mcp",
+    "presynth": "npm run sync-mcp"
   },
   "devDependencies": {
     "@types/jest": "^30",

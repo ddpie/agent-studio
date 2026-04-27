@@ -26,6 +26,8 @@ from crud.runs import router as runs_router
 from crud.kiro_key import router as kiro_key_router
 from crud.chat import router as chat_router
 from crud.workspace_iam import router as workspace_iam_router
+from crud.mcp_handlers import router as mcp_handlers_router
+from crud.admin_mcp_handlers import router as admin_mcp_handlers_router
 
 logger = Logger(service="agent-studio-crud")
 
@@ -53,6 +55,8 @@ app.include_router(costs_router)
 app.include_router(logs_router)
 app.include_router(memories_router)
 app.include_router(workspace_iam_router)
+app.include_router(mcp_handlers_router)
+app.include_router(admin_mcp_handlers_router)
 app.include_router(runs_router)
 app.include_router(kiro_key_router)
 app.include_router(chat_router)

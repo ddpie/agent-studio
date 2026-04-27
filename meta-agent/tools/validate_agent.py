@@ -425,63 +425,78 @@ def validate_agent(
     mcp_tool_names = _get_mcp_tool_names(mcp_target_names)
     mcp_tool_names_set = set(mcp_tool_names)
 
-    # 2c. MCP target IAM permission check
-    # For each mcp_target in the proposal, verify the workspace role has
-    # the required IAM permissions declared in mcp-registry.yaml.
+    # 2c. MCP target readiness check (v4 per-workspace model — spec §7.4).
+    # Each referenced target must have a per-workspace runtime in READY state.
+    # IAM grants are automatically applied by enable_mcp, so a READY runtime
+    # implies grants are in place. If not READY: refuse deploy with a clear
+    # user-facing message pointing to /#/mcp or the enable_mcp tool.
     if mcp_target_names:
         try:
-            from tools.list_mcp_servers import (
-                _load_registry_iam_policies,
-                _get_workspace_role_arn,
-                _check_iam_permissions,
-            )
+            import os
+            import boto3
             from tools._scope import current_workspace
-
-            iam_policies = _load_registry_iam_policies()
             ws_id = current_workspace()
-            workspace_role_arn = _get_workspace_role_arn(ws_id) if ws_id else None
+            if not ws_id:
+                warnings.append(
+                    "MCP readiness check skipped: no workspace context."
+                )
+            else:
+                workspaces_table = os.getenv("WORKSPACES_TABLE", "agent-studio-workspaces")
+                from config import REGION
+                ddb = boto3.resource("dynamodb", region_name=REGION)
+                item = ddb.Table(workspaces_table).get_item(
+                    Key={"workspaceId": ws_id, "sk": "META"},
+                ).get("Item") or {}
+                mcp_runtimes = item.get("mcp_runtimes") or {}
 
-            for target in mcp_target_names:
-                iam_policy = iam_policies.get(target)
-                if iam_policy is None:
-                    # No IAM policy declared — platform tool, always allowed
-                    continue
+                # Treat remote targets (aws-api, aws-knowledge, …) as always
+                # ready — they don't require per-workspace provisioning.
+                # Load registry to distinguish them.
+                remote_target_names = set()
+                try:
+                    from config import S3_BUCKET
+                    import yaml as _yaml
+                    s3 = boto3.client("s3", region_name=REGION)
+                    reg_obj = s3.get_object(
+                        Bucket=S3_BUCKET, Key="mcp-runtime/mcp-registry.yaml"
+                    )
+                    _reg = _yaml.safe_load(reg_obj["Body"].read())
+                    for _t in (_reg.get("remote_targets") or []):
+                        if _t.get("enabled"):
+                            remote_target_names.add(_t["name"])
+                except Exception:
+                    pass
 
-                if not workspace_role_arn:
-                    # Target requires IAM permissions but workspace has no custom role
-                    actions = []
-                    for stmt in iam_policy.get("Statement", []):
-                        a = stmt.get("Action", [])
-                        actions.extend(a if isinstance(a, list) else [a])
-                    errors.append(
-                        f"MCP target '{target}' requires IAM permissions "
-                        f"({', '.join(actions)}) but this workspace has no "
-                        f"custom IAM role. Create one in Settings → Workspace → "
-                        f"IAM Role, then grant permissions for '{target}'."
-                    )
-                    continue
-
-                # Workspace has a role — check if it has the required permissions
-                result = _check_iam_permissions(workspace_role_arn, iam_policy)
-                if not result["granted"]:
-                    missing = result.get("missing_actions", [])
-                    # Extract role name from ARN for CLI command
-                    role_name = workspace_role_arn.rsplit("/", 1)[-1] if "/" in workspace_role_arn else workspace_role_arn
-                    policy_json = json.dumps(iam_policy, separators=(",", ":"))
-                    cli_cmd = (
-                        f"aws iam put-role-policy "
-                        f"--role-name {role_name} "
-                        f"--policy-name MCP-{target} "
-                        f"--policy-document '{policy_json}'"
-                    )
-                    errors.append(
-                        f"MCP target '{target}' requires IAM permissions that "
-                        f"the workspace role is missing: [{', '.join(missing)}]. "
-                        f"Grant via Settings → IAM Permissions → one-click authorize, "
-                        f"or run:\n{cli_cmd}"
-                    )
+                for target in mcp_target_names:
+                    if target in remote_target_names:
+                        continue
+                    entry = mcp_runtimes.get(target)
+                    if not entry:
+                        errors.append(
+                            f"MCP target '{target}' is not enabled in this workspace. "
+                            f"Enable it via /#/mcp or call enable_mcp('{target}') first."
+                        )
+                    elif entry.get("status") not in ("READY", "ACTIVE"):
+                        status = entry.get("status") or "UNKNOWN"
+                        last_err = entry.get("last_error") or ""
+                        msg = (
+                            f"MCP target '{target}' is not READY "
+                            f"(current status: {status}"
+                            + (f"; last_error: {last_err}" if last_err else "")
+                            + "). "
+                        )
+                        if status in ("CREATING", "UPDATING"):
+                            msg += (
+                                "Wait ~3–5 min for provisioning to finish "
+                                "(call get_mcp_status to poll)."
+                            )
+                        elif status == "FAILED":
+                            msg += (
+                                "Retry by disabling then re-enabling in /#/mcp."
+                            )
+                        errors.append(msg)
         except Exception as e:
-            warnings.append(f"MCP IAM permission check skipped: {e}")
+            warnings.append(f"MCP readiness check skipped: {e}")
 
     if defined_funcs and declared_names:
         defined_set = set(defined_funcs)

@@ -33,7 +33,7 @@ Tool allowlist on the custom agent:
   (names come from the live ACP `_kiro.dev/commands/available` probe
   against kiro-cli-chat 2.0.0; NOT the legacy aws/report/thinking/todo/
   delegate aliases in the shipped agent_config.json.example)
-- Full Meta-Agent MCP server: "@agent-studio-tools" (all 34 tools,
+- Full Meta-Agent MCP server: "@agent-studio-tools" (all 38 tools,
   wildcard), served over stdio from mcp_stdio_server.
 
 Caveats (from AgentCore docs + bisect):
@@ -74,7 +74,7 @@ KIRO_HOME_DEFAULT = "/tmp/kiro-home"
 KIRO_PERSIST_ROOT = "/mnt/kiro"
 
 # Built-in Kiro tools exposed to the Meta-Agent. Keep this minimal — each
-# built-in is an extra side-effect path outside the sanctioned 34-tool MCP
+# built-in is an extra side-effect path outside the sanctioned 38-tool MCP
 # surface. Names come from the live ACP `_kiro.dev/commands/available`
 # probe (web_search / web_fetch / subagent / todo_list), not the legacy
 # aliases shipped in agent_config.json.example.
@@ -139,7 +139,7 @@ def ensure_kiro_home(
     """Populate the Kiro HOME and look up any saved session uuid.
 
     Writes/overwrites all three custom-agent configs on every call:
-      - `meta-agent`  — full 34-tool surface for the main chat
+      - `meta-agent`  — full 38-tool surface for the main chat
       - `skill-edit`  — tool-less, for /skills/:id/edit sidebar
       - `agent-edit`  — tool-less, for /agents/:id/edit sidebar
     Cheap, and lets prompt bumps take effect without a container restart.
@@ -345,7 +345,7 @@ def ensure_kiro_home(
     # captures the model's `__file_content:` / `__file_edit:` fenced
     # output directly. No MCP server, no built-in Kiro tools; we don't
     # want web_search or subagent firing either. Without this isolation
-    # Kiro reads the meta-agent system prompt ("you have 34 tools"), sees
+    # Kiro reads the meta-agent system prompt ("you have 38 tools"), sees
     # the word "skill" in the user message, and races off to list_skills
     # / read_skill_file instead of just writing the requested file.
     skill_edit_config = {

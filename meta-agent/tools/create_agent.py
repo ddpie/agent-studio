@@ -55,10 +55,14 @@ def _check_mcp_policy(targets: list, policy: dict) -> list:
 
 
 def _resolve_mcp_endpoints(target_names: list) -> list:
-    """Resolve MCP target names to endpoint configs (discriminated union).
+    """Resolve MCP target names to per-workspace endpoint configs.
 
-    Runtime targets get lazy-resolved at agent startup (only target_name stored).
-    Remote targets get their URL stored directly.
+    v4 per-workspace model (spec §7.4): Runtime endpoints are read from the
+    current workspace's DDB META item (``mcp_runtimes`` map). Agent config.json
+    receives the literal runtime_arn + endpoint — the Agent does NOT call
+    list_agent_runtimes at runtime. Remote targets are resolved via registry.
+
+    Raises ValueError if a runtime target is not READY in this workspace.
 
     Args:
         target_names: List of short target names without the "mcp-" prefix
@@ -66,17 +70,22 @@ def _resolve_mcp_endpoints(target_names: list) -> list:
 
     Returns:
         List of endpoint dicts:
-        - Runtime: {"type": "runtime", "target_name": "mcp_cloudwatch", "auth": "runtime"}
-        - Remote:  {"type": "remote", "url": "https://...", "auth": "aws-mcp"|"none"}
+        - Runtime: {"type": "runtime", "name": "cloudwatch",
+                    "runtime_name": "asmcp_<ws12>_cloudwatch",
+                    "runtime_arn": "arn:aws:bedrock-agentcore:...",
+                    "runtime_endpoint": "https://...",
+                    "auth": "runtime"}
+        - Remote:  {"type": "remote", "name": "aws-api",
+                    "url": "https://...", "auth": "aws-mcp"|"none"}
     """
-    # Load catalog to distinguish remote vs runtime
-    remote_map = {}
+    # Load registry (remote_targets + runtime_targets metadata)
+    remote_map: dict[str, dict] = {}
     try:
         s3 = boto3.client("s3", region_name=REGION)
         import yaml
         resp = s3.get_object(Bucket=S3_BUCKET, Key="mcp-runtime/mcp-registry.yaml")
         registry = yaml.safe_load(resp["Body"].read().decode())
-        for rt in registry.get("remote_targets", []):
+        for rt in (registry.get("remote_targets") or []):
             if rt.get("enabled"):
                 auth = "none" if rt.get("auth") == "none" else "aws-mcp"
                 remote_map[rt["name"]] = {"url": rt["endpoint"], "auth": auth}
@@ -87,33 +96,25 @@ def _resolve_mcp_endpoints(target_names: list) -> list:
             "aws-knowledge": {"url": "https://knowledge-mcp.global.api.aws", "auth": "none"},
         }
 
-    # Verify runtime targets exist
-    runtime_names = set()
-    for target in target_names:
-        if target not in remote_map:
-            runtime_names.add(target.replace("-", "_"))
-
-    if runtime_names:
-        control = boto3.client("bedrock-agentcore-control", region_name=REGION)
-        found = set()
-        resp = control.list_agent_runtimes()
-        for rt in resp.get("agentRuntimes", []):
-            name = rt.get("agentRuntimeName", "")
-            if name in runtime_names:
-                found.add(name)
-        while resp.get("nextToken") and found != runtime_names:
-            resp = control.list_agent_runtimes(nextToken=resp["nextToken"])
-            for rt in resp.get("agentRuntimes", []):
-                name = rt.get("agentRuntimeName", "")
-                if name in runtime_names:
-                    found.add(name)
-
-        missing = runtime_names - found
-        if missing:
-            import sys
-            print(f"WARNING: MCP runtimes not found: {missing}", file=sys.stderr)
+    # Runtime targets: read from per-workspace DDB META.
+    runtime_targets = [t for t in target_names if t not in remote_map]
+    mcp_runtimes: dict[str, dict] = {}
+    if runtime_targets:
+        from tools._scope import current_workspace
+        ws_id = current_workspace()
+        if not ws_id:
+            raise ValueError(
+                "No workspace context — cannot resolve per-workspace MCP runtimes."
+            )
+        WORKSPACES_TABLE = os.getenv("WORKSPACES_TABLE", "agent-studio-workspaces")
+        ddb = boto3.resource("dynamodb", region_name=REGION)
+        item = ddb.Table(WORKSPACES_TABLE).get_item(
+            Key={"workspaceId": ws_id, "sk": "META"},
+        ).get("Item") or {}
+        mcp_runtimes = item.get("mcp_runtimes") or {}
 
     endpoints = []
+    not_ready: list[str] = []
     for target in target_names:
         if target in remote_map:
             endpoints.append({
@@ -122,14 +123,25 @@ def _resolve_mcp_endpoints(target_names: list) -> list:
                 "url": remote_map[target]["url"],
                 "auth": remote_map[target]["auth"],
             })
-        else:
-            runtime_name = target.replace("-", "_")
-            endpoints.append({
-                "type": "runtime",
-                "name": target,
-                "target_name": runtime_name,
-                "auth": "runtime",
-            })
+            continue
+        entry = mcp_runtimes.get(target)
+        if not entry or entry.get("status") not in ("READY", "ACTIVE"):
+            not_ready.append(target)
+            continue
+        endpoints.append({
+            "type": "runtime",
+            "name": target,
+            "runtime_name": entry.get("runtime_name", ""),
+            "runtime_arn": entry.get("runtime_arn", ""),
+            "runtime_endpoint": entry.get("runtime_endpoint", ""),
+            "auth": "runtime",
+        })
+
+    if not_ready:
+        raise ValueError(
+            f"MCP targets not READY in this workspace: {', '.join(not_ready)}. "
+            f"Enable them via /#/mcp (or enable_mcp tool) first."
+        )
 
     return endpoints
 

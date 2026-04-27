@@ -236,37 +236,27 @@ _AUTH_MAP = {
     "none": None,
 }
 
-# --- Lazy resolve: runtime target_name → invoke URL at startup ---
-def _resolve_runtime_url(target_name):
-    """Resolve a runtime target name to its invoke URL.
+# --- Resolve runtime URL from config.json literal (spec §7.6 v4) ---
+# Meta-Agent bakes runtime_endpoint directly into config.json at Agent
+# deploy time via _resolve_mcp_endpoints(). No list_agent_runtimes() call
+# at runtime — Agents resolve in O(1) and the workspace role no longer
+# needs ListAgentRuntimes permission to function.
+def _resolve_runtime_endpoint_from_config(ep):
+    """Return the invoke URL for a runtime endpoint, or None if absent.
 
-    Handles naming inconsistency: catalog stores 'cloudwatch' but
-    deploy-mcp.sh creates runtimes as 'mcp_cloudwatch'. Tries both.
+    v4 endpoint shape: {"type": "runtime", "name": "cloudwatch",
+                        "runtime_name": "asmcp_<ws12>_cloudwatch",
+                        "runtime_arn": "arn:aws:bedrock-agentcore:...",
+                        "runtime_endpoint": "https://..."}
+    Legacy (pre-v4): {"type": "runtime", "target_name": "mcp_cloudwatch"}
     """
-    base = target_name.replace("-", "_")
-    # Try: exact, mcp_ prefixed, and stripped mcp_ prefix (covers both directions)
-    candidates = {base}
-    if not base.startswith("mcp_"):
-        candidates.add(f"mcp_{base}")
-    else:
-        candidates.add(base[4:])  # strip mcp_ prefix
-    control = boto3.client("bedrock-agentcore-control", region_name=REGION)
-    try:
-        resp = control.list_agent_runtimes()
-        runtimes = resp.get("agentRuntimes", [])
-        while True:
-            for rt in runtimes:
-                if rt.get("agentRuntimeName") in candidates:
-                    rt_info = control.get_agent_runtime(agentRuntimeId=rt["agentRuntimeId"])
-                    arn = rt_info["agentRuntimeArn"]
-                    encoded = urllib.parse.quote(arn, safe="")
-                    return f"https://bedrock-agentcore.{REGION}.amazonaws.com/runtimes/{encoded}/invocations?qualifier=DEFAULT"
-            if not resp.get("nextToken"):
-                break
-            resp = control.list_agent_runtimes(nextToken=resp["nextToken"])
-            runtimes = resp.get("agentRuntimes", [])
-    except Exception as e:
-        print(f"WARNING: Failed to resolve runtime {target_name}: {e}", file=sys.stderr)
+    url = ep.get("runtime_endpoint")
+    if url:
+        return url
+    arn = ep.get("runtime_arn")
+    if arn:
+        encoded = urllib.parse.quote(arn, safe="")
+        return f"https://bedrock-agentcore.{REGION}.amazonaws.com/runtimes/{encoded}/invocations?qualifier=DEFAULT"
     return None
 
 def _build_mcp_clients():
@@ -279,10 +269,20 @@ def _build_mcp_clients():
         auth = _AUTH_MAP.get(ep.get("auth", ep_type))
 
         if ep_type == "runtime":
-            url = _resolve_runtime_url(ep["target_name"])
+            url = _resolve_runtime_endpoint_from_config(ep)
             if not url:
-                print(f"WARNING: Skipping unresolvable MCP target: {ep['target_name']}", file=sys.stderr)
-                pairs.append((ep, None, "unresolvable target — not found in list_agent_runtimes"))
+                # Legacy config (pre-v4) without baked endpoint. This path is
+                # reached only for Agents that haven't been redeployed since
+                # the v4 cutover; they fail fast with a clear error rather
+                # than silently degrade.
+                name = ep.get("name") or ep.get("target_name") or "<unknown>"
+                err = (
+                    f"MCP target '{name}' missing runtime_endpoint in config.json — "
+                    f"this Agent predates the per-workspace MCP refactor. "
+                    f"Redeploy the Agent via Meta-Agent or /#/agents."
+                )
+                print(f"WARNING: {err}", file=sys.stderr)
+                pairs.append((ep, None, err))
                 continue
         else:
             url = ep["url"]

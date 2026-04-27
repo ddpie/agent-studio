@@ -119,6 +119,10 @@ from tools.sync_agent_skill import sync_agent_skill
 from tools.attach_agent_skill import attach_agent_skill
 from tools.list_mcp_servers import list_mcp_servers
 from tools.list_mcp_target_tools import list_mcp_target_tools
+from tools.enable_mcp import enable_mcp
+from tools.disable_mcp import disable_mcp
+from tools.upgrade_mcp import upgrade_mcp
+from tools.get_mcp_status import get_mcp_status
 from tools.manage_secrets import set_agent_secrets, list_agent_secrets, delete_agent_secret
 from tools_library.registry import list_tool_library, get_tool_library_code
 from tools.analyze_trace import analyze_trace
@@ -207,6 +211,10 @@ ALL_TOOLS = [
     attach_agent_skill,
     list_mcp_servers,
     list_mcp_target_tools,
+    enable_mcp,
+    disable_mcp,
+    upgrade_mcp,
+    get_mcp_status,
     analyze_trace,
     create_schedule,
     validate_agent,

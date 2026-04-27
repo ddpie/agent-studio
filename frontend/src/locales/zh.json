@@ -369,7 +369,8 @@
       "deleteTypeLabel": "输入工作区名称以确认",
       "deleteSuccess": "工作区已删除",
       "deleteFailed": "删除工作区失败"
-    }
+    },
+    "selectFirst": "请先选择一个工作区。"
   },
   "settings": {
     "title": "设置",
@@ -774,8 +775,27 @@
   },
   "admin": {
     "title": "管理后台",
-    "tabWorkspaces": "Workspace 管理",
-    "noAccess": "你没有管理员权限。"
+    "noAccess": "你没有访问管理后台的权限。",
+    "tabWorkspaces": "工作区管理",
+    "selectWorkspace": "选择一个工作区",
+    "workspaceSearch": "搜索工作区...",
+    "workspaceCount": "{{count}} 个工作区",
+    "owner": "所有者",
+    "hasRole": "已绑定 IAM 角色",
+    "noRole": "未绑定角色",
+    "goToAdmin": "前往管理后台操作",
+    "role": {
+      "title": "工作区 IAM 角色",
+      "exists": "角色已创建",
+      "notCreatedDesc": "当前工作区还没有自定义 IAM 角色。在创建前,Agent 只能使用平台内置工具。角色绑定 AgentStudioWorkspaceCeiling,限制为只读 AWS 操作。",
+      "createBtn": "创建工作区角色",
+      "boundaryNote": "绑定到 AgentStudioWorkspaceCeiling。实际权限 = 身份策略 ∩ boundary。",
+      "manageMcps": "管理 MCP 服务器",
+      "manageMcpsHint": "授权现在通过工作区内 MCP 页管理。每次启用都会把目标的 IAM 策略写入工作区角色的 WorkspaceGrants 内联策略。",
+      "goToMcps": "打开 /#/mcp"
+    },
+    "notAuthorized": "您没有平台管理员权限。",
+    "mcpFleet": "MCP 总览"
   },
   "stats": {
     "invocations": "调用次数",
@@ -1214,16 +1234,130 @@
     "confirmGrantBtn": "确认授权",
     "confirmGrantCancel": "取消"
   },
-  "admin": {
-    "title": "管理后台",
-    "noAccess": "你没有访问管理后台的权限。",
-    "tabWorkspaces": "工作区管理",
-    "selectWorkspace": "选择一个工作区",
-    "workspaceSearch": "搜索工作区...",
-    "workspaceCount": "{{count}} 个工作区",
-    "owner": "所有者",
-    "hasRole": "已绑定 IAM 角色",
-    "noRole": "未绑定角色",
-    "goToAdmin": "前往管理后台操作"
+  "mcp": {
+    "page": {
+      "title": "MCP 服务器",
+      "subtitle": "每个工作区独立的 MCP runtime — 启用 Agent 可调用的工具。",
+      "enabledCount": "已启用 {{count}} 个"
+    },
+    "empty": {
+      "noRole": {
+        "title": "需要创建工作区角色",
+        "body": "MCP 服务器使用工作区的 IAM 角色运行。启用任何 MCP 前,管理员需要先创建工作区角色。",
+        "goToAdmin": "进入管理控制台",
+        "contactAdmin": "请联系管理员创建工作区角色。"
+      },
+      "noTargets": "注册表中没有 MCP 目标。"
+    },
+    "catalog": {
+      "refresh": "刷新",
+      "category": {
+        "general": "通用",
+        "observability": "可观测性",
+        "security": "安全",
+        "cost": "成本",
+        "compute": "计算",
+        "storage": "存储",
+        "database": "数据库",
+        "networking": "网络",
+        "messaging": "消息",
+        "search": "搜索",
+        "analytics": "分析",
+        "data": "数据",
+        "ai_ml": "AI / 机器学习",
+        "industry": "行业",
+        "devtools": "开发工具",
+        "operations": "运维",
+        "management": "管理"
+      }
+    },
+    "status": {
+      "creating": "创建中",
+      "ready": "就绪",
+      "updating": "更新中",
+      "failed": "失败",
+      "deleting": "删除中",
+      "deleted": "已删除"
+    },
+    "action": {
+      "enable": "启用",
+      "disable": "禁用",
+      "upgrade": "升级",
+      "setEnv": "设置环境变量"
+    },
+    "sensitivity": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "enableConfirm": {
+      "title": "启用 MCP",
+      "bodyLow": "启用此 MCP 将创建一个独立工作区 runtime,并为工作区角色授予目标声明的 IAM action。低敏感度目标主要是只读。",
+      "bodyMed": "启用此 MCP 将创建一个独立工作区 runtime。中敏感度目标可能暴露账户数据(审计日志、IAM 角色、账单)。继续前请查看下方风险说明。",
+      "bodyHigh": "⚠ 高敏感度 MCP,需要 admin 角色。可能涉及写操作或凭证相关的权限。请仔细阅读下方原因。",
+      "requiresAdmin": "此目标需要 admin 角色才能启用。请联系工作区管理员。"
+    },
+    "disableConfirm": {
+      "title": "禁用 MCP",
+      "body": "禁用会删除此 MCP 的工作区 runtime 并撤销授权,后续调用将失败。",
+      "affectedAgents": "此操作会导致 {{count}} 个 Agent 失效,直到它们重新部署。",
+      "redeployHint": "稍后重新启用时,记得重新部署受影响的 Agent 以获取新的 runtime endpoint。",
+      "noAffectedAgents": "当前没有 Agent 引用此目标。"
+    },
+    "upgrade": {
+      "confirmTitle": "升级 MCP",
+      "versionFromTo": "从 {{from}} 升级到 {{to}}。",
+      "sensitivityRose": "注册表新版本提升了该目标的敏感度,现在需要 admin 角色。"
+    },
+    "env": {
+      "title": "环境变量",
+      "description": "值存在 Secrets Manager,注入 runtime 容器。",
+      "keyLabel": "键",
+      "valueLabel": "值",
+      "rotationRequired": "必须更新 runtime 才能让新的环境变量生效。"
+    },
+    "error": {
+      "roleMissing": "工作区角色未创建。",
+      "imageMissing": "容器镜像未构建。请联系平台管理员运行 build-mcp.sh。",
+      "envMissing": "此目标需要环境变量,env 流程暂不支持 — 请联系平台管理员。",
+      "inflight": "该目标上已有操作正在进行。",
+      "upstream": "AgentCore 控制面错误,请稍后重试。",
+      "boundaryGap": "目标所需的 action 不在工作区权限边界允许范围内。",
+      "quotaExceeded": "接近 AgentCore runtime 配额,请申请配额提升。",
+      "policyTooLarge": "启用此目标会超出 IAM 内联策略大小限制,请先禁用其他目标。",
+      "network": "网络错误,请检查连接。",
+      "loadFailed": "加载目录失败"
+    },
+    "polling": {
+      "stillCreating": "仍在创建中…",
+      "longRunning": "耗时超出预期",
+      "watching": "正在监控: {{targets}}"
+    },
+    "image": "镜像",
+    "updatedAt": "更新时间",
+    "updateAvailable": "可升级",
+    "cost": {
+      "hint": "每个启用的 MCP 都是独立容器,会产生 AWS runtime 费用。",
+      "hintShort": "会产生费用"
+    },
+    "toast": {
+      "enabled": "已启用 {{target}}",
+      "disabled": "已禁用 {{target}}",
+      "upgraded": "已升级 {{target}}",
+      "envSaved": "已保存 {{target}} 环境变量"
+    },
+    "fleet": {
+      "title": "MCP 总览",
+      "subtitle": "所有工作区 × 已启用的 MCP 目标。修补 CVE 时从这里广播升级。",
+      "filterPlaceholder": "按工作区或目标名过滤…",
+      "empty": "没有任何工作区启用了 MCP runtime。",
+      "broadcastUpgrade": "广播升级",
+      "broadcastConfirm": "在 {{count}} 个工作区升级 {{target}}?",
+      "broadcastResult": "已为 {{target}} 升级了 {{upgraded}} / {{total}} 个工作区。",
+      "colWorkspace": "工作区",
+      "colStatus": "状态",
+      "colVersion": "版本",
+      "colUpdated": "更新时间"
+    }
   }
 }

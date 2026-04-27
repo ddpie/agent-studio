@@ -23,6 +23,8 @@ ROOT = Path(__file__).resolve().parent.parent
 REGISTRY_PATH = ROOT / "mcp-runtime" / "mcp-registry.yaml"
 BACKEND_OUT = ROOT / "lambda" / "crud" / "mcp_iam_registry.py"
 FRONTEND_OUT = ROOT / "frontend" / "src" / "generated" / "mcp-targets.ts"
+BOUNDARY_PATH = ROOT / "infra" / "lib" / "constructs" / "workspace-boundary.ts"
+CEILING_OUT = ROOT / "lambda" / "crud" / "generated" / "ceiling_actions.py"
 
 HEADER_BACKEND = '''"""Auto-generated MCP IAM policy registry — DO NOT EDIT.
 
@@ -525,9 +527,156 @@ def _read_existing_hash(path: Path) -> str | None:
     return m.group(1) if m else None
 
 
+HEADER_CEILING = '''"""Auto-generated ceiling action list — DO NOT EDIT.
+
+Derived from: infra/lib/constructs/workspace-boundary.ts (Allow statements only)
+Regenerate:   python scripts/sync-mcp-iam-policies.py --export-ceiling
+
+Consumed by crud/mcp_runtime_manager.py for enable-time boundary intersection
+check (spec §11.4 / D10). At runtime the Lambda verifies CEILING_HASH matches
+the live AgentStudioWorkspaceCeiling managed policy; a mismatch rejects all
+enable requests until Lambda is redeployed.
+"""
+# CEILING_HASH: {hash}
+'''
+
+
+def _parse_boundary_allow_actions() -> tuple[list[str], list[str]]:
+    """Extract Allow-statement action patterns from workspace-boundary.ts.
+
+    Returns (allow_actions, deny_actions). Allow list is used for intersection;
+    Deny is recorded for audit but NOT considered (spec §10.3 documents that
+    targets overlapping with Deny actions will fail at runtime; intersection
+    check is an Allow-only heuristic).
+    """
+    text = BOUNDARY_PATH.read_text()
+
+    # Find every PolicyStatement block by scanning `new iam.PolicyStatement({...})`.
+    # Extract sid, effect (if present), actions array.
+    stmt_re = re.compile(
+        r"new\s+iam\.PolicyStatement\s*\(\s*\{(.*?)\}\s*\)",
+        re.DOTALL,
+    )
+    sid_re = re.compile(r"sid:\s*[\"']([^\"']+)[\"']")
+    effect_re = re.compile(r"effect:\s*iam\.Effect\.(ALLOW|DENY)")
+    actions_re = re.compile(r"actions:\s*\[(.*?)\]", re.DOTALL)
+    action_str_re = re.compile(r"[\"']([a-zA-Z0-9\-:_*?]+)[\"']")
+
+    allow_actions: set[str] = set()
+    deny_actions: set[str] = set()
+
+    for m in stmt_re.finditer(text):
+        block = m.group(1)
+        sid_m = sid_re.search(block)
+        effect_m = effect_re.search(block)
+        actions_m = actions_re.search(block)
+        if not actions_m:
+            continue
+        effect = (effect_m.group(1) if effect_m else "ALLOW").upper()
+        action_strs = action_str_re.findall(actions_m.group(1))
+        # Assertion: no NotAction support — if "notActions:" appears in block, bail.
+        if re.search(r"notActions:", block):
+            raise RuntimeError(
+                f"Boundary statement '{sid_m.group(1) if sid_m else '?'}' uses NotAction; "
+                "intersection check does not support NotAction. Refactor or add to "
+                "_CEILING_ACTIONS manually."
+            )
+        if effect == "ALLOW":
+            allow_actions.update(action_strs)
+        else:
+            deny_actions.update(action_strs)
+
+    if not allow_actions:
+        raise RuntimeError(
+            f"Failed to parse any Allow actions from {BOUNDARY_PATH}. "
+            "Regex may need updating for new syntax."
+        )
+
+    return sorted(allow_actions), sorted(deny_actions)
+
+
+def _action_matches(required: str, pattern: str) -> bool:
+    """Case-insensitive IAM-style match: '*' and '?' wildcards."""
+    import fnmatch
+    return fnmatch.fnmatchcase(required.lower(), pattern.lower())
+
+
+def _compute_ceiling_hash(allow: list[str], deny: list[str]) -> str:
+    serialized = json.dumps({"allow": allow, "deny": deny}, sort_keys=True)
+    return hashlib.sha256(serialized.encode()).hexdigest()[:16]
+
+
+def _check_boundary_covers_all_targets(
+    targets: list[dict], allow: list[str]
+) -> list[tuple[str, list[str]]]:
+    """For each ENABLED target with iam_policy, find actions not covered by the ceiling.
+
+    Disabled targets (e.g. vpc_required) are skipped — they can't be enabled
+    in a workspace anyway, so their gaps are irrelevant.
+
+    Returns list of (target_name, missing_actions) for enabled targets with gaps.
+    """
+    gaps = []
+    for t in targets:
+        if not t.get("enabled", True):
+            continue
+        policy = t.get("iamPolicy")
+        if not policy:
+            continue
+        required = set()
+        for stmt in policy.get("Statement", []):
+            if stmt.get("Effect") != "Allow":
+                continue
+            actions = stmt.get("Action", [])
+            if isinstance(actions, str):
+                actions = [actions]
+            required.update(actions)
+        missing = [a for a in sorted(required) if not any(_action_matches(a, p) for p in allow)]
+        if missing:
+            gaps.append((t["name"], missing))
+    return gaps
+
+
+def _generate_ceiling(allow: list[str], deny: list[str], ceiling_hash: str) -> str:
+    lines = [HEADER_CEILING.format(hash=ceiling_hash)]
+    lines.append("")
+    lines.append("CEILING_HASH: str = " + repr(ceiling_hash))
+    lines.append("")
+    lines.append("# Allow action patterns. Supports '*' and '?' IAM wildcards.")
+    lines.append("_CEILING_ALLOW_ACTIONS: tuple[str, ...] = (")
+    for a in allow:
+        lines.append(f"    {a!r},")
+    lines.append(")")
+    lines.append("")
+    lines.append("# Deny actions (informational; intersection check considers Allow only).")
+    lines.append("_CEILING_DENY_ACTIONS: tuple[str, ...] = (")
+    for a in deny:
+        lines.append(f"    {a!r},")
+    lines.append(")")
+    lines.append("")
+    lines.append("")
+    lines.append("def _matches(required: str, pattern: str) -> bool:")
+    lines.append("    import fnmatch")
+    lines.append("    return fnmatch.fnmatchcase(required.lower(), pattern.lower())")
+    lines.append("")
+    lines.append("")
+    lines.append("def actions_within_ceiling(actions: list[str]) -> tuple[bool, list[str]]:")
+    lines.append('    """Check if every action is covered by at least one ceiling Allow pattern.')
+    lines.append("")
+    lines.append("    Returns (ok, missing_actions).")
+    lines.append('    """')
+    lines.append("    missing = [a for a in actions")
+    lines.append("               if not any(_matches(a, p) for p in _CEILING_ALLOW_ACTIONS)]")
+    lines.append("    return (len(missing) == 0, missing)")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Sync MCP IAM policies from registry YAML")
     parser.add_argument("--check", action="store_true", help="Check mode: exit 1 if files are stale")
+    parser.add_argument("--export-ceiling", action="store_true",
+                        help="Also emit lambda/crud/generated/ceiling_actions.py from boundary construct")
     args = parser.parse_args()
 
     registry = _load_registry()
@@ -565,6 +714,25 @@ def main():
     print(f"  Backend:  {BACKEND_OUT}")
     print(f"  Frontend: {FRONTEND_OUT}")
     print(f"  Hash: {sync_hash}")
+
+    if args.export_ceiling:
+        allow, deny = _parse_boundary_allow_actions()
+        ceiling_hash = _compute_ceiling_hash(allow, deny)
+        gaps = _check_boundary_covers_all_targets(targets, allow)
+        if gaps:
+            print("\nERROR: registry targets have actions not covered by ceiling:")
+            for name, missing in gaps:
+                print(f"  {name}: {', '.join(missing)}")
+            print("\nEither widen the ceiling or drop these actions from the target.")
+            sys.exit(2)
+        CEILING_OUT.parent.mkdir(parents=True, exist_ok=True)
+        # Ensure package marker
+        init_py = CEILING_OUT.parent / "__init__.py"
+        if not init_py.exists():
+            init_py.write_text("")
+        CEILING_OUT.write_text(_generate_ceiling(allow, deny, ceiling_hash))
+        print(f"  Ceiling: {CEILING_OUT}")
+        print(f"  Ceiling hash: {ceiling_hash} ({len(allow)} Allow patterns, {len(deny)} Deny)")
 
 
 if __name__ == "__main__":

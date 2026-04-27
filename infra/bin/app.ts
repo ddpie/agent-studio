@@ -7,6 +7,7 @@ import { AgentStudioStack } from "../lib/agent-studio-stack";
 import { WafStack } from "../lib/waf-stack";
 import { getConfig } from "../lib/config";
 import { PublicAccessGuard } from "../lib/aspects/public-access-guard";
+import { EnforceBoundaryImmutability } from "../lib/aspects/enforce-boundary-immutability";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 const config = getConfig();
@@ -34,3 +35,13 @@ new AgentStudioStack(app, "AgentStudioStack", {
 
 // Fail synth if anyone reintroduces AuthType=NONE or Principal:"*" on Lambda.
 cdk.Aspects.of(app).add(new PublicAccessGuard());
+
+// Fail synth if any role can mutate the WorkspaceCeiling boundary, or if
+// CRUD Lambda gains InvokeAgentRuntime on MCP runtimes (spec §4.2 fallback).
+cdk.Aspects.of(app).add(
+  new EnforceBoundaryImmutability({
+    ceilingArn: `arn:aws:iam::${config.accountId}:policy/AgentStudioWorkspaceCeiling`,
+    region: config.region,
+    accountId: config.accountId,
+  }),
+);
