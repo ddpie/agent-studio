@@ -71,6 +71,7 @@ def _create_workspace_memory(workspace_id: str) -> str | None:
         resp = _get_control().create_memory(
             name=safe_name,
             description=f"Agent Studio workspace {workspace_id}",
+            memoryStrategies=DEFAULT_MEMORY_STRATEGIES,
             eventExpiryDuration=90,
         )
         return resp["memory"]["id"]

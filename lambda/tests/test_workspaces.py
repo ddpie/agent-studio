@@ -122,7 +122,7 @@ def test_create_workspace_memory_returns_id(mock_agentcore_control):
     result = _create_workspace_memory("ws-abcdefghijkl-rest")
     assert result == "mem-123"
     call_kw = mock_agentcore_control.create_memory.call_args.kwargs
-    assert call_kw["name"] == "agentstudio-ws-ws-abcdefghi"
+    assert call_kw["name"] == "agentstudio_ws_ws_abcdefghi"
 
 
 def test_create_workspace_memory_returns_none_on_error(mock_agentcore_control):
