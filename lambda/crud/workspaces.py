@@ -64,10 +64,13 @@ def _create_workspace_memory(workspace_id: str) -> str | None:
     """Best-effort create an AgentCore Memory for the workspace.
 
     Returns the memory ID on success, or None if the call fails.
-    Failure must never block workspace creation.
+    Failure must never block workspace creation.  If a memory with the
+    same name already exists (e.g. DDB reference was lost but the
+    AgentCore resource survived), we recover by listing memories and
+    returning the existing ID.
     """
+    safe_name = f"agentstudio_ws_{workspace_id[:12].replace('-', '_')}"
     try:
-        safe_name = f"agentstudio_ws_{workspace_id[:12].replace('-', '_')}"
         resp = _get_control().create_memory(
             name=safe_name,
             description=f"Agent Studio workspace {workspace_id}",
@@ -76,8 +79,30 @@ def _create_workspace_memory(workspace_id: str) -> str | None:
         )
         return resp["memory"]["id"]
     except Exception as e:
+        if "already exists" in str(e):
+            found = _find_memory_by_name(safe_name)
+            if found:
+                return found
         logger.warning("create_memory failed for workspace %s: %s", workspace_id, e)
         return None
+
+
+def _find_memory_by_name(name: str) -> str | None:
+    """Look up an existing memory by name prefix. Returns the ID or None."""
+    try:
+        control = _get_control()
+        resp = control.list_memories()
+        for m in resp.get("memories", []):
+            if m.get("id", "").startswith(name):
+                return m["id"]
+        while resp.get("nextToken"):
+            resp = control.list_memories(nextToken=resp["nextToken"])
+            for m in resp.get("memories", []):
+                if m.get("id", "").startswith(name):
+                    return m["id"]
+    except Exception as e:
+        logger.warning("list_memories fallback failed: %s", e)
+    return None
 
 
 def _hydrate_member_identities(members: list) -> list:

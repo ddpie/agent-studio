@@ -210,10 +210,9 @@ export class Api extends Construct {
       actions: [
         "bedrock-agentcore:CreateMemory",
         "bedrock-agentcore:DeleteMemory",
+        "bedrock-agentcore:ListMemories",
       ],
-      resources: [
-        `arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:memory/*`,
-      ],
+      resources: ["*"],
     }));
 
     // AgentCore Memory — data plane (end-user memory drawer: list/get/delete
