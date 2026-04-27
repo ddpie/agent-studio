@@ -10,7 +10,7 @@ from strands import tool
 
 from config import MODEL_ID, REGION, S3_BUCKET, AGENTS_TABLE, PERMISSION_TIER_ROLES, DEFAULT_PERMISSION_TIER
 from tools._workspace import _get_agent_role_arn
-from deploy import build_deployment_package_v2, upload_deployment, create_runtime, wait_for_ready, validate_agent_files, build_skill_prompt_section
+from deploy import build_deployment_package_v2, upload_deployment, create_runtime, wait_for_ready, validate_agent_files, build_skill_prompt_section, _shared_env_vars
 from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_base_guidelines
 
@@ -424,8 +424,32 @@ def create_agent(
         item["skills"] = skills_config
     table.put_item(Item=item)
 
-    # Wait for ready
-    status = wait_for_ready(result["agent_id"])
+    # Wait for ready, then inject agent_id-aware env vars.
+    # This must happen after wait_for_ready because AgentCore rejects
+    # update_agent_runtime while the runtime is still in CREATING state.
+    status = wait_for_ready(agent_id)
+    try:
+        control = boto3.client("bedrock-agentcore-control", region_name=REGION)
+        control.update_agent_runtime(
+            agentRuntimeId=agent_id,
+            roleArn=result["_role_arn"],
+            agentRuntimeArtifact={
+                "codeConfiguration": {
+                    "code": {"s3": {"bucket": S3_BUCKET, "prefix": result["_s3_key"]}},
+                    "runtime": "PYTHON_3_10",
+                    "entryPoint": ["main.py"],
+                }
+            },
+            networkConfiguration={"networkMode": "PUBLIC"},
+            filesystemConfigurations=[{
+                "sessionStorage": {"mountPath": "/mnt/workspace"}
+            }],
+            environmentVariables=_shared_env_vars(agent_id=agent_id),
+        )
+    except Exception as e:
+        import sys
+        print(f"WARNING: post-create env update failed for {agent_id}: {e}", file=sys.stderr)
+
     result["status"] = status
     result["agent_name"] = agent_name
 

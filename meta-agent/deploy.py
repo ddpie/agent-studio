@@ -375,35 +375,11 @@ def create_runtime(agent_name: str, description: str, s3_key: str, role_arn: str
 
     agent_id = resp["agentRuntimeId"]
 
-    # Second-pass update to inject the agent_id-aware env. Same artifact,
-    # just the env diff — this is cheap (no code rebuild, no redeploy-
-    # from-scratch).
-    try:
-        control.update_agent_runtime(
-            agentRuntimeId=agent_id,
-            roleArn=role_arn,
-            agentRuntimeArtifact={
-                "codeConfiguration": {
-                    "code": {"s3": {"bucket": S3_BUCKET, "prefix": s3_key}},
-                    "runtime": "PYTHON_3_10",
-                    "entryPoint": ["main.py"],
-                }
-            },
-            networkConfiguration={"networkMode": "PUBLIC"},
-            filesystemConfigurations=[{
-                "sessionStorage": {"mountPath": "/mnt/workspace"}
-            }],
-            environmentVariables=_shared_env_vars(agent_id=agent_id),
-        )
-    except Exception as e:
-        # Non-fatal — the agent exists, skills won't work until the next
-        # update_agent. Surface the diagnostic but don't roll back create.
-        import sys
-        print(f"WARNING: post-create env update failed for {agent_id}: {e}", file=sys.stderr)
-
     return {
         "agent_id": agent_id,
         "agent_arn": resp["agentRuntimeArn"],
+        "_s3_key": s3_key,
+        "_role_arn": role_arn,
     }
 
 
