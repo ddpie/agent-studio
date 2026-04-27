@@ -7,6 +7,7 @@ export interface AgentInfo {
   id: string;
   status: string;
   description: string;
+  runtime_type?: "zip" | "harness";
 }
 
 interface AgentListState {
@@ -50,6 +51,7 @@ export const useAgentListStore = create<AgentListState>((set) => ({
           id: item.agentId,
           status: item.status || "active",
           description: item.description || "",
+          runtime_type: item.runtime_type,
         };
         if (item.status === "archived") {
           archivedAgents.push(info);

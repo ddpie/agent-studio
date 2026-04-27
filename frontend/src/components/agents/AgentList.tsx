@@ -227,6 +227,11 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
               >
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate block">
                   {agent.displayName}
+                  {agent.runtime_type === "harness" && (
+                    <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[10px] font-medium uppercase tracking-wide">
+                      harness
+                    </span>
+                  )}
                 </span>
               </button>
               <div className="flex items-center gap-1 flex-shrink-0">
