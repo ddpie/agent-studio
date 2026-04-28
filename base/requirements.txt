@@ -8,9 +8,11 @@
 bedrock-agentcore==1.6.3
 strands-agents==1.36.0
 
-# AWS SDK
-boto3==1.42.91
-botocore==1.42.91
+# AWS SDK — 1.42.96+ needed for bedrock-agentcore-control.create_harness /
+# update_harness / delete_harness (added in the Harness public-preview API
+# bump on 2026-04). 1.42.91 raises AttributeError at runtime.
+boto3==1.42.96
+botocore==1.42.96
 
 # Observability (ADOT auto-instrumentation)
 aws-opentelemetry-distro==0.17.0
