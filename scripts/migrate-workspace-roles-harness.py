@@ -48,6 +48,39 @@ from crud.workspace_iam import (  # noqa: E402
 )
 
 
+def _preflight_check_builders() -> None:
+    """Fail loud if env vars are missing — otherwise silent ARN corruption.
+
+    shared.config reads REGION / ACCOUNT_ID from env; when either is empty
+    the policy builders produce ARNs with empty segments like
+    ``arn:aws:bedrock-agentcore:us-east-1::runtime/*`` which AWS silently
+    writes but then rejects at AssumeRole time. We'd rather crash here.
+    """
+    trust = _build_trust_policy()
+    arns = []
+    for stmt in trust.get("Statement", []):
+        cond = stmt.get("Condition", {}).get("ArnLike", {})
+        v = cond.get("aws:SourceArn")
+        if isinstance(v, str):
+            arns.append(v)
+        elif isinstance(v, list):
+            arns.extend(v)
+        src_acct = stmt.get("Condition", {}).get("StringEquals", {}).get("aws:SourceAccount")
+        if not src_acct:
+            raise SystemExit(
+                "ERROR: aws:SourceAccount is empty. Set AGENT_STUDIO_ACCOUNT_ID "
+                "(or ACCOUNT_ID) before running migration."
+            )
+    for arn in arns:
+        # Valid IAM ARN segments: arn:partition:service:region:account:resource
+        parts = arn.split(":", 5)
+        if len(parts) < 6 or not parts[4]:
+            raise SystemExit(
+                f"ERROR: malformed ARN in trust policy (empty account segment): {arn!r}. "
+                "Set AGENT_STUDIO_ACCOUNT_ID before running migration."
+            )
+
+
 def _canonicalise(obj):
     """Recursively sort dict keys and lists of strings so two semantically-equal
     policies hash to the same value."""
@@ -133,6 +166,7 @@ def _apply_minimal(iam, role_name: str, target_minimal: dict) -> None:
 
 
 def main() -> int:
+    _preflight_check_builders()
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--apply",
