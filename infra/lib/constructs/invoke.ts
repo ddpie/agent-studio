@@ -67,10 +67,17 @@ export class Invoke extends Construct {
       ],
     }));
 
-    // Grant AgentCore invoke
+    // Grant AgentCore invoke (both zip runtime and harness paths)
     this.invokeLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: ["bedrock-agentcore:InvokeAgentRuntime"],
       resources: [`arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:runtime/*`],
+    }));
+    // Harness runtime (MVP) — invoke Lambda branches on DDB runtime_type and
+    // calls InvokeHarnessCommand for harness agents. Narrow to harness/* ARN
+    // pattern; collection-level access is not needed on the data plane.
+    this.invokeLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["bedrock-agentcore:InvokeHarness"],
+      resources: [`arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:harness/*`],
     }));
 
     // Grant S3 read for presigned URLs (attachments)
