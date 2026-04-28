@@ -228,20 +228,23 @@ export class AgentCoreRoles extends Construct {
       resources: [`arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*`],
     }));
     // Harness (MVP) control-plane CRUD. Meta-Agent's create_harness_agent /
-    // update_harness_agent / delete_harness_agent tools call these. Harness
-    // ARNs do NOT share the `runtime/*` resource namespace — the action-authz
-    // is scoped by `/harnesses` (create/list) and `harness/*` (per-instance).
-    metaAgentRole.addToPolicy(new iam.PolicyStatement({
-      actions: ["bedrock-agentcore:CreateHarness", "bedrock-agentcore:ListHarnesses"],
-      resources: [`arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:/harnesses`],
-    }));
+    // update_harness_agent / delete_harness_agent tools call these. Unlike
+    // most AWS services, CreateHarness is authorized against the
+    // per-instance `harness/*` ARN pattern (not a collection-level
+    // `/harnesses` — that shape fails with AccessDenied). ListHarnesses
+    // keeps the collection-level resource since it spans all instances.
     metaAgentRole.addToPolicy(new iam.PolicyStatement({
       actions: [
+        "bedrock-agentcore:CreateHarness",
         "bedrock-agentcore:GetHarness",
         "bedrock-agentcore:UpdateHarness",
         "bedrock-agentcore:DeleteHarness",
       ],
       resources: [`arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:harness/*`],
+    }));
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["bedrock-agentcore:ListHarnesses"],
+      resources: ["*"],
     }));
     // CreateAgentRuntime also transparently provisions a WorkloadIdentity
     // under workload-identity-directory/default/ so the runtime can call
