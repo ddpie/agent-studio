@@ -79,16 +79,27 @@ def policy_needs_update(current, target) -> bool:
 
 
 def _scan_workspaces_with_role(ddb, table_name: str):
-    """Yield every META item that has a `roleArn`."""
-    paginator = ddb.meta.client.get_paginator("scan")
-    pages = paginator.paginate(
-        TableName=table_name,
-        FilterExpression="sk = :sk AND attribute_exists(roleArn)",
-        ExpressionAttributeValues={":sk": {"S": "META"}},
-    )
-    for page in pages:
-        for item in page.get("Items", []):
-            yield {k: list(v.values())[0] for k, v in item.items()}
+    """Yield every META item that has a `roleArn`.
+
+    Uses the high-level Resource.Table.scan so items come back decoded
+    (no DynamoDB typed-value wrapping). The Resource API also handles
+    Attr() expression building correctly — the low-level client paginator
+    silently returned 0 items when passed ``{":sk": {"S": "META"}}``
+    because the paginator + FilterExpression combination does not
+    type-decode values consistently across boto3 versions.
+    """
+    from boto3.dynamodb.conditions import Attr
+
+    table = ddb.Table(table_name)
+    kwargs = {"FilterExpression": Attr("sk").eq("META") & Attr("roleArn").exists()}
+    while True:
+        resp = table.scan(**kwargs)
+        for item in resp.get("Items", []):
+            yield item
+        last = resp.get("LastEvaluatedKey")
+        if not last:
+            break
+        kwargs["ExclusiveStartKey"] = last
 
 
 def _fetch_current_policies(iam, role_name: str):
