@@ -121,3 +121,57 @@ def test_create_harness_agent_wraps_boto_errors(monkeypatch):
     out = json.loads(mod.create_harness_agent(staging_key="staging/x.json"))
     assert "error" in out
     assert "quota" in out["error"]
+
+
+def test_create_harness_agent_direct_params_conversational_mode(monkeypatch):
+    """Conversational path: Meta-Agent passes name/prompt/model_id directly
+    (no staging_key). Scope provides workspace_id."""
+    from tools import create_harness_agent as mod
+
+    monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:aws:iam::1:role/ws1")
+
+    fake_ddb = MagicMock()
+    monkeypatch.setattr(mod, "_get_agents_table", lambda: fake_ddb)
+
+    fake_cp = MagicMock()
+    fake_cp.create_harness.return_value = {
+        "harness": {
+            "arn": "arn:aws:bedrock-agentcore:us-east-1:123:harness/chatBot-xyz",
+            "harnessId": "chatBot-xyz",
+        }
+    }
+    monkeypatch.setattr(mod, "_get_control_client", lambda: fake_cp)
+
+    out = json.loads(mod.create_harness_agent(
+        name="chatBot",
+        system_prompt="Be concise.",
+        model_id="us.anthropic.claude-sonnet-4-6-20250929-v1:0",
+        description="direct-params sanity",
+    ))
+
+    assert out["ok"] is True
+    assert out["agentId"] == "chatBot-xyz"
+
+    kwargs = fake_cp.create_harness.call_args.kwargs
+    assert kwargs["harnessName"] == "chatBot"
+    assert kwargs["systemPrompt"] == [{"text": "Be concise."}]
+
+    item = fake_ddb.put_item.call_args.kwargs["Item"]
+    assert item["runtime_type"] == "harness"
+    assert item["workspace_id"] == "ws-1"  # from scope
+    assert item["description"] == "direct-params sanity"
+    assert item["display_name"] == "chatBot"  # defaults to name when empty
+
+
+def test_create_harness_agent_direct_params_missing_name(monkeypatch):
+    """Direct-params mode: missing name returns a clean error, no boto call."""
+    from tools import create_harness_agent as mod
+    fake_cp = MagicMock()
+    monkeypatch.setattr(mod, "_get_control_client", lambda: fake_cp)
+
+    out = json.loads(mod.create_harness_agent(
+        system_prompt="hi", model_id="m",
+    ))
+    assert "error" in out
+    assert "name" in out["error"].lower()
+    fake_cp.create_harness.assert_not_called()

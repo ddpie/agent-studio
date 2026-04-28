@@ -4,7 +4,9 @@ Companion to create_agent (zip runtime). Distinguishing feature: no code
 generation, no deployment.zip — harness is a declarative AWS-managed agent.
 
 Selection rule for the Meta-Agent:
-- Only call this when the staging.json's runtime_type == "harness".
+- Call this when the user wants a harness-runtime agent (conversational
+  creation: pass name/system_prompt/model_id directly; form-driven:
+  pass staging_key pointing to the uploaded staging.json).
 - Do NOT call this for zip agents — use create_agent instead.
 - MVP scope: prompt + model only. tools/skills/MCP are not supported here.
 """
@@ -34,50 +36,78 @@ def _read_staging(staging_key: str) -> dict:
 
 
 @tool
-def create_harness_agent(staging_key: str) -> str:
-    """Create an AgentCore Harness-based Agent.
+def create_harness_agent(
+    name: str = "",
+    system_prompt: str = "",
+    model_id: str = "",
+    display_name: str = "",
+    description: str = "",
+    welcome_message: str = "",
+    supports_images: bool = False,
+    staging_key: str = "",
+) -> str:
+    """Create an AgentCore Harness-based Agent (text-only, no tools/skills/MCP).
 
-    MVP scope: text-only conversation. Does NOT support tool / skill / MCP /
-    memory. If the user wants any of those features, use create_agent (zip
-    runtime) instead.
+    MVP scope: Harness agents only support a system prompt + model. If the
+    user wants tools, skills, MCP, or memory, use create_agent (zip)
+    instead.
 
-    staging.json (referenced by staging_key in S3) MUST contain:
-      - name: alphanumeric, max 36 chars (enforced by AgentCore)
-      - system_prompt: non-empty
-      - model_id: non-empty Bedrock model id
-      - runtime_type: must equal "harness"
-      - workspace_id: workspace this agent belongs to
-    Optional:
-      - display_name, description, welcome_message, suggestions, supports_images
+    Two calling modes:
+      1. Conversational (from chat): pass name + system_prompt + model_id
+         directly. Leave staging_key empty. Use this when the user tells
+         the Meta-Agent what they want in chat and expects immediate
+         creation.
+      2. Form-driven (from Agent edit page): the frontend uploads
+         staging.json to S3 and passes staging_key; direct params are
+         ignored in that mode. staging.json MUST include runtime_type:
+         "harness" plus name/system_prompt/model_id/workspace_id.
 
     Args:
-        staging_key: S3 key to the staging JSON file.
+        name: agent name. Alphanumeric only, max 36 chars (AgentCore rule).
+        system_prompt: the agent's system prompt. Required.
+        model_id: Bedrock model id (e.g. "us.anthropic.claude-haiku-4-5-20251001-v1:0").
+        display_name: UI display name (optional; defaults to name).
+        description: one-liner (optional).
+        welcome_message: greeting shown in chat (optional).
+        supports_images: multimodal flag (optional, default False).
+        staging_key: S3 key to staging.json if using form-driven mode
+                     (mutually exclusive with direct params).
 
     Returns:
-        JSON-encoded: {"ok": true, "agentId": "...", "harnessArn": "..."} on success,
-        {"error": "..."} on any failure.
+        JSON: {"ok": true, "agentId": "...", "harnessArn": "..."} on success,
+              {"error": "..."} on failure.
     """
     try:
-        staged = _read_staging(staging_key)
+        if staging_key:
+            staged = _read_staging(staging_key)
+            if staged.get("runtime_type") != "harness":
+                return json.dumps({"error": "staging.json runtime_type must be 'harness'"})
+            name = (staged.get("name") or "").strip()
+            system_prompt = (staged.get("system_prompt") or "").strip()
+            model_id = (staged.get("model_id") or "").strip()
+            display_name = staged.get("display_name", "")
+            description = staged.get("description", "")
+            welcome_message = staged.get("welcome_message", "")
+            supports_images = bool(staged.get("supports_images", False))
+            suggestions = staged.get("suggestions", [])
+            default_model_id = staged.get("default_model_id", "")
+            workspace_id = (staged.get("workspace_id") or "").strip() or current_workspace()
+        else:
+            name = (name or "").strip()
+            system_prompt = (system_prompt or "").strip()
+            model_id = (model_id or "").strip()
+            suggestions = []
+            default_model_id = ""
+            workspace_id = current_workspace()
 
-        if staged.get("runtime_type") != "harness":
-            return json.dumps({"error": "staging.json runtime_type must be 'harness'"})
-
-        name = (staged.get("name") or "").strip()
         if not name:
             return json.dumps({"error": "name is required"})
-
-        system_prompt = (staged.get("system_prompt") or "").strip()
         if not system_prompt:
             return json.dumps({"error": "system_prompt is required"})
-
-        model_id = (staged.get("model_id") or "").strip()
         if not model_id:
             return json.dumps({"error": "model_id is required"})
-
-        workspace_id = (staged.get("workspace_id") or "").strip() or current_workspace()
         if not workspace_id:
-            return json.dumps({"error": "workspace_id is required"})
+            return json.dumps({"error": "workspace_id is required (no active workspace scope)"})
 
         role_arn = _get_agent_role_arn(workspace_id)
 
@@ -101,13 +131,13 @@ def create_harness_agent(staging_key: str) -> str:
             "agentId": harness_id,
             "workspace_id": workspace_id,
             "name": name,
-            "display_name": staged.get("display_name", ""),
-            "description": staged.get("description", ""),
+            "display_name": display_name or name,
+            "description": description,
             "model_id": model_id,
-            "default_model_id": staged.get("default_model_id", ""),
-            "supports_images": bool(staged.get("supports_images", False)),
-            "welcome_message": staged.get("welcome_message", ""),
-            "suggestions": staged.get("suggestions", []),
+            "default_model_id": default_model_id,
+            "supports_images": supports_images,
+            "welcome_message": welcome_message,
+            "suggestions": suggestions,
             "system_prompt": system_prompt,
             "tool_names": [],
             "skill_ids": [],

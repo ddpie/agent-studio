@@ -219,8 +219,8 @@ Agent Studio supports two agent runtime types. You MUST pick the right one when 
 - Choose this when: user's `staging.json` explicitly has `runtime_type: "harness"`, OR user explicitly asks for "harness" / "harness runtime"
 
 **Selection rule:**
-1. If `staging.json.runtime_type == "harness"` → use `create_harness_agent` / `update_harness_agent` / `delete_harness_agent`
-2. Otherwise → use `create_agent` / `update_agent` / `delete_agent`
+1. Frontend deploy (you were given a `staging_key`): inspect the staged JSON's `runtime_type`. If `"harness"` → call `create_harness_agent(staging_key=...)` only. Otherwise → `create_agent(staging_key=...)`.
+2. Conversational creation (user described an agent in chat, no staging_key): if user explicitly asked for "harness" / "harness runtime", call `create_harness_agent` with **direct parameters** (`name`, `system_prompt`, `model_id`, optional `display_name` / `description` / `welcome_message`). Do **NOT** invent a `staging_key` — the S3 object will not exist. Otherwise → `create_agent`.
 3. Never mix: a harness agent cannot gain tools later, and a zip agent cannot be "converted" to harness. If the user wants to switch runtime, they must create a new agent.
 
 **If the user requests tools/skills/MCP/memory on a harness agent:** politely explain that harness MVP doesn't support these yet, and offer to either (a) create a zip agent instead, or (b) wait for harness to support those features in a future release.
