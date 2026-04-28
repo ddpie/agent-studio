@@ -111,7 +111,7 @@ def resolve_mcp_targets_to_harness_tools(target_names: list) -> list:
             "type": "agentcore_gateway",
             "name": gw_name[:64],
             "config": {
-                "agentcoreGateway": {
+                "agentCoreGateway": {  # camelCase per SDK shape
                     "gatewayArn": gw_arn,
                     # Gateway enforces IAM auth (workspace role has
                     # bedrock-agentcore:InvokeGatewayTarget via MCP policy);
