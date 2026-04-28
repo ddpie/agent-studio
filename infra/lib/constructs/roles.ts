@@ -227,6 +227,22 @@ export class AgentCoreRoles extends Construct {
       ],
       resources: [`arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:runtime/*`],
     }));
+    // Harness (MVP) control-plane CRUD. Meta-Agent's create_harness_agent /
+    // update_harness_agent / delete_harness_agent tools call these. Harness
+    // ARNs do NOT share the `runtime/*` resource namespace — the action-authz
+    // is scoped by `/harnesses` (create/list) and `harness/*` (per-instance).
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["bedrock-agentcore:CreateHarness", "bedrock-agentcore:ListHarnesses"],
+      resources: [`arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:/harnesses`],
+    }));
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        "bedrock-agentcore:GetHarness",
+        "bedrock-agentcore:UpdateHarness",
+        "bedrock-agentcore:DeleteHarness",
+      ],
+      resources: [`arn:aws:bedrock-agentcore:${props.region}:${props.accountId}:harness/*`],
+    }));
     // CreateAgentRuntime also transparently provisions a WorkloadIdentity
     // under workload-identity-directory/default/ so the runtime can call
     // back to AgentCore-managed services (Identity Store etc). Missing this
