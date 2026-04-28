@@ -588,6 +588,8 @@
     "template": "Template",
     "defaultModel": "Default Model",
     "modelHint": "Auto-selected when chatting",
+    "harnessModelHint": "Required — harness agents bind to a single model",
+    "harnessModelRequired": "Pick a model before deploying a harness agent.",
     "imageSupport": "Image Support",
     "multimodal": "Image input",
     "multimodalEnabled": "Image input (enabled)",
@@ -972,6 +974,7 @@
   },
   "agentFormSections": {
     "autoInherit": "Auto (inherit)",
+    "pickModel": "Pick a model…",
     "registeredTools": "Registered Tools",
     "registeredToolsHint": "Auto-synced from tool code. Shows which tools will be available at runtime.",
     "importedFrom": "Imported from {{name}}"

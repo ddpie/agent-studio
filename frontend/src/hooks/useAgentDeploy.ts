@@ -224,6 +224,15 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
 
     try {
       const { getWorkspaceId: getWsId } = await import("../lib/api-client");
+      // Harness agents are bound to a single model (no runtime tool picker).
+      // Require the user to pick one in the form rather than letting the
+      // Meta-Agent guess. zip agents stay optional (they inherit the global
+      // default at invoke time).
+      if (formData?.runtime_type === "harness" && !formData?.default_model_id) {
+        setStatus(t("agentEditor.harnessModelRequired"));
+        setSaving(false);
+        return;
+      }
       const stagingData = {
         name: formData?.name || agentName,
         display_name: formData?.display_name || agentName,
@@ -240,6 +249,13 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
         agent_id: agentId,
         workspace_id: getWsId(),
         runtime_type: formData?.runtime_type || "zip",
+        // create_harness_agent reads `model_id` (the harness bedrockModelConfig)
+        // and `default_model_id` (chat-page default) from staging.json.
+        // For harness: mirror default_model_id into model_id.
+        model_id: formData?.runtime_type === "harness"
+          ? (formData?.default_model_id || "")
+          : (formData?.model_id || ""),
+        default_model_id: formData?.default_model_id || "",
       };
 
       let stagingKey: string;
@@ -328,6 +344,10 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
           agent_id: agentId,
           workspace_id: getWsId(),
           runtime_type: formData.runtime_type || "zip",
+          model_id: formData.runtime_type === "harness"
+            ? (formData.default_model_id || "")
+            : (formData.model_id || ""),
+          default_model_id: formData.default_model_id || "",
         };
         await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
 

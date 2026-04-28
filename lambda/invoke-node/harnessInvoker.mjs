@@ -28,15 +28,17 @@ function getClient(region) {
  *   sessionId: string,    // runtimeSessionId, must be >= 33 chars (see doubleUuid())
  *   messages: Array<{role: string, content: Array<{text: string}>}>,
  *   region: string,
+ *   modelId?: string,     // per-invoke model override (chat-page dropdown)
  * }} opts
  * @returns {Promise<AsyncIterable>} native harness event stream
  */
-export async function invokeHarness({ harnessArn, sessionId, messages, region }) {
+export async function invokeHarness({ harnessArn, sessionId, messages, region, modelId }) {
   const client = getClient(region);
   const cmd = new InvokeHarnessCommand({
     harnessArn,
     runtimeSessionId: sessionId,
     messages,
+    ...(modelId && { model: { bedrockModelConfig: { modelId } } }),
   });
   const resp = await client.send(cmd);
   return resp.stream;

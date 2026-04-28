@@ -117,13 +117,22 @@ export default function AgentFormSections({
       {/* Agent Behavior */}
       <Section title={t("agentEditor.agentBehavior")} icon={<Settings2 className="w-3.5 h-3.5" />}>
         <div className="grid grid-cols-2 gap-4">
-          <Field label={t("agentEditor.defaultModel")} changed={!!changedFields.default_model_id} hint={t("agentEditor.modelHint")}>
+          <Field
+            label={(formData.runtime_type === "harness" ? "* " : "") + t("agentEditor.defaultModel")}
+            changed={!!changedFields.default_model_id}
+            hint={formData.runtime_type === "harness" ? t("agentEditor.harnessModelHint") : t("agentEditor.modelHint")}
+          >
             <select
               value={formData.default_model_id || ""}
               onChange={(e) => updateField("default_model_id", e.target.value)}
               className={inputClass}
+              required={formData.runtime_type === "harness"}
             >
-              <option value="">{t("agentFormSections.autoInherit")}</option>
+              {formData.runtime_type === "harness" ? (
+                <option value="">{t("agentFormSections.pickModel")}</option>
+              ) : (
+                <option value="">{t("agentFormSections.autoInherit")}</option>
+              )}
               {MODEL_GROUPS.map((g) =>
                 g.models.map((m) => (
                   <option key={m.id} value={m.id}>{m.label}</option>

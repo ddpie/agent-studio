@@ -276,6 +276,7 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
         sessionId: doubleUuid(),   // MVP session model A: stateless, new id per invoke
         messages,
         region: REGION,
+        modelId: typeof body.model_id === "string" && body.model_id ? body.model_id : undefined,
       });
       for await (const chunk of translateHarnessStream(stream)) {
         responseStream.write(chunk);

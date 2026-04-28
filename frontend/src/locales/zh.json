@@ -588,6 +588,8 @@
     "template": "模板",
     "defaultModel": "默认模型",
     "modelHint": "聊天时自动选择",
+    "harnessModelHint": "必填 — harness agent 绑定单一模型",
+    "harnessModelRequired": "部署 harness agent 前请先选择模型。",
     "imageSupport": "图片支持",
     "multimodal": "支持图片输入",
     "multimodalEnabled": "支持图片输入（已启用）",
@@ -972,6 +974,7 @@
   },
   "agentFormSections": {
     "autoInherit": "自动（继承）",
+    "pickModel": "请选择模型…",
     "registeredTools": "已注册工具",
     "registeredToolsHint": "从工具代码自动同步。显示运行时可用的工具。",
     "importedFrom": "从 {{name}} 导入"
