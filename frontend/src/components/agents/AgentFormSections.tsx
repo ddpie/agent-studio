@@ -217,17 +217,22 @@ export default function AgentFormSections({
       </Section>
       )}
 
-      {/* MCP Tools */}
-      <Section title={t("agentEdit.mcpTargets")} icon={<Network className="w-3.5 h-3.5" />}>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-          {t("agentEdit.mcpTargetsDesc")}
-        </p>
-        <McpTargetSelector
-          selectedTargets={formData.mcp_targets || []}
-          onChange={(targets) => updateField("mcp_targets", targets)}
-          hasLegacyConfig={!!formData.gateway_url && !formData.mcp_targets?.length}
-        />
-      </Section>
+      {/* MCP Tools — harness runtime cannot currently consume our MCP
+           targets (AWS-backed MCP URLs need SigV4 which harness's remote_mcp
+           doesn't inject, and the gateway path needs an OAuth bearer flow
+           that harness's outboundAuth.awsIam doesn't wire up yet). */}
+      {formData.runtime_type !== "harness" && (
+        <Section title={t("agentEdit.mcpTargets")} icon={<Network className="w-3.5 h-3.5" />}>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            {t("agentEdit.mcpTargetsDesc")}
+          </p>
+          <McpTargetSelector
+            selectedTargets={formData.mcp_targets || []}
+            onChange={(targets) => updateField("mcp_targets", targets)}
+            hasLegacyConfig={!!formData.gateway_url && !formData.mcp_targets?.length}
+          />
+        </Section>
+      )}
 
       {/* Linked Agents — A2A requires injecting a call_agent tool into
            main.py, which harness has no room for. Hide for harness. */}

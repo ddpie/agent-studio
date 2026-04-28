@@ -10,7 +10,6 @@ import boto3
 from strands import tool
 
 from config import REGION, AGENTS_TABLE, S3_BUCKET
-from tools._harness_mcp import resolve_mcp_targets_to_harness_tools
 
 
 def _get_control_client():
@@ -55,43 +54,32 @@ def update_harness_agent(agent_id: str, staging_key: str) -> str:
 
         staged = _read_staging(staging_key)
 
-        # Control-plane update — only if prompt, model, or mcp_targets changed.
+        # Control-plane update — only if prompt or model changed. MCP tools
+        # are intentionally not forwarded to UpdateHarness; see the
+        # create_harness_agent module docstring for why harness + our MCP
+        # targets are currently incompatible.
         cp_kwargs = {"harnessId": agent_id}
         if staged.get("model_id"):
             cp_kwargs["model"] = {"bedrockModelConfig": {"modelId": staged["model_id"]}}
         if staged.get("system_prompt"):
             cp_kwargs["systemPrompt"] = [{"text": staged["system_prompt"]}]
 
-        # mcp_targets: absent means "don't touch"; [] means "remove all".
-        # Distinguish via the key's presence in the staging dict.
-        mcp_targets_list = None
-        if "mcp_targets" in staged:
-            raw = staged.get("mcp_targets", [])
-            if isinstance(raw, list):
-                mcp_targets_list = [t for t in raw if isinstance(t, str) and t.strip()]
-            else:
-                mcp_targets_list = [t.strip() for t in str(raw).split(",") if t.strip()]
-            try:
-                cp_kwargs["tools"] = resolve_mcp_targets_to_harness_tools(mcp_targets_list)
-            except ValueError as ve:
-                return json.dumps({"error": str(ve)})
-
-        if "model" in cp_kwargs or "systemPrompt" in cp_kwargs or "tools" in cp_kwargs:
+        if "model" in cp_kwargs or "systemPrompt" in cp_kwargs:
             _get_control_client().update_harness(**cp_kwargs)
 
         # DDB update — always write updated_at + any provided metadata fields.
+        # mcp_targets is still persisted (the UI lets users pick them so we
+        # remember the selection), but harness never sees them.
         now = datetime.utcnow().isoformat() + "Z"
         set_parts = ["updated_at = :updated_at"]
         values = {":updated_at": now}
         for k in ("display_name", "description", "welcome_message",
-                  "suggestions", "supports_images", "model_id", "system_prompt"):
+                  "suggestions", "supports_images", "model_id", "system_prompt",
+                  "mcp_targets"):
             if k in staged:
                 ph = f":{k}"
                 values[ph] = staged[k]
                 set_parts.append(f"{k} = {ph}")
-        if mcp_targets_list is not None:
-            values[":mcp_targets"] = mcp_targets_list
-            set_parts.append("mcp_targets = :mcp_targets")
         table.update_item(
             Key={"agentId": agent_id},
             UpdateExpression="SET " + ", ".join(set_parts),

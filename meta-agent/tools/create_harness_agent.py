@@ -1,14 +1,15 @@
-"""create_harness_agent — Create an AgentCore Harness-based Agent (MVP: text-only).
+"""create_harness_agent — Create an AgentCore Harness-based Agent.
 
 Companion to create_agent (zip runtime). Distinguishing feature: no code
 generation, no deployment.zip — harness is a declarative AWS-managed agent.
 
-Selection rule for the Meta-Agent:
-- Call this when the user wants a harness-runtime agent (conversational
-  creation: pass name/system_prompt/model_id directly; form-driven:
-  pass staging_key pointing to the uploaded staging.json).
-- Do NOT call this for zip agents — use create_agent instead.
-- MVP scope: prompt + model only. tools/skills/MCP are not supported here.
+MVP scope: system prompt + model + memory only. MCP is NOT supported:
+- harness `agentcore_gateway` tool needs gateway OAuth bearer that the
+  control plane's `outboundAuth.awsIam` declaration doesn't yet provide.
+- harness `remote_mcp` tool has no SigV4 hook, so it can't sign requests
+  to the AWS-native MCP runtime URLs our MCP targets live behind.
+Either path ends in 401/403 at invoke time. Use create_agent (zip) if
+the user needs MCP tools.
 """
 import json
 from datetime import datetime
@@ -19,7 +20,6 @@ from strands import tool
 from config import REGION, AGENTS_TABLE, S3_BUCKET
 from tools._scope import current_caller, current_workspace
 from tools._workspace import _get_agent_role_arn
-from tools._harness_mcp import resolve_mcp_targets_to_harness_tools
 
 # Workspaces table isn't in meta-agent/config.py (Meta-Agent rarely needs it);
 # hardcode the default here + env override for parity with Lambda naming.
@@ -58,15 +58,13 @@ def create_harness_agent(
     description: str = "",
     welcome_message: str = "",
     supports_images: bool = False,
-    mcp_targets: str = "",
     staging_key: str = "",
 ) -> str:
-    """Create an AgentCore Harness-based Agent.
+    """Create an AgentCore Harness-based Agent (prompt + model + memory).
 
-    Supported: system prompt, model, and MCP tools (via workspace MCP
-    gateway). NOT YET supported: custom Python tools, skills, memory.
-    If the user wants any of the unsupported features, use create_agent
-    (zip) instead.
+    Supported: system prompt, model, optional memory. NOT supported:
+    MCP tools, custom Python tools, skills. If the user wants any of
+    those, use create_agent (zip) instead.
 
     Two calling modes:
       1. Conversational (from chat): pass name + system_prompt + model_id
@@ -86,9 +84,6 @@ def create_harness_agent(
         description: one-liner (optional).
         welcome_message: greeting shown in chat (optional).
         supports_images: multimodal flag (optional, default False).
-        mcp_targets: comma-separated MCP target names (e.g. "cloudwatch,iam").
-                     Each target is resolved to its gateway; harness gets
-                     one agentcore_gateway tool entry per gateway.
         staging_key: S3 key to staging.json if using form-driven mode
                      (mutually exclusive with direct params).
 
@@ -97,6 +92,7 @@ def create_harness_agent(
               {"error": "..."} on failure.
     """
     try:
+        mcp_targets_from_staging = []  # recorded in DDB for user visibility, never wired
         if staging_key:
             staged = _read_staging(staging_key)
             if staged.get("runtime_type") != "harness":
@@ -111,11 +107,14 @@ def create_harness_agent(
             suggestions = staged.get("suggestions", [])
             default_model_id = staged.get("default_model_id", "")
             workspace_id = (staged.get("workspace_id") or "").strip() or current_workspace()
+            # mcp_targets from staging is intentionally NOT forwarded to
+            # CreateHarness — harness cannot actually call any AWS-backed
+            # MCP target (see module docstring). We preserve the field in
+            # DDB only so the UI still reflects what the user picked in
+            # the form, and so a future harness release can light it up.
             staged_targets = staged.get("mcp_targets", [])
             if isinstance(staged_targets, list):
-                mcp_targets_list = [t for t in staged_targets if isinstance(t, str) and t.strip()]
-            else:
-                mcp_targets_list = [t.strip() for t in str(staged_targets).split(",") if t.strip()]
+                mcp_targets_from_staging = [t for t in staged_targets if isinstance(t, str) and t.strip()]
             memory_cfg = staged.get("memory") or {}
         else:
             name = (name or "").strip()
@@ -124,7 +123,6 @@ def create_harness_agent(
             suggestions = []
             default_model_id = ""
             workspace_id = current_workspace()
-            mcp_targets_list = [t.strip() for t in (mcp_targets or "").split(",") if t.strip()]
             memory_cfg = {}
 
         if not name:
@@ -137,15 +135,6 @@ def create_harness_agent(
             return json.dumps({"error": "workspace_id is required (no active workspace scope)"})
 
         role_arn = _get_agent_role_arn(workspace_id)
-
-        # Resolve MCP targets → one agentcore_gateway tool entry per gateway.
-        # Raises if any target isn't reachable on a READY gateway.
-        harness_tools = []
-        if mcp_targets_list:
-            try:
-                harness_tools = resolve_mcp_targets_to_harness_tools(mcp_targets_list)
-            except ValueError as ve:
-                return json.dumps({"error": str(ve)})
 
         # Memory: only pass to harness if the staging cfg opted in AND the
         # workspace has a memory resource provisioned. Silent no-op otherwise
@@ -171,8 +160,6 @@ def create_harness_agent(
             model={"bedrockModelConfig": {"modelId": model_id}},
             systemPrompt=[{"text": system_prompt}],
         )
-        if harness_tools:
-            create_kwargs["tools"] = harness_tools
         if harness_memory:
             create_kwargs["memory"] = harness_memory
         resp = cp.create_harness(**create_kwargs)
@@ -200,7 +187,7 @@ def create_harness_agent(
             "tool_names": [],
             "skill_ids": [],
             "skills": [],
-            "mcp_targets": mcp_targets_list,
+            "mcp_targets": mcp_targets_from_staging,
             "memory": {
                 "enabled": bool(harness_memory),
                 "strategies": (memory_cfg.get("strategies", []) if isinstance(memory_cfg, dict) else []),
