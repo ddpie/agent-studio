@@ -117,6 +117,10 @@ def _agent_response(item: dict) -> dict:
         "tool_names": item.get("tool_names", []),
         "skill_ids": item.get("skill_ids", []),
         "skills": item.get("skills", []),
+        # Harness agents store system_prompt on the DDB item (no S3 staging
+        # file exists for them). Zip agents leave this empty — the frontend
+        # falls back to fetching system_prompt.txt from S3 for zip.
+        "system_prompt": item.get("system_prompt", ""),
         "status": item.get("status", "active"),
         "visibility": item.get("visibility", "private"),
         "created_by": item.get("created_by", ""),
