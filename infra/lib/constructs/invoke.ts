@@ -32,7 +32,7 @@ export class Invoke extends Construct {
           image: lambda.Runtime.NODEJS_22_X.bundlingImage,
           command: ["bash", "-c",
             "cp package.json /asset-output/ && " +
-            "cp handler.mjs /asset-output/ && " +
+            "cp *.mjs /asset-output/ && " +
             "cd /asset-output && HOME=/tmp npm install --omit=dev"
           ],
         },
