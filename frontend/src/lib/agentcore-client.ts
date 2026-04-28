@@ -194,6 +194,22 @@ async function* invokeAgent(
     clearTimeout(timeoutId);
 
     if (response.ok) {
+      // Guard against Lambda runtime crashes that return 200 + JSON body
+      // (module load failures, uncaught exceptions before streamifyResponse
+      // commits SSE headers). Without this the body falls through to
+      // parseSSEStream which yields nothing — the spinner hangs forever.
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("text/event-stream")) {
+        const text = await response.text();
+        let msg = text;
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed?.errorMessage) {
+            msg = parsed.errorMessage;
+          }
+        } catch { /* keep raw text */ }
+        throw new Error(`Agent backend error (non-SSE response): ${msg.slice(0, 500)}`);
+      }
       onStatus?.(null);
       yield* parseSSEStream(response);
       return;
