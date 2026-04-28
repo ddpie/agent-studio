@@ -81,6 +81,8 @@ export async function fetchAgentMetadataLight(agentId: string): Promise<AgentMet
       gateway_url: item.gateway_url,
       linked_agents: item.linked_agents || [],
       memory: item.memory,
+      runtime_type: (item.runtime_type as "zip" | "harness" | undefined) || "zip",
+      harness_arn: item.harness_arn || "",
     } as AgentMetadata;
   } catch (err) {
     console.error("fetchAgentMetadataLight error:", err);
@@ -95,12 +97,27 @@ export async function fetchAgentMetadataLight(agentId: string): Promise<AgentMet
 export async function fetchAgentMetadata(agentId: string): Promise<AgentMetadata | null> {
   try {
     const item = await fetchAgent(agentId);
+    const runtimeType = (item.runtime_type as "zip" | "harness" | undefined) || "zip";
 
-    // 并行读取 S3 文件
-    const [systemPrompt, toolDefinitions] = await Promise.all([
-      fetchAgentFile(agentId, "system_prompt.txt").catch(() => ""),
-      fetchAgentFile(agentId, "tool_definitions.py").catch(() => ""),
+    // Harness agents store system_prompt directly on the DDB item (no S3
+    // staging files exist for them). Zip agents store it as S3
+    // system_prompt.txt. Read DDB first; for zip fall back to S3 if empty.
+    // tool_definitions is zip-only — skip the S3 read for harness to avoid
+    // needless 404s (and to correctly show empty tool defs).
+    const ddbSystemPrompt = typeof item.system_prompt === "string" ? item.system_prompt : "";
+    const needsS3Prompt = runtimeType === "zip" && !ddbSystemPrompt;
+    const needsS3ToolDefs = runtimeType === "zip";
+
+    const [s3SystemPrompt, toolDefinitions] = await Promise.all([
+      needsS3Prompt
+        ? fetchAgentFile(agentId, "system_prompt.txt").catch(() => "")
+        : Promise.resolve(""),
+      needsS3ToolDefs
+        ? fetchAgentFile(agentId, "tool_definitions.py").catch(() => "")
+        : Promise.resolve(""),
     ]);
+
+    const systemPrompt = ddbSystemPrompt || s3SystemPrompt;
 
     return {
       name: item.name || agentId,
@@ -128,6 +145,8 @@ export async function fetchAgentMetadata(agentId: string): Promise<AgentMetadata
       gateway_url: item.gateway_url,
       linked_agents: item.linked_agents || [],
       memory: item.memory,
+      runtime_type: runtimeType,
+      harness_arn: item.harness_arn || "",
     } as AgentMetadata;
   } catch (err) {
     console.error("fetchAgentMetadata error:", err);

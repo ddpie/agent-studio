@@ -186,6 +186,12 @@ export class Api extends Construct {
         `arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:runtime/*/runtime-endpoint/*`,
       ],
     }));
+    // Harness (MVP): crud/runtime.py's GET /runtime endpoint branches on
+    // runtime_type and calls get_harness for harness agents. Read-only.
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["bedrock-agentcore:GetHarness"],
+      resources: [`arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:harness/*`],
+    }));
 
     // Sprint 2 F5: create eval config from workspaces.create + read eval
     // results from CloudWatch Logs Insights.

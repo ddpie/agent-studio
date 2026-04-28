@@ -101,13 +101,35 @@ def get_runtime(wsId: str, agentId: str):
     if not item or item.get("workspace_id") != ws_id:
         return forbidden()
 
+    runtime_type = item.get("runtime_type", "zip")
+    cp = _get_control()
     try:
-        resp = _get_control().get_agent_runtime(agentRuntimeId=agentId)
+        if runtime_type == "harness":
+            # Harness and Runtime are separate control-plane resources with
+            # different response shapes. Normalize to the same envelope the
+            # frontend's StatusBadge expects: the harness response wraps
+            # fields under "harness".
+            raw = cp.get_harness(harnessId=agentId)
+            h = raw.get("harness", {})
+            resp = {
+                "status": h.get("status"),
+                "agentRuntimeArn": h.get("arn"),
+                "agentRuntimeId": h.get("harnessId"),
+                "createdAt": h.get("createdAt"),
+                "lastUpdatedAt": h.get("updatedAt"),
+                "runtime_type": "harness",
+            }
+        else:
+            resp = cp.get_agent_runtime(agentRuntimeId=agentId)
+            resp["runtime_type"] = "zip"
     except ClientError as e:
         code = e.response.get("Error", {}).get("Code")
         if code == "ResourceNotFoundException":
             return not_found()
-        logger.exception("get_agent_runtime failed", extra={"agentId": agentId, "code": code})
+        logger.exception(
+            "get runtime status failed",
+            extra={"agentId": agentId, "runtime_type": runtime_type, "code": code},
+        )
         return internal_error()
 
     return success(_strip_sensitive(resp))
