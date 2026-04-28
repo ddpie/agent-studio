@@ -73,10 +73,16 @@ export class Invoke extends Construct {
       resources: [`arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:runtime/*`],
     }));
     // Harness runtime (MVP) — invoke Lambda branches on DDB runtime_type and
-    // calls InvokeHarnessCommand for harness agents. Narrow to harness/* ARN
-    // pattern; collection-level access is not needed on the data plane.
+    // calls InvokeHarnessCommand for harness agents. IAM authz for harness
+    // invoke checks BOTH InvokeHarness AND InvokeAgentRuntime on the same
+    // harness/* ARN (empirical — AWS docs on harness public preview call
+    // it out as "Harness API + underlying Runtime action"). Both must be
+    // granted on the harness resource pattern (NOT runtime/*).
     this.invokeLambda.addToRolePolicy(new iam.PolicyStatement({
-      actions: ["bedrock-agentcore:InvokeHarness"],
+      actions: [
+        "bedrock-agentcore:InvokeHarness",
+        "bedrock-agentcore:InvokeAgentRuntime",
+      ],
       resources: [`arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:harness/*`],
     }));
 
