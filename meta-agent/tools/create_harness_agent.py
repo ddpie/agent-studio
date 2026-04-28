@@ -19,6 +19,20 @@ from strands import tool
 from config import REGION, AGENTS_TABLE, S3_BUCKET
 from tools._scope import current_caller, current_workspace
 from tools._workspace import _get_agent_role_arn
+from tools._harness_mcp import resolve_mcp_targets_to_harness_tools
+
+# Workspaces table isn't in meta-agent/config.py (Meta-Agent rarely needs it);
+# hardcode the default here + env override for parity with Lambda naming.
+import os as _os
+_WORKSPACES_TABLE = _os.getenv("AGENT_STUDIO_WORKSPACES_TABLE", "agent-studio-workspaces")
+
+
+def _get_workspace_memory_id(workspace_id: str) -> str | None:
+    ddb = boto3.resource("dynamodb", region_name=REGION).Table(_WORKSPACES_TABLE)
+    resp = ddb.get_item(Key={"workspaceId": workspace_id, "sk": "META"})
+    item = resp.get("Item") or {}
+    mem = item.get("memory_id")
+    return mem if mem else None
 
 
 def _get_control_client():
@@ -44,13 +58,15 @@ def create_harness_agent(
     description: str = "",
     welcome_message: str = "",
     supports_images: bool = False,
+    mcp_targets: str = "",
     staging_key: str = "",
 ) -> str:
-    """Create an AgentCore Harness-based Agent (text-only, no tools/skills/MCP).
+    """Create an AgentCore Harness-based Agent.
 
-    MVP scope: Harness agents only support a system prompt + model. If the
-    user wants tools, skills, MCP, or memory, use create_agent (zip)
-    instead.
+    Supported: system prompt, model, and MCP tools (via workspace MCP
+    gateway). NOT YET supported: custom Python tools, skills, memory.
+    If the user wants any of the unsupported features, use create_agent
+    (zip) instead.
 
     Two calling modes:
       1. Conversational (from chat): pass name + system_prompt + model_id
@@ -70,6 +86,9 @@ def create_harness_agent(
         description: one-liner (optional).
         welcome_message: greeting shown in chat (optional).
         supports_images: multimodal flag (optional, default False).
+        mcp_targets: comma-separated MCP target names (e.g. "cloudwatch,iam").
+                     Each target is resolved to its gateway; harness gets
+                     one agentcore_gateway tool entry per gateway.
         staging_key: S3 key to staging.json if using form-driven mode
                      (mutually exclusive with direct params).
 
@@ -92,6 +111,12 @@ def create_harness_agent(
             suggestions = staged.get("suggestions", [])
             default_model_id = staged.get("default_model_id", "")
             workspace_id = (staged.get("workspace_id") or "").strip() or current_workspace()
+            staged_targets = staged.get("mcp_targets", [])
+            if isinstance(staged_targets, list):
+                mcp_targets_list = [t for t in staged_targets if isinstance(t, str) and t.strip()]
+            else:
+                mcp_targets_list = [t.strip() for t in str(staged_targets).split(",") if t.strip()]
+            memory_cfg = staged.get("memory") or {}
         else:
             name = (name or "").strip()
             system_prompt = (system_prompt or "").strip()
@@ -99,6 +124,8 @@ def create_harness_agent(
             suggestions = []
             default_model_id = ""
             workspace_id = current_workspace()
+            mcp_targets_list = [t.strip() for t in (mcp_targets or "").split(",") if t.strip()]
+            memory_cfg = {}
 
         if not name:
             return json.dumps({"error": "name is required"})
@@ -111,13 +138,44 @@ def create_harness_agent(
 
         role_arn = _get_agent_role_arn(workspace_id)
 
+        # Resolve MCP targets → one agentcore_gateway tool entry per gateway.
+        # Raises if any target isn't reachable on a READY gateway.
+        harness_tools = []
+        if mcp_targets_list:
+            try:
+                harness_tools = resolve_mcp_targets_to_harness_tools(mcp_targets_list)
+            except ValueError as ve:
+                return json.dumps({"error": str(ve)})
+
+        # Memory: only pass to harness if the staging cfg opted in AND the
+        # workspace has a memory resource provisioned. Silent no-op otherwise
+        # — the frontend already surfaces "memory unavailable" when the WS
+        # memory id is missing.
+        harness_memory = None
+        if isinstance(memory_cfg, dict) and memory_cfg.get("enabled"):
+            ws_memory_id = _get_workspace_memory_id(workspace_id)
+            if ws_memory_id:
+                sts = boto3.client("sts", region_name=REGION)
+                account_id = sts.get_caller_identity()["Account"]
+                mem_arn = (
+                    f"arn:aws:bedrock-agentcore:{REGION}:{account_id}:memory/{ws_memory_id}"
+                )
+                harness_memory = {
+                    "agentCoreMemoryConfiguration": {"arn": mem_arn},
+                }
+
         cp = _get_control_client()
-        resp = cp.create_harness(
+        create_kwargs = dict(
             harnessName=name,
             executionRoleArn=role_arn,
             model={"bedrockModelConfig": {"modelId": model_id}},
             systemPrompt=[{"text": system_prompt}],
         )
+        if harness_tools:
+            create_kwargs["tools"] = harness_tools
+        if harness_memory:
+            create_kwargs["memory"] = harness_memory
+        resp = cp.create_harness(**create_kwargs)
 
         # Response shape (from Phase 0 spike): resp["harness"]["arn"] and ["harnessId"]
         harness = resp.get("harness", resp)  # tolerate both shapes
@@ -142,7 +200,11 @@ def create_harness_agent(
             "tool_names": [],
             "skill_ids": [],
             "skills": [],
-            "mcp_targets": [],
+            "mcp_targets": mcp_targets_list,
+            "memory": {
+                "enabled": bool(harness_memory),
+                "strategies": (memory_cfg.get("strategies", []) if isinstance(memory_cfg, dict) else []),
+            },
             "runtime_type": "harness",
             "harness_arn": harness_arn,
             "status": "active",

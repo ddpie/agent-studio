@@ -52,6 +52,60 @@ def _validate_memory_enable(*, memory_enabled: bool, workspace_memory_id: str | 
         )
 
 
+_control = None
+
+
+def _get_control():
+    global _control
+    if _control is None:
+        _control = boto3.client("bedrock-agentcore-control", region_name=REGION)
+    return _control
+
+
+def _sync_harness_memory(agent_id: str, memory_cfg: dict | None, workspace_memory_id: str | None) -> None:
+    """Reflect the agent's memory toggle into the harness control plane.
+
+    Zip agents discover their memory config inside the generated main.py
+    at invoke time. Harness is declarative — we have to re-push the whole
+    memory block via UpdateHarness whenever it changes.
+
+    Args:
+        agent_id: harnessId (same as our DDB agentId for harness agents).
+        memory_cfg: dict from request body, e.g. {"enabled": True, "strategies": [...]}.
+            None / missing key → no memory change; we skip the control-plane call.
+        workspace_memory_id: workspace's Memory resource id; required for enable=True.
+
+    Failures are logged but not re-raised — memory drift isn't worth
+    failing the whole PUT, since the DDB flag is already the source of
+    truth the frontend reads.
+    """
+    if not isinstance(memory_cfg, dict):
+        return
+    enabled = bool(memory_cfg.get("enabled"))
+    try:
+        kwargs = {"harnessId": agent_id}
+        if enabled and workspace_memory_id:
+            mem_arn = (
+                f"arn:aws:bedrock-agentcore:{REGION}:"
+                f"{boto3.client('sts').get_caller_identity()['Account']}:"
+                f"memory/{workspace_memory_id}"
+            )
+            kwargs["memory"] = {
+                "agentCoreMemoryConfiguration": {"arn": mem_arn},
+            }
+        else:
+            # Disable = send explicit empty memory object. The SDK
+            # treats absent memory as "unchanged", so we must send
+            # something to clear it.
+            kwargs["memory"] = {}
+        _get_control().update_harness(**kwargs)
+    except Exception as e:
+        logger.warning(
+            "harness memory sync failed",
+            extra={"agentId": agent_id, "enabled": enabled, "err": str(e)},
+        )
+
+
 # Fields PUT /agents/{id} is allowed to mutate. runtime_type and harness_arn
 # are deliberately excluded — they're set exactly once at create time and
 # mutating them would break the Meta-Agent's harness lifecycle. Silently
@@ -304,7 +358,24 @@ def update_agent(wsId: str, agentId: str):
     except table.meta.client.exceptions.ConditionalCheckFailedException:
         return version_conflict("Agent was modified by another request")
 
-    return success(_agent_response(resp.get("Attributes", {})))
+    # Memory is the only DDB-mutation that also needs a control-plane sync
+    # for harness agents. Zip agents pick up memory cfg at invoke time from
+    # their generated main.py, so we skip the sync for them.
+    updated_item = resp.get("Attributes", {})
+    if (
+        updated_item.get("runtime_type") == "harness"
+        and isinstance(body.get("memory"), dict)
+    ):
+        ws_item = _get_ws_table().get_item(
+            Key={"workspaceId": ws_id, "sk": "META"}, ConsistentRead=False,
+        ).get("Item") or {}
+        _sync_harness_memory(
+            agent_id=agentId,
+            memory_cfg=body["memory"],
+            workspace_memory_id=ws_item.get("memory_id"),
+        )
+
+    return success(_agent_response(updated_item))
 
 
 @router.delete("/api/workspaces/<wsId>/agents/<agentId>")

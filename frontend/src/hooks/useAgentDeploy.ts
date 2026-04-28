@@ -256,6 +256,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
           ? (formData?.default_model_id || "")
           : (formData?.model_id || ""),
         default_model_id: formData?.default_model_id || "",
+        memory: formData?.memory || { enabled: false, strategies: [] },
       };
 
       let stagingKey: string;

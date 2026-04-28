@@ -39,26 +39,34 @@ export default function AgentDetailPage() {
   const [statsRange, setStatsRange] = useState<string>("24h");
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
 
+  // Harness agents have no Deployments/Endpoints/Versions (control plane
+  // doesn't expose CreateHarnessEndpoint) and a different log-group layout
+  // (our LogsTab queries `/aws/bedrock-agentcore/runtimes/*`, which harness
+  // doesn't use). Drop those tabs from the nav + DOM for harness rather
+  // than letting them render + surface ResourceNotFound errors.
+  const isHarness = agent?.runtime_type === "harness";
   const navItems: NavEntry[] = useMemo(
-    () => [
-      { id: "traces-section", label: t("traces.title"), icon: <Activity className="w-3.5 h-3.5" /> },
-      { id: "schedules-section", label: t("schedules.title"), icon: <Clock className="w-3.5 h-3.5" /> },
-
-      { id: "costs-section", label: t("costs.title"), icon: <DollarSign className="w-3.5 h-3.5" /> },
-      { id: "integration-section", label: t("integration.title"), icon: <Share2 className="w-3.5 h-3.5" /> },
-      {
-        type: "group",
-        id: "advanced",
-        label: t("agentDetail.sideNav.advanced"),
-        items: [
-          { id: "deployments-section", label: t("deployments.tab"), icon: <Rocket className="w-3.5 h-3.5" /> },
-          { id: "endpoints-section", label: t("endpoints.tab"), icon: <Network className="w-3.5 h-3.5" /> },
-          { id: "secrets-section", label: t("secrets.title"), icon: <KeyRound className="w-3.5 h-3.5" /> },
-          { id: "logs-section", label: t("logs.sectionTitle"), icon: <ScrollText className="w-3.5 h-3.5" /> },
-        ],
-      },
-    ],
-    [t],
+    () => {
+      const advanced: NavEntry[] = [];
+      if (!isHarness) {
+        advanced.push({ id: "deployments-section", label: t("deployments.tab"), icon: <Rocket className="w-3.5 h-3.5" /> });
+        advanced.push({ id: "endpoints-section", label: t("endpoints.tab"), icon: <Network className="w-3.5 h-3.5" /> });
+      }
+      advanced.push({ id: "secrets-section", label: t("secrets.title"), icon: <KeyRound className="w-3.5 h-3.5" /> });
+      if (!isHarness) {
+        advanced.push({ id: "logs-section", label: t("logs.sectionTitle"), icon: <ScrollText className="w-3.5 h-3.5" /> });
+      }
+      return [
+        { id: "traces-section", label: t("traces.title"), icon: <Activity className="w-3.5 h-3.5" /> },
+        { id: "schedules-section", label: t("schedules.title"), icon: <Clock className="w-3.5 h-3.5" /> },
+        { id: "costs-section", label: t("costs.title"), icon: <DollarSign className="w-3.5 h-3.5" /> },
+        { id: "integration-section", label: t("integration.title"), icon: <Share2 className="w-3.5 h-3.5" /> },
+        advanced.length > 0
+          ? { type: "group", id: "advanced", label: t("agentDetail.sideNav.advanced"), items: advanced }
+          : null,
+      ].filter(Boolean) as NavEntry[];
+    },
+    [t, isHarness],
   );
 
   const flatIds = useMemo(() => {
@@ -245,7 +253,7 @@ export default function AgentDetailPage() {
               )}
               {/* Advanced group — rendered linearly in DOM so scroll-spy
                   tracks them even while the nav group is collapsed. */}
-              {agentId && (
+              {agentId && !isHarness && (
                 <LazySection
                   id="deployments-section"
                   testId="deployments-section"
@@ -254,7 +262,7 @@ export default function AgentDetailPage() {
                   <DeploymentsTab agentId={agentId} />
                 </LazySection>
               )}
-              {agentId && (
+              {agentId && !isHarness && (
                 <LazySection
                   id="endpoints-section"
                   testId="endpoints-section"
@@ -272,7 +280,7 @@ export default function AgentDetailPage() {
                   <SecretsTab agentId={agentId} />
                 </LazySection>
               )}
-              {agentId && (
+              {agentId && !isHarness && (
                 <LazySection
                   id="logs-section"
                   testId="logs-section"

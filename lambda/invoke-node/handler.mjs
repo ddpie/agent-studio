@@ -12,7 +12,7 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { randomBytes } from "node:crypto";
 import { invokeHarness } from "./harnessInvoker.mjs";
 import { translateHarnessStream } from "./harnessTranslator.mjs";
-import { historyToHarnessMessages, doubleUuid } from "./harnessHelpers.mjs";
+import { historyToHarnessMessages, doubleUuid, stableHarnessSessionId } from "./harnessHelpers.mjs";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
 const ACCOUNT_ID = process.env.ACCOUNT_ID || "";
@@ -271,9 +271,14 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
 
     try {
       const messages = historyToHarnessMessages(body.history, body.prompt || "");
+      // Memory-enabled agents need a stable sessionId so recall works
+      // across invokes; without memory the sessionId is effectively
+      // opaque — still stabilise it so CloudWatch traces for one
+      // (agent,user) pair group together.
+      const sessionId = stableHarnessSessionId(route.agentId, auth.userId) || doubleUuid();
       const stream = await invokeHarness({
         harnessArn,
-        sessionId: doubleUuid(),   // MVP session model A: stateless, new id per invoke
+        sessionId,
         messages,
         region: REGION,
         modelId: typeof body.model_id === "string" && body.model_id ? body.model_id : undefined,

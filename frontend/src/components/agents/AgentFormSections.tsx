@@ -163,15 +163,18 @@ export default function AgentFormSections({
         </Field>
       </Section>
 
-      {/* Skills */}
-      <SkillsSection
-        skills={formData.skills || []}
-        agentId={agentId}
-        deployedHashes={deployedSkillHashes}
-        onEditSkill={onEditSkill}
-      />
+      {/* Skills — harness MVP doesn't support skills */}
+      {formData.runtime_type !== "harness" && (
+        <SkillsSection
+          skills={formData.skills || []}
+          agentId={agentId}
+          deployedHashes={deployedSkillHashes}
+          onEditSkill={onEditSkill}
+        />
+      )}
 
-      {/* Tools */}
+      {/* Tools — harness MVP doesn't support custom Python tools */}
+      {formData.runtime_type !== "harness" && (
       <Section title={t("agentEditor.tools")} icon={<Code2 className="w-3.5 h-3.5" />} action={
         <button
           onClick={() => handleOptimizeField("tool_definitions", "Tools")}
@@ -212,6 +215,7 @@ export default function AgentFormSections({
           }}
         />
       </Section>
+      )}
 
       {/* MCP Tools */}
       <Section title={t("agentEdit.mcpTargets")} icon={<Network className="w-3.5 h-3.5" />}>
@@ -225,8 +229,9 @@ export default function AgentFormSections({
         />
       </Section>
 
-      {/* Linked Agents — let this agent call other workspace peers via A2A */}
-      {!isCreateMode && (
+      {/* Linked Agents — A2A requires injecting a call_agent tool into
+           main.py, which harness has no room for. Hide for harness. */}
+      {!isCreateMode && formData.runtime_type !== "harness" && (
         <LinkedAgentsSection
           agentId={agentId}
           linkedAgents={formData.linked_agents || []}

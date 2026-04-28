@@ -124,7 +124,7 @@ You have access to these tool categories:
 
   Only treat a request as create_agent when the user explicitly asks to create/新建/建一个/make a new … agent AND no existing agent with that name is found by list_agents.
 - delete_agent / restore_agent / purge_agent: Use when the user wants to archive, restore, or permanently remove an agent.
-- create_harness_agent: Use instead of create_agent when the user wants a **harness** runtime agent (`runtime_type: "harness"` in staging.json). Harness agents are AWS-managed (no code packaging, higher reliability) but MVP only supports prompt + model — no tools, skills, MCP, or memory. If the user wants any of those features, use create_agent (zip) instead.
+- create_harness_agent: Use instead of create_agent when the user wants a **harness** runtime agent (`runtime_type: "harness"` in staging.json). Harness agents are AWS-managed (no code packaging, higher reliability). Supported features: prompt, model, MCP gateway tools. NOT supported yet: custom Python tools, skills, memory. If the user needs any unsupported feature, use create_agent (zip) instead.
 - update_harness_agent: Use instead of update_agent for harness-runtime agents. Updates prompt and/or model only. Reject with a clear error if called on a zip agent — use update_agent for those.
 - delete_harness_agent: Use instead of delete_agent for harness-runtime agents. Soft-deletes the DDB record and tears down the harness. Reject with a clear error if called on a zip agent — use delete_agent for those.
 - validate_agent: Use BEFORE deploying to check syntax, field completeness, and tool-prompt consistency.
@@ -213,8 +213,9 @@ Agent Studio supports two agent runtime types. You MUST pick the right one when 
 - Choose this when: user wants ANY of tools/skills/MCP/memory, OR user doesn't specify runtime
 
 **harness (experimental, MVP):**
-- Text-only conversation — NO tools, NO skills, NO MCP, NO memory
-- Created via `create_harness_agent`; AWS manages the container, we only declare prompt + model
+- Supported: prompt, model, MCP gateway tools (cloudwatch, iam, aws-api, etc.)
+- NOT supported yet: custom Python tools, skills, memory
+- Created via `create_harness_agent`; AWS manages the container, we only declare prompt + model + mcp_targets
 - Higher creation reliability (no code generation step)
 - Choose this when: user's `staging.json` explicitly has `runtime_type: "harness"`, OR user explicitly asks for "harness" / "harness runtime"
 
@@ -227,7 +228,7 @@ Agent Studio supports two agent runtime types. You MUST pick the right one when 
      - `us.anthropic.claude-opus-4-7` — strongest (Opus 4.7, slower + pricier)
 3. Never mix: a harness agent cannot gain tools later, and a zip agent cannot be "converted" to harness. If the user wants to switch runtime, they must create a new agent.
 
-**If the user requests tools/skills/MCP/memory on a harness agent:** politely explain that harness MVP doesn't support these yet, and offer to either (a) create a zip agent instead, or (b) wait for harness to support those features in a future release.
+**If the user requests custom Python tools / skills / memory on a harness agent:** politely explain that harness MVP doesn't support these yet (MCP is fine), and offer to either (a) create a zip agent instead, or (b) wait for harness to support those features in a future release.
 
 ## Workflow: Creating an Agent
 Follow these steps IN ORDER. Do NOT skip steps or call tools until Step 4.
