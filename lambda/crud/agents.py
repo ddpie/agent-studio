@@ -82,23 +82,34 @@ def _sync_harness_memory(agent_id: str, memory_cfg: dict | None, workspace_memor
     if not isinstance(memory_cfg, dict):
         return
     enabled = bool(memory_cfg.get("enabled"))
+    # AWS asymmetry: UpdateHarness can switch memory ON (by passing the
+    # wrapped optionalValue tagged union) but has no documented way to
+    # switch it OFF — `optionalValue: {}` and `optionalValue: None` both
+    # fail ParamValidation, and omitting `memory` leaves the existing
+    # config untouched. So "disable" here is intentionally a DDB-only
+    # change; the harness server keeps the memory arn until the agent
+    # is destroyed. That's fine: without the DDB flag, no caller can
+    # read the memory drawer, and no new writes are initiated by the
+    # frontend. If we ever need hard-clear semantics, we'd have to
+    # delete+recreate the harness.
+    if not enabled:
+        return
+    if not workspace_memory_id:
+        return
     try:
-        kwargs = {"harnessId": agent_id}
-        if enabled and workspace_memory_id:
-            mem_arn = (
-                f"arn:aws:bedrock-agentcore:{REGION}:"
-                f"{boto3.client('sts').get_caller_identity()['Account']}:"
-                f"memory/{workspace_memory_id}"
-            )
-            kwargs["memory"] = {
-                "agentCoreMemoryConfiguration": {"arn": mem_arn},
-            }
-        else:
-            # Disable = send explicit empty memory object. The SDK
-            # treats absent memory as "unchanged", so we must send
-            # something to clear it.
-            kwargs["memory"] = {}
-        _get_control().update_harness(**kwargs)
+        mem_arn = (
+            f"arn:aws:bedrock-agentcore:{REGION}:"
+            f"{boto3.client('sts').get_caller_identity()['Account']}:"
+            f"memory/{workspace_memory_id}"
+        )
+        _get_control().update_harness(
+            harnessId=agent_id,
+            memory={
+                "optionalValue": {
+                    "agentCoreMemoryConfiguration": {"arn": mem_arn},
+                },
+            },
+        )
     except Exception as e:
         logger.warning(
             "harness memory sync failed",
