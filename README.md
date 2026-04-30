@@ -23,7 +23,7 @@
 | **zip**(默认) | 需要自定义 Python 工具、MCP、Skills、A2A 关联、浏览器/代码解释器 | — |
 | **harness**(实验性) | 只需要 prompt + 模型 + 长期记忆,看重**创建可靠性**和**最短冷启动** | MCP、自定义工具、Skills、linked agents |
 
-两者共享聊天、Memory、可观测、成本页面等所有平台能力;区别只在 Agent 执行层。harness MVP 的能力边界、性能对比和已知局限见 [docs/harness-mvp-release-notes.md](docs/harness-mvp-release-notes.md)。
+两者共享聊天、Memory、可观测、成本页面等所有平台能力;区别只在 Agent 执行层。
 
 ## 架构
 
