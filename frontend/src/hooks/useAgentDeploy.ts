@@ -121,6 +121,8 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
     validate_agent: t("agentEditor.validating"),
     create_agent: t("agentEditor.creatingAgent"),
     update_agent: t("agentEditor.updatingAgent"),
+    create_harness_agent: t("agentEditor.creatingHarness"),
+    update_harness_agent: t("agentEditor.updatingHarness"),
     upload_deployment: t("agentEditor.uploadingCode"),
     deploy_agent: t("agentEditor.deploying"),
     get_agent_status: t("agentEditor.checkingStatus"),
@@ -167,7 +169,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
         template_id: formData?.template_id || "",
         supports_images: formData?.supports_images || false,
         skills: formData?.skills || [],
-        mcp_targets: formData?.mcp_targets || [],
+        mcp_targets: formData?.runtime_type === "harness" ? [] : (formData?.mcp_targets || []),
         agent_id: agentId,
         workspace_id: getWsId(),
       };
@@ -221,6 +223,16 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
     setValidationResult(null);
 
     try {
+      const { getWorkspaceId: getWsId } = await import("../lib/api-client");
+      // Harness agents are bound to a single model (no runtime tool picker).
+      // Require the user to pick one in the form rather than letting the
+      // Meta-Agent guess. zip agents stay optional (they inherit the global
+      // default at invoke time).
+      if (formData?.runtime_type === "harness" && !formData?.default_model_id) {
+        setStatus(t("agentEditor.harnessModelRequired"));
+        setSaving(false);
+        return;
+      }
       const stagingData = {
         name: formData?.name || agentName,
         display_name: formData?.display_name || agentName,
@@ -233,8 +245,18 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
         template_id: formData?.template_id || "",
         supports_images: formData?.supports_images || false,
         skills: formData?.skills || [],
-        mcp_targets: formData?.mcp_targets || [],
+        mcp_targets: formData?.runtime_type === "harness" ? [] : (formData?.mcp_targets || []),
         agent_id: agentId,
+        workspace_id: getWsId(),
+        runtime_type: formData?.runtime_type || "zip",
+        // create_harness_agent reads `model_id` (the harness bedrockModelConfig)
+        // and `default_model_id` (chat-page default) from staging.json.
+        // For harness: mirror default_model_id into model_id.
+        model_id: formData?.runtime_type === "harness"
+          ? (formData?.default_model_id || "")
+          : (formData?.model_id || ""),
+        default_model_id: formData?.default_model_id || "",
+        memory: formData?.memory || { enabled: false, strategies: [] },
       };
 
       let stagingKey: string;
@@ -243,8 +265,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
           await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
           stagingKey = `agents/${agentId}/staging.json`;
         } else {
-          const { getWorkspaceId } = await import("../lib/api-client");
-          const wsId = getWorkspaceId();
+          const wsId = getWsId();
           const draftKey = `staging/${agentId || "new"}.json`;
           const actualKey = await putStorage(draftKey, stagingData);
           if (!actualKey) { setStatus(i18n.t("agentEditor.uploadFailed")); setSaving(false); return; }
@@ -307,6 +328,7 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
     try {
       // Re-upload staging.json with latest formData (auto-fix may have changed fields)
       if (agentId && !isCreateMode && formData) {
+        const { getWorkspaceId: getWsId } = await import("../lib/api-client");
         const stagingData = {
           name: formData.name || agentName,
           display_name: formData.display_name || agentName,
@@ -321,6 +343,12 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
           skills: formData.skills || [],
           mcp_targets: formData.mcp_targets || [],
           agent_id: agentId,
+          workspace_id: getWsId(),
+          runtime_type: formData.runtime_type || "zip",
+          model_id: formData.runtime_type === "harness"
+            ? (formData.default_model_id || "")
+            : (formData.model_id || ""),
+          default_model_id: formData.default_model_id || "",
         };
         await apiPut(`/agents/${agentId}/files?path=staging.json`, { content: JSON.stringify(stagingData) });
 
@@ -337,23 +365,29 @@ export function useAgentDeploy(params: UseAgentDeployParams): AgentDeployState {
           }
         }
       }
+      const isHarness = formData?.runtime_type === "harness";
+      const createTool = isHarness ? "create_harness_agent" : "create_agent";
+      const updateTool = isHarness ? "update_harness_agent" : "update_agent";
+
       const prompt = isCreateMode
-        ? `Execute create_agent with staging_key: ${stagingKey}
+        ? `Execute ${createTool} with staging_key: ${stagingKey}
 The full config is in S3. Read it and use those parameters.
 - agent_name: ${formData?.name || agentName}
 - permission_tier: readonly
 
-Do NOT ask for confirmation. Execute create_agent immediately.`
-        : `Execute update_agent with these parameters:
+Do NOT ask for confirmation. Execute ${createTool} immediately.`
+        : `Execute ${updateTool} with these parameters:
 - agent_id: ${agentId}
 - staging_key: ${stagingKey}
 
-The full config (system_prompt, tool_definitions, etc.) is in the S3 staging file. Pass staging_key to update_agent.
-Do NOT ask for confirmation. Execute update_agent immediately.`;
+The full config (system_prompt, tool_definitions, etc.) is in the S3 staging file. Pass staging_key to ${updateTool}.
+Do NOT ask for confirmation. Execute ${updateTool} immediately.`;
 
       const deployToolPctMap: Record<string, number> = {
         validate_agent: 40, create_agent: 50, update_agent: 50,
         upload_deployment: 70, deploy_agent: 80, get_agent_status: 90, save_metadata: 95,
+        // Harness path has fewer steps (no validate / upload / deploy).
+        create_harness_agent: 60, update_harness_agent: 60,
       };
       setProgressPct(35);
 
@@ -364,7 +398,12 @@ Do NOT ask for confirmation. Execute update_agent immediately.`;
         deployToolPctMap,
       );
 
-      const deployResult = (toolResults.update_agent || toolResults.create_agent) as { error?: string; status?: string; details?: string[] } | undefined;
+      const deployResult = (
+        toolResults.update_agent ||
+        toolResults.create_agent ||
+        toolResults.update_harness_agent ||
+        toolResults.create_harness_agent
+      ) as { error?: string; status?: string; details?: string[] } | undefined;
       const failed = !deployResult || deployResult.error != null;
 
       setProgressStep(null);

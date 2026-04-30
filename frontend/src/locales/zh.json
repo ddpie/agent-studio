@@ -240,6 +240,11 @@
     "copied": "已复制"
   },
   "runtime": {
+    "label": "运行时",
+    "zip": "zip（稳定）",
+    "harness": "harness（实验性）",
+    "helper": "harness 是新的托管 runtime，可靠性更高。MVP 阶段仅支持纯对话，不支持 tool / skill / MCP。",
+    "readonlyHint": "创建后不可更改",
     "status": {
       "ready": "就绪",
       "creating": "创建中",
@@ -588,6 +593,8 @@
     "template": "模板",
     "defaultModel": "默认模型",
     "modelHint": "聊天时自动选择",
+    "harnessModelHint": "必填 — harness agent 绑定单一模型",
+    "harnessModelRequired": "部署 harness agent 前请先选择模型。",
     "imageSupport": "图片支持",
     "multimodal": "支持图片输入",
     "multimodalEnabled": "支持图片输入（已启用）",
@@ -630,6 +637,9 @@
     "updating": "更新中...",
     "creatingAgent": "创建 Agent...",
     "updatingAgent": "更新 Agent...",
+    "creatingHarness": "正在创建 harness agent...",
+    "updatingHarness": "正在更新 harness agent...",
+    "harnessDeployFailed": "harness 部署失败",
     "uploadingCode": "上传代码...",
     "deploying": "部署中...",
     "checkingStatus": "检查状态...",
@@ -969,6 +979,7 @@
   },
   "agentFormSections": {
     "autoInherit": "自动（继承）",
+    "pickModel": "请选择模型…",
     "registeredTools": "已注册工具",
     "registeredToolsHint": "从工具代码自动同步。显示运行时可用的工具。",
     "importedFrom": "从 {{name}} 导入"

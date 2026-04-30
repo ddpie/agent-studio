@@ -31,9 +31,9 @@ export class Invoke extends Construct {
         bundling: {
           image: lambda.Runtime.NODEJS_22_X.bundlingImage,
           command: ["bash", "-c",
-            "cp package.json /asset-output/ && " +
-            "cp handler.mjs /asset-output/ && " +
-            "cd /asset-output && HOME=/tmp npm install --omit=dev"
+            "cp package.json package-lock.json /asset-output/ && " +
+            "cp *.mjs /asset-output/ && " +
+            "cd /asset-output && HOME=/tmp npm ci --omit=dev"
           ],
         },
       }),
@@ -67,10 +67,23 @@ export class Invoke extends Construct {
       ],
     }));
 
-    // Grant AgentCore invoke
+    // Grant AgentCore invoke (both zip runtime and harness paths)
     this.invokeLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: ["bedrock-agentcore:InvokeAgentRuntime"],
       resources: [`arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:runtime/*`],
+    }));
+    // Harness runtime (MVP) — invoke Lambda branches on DDB runtime_type and
+    // calls InvokeHarnessCommand for harness agents. IAM authz for harness
+    // invoke checks BOTH InvokeHarness AND InvokeAgentRuntime on the same
+    // harness/* ARN (empirical — AWS docs on harness public preview call
+    // it out as "Harness API + underlying Runtime action"). Both must be
+    // granted on the harness resource pattern (NOT runtime/*).
+    this.invokeLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        "bedrock-agentcore:InvokeHarness",
+        "bedrock-agentcore:InvokeAgentRuntime",
+      ],
+      resources: [`arn:aws:bedrock-agentcore:${props.config.region}:${props.config.accountId}:harness/*`],
     }));
 
     // Grant S3 read for presigned URLs (attachments)

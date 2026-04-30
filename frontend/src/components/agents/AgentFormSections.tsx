@@ -66,6 +66,21 @@ export default function AgentFormSections({
             />
           </Field>
         </div>
+        {/* Runtime selector — editable only at create time; locked afterwards. */}
+        <div className="grid grid-cols-2 gap-4">
+          <Field label={t("runtime.label")} hint={isCreateMode ? t("runtime.helper") : t("runtime.readonlyHint")}>
+            <select
+              value={formData.runtime_type || "zip"}
+              onChange={isCreateMode ? (e) => updateField("runtime_type", e.target.value as "zip" | "harness") : undefined}
+              disabled={!isCreateMode}
+              className={isCreateMode ? inputClass : disabledClass}
+            >
+              <option value="zip">{t("runtime.zip")}</option>
+              <option value="harness">{t("runtime.harness")}</option>
+            </select>
+          </Field>
+          <div />
+        </div>
         <Field label={t("agentEditor.description")} changed={!!changedFields.description} onOptimize={() => handleOptimizeField("description", "Description")}>
           <textarea
             value={formData.description || ""}
@@ -102,13 +117,22 @@ export default function AgentFormSections({
       {/* Agent Behavior */}
       <Section title={t("agentEditor.agentBehavior")} icon={<Settings2 className="w-3.5 h-3.5" />}>
         <div className="grid grid-cols-2 gap-4">
-          <Field label={t("agentEditor.defaultModel")} changed={!!changedFields.default_model_id} hint={t("agentEditor.modelHint")}>
+          <Field
+            label={(formData.runtime_type === "harness" ? "* " : "") + t("agentEditor.defaultModel")}
+            changed={!!changedFields.default_model_id}
+            hint={formData.runtime_type === "harness" ? t("agentEditor.harnessModelHint") : t("agentEditor.modelHint")}
+          >
             <select
               value={formData.default_model_id || ""}
               onChange={(e) => updateField("default_model_id", e.target.value)}
               className={inputClass}
+              required={formData.runtime_type === "harness"}
             >
-              <option value="">{t("agentFormSections.autoInherit")}</option>
+              {formData.runtime_type === "harness" ? (
+                <option value="">{t("agentFormSections.pickModel")}</option>
+              ) : (
+                <option value="">{t("agentFormSections.autoInherit")}</option>
+              )}
               {MODEL_GROUPS.map((g) =>
                 g.models.map((m) => (
                   <option key={m.id} value={m.id}>{m.label}</option>
@@ -139,15 +163,18 @@ export default function AgentFormSections({
         </Field>
       </Section>
 
-      {/* Skills */}
-      <SkillsSection
-        skills={formData.skills || []}
-        agentId={agentId}
-        deployedHashes={deployedSkillHashes}
-        onEditSkill={onEditSkill}
-      />
+      {/* Skills — harness MVP doesn't support skills */}
+      {formData.runtime_type !== "harness" && (
+        <SkillsSection
+          skills={formData.skills || []}
+          agentId={agentId}
+          deployedHashes={deployedSkillHashes}
+          onEditSkill={onEditSkill}
+        />
+      )}
 
-      {/* Tools */}
+      {/* Tools — harness MVP doesn't support custom Python tools */}
+      {formData.runtime_type !== "harness" && (
       <Section title={t("agentEditor.tools")} icon={<Code2 className="w-3.5 h-3.5" />} action={
         <button
           onClick={() => handleOptimizeField("tool_definitions", "Tools")}
@@ -188,21 +215,28 @@ export default function AgentFormSections({
           }}
         />
       </Section>
+      )}
 
-      {/* MCP Tools */}
-      <Section title={t("agentEdit.mcpTargets")} icon={<Network className="w-3.5 h-3.5" />}>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-          {t("agentEdit.mcpTargetsDesc")}
-        </p>
-        <McpTargetSelector
-          selectedTargets={formData.mcp_targets || []}
-          onChange={(targets) => updateField("mcp_targets", targets)}
-          hasLegacyConfig={!!formData.gateway_url && !formData.mcp_targets?.length}
-        />
-      </Section>
+      {/* MCP Tools — harness runtime cannot currently consume our MCP
+           targets (AWS-backed MCP URLs need SigV4 which harness's remote_mcp
+           doesn't inject, and the gateway path needs an OAuth bearer flow
+           that harness's outboundAuth.awsIam doesn't wire up yet). */}
+      {formData.runtime_type !== "harness" && (
+        <Section title={t("agentEdit.mcpTargets")} icon={<Network className="w-3.5 h-3.5" />}>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            {t("agentEdit.mcpTargetsDesc")}
+          </p>
+          <McpTargetSelector
+            selectedTargets={formData.mcp_targets || []}
+            onChange={(targets) => updateField("mcp_targets", targets)}
+            hasLegacyConfig={!!formData.gateway_url && !formData.mcp_targets?.length}
+          />
+        </Section>
+      )}
 
-      {/* Linked Agents — let this agent call other workspace peers via A2A */}
-      {!isCreateMode && (
+      {/* Linked Agents — A2A requires injecting a call_agent tool into
+           main.py, which harness has no room for. Hide for harness. */}
+      {!isCreateMode && formData.runtime_type !== "harness" && (
         <LinkedAgentsSection
           agentId={agentId}
           linkedAgents={formData.linked_agents || []}

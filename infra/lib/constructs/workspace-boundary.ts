@@ -47,7 +47,7 @@ export class WorkspaceBoundary extends Construct {
           ],
         }),
         new iam.PolicyStatement({
-          sid: "AgentCoreRuntime",
+          sid: "ACRuntime",
           actions: ["bedrock-agentcore:InvokeAgentRuntime"],
           resources: [
             `arn:aws:bedrock-agentcore:${region}:${accountId}:runtime/*`,
@@ -55,7 +55,11 @@ export class WorkspaceBoundary extends Construct {
           ],
         }),
         new iam.PolicyStatement({
-          sid: "AgentCoreServices",
+          // Tools + memory data plane. Invoke* / Save* / Update* / Connect*
+          // serve browser + code-interpreter; CreateEvent + Retrieve* serve
+          // harness memory recall + writeback. All three resource patterns
+          // are workspace-scoped via wildcards on the shared namespaces.
+          sid: "ACSvc",
           actions: [
             "bedrock-agentcore:Invoke*",
             "bedrock-agentcore:Start*",
@@ -63,14 +67,17 @@ export class WorkspaceBoundary extends Construct {
             "bedrock-agentcore:Save*",
             "bedrock-agentcore:Update*",
             "bedrock-agentcore:Connect*",
+            "bedrock-agentcore:CreateEvent",
+            "bedrock-agentcore:Retrieve*",
           ],
           resources: [
             `arn:aws:bedrock-agentcore:${region}:${accountId}:code-interpreter-custom/*`,
             `arn:aws:bedrock-agentcore:${region}:${accountId}:browser-custom/*`,
+            `arn:aws:bedrock-agentcore:${region}:${accountId}:memory/*`,
           ],
         }),
         new iam.PolicyStatement({
-          sid: "S3Platform",
+          sid: "S3Plat",
           actions: ["s3:GetObject", "s3:ListBucket", "s3:PutObject", "s3:DeleteObject"],
           resources: [
             `arn:aws:s3:::${s3Bucket}`,
@@ -78,7 +85,7 @@ export class WorkspaceBoundary extends Construct {
           ],
         }),
         new iam.PolicyStatement({
-          sid: "DynamoDBPlatform",
+          sid: "DDBPlat",
           actions: [
             "dynamodb:GetItem",
             "dynamodb:Query",
@@ -92,14 +99,14 @@ export class WorkspaceBoundary extends Construct {
           ],
         }),
         new iam.PolicyStatement({
-          sid: "SecretsRead",
+          sid: "SecRead",
           actions: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
           resources: [
             `arn:aws:secretsmanager:${region}:${accountId}:secret:agent-studio/*`,
           ],
         }),
         new iam.PolicyStatement({
-          sid: "Observability",
+          sid: "Obs",
           actions: [
             "logs:CreateLogGroup",
             "logs:CreateLogStream",
@@ -122,7 +129,7 @@ export class WorkspaceBoundary extends Construct {
           resources: ["*"],
         }),
         new iam.PolicyStatement({
-          sid: "CloudWatchMetrics",
+          sid: "CWMetric",
           actions: ["cloudwatch:PutMetricData"],
           resources: ["*"],
           conditions: {
@@ -134,8 +141,21 @@ export class WorkspaceBoundary extends Construct {
           actions: [
             "ecr:GetDownloadUrlForLayer",
             "ecr:GetAuthorizationToken",
+            "ecr:BatchGetImage",
+            // Harness images live on ECR Public.
+            "ecr-public:GetAuthorizationToken",
+            "ecr-public:BatchGetImage",
+            "ecr-public:GetDownloadUrlForLayer",
           ],
           resources: ["*"],
+        }),
+        new iam.PolicyStatement({
+          sid: "HBearer",
+          actions: ["sts:GetServiceBearerToken"],
+          resources: ["*"],
+          conditions: {
+            StringEquals: { "sts:AWSServiceName": "bedrock-agentcore.amazonaws.com" },
+          },
         }),
 
         // ─── Extensible ceiling: read-only access for AWS services ───
@@ -145,7 +165,7 @@ export class WorkspaceBoundary extends Construct {
         // Trimmed: lightsail, fsx, memorydb, synthetics, resiliencehub, savingsplans,
         // cost-optimization-hub, apprunner, batch (re-add when MCP targets exist).
         new iam.PolicyStatement({
-          sid: "AWSServicesReadCeiling",
+          sid: "AWSReadCeil",
           actions: [
             // Compute / containers
             "ec2:Describe*",
@@ -239,7 +259,7 @@ export class WorkspaceBoundary extends Construct {
 
         // ─── Belt-and-suspenders deny (compact wildcards) ───
         new iam.PolicyStatement({
-          sid: "DenyEscalation",
+          sid: "DenyEsc",
           effect: iam.Effect.DENY,
           actions: [
             "iam:Create*", "iam:Delete*", "iam:Put*", "iam:Attach*",

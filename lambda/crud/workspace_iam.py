@@ -71,7 +71,10 @@ def _build_trust_policy() -> dict:
                         "aws:SourceAccount": ACCOUNT_ID,
                     },
                     "ArnLike": {
-                        "aws:SourceArn": f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:runtime/*",
+                        "aws:SourceArn": [
+                            f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:runtime/*",
+                            f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:harness/*",
+                        ],
                     },
                 },
             }
@@ -149,6 +152,28 @@ def _build_default_minimal_policy() -> dict:
                 "Resource": "*",
             },
             {
+                # AgentCore Memory data plane. Harness agents with memory
+                # enabled read session events + upsert memory records on
+                # every invocation using this role — without these perms
+                # the harness returns AccessDeniedException on ListEvents
+                # and the chat shows an error instead of a reply. Scoped
+                # to the workspace's own memory resource via the memory/*
+                # pattern; the workspace role never sees other workspaces'
+                # memory ids.
+                "Sid": "AgentCoreMemory",
+                "Effect": "Allow",
+                "Action": [
+                    "bedrock-agentcore:CreateEvent",
+                    "bedrock-agentcore:ListEvents",
+                    "bedrock-agentcore:GetEvent",
+                    "bedrock-agentcore:ListSessions",
+                    "bedrock-agentcore:RetrieveMemoryRecords",
+                    "bedrock-agentcore:ListMemoryRecords",
+                    "bedrock-agentcore:GetMemoryRecord",
+                ],
+                "Resource": f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT_ID}:memory/*",
+            },
+            {
                 "Sid": "Observability",
                 "Effect": "Allow",
                 "Action": [
@@ -187,8 +212,20 @@ def _build_default_minimal_policy() -> dict:
                     "ecr:BatchGetImage",
                     "ecr:GetDownloadUrlForLayer",
                     "ecr:GetAuthorizationToken",
+                    "ecr-public:GetAuthorizationToken",
+                    "ecr-public:BatchGetImage",
+                    "ecr-public:GetDownloadUrlForLayer",
                 ],
                 "Resource": "*",
+            },
+            {
+                "Sid": "HarnessBearerToken",
+                "Effect": "Allow",
+                "Action": ["sts:GetServiceBearerToken"],
+                "Resource": "*",
+                "Condition": {
+                    "StringEquals": {"sts:AWSServiceName": "bedrock-agentcore.amazonaws.com"}
+                },
             },
         ],
     }

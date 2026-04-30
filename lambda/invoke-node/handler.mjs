@@ -10,6 +10,9 @@ import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { randomBytes } from "node:crypto";
+import { invokeHarness } from "./harnessInvoker.mjs";
+import { translateHarnessStream } from "./harnessTranslator.mjs";
+import { historyToHarnessMessages, doubleUuid, stableHarnessSessionId } from "./harnessHelpers.mjs";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
 const ACCOUNT_ID = process.env.ACCOUNT_ID || "";
@@ -136,9 +139,13 @@ async function checkAgentOwnership(agentId, wsId) {
     Key: { agentId },
   }));
   const item = resp.Item;
-  if (!item || item.workspace_id !== wsId) return jsonResponse(403, { error: "Forbidden" });
-  if (item.status === "archived") return jsonResponse(404, { error: "Agent is archived" });
-  return null;
+  if (!item || item.workspace_id !== wsId) {
+    return { error: jsonResponse(403, { error: "Forbidden" }) };
+  }
+  if (item.status === "archived") {
+    return { error: jsonResponse(404, { error: "Agent is archived" }) };
+  }
+  return { item };
 }
 
 // ── Route parsing ──
@@ -212,15 +219,17 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
   }
 
   // Agent ownership check
+  let agentItem = null;
   if (route.type === "agent") {
-    const ownerErr = await checkAgentOwnership(route.agentId, route.wsId);
-    if (ownerErr) {
-      const meta = { statusCode: ownerErr.statusCode, headers: { "content-type": "application/json" } };
+    const check = await checkAgentOwnership(route.agentId, route.wsId);
+    if (check.error) {
+      const meta = { statusCode: check.error.statusCode, headers: { "content-type": "application/json" } };
       responseStream = awslambda.HttpResponseStream.from(responseStream, meta);
-      responseStream.write(ownerErr.body);
+      responseStream.write(check.error.body);
       responseStream.end();
       return;
     }
+    agentItem = check.item;
   }
 
   // Parse body
@@ -233,6 +242,57 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
     responseStream = awslambda.HttpResponseStream.from(responseStream, meta);
     responseStream.write(JSON.stringify({ error: "Invalid JSON body" }));
     responseStream.end();
+    return;
+  }
+
+  // ── Harness runtime branch ──
+  // If the target agent is a harness-runtime agent, route through InvokeHarness.
+  // This branch is terminal: it writes the SSE response and returns before
+  // the existing zip/meta-agent path runs.
+  if (route.type === "agent" && agentItem?.runtime_type === "harness") {
+    const harnessArn = agentItem.harness_arn;
+    if (!harnessArn) {
+      const meta = { statusCode: 500, headers: { "content-type": "application/json" } };
+      responseStream = awslambda.HttpResponseStream.from(responseStream, meta);
+      responseStream.write(JSON.stringify({ error: "Harness agent is missing harness_arn" }));
+      responseStream.end();
+      return;
+    }
+
+    const sseHeaders = {
+      statusCode: 200,
+      headers: {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        "x-accel-buffering": "no",
+      },
+    };
+    responseStream = awslambda.HttpResponseStream.from(responseStream, sseHeaders);
+
+    try {
+      const messages = historyToHarnessMessages(body.history, body.prompt || "");
+      // Memory-enabled agents need a stable sessionId so recall works
+      // across invokes; without memory the sessionId is effectively
+      // opaque — still stabilise it so CloudWatch traces for one
+      // (agent,user) pair group together.
+      const sessionId = stableHarnessSessionId(route.agentId, auth.userId) || doubleUuid();
+      const stream = await invokeHarness({
+        harnessArn,
+        sessionId,
+        messages,
+        region: REGION,
+        modelId: typeof body.model_id === "string" && body.model_id ? body.model_id : undefined,
+      });
+      for await (const chunk of translateHarnessStream(stream)) {
+        responseStream.write(chunk);
+      }
+    } catch (err) {
+      console.error("harness invoke error:", err);
+      const msg = String(err?.message || err || "harness invoke failed");
+      responseStream.write(`data: ${JSON.stringify({ __error: msg })}\n\n`);
+    } finally {
+      responseStream.end();
+    }
     return;
   }
 

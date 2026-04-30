@@ -240,6 +240,11 @@
     "copied": "Copied"
   },
   "runtime": {
+    "label": "Runtime",
+    "zip": "zip (stable)",
+    "harness": "harness (experimental)",
+    "helper": "harness is the new managed runtime with higher reliability. MVP supports text-only conversation — no tools, skills, or MCP.",
+    "readonlyHint": "Cannot change after creation",
     "status": {
       "ready": "Ready",
       "creating": "Creating",
@@ -588,6 +593,8 @@
     "template": "Template",
     "defaultModel": "Default Model",
     "modelHint": "Auto-selected when chatting",
+    "harnessModelHint": "Required — harness agents bind to a single model",
+    "harnessModelRequired": "Pick a model before deploying a harness agent.",
     "imageSupport": "Image Support",
     "multimodal": "Image input",
     "multimodalEnabled": "Image input (enabled)",
@@ -630,6 +637,9 @@
     "updating": "Updating...",
     "creatingAgent": "Creating agent...",
     "updatingAgent": "Updating agent...",
+    "creatingHarness": "Creating harness agent...",
+    "updatingHarness": "Updating harness agent...",
+    "harnessDeployFailed": "Harness deploy failed",
     "uploadingCode": "Uploading code...",
     "deploying": "Deploying...",
     "checkingStatus": "Checking status...",
@@ -969,6 +979,7 @@
   },
   "agentFormSections": {
     "autoInherit": "Auto (inherit)",
+    "pickModel": "Pick a model…",
     "registeredTools": "Registered Tools",
     "registeredToolsHint": "Auto-synced from tool code. Shows which tools will be available at runtime.",
     "importedFrom": "Imported from {{name}}"

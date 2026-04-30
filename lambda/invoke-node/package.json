@@ -2,6 +2,9 @@
   "name": "agent-studio-invoke",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test": "node --test 'tests/*.test.mjs'"
+  },
   "dependencies": {
     "@aws-sdk/client-bedrock-agentcore": "^3.1026.0",
     "@aws-sdk/client-dynamodb": "^3.1026.0",

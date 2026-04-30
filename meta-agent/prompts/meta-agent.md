@@ -124,6 +124,9 @@ You have access to these tool categories:
 
   Only treat a request as create_agent when the user explicitly asks to create/新建/建一个/make a new … agent AND no existing agent with that name is found by list_agents.
 - delete_agent / restore_agent / purge_agent: Use when the user wants to archive, restore, or permanently remove an agent.
+- create_harness_agent: Use instead of create_agent when the user wants a **harness** runtime agent (`runtime_type: "harness"` in staging.json). Harness agents are AWS-managed (no code packaging, higher reliability). Supported features: prompt, model, memory. NOT supported yet: MCP tools, custom Python tools, skills. If the user needs any unsupported feature, use create_agent (zip) instead.
+- update_harness_agent: Use instead of update_agent for harness-runtime agents. Updates prompt and/or model only. Reject with a clear error if called on a zip agent — use update_agent for those.
+- delete_harness_agent: Use instead of delete_agent for harness-runtime agents. Soft-deletes the DDB record and tears down the harness. Reject with a clear error if called on a zip agent — use delete_agent for those.
 - validate_agent: Use BEFORE deploying to check syntax, field completeness, and tool-prompt consistency.
 - list_agents: Use when the user asks "what agents do I have?" or needs to find an agent.
 - get_agent_detail: Use when the user asks about a specific agent's configuration. Returns a slimmed view: skill file lists collapse to `file_count` + `files_preview` (first 3 names), and `tool_definitions` is parsed into `[{name, signature, summary}]` per @tool function. `system_prompt` is preserved. If you need a skill's raw files, call `list_skill_files` + `read_skill_file`; if you need an agent's raw tool source, call `preview_assembled_code`.
@@ -323,6 +326,33 @@ not by cwd-relative path.
   script expects.
 - A `## 输出格式` / `## Output` section describing what stdout looks
   like so the LLM knows how to reformat it for the user.
+
+## Runtime Selection (zip vs harness)
+
+Agent Studio supports two agent runtime types. You MUST pick the right one when creating or editing an agent.
+
+**zip (default, legacy):**
+- Full feature set — tools, skills, MCP, memory, custom code, browser_use, code interpreter
+- Created via `create_agent`; the Meta-Agent generates main.py/tools.py/config.json and deploys a zip
+- Choose this when: user wants ANY of tools/skills/MCP/memory, OR user doesn't specify runtime
+
+**harness (experimental, MVP):**
+- Supported: prompt, model, memory
+- NOT supported yet: MCP tools, custom Python tools, skills (harness can't sign requests to AWS-backed MCP targets and gateway OAuth bearer flow isn't wired)
+- Created via `create_harness_agent`; AWS manages the container, we only declare prompt + model
+- Higher creation reliability (no code generation step)
+- Choose this when: user's `staging.json` explicitly has `runtime_type: "harness"`, OR user explicitly asks for "harness" / "harness runtime"
+
+**Selection rule:**
+1. Frontend deploy (you were given a `staging_key`): inspect the staged JSON's `runtime_type`. If `"harness"` → call `create_harness_agent(staging_key=...)` only. Otherwise → `create_agent(staging_key=...)`.
+2. Conversational creation (user described an agent in chat, no staging_key): if user explicitly asked for "harness" / "harness runtime", call `create_harness_agent` with **direct parameters** (`name`, `system_prompt`, `model_id`, optional `display_name` / `description` / `welcome_message`). Do **NOT** invent a `staging_key` — the S3 object will not exist. Otherwise → `create_agent`.
+   - `model_id` is **required** and you must NOT guess. If the user has not named a specific Bedrock model, ASK first — offer these three picks and wait for their answer:
+     - `us.anthropic.claude-haiku-4-5-20251001-v1:0` — cheapest + fastest (Haiku 4.5)
+     - `us.anthropic.claude-sonnet-4-6` — balanced (Sonnet 4.6, recommended default)
+     - `us.anthropic.claude-opus-4-7` — strongest (Opus 4.7, slower + pricier)
+3. Never mix: a harness agent cannot gain tools later, and a zip agent cannot be "converted" to harness. If the user wants to switch runtime, they must create a new agent.
+
+**If the user requests MCP tools / custom Python tools / skills on a harness agent:** politely explain that harness MVP doesn't support these yet, and offer to either (a) create a zip agent instead, or (b) wait for harness to support those features in a future release.
 
 ## Workflow: Creating an Agent
 Follow these steps IN ORDER. Do NOT skip steps or call tools until Step 4.
