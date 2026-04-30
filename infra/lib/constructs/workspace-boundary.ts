@@ -69,6 +69,21 @@ export class WorkspaceBoundary extends Construct {
             `arn:aws:bedrock-agentcore:${region}:${accountId}:browser-custom/*`,
           ],
         }),
+        // AgentCore Memory data plane — needed at harness invocation time.
+        // CreateEvent is how harness writes conversational turns into
+        // memory; RetrieveMemoryRecords is how it reads them back. These
+        // don't match the generic `Invoke*/Get*/List*` shapes above so
+        // they must be listed explicitly.
+        new iam.PolicyStatement({
+          sid: "AgentCoreMemoryDataPlane",
+          actions: [
+            "bedrock-agentcore:CreateEvent",
+            "bedrock-agentcore:RetrieveMemoryRecords",
+          ],
+          resources: [
+            `arn:aws:bedrock-agentcore:${region}:${accountId}:memory/*`,
+          ],
+        }),
         new iam.PolicyStatement({
           sid: "S3Platform",
           actions: ["s3:GetObject", "s3:ListBucket", "s3:PutObject", "s3:DeleteObject"],
