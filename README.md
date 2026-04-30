@@ -16,6 +16,15 @@
 - **平台级可观测性** — 调用追踪、延迟分位数、错误率、Token 成本按 Agent 和 workspace 自动聚合，一屏总览
 - **Marketplace** — 跨 workspace 发布和克隆 Agent / Skill / Tool，元数据公开，源码克隆后才可见
 
+## 两种 Agent 运行时
+
+| 运行时 | 适合 | 不支持 |
+|---|---|---|
+| **zip**(默认) | 需要自定义 Python 工具、MCP、Skills、A2A 关联、浏览器/代码解释器 | — |
+| **harness**(实验性) | 只需要 prompt + 模型 + 长期记忆,看重**创建可靠性**和**最短冷启动** | MCP、自定义工具、Skills、linked agents |
+
+两者共享聊天、Memory、可观测、成本页面等所有平台能力;区别只在 Agent 执行层。harness MVP 的能力边界、性能对比和已知局限见 [docs/harness-mvp-release-notes.md](docs/harness-mvp-release-notes.md)。
+
 ## 架构
 
 ```mermaid
