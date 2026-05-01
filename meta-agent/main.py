@@ -467,7 +467,10 @@ async def _get_usage(api_key: str, region: str):
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
-        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=20.0)
+        # 360 MB kiro binary's first-ever exec can take 20-40 s (linker
+        # + auth bootstrap). Subsequent invocations reuse OS page cache
+        # and return in < 2 s. 60 s cap lets cold path complete.
+        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=60.0)
     except asyncio.TimeoutError:
         log.warning("kiro-cli /usage timed out")
         yield json.dumps({"__error": "usage_cli_failed", "detail": "timeout"})
@@ -583,7 +586,8 @@ async def _list_models(api_key: str):
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
-        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=15.0)
+        # First-exec cold path can take 20-40 s; warm path < 2 s.
+        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=60.0)
         cli_stdout = stdout_b.decode("utf-8", errors="replace")
         cli_stderr = stderr_b.decode("utf-8", errors="replace")
         if proc.returncode == 0:
@@ -653,6 +657,14 @@ async def _list_models(api_key: str):
 
 @app.entrypoint
 async def invoke(payload, context):
+    # Yield a zero-byte heartbeat BEFORE doing anything slow. AgentCore's
+    # InvokeAgentRuntime has a ~30 s first-byte cap. Kiro CLI's cold-start
+    # (360 MB aarch64 binary + auth bootstrap) can eat that entire budget
+    # before our action handlers even start. An immediate yield pins the
+    # stream open so the long-running work runs on the caller's timeline,
+    # not AgentCore's invoke timeout.
+    yield ""
+
     prompt = payload.get("prompt", "Hello! I'm Agent Studio.")
     history = payload.get("history", [])
     images = payload.get("images") or []
