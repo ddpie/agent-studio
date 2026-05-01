@@ -365,6 +365,14 @@ def _compose_user_text(prompt: str, history_blob: str, is_new_session: bool) -> 
 # Entrypoint
 # --------------------------------------------------------------------------
 
+# Pre-warm kiro binary at import time, NOT on first invoke. The copy is
+# ~360 MB — doing it inside the entrypoint can push first-invoke past
+# AgentCore's 30 s initialization-timeout. Running it here moves the cost
+# into container startup, which has no such cap. Cheap if the binary is
+# already +x on disk (most common case after the first warm container).
+_ensure_kiro_binary_ready()
+_log_phase("kiro binary ready")
+
 app = BedrockAgentCoreApp()
 
 
