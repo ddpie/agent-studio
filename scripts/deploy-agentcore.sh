@@ -60,7 +60,26 @@ base_key = "base/deployment.zip"
 print(f"  Downloading base zip from s3://{bucket}/{base_key}...")
 base_resp = s3.get_object(Bucket=bucket, Key=base_key)
 base_data = base_resp["Body"].read()
-print(f"  Base zip: {len(base_data) / 1024 / 1024:.1f} MB")
+base_mb = len(base_data) / 1024 / 1024
+print(f"  Base zip: {base_mb:.1f} MB")
+
+# Sanity check: a valid base zip is ~200 MB (Python deps + Kiro binary).
+# If something truncated it to a near-empty placeholder (we hit this
+# after a CDK BucketDeployment Lambda ran out of ephemeral storage and
+# uploaded a 154-byte stub), every downstream agent container will
+# ImportError on startup and AgentCore returns the deceptive
+# "Runtime initialization time exceeded" error. Fail loudly here
+# instead of shipping a broken package.
+if len(base_data) < 10 * 1024 * 1024:  # 10 MB
+    import sys as _sys
+    print(
+        f"ERROR: base zip is only {base_mb:.2f} MB — expected > 10 MB. "
+        f"It was likely overwritten by a broken CDK BucketDeployment or a "
+        f"manual upload. Recover it with: "
+        f"aws s3 cp base/deployment.zip s3://{bucket}/{base_key} --region {region}",
+        file=_sys.stderr,
+    )
+    _sys.exit(2)
 
 # Collect source files
 source_files = {}

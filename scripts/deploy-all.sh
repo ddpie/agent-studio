@@ -326,6 +326,26 @@ fi
 # ============================================================
 # Phase 3: CDK deploy
 # ============================================================
+# base zip size floor — catches the case where the file gets replaced
+# with an empty stub (seen after a CDK BucketDeployment Lambda OOM
+# corrupted the upload). < 10 MB ⇒ Python deps are missing ⇒ every
+# downstream Agent container will crash at import.
+assert_base_zip_healthy() {
+  local phase="$1"
+  local size
+  size=$(aws s3api head-object \
+    --bucket "$S3_BUCKET" --key "base/deployment.zip" \
+    --region "$REGION" --query 'ContentLength' --output text 2>/dev/null || echo 0)
+  if [[ "$size" -lt $((10 * 1024 * 1024)) ]]; then
+    echo ""
+    echo "ERROR [$phase]: s3://$S3_BUCKET/base/deployment.zip is $size bytes (< 10 MB)."
+    echo "       Python deps are missing — Agent containers will fail to start."
+    echo "       Recover with: aws s3 cp base/deployment.zip s3://$S3_BUCKET/base/deployment.zip --region $REGION"
+    exit 2
+  fi
+  echo "  base zip healthy: $((size / 1024 / 1024)) MB [$phase]"
+}
+
 if [[ "$SKIP_INFRA" == false ]]; then
   echo "=== Phase 3: CDK deploy ==="
   cd "$INFRA_DIR"
@@ -337,7 +357,14 @@ if [[ "$SKIP_INFRA" == false ]]; then
     npx cdk bootstrap "aws://$ACCOUNT_ID/us-east-1" 2>&1 | tail -1
   fi
 
+  assert_base_zip_healthy "pre-cdk"
+
   npx cdk deploy --all --require-approval never --outputs-file "$PROJECT_ROOT/cdk-outputs.json"
+
+  # CDK's BucketDeployment can silently corrupt base/deployment.zip when
+  # its upload Lambda runs out of ephemeral storage. Recheck after deploy
+  # so we catch the regression before shipping a broken Meta-Agent.
+  assert_base_zip_healthy "post-cdk"
   echo ""
 fi
 
