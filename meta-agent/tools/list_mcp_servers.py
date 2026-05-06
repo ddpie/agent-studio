@@ -1,4 +1,11 @@
-"""list_mcp_servers — List available MCP tool servers from AgentCore Gateway."""
+"""list_mcp_servers — List available MCP tool servers.
+
+Source of truth is mcp-runtime/mcp-registry.yaml (S3-mirrored). Runtime
+status comes from list_agent_runtimes. The AgentCore Gateway is NOT read
+here — see lambda/crud/mcp.py for the same reasoning. Agents invoke MCP
+servers by resolving Runtime ARNs directly (agent_template_v2.py), so
+the Gateway is no longer on any hot path.
+"""
 
 import json
 
@@ -9,35 +16,64 @@ from config import REGION, S3_BUCKET
 from tools._scope import current_workspace
 
 
-def _load_catalog() -> dict:
-    """Load target catalog from S3 for category metadata."""
-    try:
-        s3 = boto3.client("s3", region_name=REGION)
-        resp = s3.get_object(Bucket=S3_BUCKET, Key="mcp/target-catalog.json")
-        items = json.loads(resp["Body"].read().decode())
-        return {item["name"]: item for item in items}
-    except Exception:
-        return {}
+def _load_registry() -> dict:
+    """Load mcp-registry.yaml from S3.
 
-
-def _load_registry_iam_policies() -> dict:
-    """Load iam_policy declarations from mcp-registry.yaml.
-
-    Returns a dict mapping target short name → iam_policy (dict or None).
-    Targets not present in the registry are treated as having no extra
-    IAM requirements (i.e. granted by default).
+    Returns the parsed dict with "remote_targets" and "runtime_targets".
+    Returns empty lists on failure so callers can still render a useful
+    (though empty) result.
     """
     try:
         import yaml
         s3 = boto3.client("s3", region_name=REGION)
         resp = s3.get_object(Bucket=S3_BUCKET, Key="mcp-runtime/mcp-registry.yaml")
-        registry = yaml.safe_load(resp["Body"].read().decode())
-        policies = {}
-        for t in registry.get("remote_targets", []):
-            policies[t["name"]] = t.get("iam_policy")
-        for t in registry.get("runtime_targets", []):
-            policies[t["name"]] = t.get("iam_policy")
-        return policies
+        data = yaml.safe_load(resp["Body"].read().decode()) or {}
+        data.setdefault("remote_targets", [])
+        data.setdefault("runtime_targets", [])
+        return data
+    except Exception:
+        return {"remote_targets": [], "runtime_targets": []}
+
+
+def _iam_policies_from_registry(registry: dict) -> dict:
+    """Extract iam_policy declarations from the registry by target name.
+
+    Targets not present in the registry are treated as having no extra
+    IAM requirements (i.e. granted by default).
+    """
+    policies = {}
+    for t in registry.get("remote_targets", []):
+        policies[t["name"]] = t.get("iam_policy")
+    for t in registry.get("runtime_targets", []):
+        policies[t["name"]] = t.get("iam_policy")
+    return policies
+
+
+def _runtime_name_candidates(short_name: str) -> set:
+    """Set of agent-runtime names a registry entry might match.
+
+    Mirror of lambda/crud/mcp.py and agent_template_v2._resolve_runtime_url
+    so the discovery side and the agent invocation side stay aligned.
+    """
+    base = short_name.replace("-", "_")
+    return {base, f"mcp_{base}"}
+
+
+def _list_deployed_runtimes() -> dict:
+    """Paginate list_agent_runtimes into {agentRuntimeName: item}."""
+    try:
+        control = boto3.client("bedrock-agentcore-control", region_name=REGION)
+        resp = control.list_agent_runtimes()
+        out = {}
+        while True:
+            for rt in resp.get("agentRuntimes", []):
+                name = rt.get("agentRuntimeName")
+                if name:
+                    out[name] = rt
+            if not resp.get("nextToken"):
+                break
+            resp = control.list_agent_runtimes(nextToken=resp["nextToken"])
+        return out
     except Exception:
         return {}
 
@@ -148,40 +184,56 @@ def _enrich_with_permissions(target_name: str, iam_policies: dict, workspace_rol
     return out
 
 
-def _list_gateway_targets() -> list:
-    """List all gateway targets with pagination."""
-    control = boto3.client("bedrock-agentcore-control", region_name=REGION)
+def _build_targets_from_registry(registry: dict, deployed: dict, iam_policies: dict, workspace_role_arn: str | None) -> list:
+    """Produce the list-of-targets view used by list_mcp_servers.
 
-    gateways = control.list_gateways()
-    all_targets = []
+    Reads every ``enabled`` and non-``deprecated`` entry from the registry,
+    attaches the live status for runtime entries (looked up in
+    list_agent_runtimes), and enriches each entry with the workspace's
+    permission check against the declared iam_policy.
+    """
+    merged = []
+    for t in registry.get("remote_targets", []):
+        if not t.get("enabled") or t.get("deprecated"):
+            continue
+        name = t["name"]
+        perm = _enrich_with_permissions(name, iam_policies, workspace_role_arn)
+        merged.append({
+            "name": name,
+            "description": t.get("description", ""),
+            "category": t.get("category", "general"),
+            "type": "remote",
+            "status": "READY",
+            **perm,
+        })
 
-    for gw in gateways.get("items", gateways.get("gateways", [])):
-        gw_id = gw["gatewayId"]
-        gw_name = gw.get("name", "")
-
-        resp = control.list_gateway_targets(gatewayIdentifier=gw_id)
-        targets = resp.get("items", resp.get("targets", []))
-        while resp.get("nextToken"):
-            resp = control.list_gateway_targets(
-                gatewayIdentifier=gw_id, nextToken=resp["nextToken"]
-            )
-            targets.extend(resp.get("items", resp.get("targets", [])))
-
-        for t in targets:
-            all_targets.append({
-                "gateway_id": gw_id,
-                "gateway_name": gw_name,
-                "target_name": t.get("name", ""),
-                "status": t.get("status", ""),
-            })
-
-    return all_targets
+    for t in registry.get("runtime_targets", []):
+        if not t.get("enabled") or t.get("deprecated"):
+            continue
+        name = t["name"]
+        live = next(
+            (deployed[n] for n in _runtime_name_candidates(name) if n in deployed),
+            None,
+        )
+        status = (live or {}).get("status", "unavailable")
+        perm = _enrich_with_permissions(name, iam_policies, workspace_role_arn)
+        merged.append({
+            "name": name,
+            "description": t.get("description", ""),
+            "category": t.get("category", "general"),
+            "type": "runtime",
+            "status": status,
+            **perm,
+        })
+    return merged
 
 
 @tool
 def list_mcp_servers() -> str:
-    """List available MCP tool servers from AgentCore Gateway.
+    """List available MCP tool servers for the current workspace.
 
+    Reads mcp-runtime/mcp-registry.yaml (source of truth for what exists)
+    and list_agent_runtimes (source of truth for current runtime health).
     Returns categorized MCP targets with status and permission grant info.
     Use this to show users what MCP tools are available when creating or
     updating agents. Targets with ``granted: false`` should not be included
@@ -193,38 +245,17 @@ def list_mcp_servers() -> str:
         ``granted`` / ``reason`` / ``missing_actions`` fields.
     """
     try:
-        catalog = _load_catalog()
-        targets = _list_gateway_targets()
-        iam_policies = _load_registry_iam_policies()
+        registry = _load_registry()
+        deployed = _list_deployed_runtimes()
+        iam_policies = _iam_policies_from_registry(registry)
 
         # Load workspace role for permission checks
         ws_id = current_workspace()
         workspace_role_arn = _get_workspace_role_arn(ws_id) if ws_id else None
 
-        # Merge gateway status with catalog metadata.
-        # Strip the "mcp-" prefix that gateway targets carry — the short name
-        # (e.g. "cloudwatch") is the contract everywhere else: the frontend
-        # /mcp/targets API returns short names, workspace policy stores short
-        # names, and _resolve_mcp_endpoints expects short names so it can map
-        # them to runtime ids (e.g. "cloudwatch" -> "mcp_cloudwatch").
-        # Leaving the prefix on here caused Meta-Agent to write
-        # "mcp-cloudwatch" into proposals, which then failed to match the
-        # selector's short names in the editor and would have 404'd at
-        # runtime resolution.
-        merged = []
-        for t in targets:
-            gw_name = t["target_name"]
-            short = gw_name[len("mcp-"):] if gw_name.startswith("mcp-") else gw_name
-            cat_entry = catalog.get(short, {})
-            perm = _enrich_with_permissions(short, iam_policies, workspace_role_arn)
-            entry = {
-                "name": short,
-                "description": cat_entry.get("description", ""),
-                "category": cat_entry.get("category", "general"),
-                "status": t["status"],
-                **perm,
-            }
-            merged.append(entry)
+        merged = _build_targets_from_registry(
+            registry, deployed, iam_policies, workspace_role_arn,
+        )
 
         # Group by category
         by_category: dict[str, list] = {}

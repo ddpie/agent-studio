@@ -1,4 +1,16 @@
-"""MCP Gateway discovery endpoints."""
+"""MCP discovery endpoints.
+
+Source of truth for "what MCP targets exist" = mcp-runtime/mcp-registry.yaml
+(mirrored to S3 by deploy-mcp.sh). For runtime-type targets we then consult
+list_agent_runtimes to report live status (READY / CREATING / FAILED /
+DELETING / unavailable). The Gateway is NOT consulted here — it used to be
+the default data source but it reliably drifts out of sync with the
+registry (nova-canvas incident 2026-05-06: Runtime deleted, ECR deleted,
+yaml scrubbed, but the Gateway target lingered and kept appearing in /mcp).
+Agents invoke MCP servers by resolving Runtime invoke URLs directly
+(agent_template_v2._resolve_runtime_url), so the Gateway plays no role in
+the Agent runtime path either.
+"""
 import json
 import time
 import boto3
@@ -14,7 +26,7 @@ logger = Logger(child=True)
 
 _control = None
 _ws_table = None
-_catalog_cache = {"data": None, "expires": 0}
+_registry_cache = {"data": None, "expires": 0}
 
 
 def _get_control():
@@ -31,22 +43,66 @@ def _get_ws_table():
     return _ws_table
 
 
-def _load_target_catalog():
-    """Load target-catalog.json from S3 with 5-min cache."""
+def _load_registry():
+    """Load mcp-registry.yaml from S3 with 5-min cache.
+
+    Returns the parsed registry dict with keys "remote_targets" and
+    "runtime_targets". Each entry already carries description, category,
+    sensitivity, deprecated, and (for runtime) package/version. Returns an
+    empty dict with both keys on failure so callers can proceed without
+    crashing the /mcp page.
+    """
     now = time.time()
-    if _catalog_cache["data"] and now < _catalog_cache["expires"]:
-        return _catalog_cache["data"]
+    if _registry_cache["data"] and now < _registry_cache["expires"]:
+        return _registry_cache["data"]
     try:
+        import yaml
         s3 = boto3.client("s3", region_name=REGION)
-        resp = s3.get_object(Bucket=S3_BUCKET, Key="mcp/target-catalog.json")
-        items = json.loads(resp["Body"].read())
-        # Convert list to dict keyed by name
-        data = {item["name"]: item for item in items} if isinstance(items, list) else items
-        _catalog_cache["data"] = data
-        _catalog_cache["expires"] = now + 300
+        resp = s3.get_object(Bucket=S3_BUCKET, Key="mcp-runtime/mcp-registry.yaml")
+        data = yaml.safe_load(resp["Body"].read().decode())
+        if not isinstance(data, dict):
+            data = {}
+        # Normalise the two lists so callers never hit KeyError.
+        data.setdefault("remote_targets", [])
+        data.setdefault("runtime_targets", [])
+        _registry_cache["data"] = data
+        _registry_cache["expires"] = now + 300
         return data
     except Exception as e:
-        logger.warning("Failed to load target catalog: %s", str(e))
+        logger.warning("Failed to load mcp-registry.yaml: %s", str(e))
+        return {"remote_targets": [], "runtime_targets": []}
+
+
+def _runtime_name_candidates(short_name: str) -> set:
+    """Return the set of agent-runtime names a registry entry might match.
+
+    deploy-mcp.sh names runtimes as mcp_<name> with hyphens replaced by
+    underscores (e.g. "aws-pricing" -> "mcp_aws_pricing"). We also accept
+    the bare underscore form in case a runtime was created without the
+    prefix. Matches agent_template_v2._resolve_runtime_url so the discovery
+    path and the agent invocation path stay in agreement.
+    """
+    base = short_name.replace("-", "_")
+    return {base, f"mcp_{base}"}
+
+
+def _list_deployed_runtimes():
+    """Paginate list_agent_runtimes into {agentRuntimeName: item}."""
+    try:
+        control = _get_control()
+        resp = control.list_agent_runtimes()
+        out = {}
+        while True:
+            for rt in resp.get("agentRuntimes", []):
+                name = rt.get("agentRuntimeName")
+                if name:
+                    out[name] = rt
+            if not resp.get("nextToken"):
+                break
+            resp = control.list_agent_runtimes(nextToken=resp["nextToken"])
+        return out
+    except Exception as e:
+        logger.warning("list_agent_runtimes failed: %s", str(e))
         return {}
 
 
@@ -71,116 +127,50 @@ def _filter_by_policy(targets, policy):
     return targets
 
 
-def _list_all_gateway_targets():
-    """List all targets from all gateways (paginated)."""
-    try:
-        control = _get_control()
-        gateways_resp = control.list_gateways()
-        all_targets = []
-        for gw in gateways_resp.get("items", gateways_resp.get("gateways", [])):
-            gw_id = gw.get("gatewayId")
-            if not gw_id:
-                continue
-            try:
-                resp = control.list_gateway_targets(gatewayIdentifier=gw_id)
-                targets = resp.get("items", resp.get("targets", []))
-                while resp.get("nextToken"):
-                    resp = control.list_gateway_targets(gatewayIdentifier=gw_id, nextToken=resp["nextToken"])
-                    targets.extend(resp.get("items", resp.get("targets", [])))
-                for t in targets:
-                    all_targets.append({
-                        "name": t.get("name", ""),
-                        "status": t.get("status", "UNKNOWN"),
-                        "description": t.get("description", ""),
-                    })
-            except Exception as e:
-                logger.warning("Failed to list targets for gateway %s: %s", gw_id, str(e))
-        return all_targets
-    except Exception as e:
-        logger.exception("Failed to list all gateway targets")
-        return []
+def _build_target_list():
+    """Produce the /mcp/targets payload from registry + deployed runtimes.
 
-
-def _merge_catalog_and_targets(catalog, gateway_targets):
-    """Merge catalog metadata with gateway status.
-
-    Catalog names may lack the 'mcp-' prefix that gateway target names have.
+    Every ``enabled`` entry in mcp-registry.yaml becomes one row. Remote
+    targets are assumed READY (no health check possible — the endpoint is
+    third-party). Runtime targets get their status from list_agent_runtimes;
+    "unavailable" means the entry was declared in the registry but
+    deploy-mcp.sh never ran or the runtime has since been deleted.
     """
-    merged = {}
-    # Add all catalog entries
-    for name, info in catalog.items():
-        merged[name] = {
-            "name": name,
-            "description": info.get("description", ""),
-            "category": info.get("category", "uncategorized"),
-            "type": info.get("type", "runtime"),
-            "status": "unavailable",
-        }
-    # Overlay gateway status — try both exact name and with 'mcp-' prefix stripped
-    for t in gateway_targets:
-        gw_name = t.get("name", "")
-        catalog_name = gw_name
-        if catalog_name not in merged:
-            catalog_name = gw_name.replace("mcp-", "", 1)
-        if catalog_name in merged:
-            merged[catalog_name]["status"] = t.get("status", "UNKNOWN")
-            # Keep catalog name (without mcp- prefix) for consistency with mcp_targets config
-        else:
-            merged[gw_name] = {
-                "name": gw_name,
-                "description": t.get("description", ""),
-                "category": "uncategorized",
-                "type": "runtime",
-                "status": t.get("status", "UNKNOWN"),
-            }
-    return list(merged.values())
+    registry = _load_registry()
+    deployed = _list_deployed_runtimes()
 
+    out = []
+    for t in registry.get("remote_targets", []):
+        if not t.get("enabled"):
+            continue
+        if t.get("deprecated"):
+            continue
+        out.append({
+            "name": t["name"],
+            "description": t.get("description", ""),
+            "category": t.get("category", "general"),
+            "sensitivity": t.get("sensitivity", "low"),
+            "type": "remote",
+            "status": "READY",
+        })
 
-@router.get("/api/workspaces/<wsId>/mcp/gateways")
-def list_gateways(wsId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
-    if err:
-        return err
-
-    try:
-        control = _get_control()
-        resp = control.list_gateways()
-        gateways = [
-            {
-                "id": gw["gatewayId"],
-                "name": gw.get("name", ""),
-                "status": gw.get("status", ""),
-            }
-            for gw in resp.get("items", resp.get("gateways", []))
-        ]
-        return success({"items": gateways})
-    except Exception:
-        logger.exception("list_gateways failed")
-        return internal_error()
-
-
-@router.get("/api/workspaces/<wsId>/mcp/gateways/<gatewayId>/targets")
-def list_targets(wsId: str, gatewayId: str):
-    user_id, ws_id, member, err = auth_check(router.current_event, ws_id=wsId)
-    if err:
-        return err
-
-    try:
-        control = _get_control()
-        resp = control.list_gateway_targets(gatewayIdentifier=gatewayId)
-        targets = [
-            {
-                "name": t.get("name", ""),
-                "description": t.get("description", ""),
-                "endpointUrl": t.get("endpointUrl", ""),
-                "status": t.get("status", ""),
-            }
-            for t in resp.get("items", resp.get("targets", []))
-        ]
-        return success({"items": targets})
-    except Exception:
-        logger.exception("list_targets failed for gateway=%s", gatewayId)
-        return internal_error()
+    for t in registry.get("runtime_targets", []):
+        if not t.get("enabled"):
+            continue
+        if t.get("deprecated"):
+            continue
+        candidates = _runtime_name_candidates(t["name"])
+        live = next((deployed[n] for n in candidates if n in deployed), None)
+        status = (live or {}).get("status", "unavailable")
+        out.append({
+            "name": t["name"],
+            "description": t.get("description", ""),
+            "category": t.get("category", "general"),
+            "sensitivity": t.get("sensitivity", "low"),
+            "type": "runtime",
+            "status": status,
+        })
+    return out
 
 
 @router.get("/api/workspaces/<wsId>/mcp/policy")
@@ -257,19 +247,14 @@ def list_available_targets(wsId: str):
         return err
 
     try:
-        # Load catalog and gateway targets
-        catalog = _load_target_catalog()
-        gateway_targets = _list_all_gateway_targets()
-
-        # Merge catalog metadata with gateway status
-        merged = _merge_catalog_and_targets(catalog, gateway_targets)
+        items = _build_target_list()
 
         # Apply policy filtering unless show_all
         if not show_all:
             policy = _get_workspace_policy(ws_id)
-            merged = _filter_by_policy(merged, policy)
+            items = _filter_by_policy(items, policy)
 
-        return success({"items": merged})
+        return success({"items": items})
     except Exception:
         logger.exception("list_available_targets failed for workspace=%s", ws_id)
         return internal_error()
@@ -312,22 +297,20 @@ def get_target_tools(wsId: str, targetName: str):
         except Exception:
             continue
 
-    # Fallback: list from Gateway (if target exists there)
-    try:
-        control = _get_control()
-        gateways = control.list_gateways()
-        for gw in gateways.get("items", gateways.get("gateways", [])):
-            gw_id = gw["gatewayId"]
-            targets_resp = control.list_gateway_targets(gatewayIdentifier=gw_id)
-            for t in targets_resp.get("items", targets_resp.get("targets", [])):
-                if t.get("name") == targetName:
-                    # Found — but we can't do tools/list from Lambda easily.
-                    # Return empty with a hint.
-                    _tool_manifests[targetName] = []
-                    _tool_manifests_ttl[targetName] = now
-                    return success({"tools": [], "hint": "Run deploy-mcp.sh to generate tool manifests"})
-
-        return success({"tools": []})
-    except Exception:
-        logger.exception("get_target_tools failed for %s", targetName)
-        return internal_error()
+    # No manifest cached and no S3 object. The tool-list for a target is
+    # produced by deploy-mcp.sh at deploy time (it runs a one-shot
+    # tools/list against the newly-built runtime and dumps the result to
+    # S3). If the manifest is missing, the target exists in the registry
+    # but nobody has generated its manifest yet — rerun deploy-mcp.sh for
+    # that target. We deliberately do NOT try a live tools/list from
+    # Lambda: cold Runtime invocation from a Lambda Function can exceed
+    # the 30s budget and the caller just sees a timeout instead of an
+    # actionable hint.
+    _tool_manifests[targetName] = []
+    _tool_manifests_ttl[targetName] = now
+    return success({
+        "tools": [],
+        "hint": "Tool manifest not yet generated. Run "
+                "scripts/deploy-mcp.sh for this target to populate "
+                "mcp/target-tools/<name>.json in S3.",
+    })
