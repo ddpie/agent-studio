@@ -426,14 +426,26 @@ def link_agent(source_agent_id: str, target_agent_id: str) -> str:
     meta["tools"] = tools_list
     meta["tool_names"] = ",".join(tools_list)
 
-    # Refresh tool_definitions so the @tool code is present (injected at
-    # deploy time as well, but keep metadata honest for the frontend).
+    # Refresh tool_definitions so the @tool code matches the CURRENT
+    # tools_library template (not whatever was frozen on first link). Older
+    # agents had a call_agent body that used message/send + no
+    # x-amz-content-sha256 header, which now trips CloudFront OAC's SigV4
+    # check and returns HTTP 403 on every A2A call. Re-linking must replace
+    # that stale code, not just skip because "def call_agent" is present.
     tool_defs = meta.get("tool_definitions") or ""
-    if "def call_agent" not in tool_defs:
-        call_code = _get_builtin_code("call_agent") or ""
-        if call_code:
-            tool_defs = (tool_defs.rstrip() + "\n\n" + call_code.strip()) if tool_defs.strip() else call_code.strip()
-            meta["tool_definitions"] = tool_defs
+    call_code = _get_builtin_code("call_agent") or ""
+    if call_code:
+        if "def call_agent" in tool_defs:
+            # Strip existing @tool/def call_agent block (including its
+            # preceding @tool decorator) and re-append the fresh template.
+            tool_defs = re.sub(
+                r"(?:@tool\s*\n)?def\s+call_agent\s*\([^)]*\)\s*(?:->[^:]+)?:\s*(?:\"\"\"[\s\S]*?\"\"\"\s*)?(?:(?!@tool\b)[\s\S])*?(?=\n@tool\b|\Z)",
+                "",
+                tool_defs,
+                count=1,
+            ).rstrip()
+        tool_defs = (tool_defs.rstrip() + "\n\n" + call_code.strip()) if tool_defs.strip() else call_code.strip()
+        meta["tool_definitions"] = tool_defs
 
     linked = meta.get("linked_agents") or []
     linked = [l for l in linked if l.get("agent_id") != target_agent_id]
