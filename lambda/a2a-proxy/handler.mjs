@@ -112,7 +112,16 @@ function buildPublicCardForMeta(event) {
   });
 }
 
+// Keepalive cadence. W3C SSE spec allows comment lines (`:`-prefixed) to be
+// sent at any interval to prevent idle timeouts. 15s is the community
+// convention — short enough to stay well under CloudFront's 60s origin
+// idle timeout and any TCP-level 60s idle trip on the client side.
+const KEEPALIVE_INTERVAL_MS = 15_000;
+
 async function invokeRuntimeUnary({ parsed, internal, agentArn }) {
+  // Unchanged: A2A protocol `message/send` → one-shot JSON-RPC response
+  // (application/json). Long-running targets must use `message/stream`
+  // instead to get keepalive-protected SSE (see invokeRuntimeStream).
   let agentResp;
   try {
     agentResp = await agentcore.send(new InvokeAgentRuntimeCommand({
@@ -166,6 +175,16 @@ async function invokeRuntimeStream({ parsed, internal, agentArn, responseStream 
   const taskId = cryptoRandomId();
   const ctxId = internal.session_id || taskId;
 
+  // Keepalive heartbeat: W3C SSE spec allows comment lines (`:`-prefixed)
+  // at any cadence to hold the connection open. CloudFront and most TCP
+  // clients trip at 60s of idle on the wire; 15s gives ample safety
+  // margin. Without this, a target agent that runs for 100s without
+  // emitting a chunk causes the whole A2A call to fail with a network
+  // error at the client side even though the backend completed fine.
+  const keepaliveTimer = setInterval(() => {
+    try { responseStream.write(": keepalive\n\n"); } catch { /* stream dead */ }
+  }, 15_000);
+
   try {
     for await (const line of iterateAgentLines(agentResp)) {
       const chunk = parseInternalChunk(line);
@@ -180,6 +199,8 @@ async function invokeRuntimeStream({ parsed, internal, agentArn, responseStream 
   } catch (err) {
     console.error("a2a-proxy stream error:", err);
     responseStream.write(`data: ${JSON.stringify(rpcError(parsed.id, -32002, "Stream interrupted"))}\n\n`);
+  } finally {
+    clearInterval(keepaliveTimer);
   }
   responseStream.end();
 }
@@ -293,7 +314,7 @@ async function handleAgentRpc({ route, event, responseStream, method, send, agen
     const out = await invokeRuntimeUnary({ parsed, internal, agentArn });
     return send(out.status, out.body);
   }
-  // message/stream — handled directly on responseStream
+  // message/stream — handled directly on responseStream with keepalive heartbeat
   await invokeRuntimeStream({ parsed, internal, agentArn, responseStream });
 }
 

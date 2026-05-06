@@ -864,7 +864,10 @@ def _write_run_failed(agent_id, run_id, error):
 async def _stream_and_record(agent, payload):
     """Wrap _stream_with_tools: for sched- sessions, record to DDB + S3."""
     _LAST_ASSISTANT_TEXT.clear()
-    session_id = payload.get("session_id", "")
+    # Coerce to str — A2A proxy callers set session_id to JSON null (=> Python
+    # None) when contextId is absent, which previously tripped None.startswith
+    # below. See a2a-proxy/lib/translate.mjs:a2aToInternalPayload.
+    session_id = payload.get("session_id") or ""
     # Tag every span emitted during this invocation with the caller's
     # session_id so trace queries can find them. This replaces the
     # AgentCore-managed `attributes.session.id` which goes stale on

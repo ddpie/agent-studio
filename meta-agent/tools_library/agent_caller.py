@@ -12,8 +12,15 @@ get two things injected by the Meta-Agent:
   - Env var `AGENTS_TOOL_KEYS_JSON` — a JSON map of
     `{targetAgentId: a2aApiKey}`. One entry per linked peer.
 
-The tool uses the synchronous `message/send` RPC (not streaming) because the
-caller agent wants a single concatenated string back.
+The tool uses `message/stream` (SSE) rather than the simpler `message/send`
+(one-shot JSON) specifically to work around CloudFront's 60s idle timeout.
+Target agents that take more than 60s to respond (e.g. analyzing a
+1000-row JSON upload through several run_command cycles) trip the
+timeout and the client sees a network error even though the backend
+completed. The A2A proxy emits `: keepalive\\n\\n` comment lines every
+15s on the `message/stream` path to keep the connection warm, and this
+tool concatenates all incoming text/status events into a single reply
+for the caller agent's LLM to reason about.
 """
 
 TOOL_META = {
@@ -74,7 +81,7 @@ def call_agent(agent_id: str, prompt: str, session_id: str = "") -> str:
     envelope = {
         "jsonrpc": "2.0",
         "id": _uuid.uuid4().hex,
-        "method": "message/send",
+        "method": "message/stream",
         "params": {
             "message": {
                 "kind": "message",
@@ -100,14 +107,58 @@ def call_agent(agent_id: str, prompt: str, session_id: str = "") -> str:
         method="POST",
         headers={
             "content-type": "application/json",
-            "accept": "application/json",
+            "accept": "text/event-stream",
             "authorization": f"Bearer {api_key}",
             "x-amz-content-sha256": _body_sha256,
         },
     )
+    # Stream-parse SSE — ignore `:`-prefixed comment lines (keepalive),
+    # concatenate text from each `data:` JSON-RPC envelope. Timeout is
+    # per-read rather than total; a valid target agent may legitimately
+    # take 3+ min but should never be silent > 30s thanks to the proxy's
+    # 15s keepalive tick. 60s gives generous jitter budget.
+    texts = []
+    last_error = None
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            payload = resp.read().decode("utf-8")
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            # urllib reads can block indefinitely; we rely on the proxy's
+            # keepalive + CloudFront's 60s idle to bound total time.
+            # urllib returns a file-like; readline() gives us one SSE
+            # line at a time.
+            for raw in resp:
+                line = raw.decode("utf-8", errors="replace").rstrip("\\n").rstrip("\\r")
+                if not line:
+                    continue
+                if line.startswith(":"):
+                    # SSE comment (keepalive). Ignore.
+                    continue
+                if not line.startswith("data:"):
+                    # Ignore event:/id:/retry: lines — we only consume data.
+                    continue
+                payload_str = line[5:].lstrip()
+                if not payload_str:
+                    continue
+                try:
+                    rpc = json.loads(payload_str)
+                except json.JSONDecodeError:
+                    continue
+                if "error" in rpc:
+                    last_error = rpc["error"]
+                    continue
+                result = rpc.get("result") or {}
+                kind = result.get("kind")
+                if kind == "message":
+                    for p in result.get("parts") or []:
+                        if isinstance(p, dict) and (p.get("kind") == "text" or p.get("type") == "text"):
+                            t = p.get("text") or ""
+                            if t:
+                                texts.append(t)
+                elif kind == "status-update":
+                    # Informational — tool progress. Skip.
+                    pass
+                elif kind == "final":
+                    # End-of-stream marker from a2a-proxy. Stop reading.
+                    break
     except urllib.error.HTTPError as e:
         err_body = ""
         try:
@@ -120,21 +171,10 @@ def call_agent(agent_id: str, prompt: str, session_id: str = "") -> str:
     except Exception as e:
         return json.dumps({"error": f"A2A call failed: {e}"})
 
-    try:
-        rpc = json.loads(payload)
-    except json.JSONDecodeError:
-        # Not JSON — return raw for visibility.
-        return payload[:4000]
-
-    if "error" in rpc:
-        return json.dumps({"error": "A2A RPC error", "detail": rpc["error"]})
-
-    result = rpc.get("result") or {}
-    parts = result.get("parts") or []
-    texts = [p.get("text", "") for p in parts if isinstance(p, dict) and (p.get("kind") == "text" or p.get("type") == "text")]
-    text = "".join(t for t in texts if t)
+    if last_error and not texts:
+        return json.dumps({"error": "A2A RPC error", "detail": last_error})
+    text = "".join(texts)
     if not text:
-        # Fall back to the raw result so the caller has something to reason about.
-        return json.dumps(result, ensure_ascii=False)[:4000]
+        return json.dumps({"error": "A2A call returned no text", "detail": last_error})
     return text
 '''
