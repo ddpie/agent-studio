@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import uuid
 from datetime import datetime, timezone
 
 import boto3
@@ -149,6 +150,7 @@ def create_agent(
     supports_images: bool = False,
     permission_tier: str = "",
     staging_key: str = "",
+    skill_names: str = "",
 ) -> str:
     """Create and deploy a new AI agent to AgentCore Runtime.
 
@@ -166,6 +168,15 @@ def create_agent(
         supports_images: Whether this agent can process image inputs.
         permission_tier: IAM permission level: basic/readonly/data-access. Default: readonly.
         staging_key: S3 key to a JSON file containing all parameters.
+        skill_names: Comma-separated workspace library skill names to attach
+            on create. Conversational alternative to the frontend's
+            staging_key + attach_agent_skill double-deploy path. Each name
+            is resolved against the workspace skills DDB; files are copied
+            from the library to the agent's S3 prefix after runtime READY.
+            Saves ~60s (one full redeploy) vs create_agent + attach_agent_skill.
+            If a name doesn't resolve to exactly one library skill, the call
+            fails with an error listing the unresolved names. Ignored when
+            staging_key is set (the staging JSON already carries skills).
 
     Returns:
         JSON with agent_id, agent_arn, status.
@@ -203,6 +214,60 @@ def create_agent(
     if not workspace_id:
         workspace_id = getattr(__import__('tools.create_agent', fromlist=['_workspace_id']), '_workspace_id', '')
 
+    # Conversational skill attachment: `skill_names` is the no-staging
+    # alternative to staging_key's `skills: [...]` array. Resolves each
+    # name against the workspace skills library (agent-studio-skills
+    # DDB), seeds skills_config with {id, name, description, contentHash}
+    # so the downstream SKILL.md read + file-copy paths work unchanged.
+    # Library file copy happens AFTER the runtime is created (we need the
+    # real agent_id for the dst prefix) — see the post-runtime block.
+    requested_skill_names = [
+        n.strip() for n in (skill_names or "").split(",") if n.strip()
+    ] if (skill_names and not staging_key) else []
+    library_skill_resolutions: list[dict] = []  # [{name, library_id, new_local_id, library_files_hash}]
+    if requested_skill_names:
+        from tools.sync_agent_skill import (
+            _resolve_library_skill as _resolve_lib,
+            _read_library_skill_files as _read_lib_files,
+            _compute_content_hash as _lib_content_hash,
+        )
+        unresolved: list[str] = []
+        _lib_s3 = boto3.client("s3", region_name=REGION)
+        for skill_name in requested_skill_names:
+            lib_item, err = _resolve_lib(skill_name, "")
+            if err or not lib_item:
+                unresolved.append(f"{skill_name} ({err})")
+                continue
+            lib_skill_id = lib_item["skillId"]
+            # Fetch SKILL.md for the prompt section; other files come
+            # later via _copy_prefix at deploy time.
+            lib_files = _read_lib_files(_lib_s3, lib_skill_id)
+            skill_md = lib_files.get("SKILL.md", "")
+            if not skill_md:
+                unresolved.append(f"{skill_name} (library skill has no SKILL.md)")
+                continue
+            new_local_id = uuid.uuid4().hex[:8]
+            content_hash = _lib_content_hash(lib_files)
+            skills_config.append({
+                "id": new_local_id,
+                "name": lib_item.get("name", skill_name),
+                "description": lib_item.get("description", ""),
+                "contentHash": content_hash,
+                "sourceSkillId": lib_skill_id,
+            })
+            library_skill_resolutions.append({
+                "library_id": lib_skill_id,
+                "new_local_id": new_local_id,
+                "files": lib_files,
+            })
+        if unresolved:
+            return json.dumps({
+                "error": "skill_names resolution failed",
+                "unresolved": unresolved,
+                "hint": "Use list_skills to check spelling; skill_names must match "
+                        "workspace library entries exactly.",
+            })
+
     # Parse mcp_targets and validate against workspace policy
     mcp_targets_list = [t.strip() for t in mcp_targets.split(",") if t.strip()] if mcp_targets else []
     mcp_endpoints = []
@@ -222,18 +287,28 @@ def create_agent(
     # the prompt's progressive-disclosure section.
     if skills_config:
         s3_client = boto3.client("s3", region_name=REGION)
+        # Index library-resolved skills by their new local id so we can
+        # use the in-memory SKILL.md rather than re-reading from S3 (which
+        # won't exist yet — files land after the runtime is created).
+        lib_by_new_id = {r["new_local_id"]: r for r in library_skill_resolutions}
         for skill_entry in skills_config:
             skill_id = skill_entry.get("id", "")
             agent_name_for_path = staged.get("agent_id", agent_name) if staging_key else agent_name
 
             skill_md_content = ""
-            try:
-                md_key = f"agents/{agent_name_for_path}/skills/{skill_id}/SKILL.md"
-                md_obj = s3_client.get_object(Bucket=S3_BUCKET, Key=md_key)
-                skill_md_content = md_obj["Body"].read().decode("utf-8")
-            except Exception as e:
-                import sys
-                print(f"WARNING: Failed to read SKILL.md for skill {skill_id}: {e}", file=sys.stderr)
+            if skill_id in lib_by_new_id:
+                # Conversational skill_names path — we already pulled the
+                # SKILL.md from the library in the resolution step. No S3
+                # roundtrip needed here.
+                skill_md_content = lib_by_new_id[skill_id]["files"].get("SKILL.md", "")
+            else:
+                try:
+                    md_key = f"agents/{agent_name_for_path}/skills/{skill_id}/SKILL.md"
+                    md_obj = s3_client.get_object(Bucket=S3_BUCKET, Key=md_key)
+                    skill_md_content = md_obj["Body"].read().decode("utf-8")
+                except Exception as e:
+                    import sys
+                    print(f"WARNING: Failed to read SKILL.md for skill {skill_id}: {e}", file=sys.stderr)
 
             skills_data.append({
                 "name": skill_entry.get("name", skill_id),
@@ -336,6 +411,26 @@ def create_agent(
                 except Exception as e:
                     import sys
                     print(f"WARNING: Failed to copy skill {sid} files to {agent_id}: {e}", file=sys.stderr)
+
+    # Conversational skill_names path: copy library skill files from
+    # skills/{library_id}/ to agents/{agent_id}/skills/{new_local_id}/.
+    # Uses _copy_prefix from sync_agent_skill which is the canonical
+    # "copy every object under a prefix" helper used by attach/sync.
+    if library_skill_resolutions:
+        from tools.sync_agent_skill import _copy_prefix as _lib_copy_prefix
+        _lib_s3_copy = boto3.client("s3", region_name=REGION)
+        for resolved in library_skill_resolutions:
+            src_prefix = f"skills/{resolved['library_id']}/"
+            dst_prefix = f"agents/{agent_id}/skills/{resolved['new_local_id']}/"
+            try:
+                _lib_copy_prefix(_lib_s3_copy, src_prefix, dst_prefix)
+            except Exception as e:
+                import sys
+                print(
+                    f"WARNING: Failed to copy library skill "
+                    f"{resolved['library_id']} -> {dst_prefix}: {e}",
+                    file=sys.stderr,
+                )
 
     # Save metadata.json
     suggestion_list = [s.strip() for s in suggestions.split("|") if s.strip()] if suggestions else []

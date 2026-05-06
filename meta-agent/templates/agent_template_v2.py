@@ -1539,6 +1539,16 @@ def _tool_error(message: str) -> dict:
 def run_command(command: str, language: str = "python") -> str:
     """Execute Python/JS/TS code or shell commands in a managed AgentCore sandbox.
 
+    **Session persistence (IMPORTANT).** All `run_command` calls within
+    the same agent invocation share ONE sandbox session
+    (sessionTimeoutSeconds=3600). Variables you define, modules you
+    import, and files you write in a prior call are STILL AVAILABLE in
+    the next call. Prefer incremental analysis: load expensive data
+    once, then run follow-up queries against the already-loaded
+    variables. Do NOT re-read the same input file or re-import the
+    same library across consecutive calls — cold-import + JSON parse
+    cost is 20-30 seconds per call that can be skipped entirely.
+
     File paths tip: any file you save here (e.g. matplotlib savefig,
     pandas.to_csv, python-pptx) can later be passed to `upload_to_s3`
     using the same path — `upload_to_s3` will fetch the bytes back out
