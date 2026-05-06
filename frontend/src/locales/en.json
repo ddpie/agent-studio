@@ -1234,12 +1234,30 @@
     "title": "Admin Console",
     "noAccess": "You do not have permission to access the admin console.",
     "tabWorkspaces": "Workspace Management",
+    "tabCosts": "Costs",
     "selectWorkspace": "Select a workspace",
     "workspaceSearch": "Search workspaces...",
     "workspaceCount": "{{count}} workspaces",
     "owner": "Owner",
     "hasRole": "IAM role bound",
     "noRole": "No IAM role",
-    "goToAdmin": "Go to Admin Console to manage"
+    "goToAdmin": "Go to Admin Console to manage",
+    "costs": {
+      "subtitle": "Cross-workspace cost rollup. Logs Insights scan cost is the same as the per-workspace page — Insights bills by bytes scanned, not by groupby cardinality.",
+      "totalCost": "Total cost",
+      "totalCalls": "Calls",
+      "totalInput": "Input tokens",
+      "totalOutput": "Output tokens",
+      "byWorkspace": "By workspace",
+      "topAgents": "Top agents",
+      "workspace": "Workspace",
+      "agent": "Agent",
+      "agents": "Agents",
+      "calls": "Calls",
+      "cost": "Cost",
+      "model": "Model",
+      "inputShort": "In tok",
+      "outputShort": "Out tok"
+    }
   }
 }

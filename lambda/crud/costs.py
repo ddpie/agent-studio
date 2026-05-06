@@ -28,8 +28,8 @@ from aws_lambda_powertools.event_handler.api_gateway import Router
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
-from shared.config import AGENTS_TABLE, REGION, SPANS_LOG_GROUP
-from shared.middleware import auth_check
+from shared.config import AGENTS_TABLE, REGION, SPANS_LOG_GROUP, WORKSPACES_TABLE
+from shared.middleware import auth_check, check_platform_admin
 from shared.response import success, forbidden, bad_request, internal_error
 from shared.validators import validate_id
 
@@ -462,6 +462,228 @@ def workspace_costs(wsId: str):
             "rangeEnd": end,
             "bucket": bucket,
         },
+    })
+
+
+# ── Admin: cross-workspace rollup ──────────────────────────────────────────
+
+_GLOBAL_AGENTS_CACHE = {"data": None, "expires": 0}
+_GLOBAL_WORKSPACES_CACHE = {"data": None, "expires": 0}
+_GLOBAL_CACHE_TTL = 60  # seconds — agent membership changes slowly
+
+
+def _all_agents_by_runtime_id() -> dict:
+    """Scan every agent row, index by agent runtime id (= DDB agentId).
+
+    Cached 60s because /admin/costs is likely to be opened and refreshed
+    by a human at a slower cadence than that. Attributes picked are the
+    same set workspace_costs already surfaces per agent.
+    """
+    now = time.time()
+    if _GLOBAL_AGENTS_CACHE["data"] and now < _GLOBAL_AGENTS_CACHE["expires"]:
+        return _GLOBAL_AGENTS_CACHE["data"]
+    table = _get_agents_table()
+    out: dict = {}
+    try:
+        kwargs = {}
+        while True:
+            resp = table.scan(**kwargs)
+            for it in resp.get("Items", []):
+                aid = it.get("agentId")
+                if not aid:
+                    continue
+                out[aid] = {
+                    "agentId": aid,
+                    "name": it.get("display_name") or it.get("name") or aid,
+                    "model_id": it.get("model_id") or it.get("default_model_id") or "",
+                    "workspace_id": it.get("workspace_id", ""),
+                    "status": it.get("status") or "active",
+                }
+            last = resp.get("LastEvaluatedKey")
+            if not last:
+                break
+            kwargs["ExclusiveStartKey"] = last
+    except ClientError as e:
+        logger.warning("scan(agents) failed", extra={"error_code": e.response.get("Error", {}).get("Code")})
+    _GLOBAL_AGENTS_CACHE["data"] = out
+    _GLOBAL_AGENTS_CACHE["expires"] = now + _GLOBAL_CACHE_TTL
+    return out
+
+
+def _all_workspaces_by_id() -> dict:
+    """Scan every workspace META row, index by workspaceId -> {name}.
+
+    Cached 60s like agent index. Only META items hold the display name;
+    the rest of the workspace table is member rows.
+    """
+    now = time.time()
+    if _GLOBAL_WORKSPACES_CACHE["data"] and now < _GLOBAL_WORKSPACES_CACHE["expires"]:
+        return _GLOBAL_WORKSPACES_CACHE["data"]
+    out: dict = {}
+    try:
+        ddb = boto3.resource("dynamodb", region_name=REGION)
+        table = ddb.Table(WORKSPACES_TABLE)
+        kwargs = {"FilterExpression": Key("sk").eq("META")}
+        while True:
+            resp = table.scan(**kwargs)
+            for it in resp.get("Items", []):
+                ws_id = it.get("workspaceId")
+                if not ws_id:
+                    continue
+                out[ws_id] = {
+                    "workspaceId": ws_id,
+                    "name": it.get("name") or it.get("display_name") or ws_id,
+                }
+            last = resp.get("LastEvaluatedKey")
+            if not last:
+                break
+            kwargs["ExclusiveStartKey"] = last
+    except ClientError as e:
+        logger.warning("scan(workspaces) failed", extra={"error_code": e.response.get("Error", {}).get("Code")})
+    _GLOBAL_WORKSPACES_CACHE["data"] = out
+    _GLOBAL_WORKSPACES_CACHE["expires"] = now + _GLOBAL_CACHE_TTL
+    return out
+
+
+@router.get("/api/admin/costs")
+def admin_costs():
+    """Cross-workspace cost rollup. Platform-admin only.
+
+    One pass over the span log group (same two Insights queries as the
+    per-workspace endpoint), then fan out by workspace on the application
+    side via the agents-table index. Scan cost is the same as a single
+    /workspaces/{ws}/costs call — Logs Insights charges by bytes scanned,
+    which does not change with the groupby cardinality.
+    """
+    _user_id, is_admin, admin_err = check_platform_admin(router.current_event)
+    if admin_err:
+        return admin_err
+    if not is_admin:
+        return forbidden()
+
+    qp = router.current_event.query_string_parameters or {}
+    start, end, bucket = _parse_range(qp)
+
+    agents_by_id = _all_agents_by_runtime_id()
+    workspaces_by_id = _all_workspaces_by_id()
+
+    # Same queries as workspace_costs but consumed without the
+    # "filter by workspace" step — we want every agent so we can
+    # attribute it server-side.
+    try:
+        token_rows = _run_query(_per_agent_totals_query(), start, end)
+    except ClientError as e:
+        logger.exception("admin per-agent token query failed",
+                         extra={"error_code": e.response.get("Error", {}).get("Code")})
+        token_rows = []
+    try:
+        call_rows = _run_query(_per_agent_calls_query(), start, end)
+    except ClientError as e:
+        logger.exception("admin per-agent calls query failed",
+                         extra={"error_code": e.response.get("Error", {}).get("Code")})
+        call_rows = []
+
+    calls_by_id: dict[str, int] = {}
+    for row in call_rows:
+        rid = _field(row, "agentRuntimeId")
+        if rid:
+            calls_by_id[rid] = _to_int(_field(row, "calls"))
+
+    # Build per-agent rows. Skip agents we have no DDB row for — those
+    # are runtimes from deleted agents (or other products sharing the
+    # span log group) and we can't reliably attribute them.
+    per_agent: list[dict] = []
+    grand_calls = 0
+    grand_in = 0
+    grand_out = 0
+    grand_cost = 0.0
+
+    for row in token_rows:
+        rid = _field(row, "agentRuntimeId")
+        if not rid:
+            continue
+        info = agents_by_id.get(rid)
+        if not info:
+            continue
+        in_tok = _to_int(_field(row, "inputTokens"))
+        out_tok = _to_int(_field(row, "outputTokens"))
+        calls = calls_by_id.get(rid, 0)
+        cost = _compute_cost(in_tok, out_tok, info["model_id"])
+        per_agent.append({
+            "agentId": rid,
+            "name": info["name"],
+            "modelId": info["model_id"],
+            "workspaceId": info["workspace_id"],
+            "status": info["status"],
+            "calls": calls,
+            "inputTokens": in_tok,
+            "outputTokens": out_tok,
+            "costUsd": round(cost, 6),
+        })
+        grand_calls += calls
+        grand_in += in_tok
+        grand_out += out_tok
+        grand_cost += cost
+
+    # Roll per-agent into per-workspace. Zero-usage workspaces included
+    # so admin sees the full picture, including new/idle workspaces.
+    workspaces: dict[str, dict] = {}
+    for ws_id, info in workspaces_by_id.items():
+        workspaces[ws_id] = {
+            "workspaceId": ws_id,
+            "name": info["name"],
+            "agentCount": 0,
+            "calls": 0,
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "costUsd": 0.0,
+        }
+    for info in agents_by_id.values():
+        ws_id = info.get("workspace_id")
+        if ws_id and ws_id in workspaces:
+            workspaces[ws_id]["agentCount"] += 1
+    for a in per_agent:
+        ws_id = a.get("workspaceId")
+        if not ws_id:
+            continue
+        ws_row = workspaces.get(ws_id)
+        if not ws_row:
+            # Agent references a workspace we don't know about (deleted
+            # workspace META row with agents still alive) — surface it
+            # under a synthetic entry so the numbers don't disappear.
+            ws_row = {
+                "workspaceId": ws_id,
+                "name": f"(deleted: {ws_id[:12]})",
+                "agentCount": 0,
+                "calls": 0,
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "costUsd": 0.0,
+            }
+            workspaces[ws_id] = ws_row
+        ws_row["calls"] += a["calls"]
+        ws_row["inputTokens"] += a["inputTokens"]
+        ws_row["outputTokens"] += a["outputTokens"]
+        ws_row["costUsd"] += a["costUsd"]
+
+    ws_list = sorted(workspaces.values(), key=lambda w: w["costUsd"], reverse=True)
+    for w in ws_list:
+        w["costUsd"] = round(w["costUsd"], 6)
+
+    per_agent.sort(key=lambda a: a["costUsd"], reverse=True)
+
+    return success({
+        "workspaces": ws_list,
+        "agents": per_agent,
+        "totals": {
+            "calls": grand_calls,
+            "inputTokens": grand_in,
+            "outputTokens": grand_out,
+            "costUsd": round(grand_cost, 6),
+        },
+        "rangeStart": start,
+        "rangeEnd": end,
+        "bucket": bucket,
     })
 
 

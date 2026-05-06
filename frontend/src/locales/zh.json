@@ -1234,12 +1234,30 @@
     "title": "管理后台",
     "noAccess": "你没有访问管理后台的权限。",
     "tabWorkspaces": "工作区管理",
+    "tabCosts": "成本",
     "selectWorkspace": "选择一个工作区",
     "workspaceSearch": "搜索工作区...",
     "workspaceCount": "{{count}} 个工作区",
     "owner": "所有者",
     "hasRole": "已绑定 IAM 角色",
     "noRole": "未绑定角色",
-    "goToAdmin": "前往管理后台操作"
+    "goToAdmin": "前往管理后台操作",
+    "costs": {
+      "subtitle": "跨工作区成本汇总。与单工作区的成本页面使用同样的 Logs Insights 扫描量 —— Insights 按扫描的字节数计费，不随分组粒度变化。",
+      "totalCost": "总成本",
+      "totalCalls": "调用次数",
+      "totalInput": "输入 tokens",
+      "totalOutput": "输出 tokens",
+      "byWorkspace": "按工作区",
+      "topAgents": "高开销 Agent",
+      "workspace": "工作区",
+      "agent": "Agent",
+      "agents": "Agent 数",
+      "calls": "调用",
+      "cost": "成本",
+      "model": "模型",
+      "inputShort": "输入",
+      "outputShort": "输出"
+    }
   }
 }

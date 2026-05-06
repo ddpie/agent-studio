@@ -1669,6 +1669,40 @@ export async function fetchAgentCosts(agentId: string, range: CostRange = "7d") 
   );
 }
 
+export interface AdminCostsWorkspaceRow {
+  workspaceId: string;
+  name: string;
+  agentCount: number;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+export interface AdminCostsAgentRow extends CostAgentRow {
+  workspaceId: string;
+}
+
+export interface AdminCostsResponse {
+  workspaces: AdminCostsWorkspaceRow[];
+  agents: AdminCostsAgentRow[];
+  totals: {
+    calls: number;
+    inputTokens: number;
+    outputTokens: number;
+    costUsd: number;
+  };
+  rangeStart: number;
+  rangeEnd: number;
+  bucket: string;
+}
+
+export async function fetchAdminCosts(range: CostRange = "7d") {
+  return apiGetRaw<AdminCostsResponse>(
+    `/api/admin/costs?range=${encodeURIComponent(range)}`,
+  );
+}
+
 // ── Observability: Traces ──
 
 export interface TraceSession {

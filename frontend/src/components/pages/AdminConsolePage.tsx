@@ -1,13 +1,14 @@
-import { ShieldCheck, Building2 } from "lucide-react";
+import { ShieldCheck, Building2, DollarSign } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
 import { isPlatformAdmin } from "../../lib/api-client";
 import AdminWorkspaceIamPanel from "../admin/AdminWorkspaceIamPanel";
+import AdminCostsPanel from "../admin/AdminCostsPanel";
 
-type TabId = "workspaces";
+type TabId = "workspaces" | "costs";
 
-const VALID_TABS: TabId[] = ["workspaces"];
+const VALID_TABS: TabId[] = ["workspaces", "costs"];
 
 export default function AdminConsolePage() {
   const { t } = useTranslation();
@@ -64,6 +65,7 @@ export default function AdminConsolePage() {
       <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 mb-4 shrink-0">
         {([
           { id: "workspaces" as const, icon: Building2, label: t("admin.tabWorkspaces") },
+          { id: "costs" as const, icon: DollarSign, label: t("admin.tabCosts", { defaultValue: "Costs" }) },
         ]).map(({ id, icon: Icon, label }) => (
           <button
             key={id}
@@ -81,6 +83,7 @@ export default function AdminConsolePage() {
 
       <div className="flex-1 min-h-0">
         {tab === "workspaces" && <AdminWorkspaceIamPanel />}
+        {tab === "costs" && <AdminCostsPanel />}
       </div>
     </div>
   );
