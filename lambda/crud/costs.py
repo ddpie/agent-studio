@@ -1,18 +1,31 @@
 """Cost / usage aggregation endpoints.
 
 Reads OTEL spans from the `aws/spans` log group via CloudWatch Logs Insights
-and joins with the `agent-studio-agents` DynamoDB table to produce per-agent
-and workspace-level totals.
+and groups by `(agentRuntimeId, gen_ai.request.model)` so pricing uses the
+model the span actually reported — not whatever is currently configured on
+the DDB agent row. Important because a single agent can change model
+between invocations (users can pick a model in the chat dropdown, and a
+Sonnet-configured agent may be replayed with Opus or vice versa).
 
 Two endpoints:
 - GET /api/workspaces/{ws}/costs                 — workspace roll-up + timeseries
 - GET /api/workspaces/{ws}/agents/{id}/costs     — single agent roll-up
+- GET /api/admin/costs                           — cross-workspace roll-up (admin)
 
-Important: in the current account, runtime-level spans (`AgentCore.Runtime.Invoke`)
-do NOT carry `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` — only
-session / agent id / duration. We still try to pull token attrs in case an
-account has detailed genai telemetry enabled; if absent, tokens default to 0
-and `costUsd` falls back to 0. The UI disclaims that costs are estimates.
+Span shape (verified 2026-05-06 against aws/spans in this account): the
+top-level span `name = "invoke_agent Strands Agents"` carries the full
+usage envelope:
+  attributes.gen_ai.request.model                 — pricing key
+  attributes.gen_ai.usage.input_tokens            — base input
+  attributes.gen_ai.usage.output_tokens           — output
+  attributes.gen_ai.usage.cache_read_input_tokens — 0.1× input price
+  attributes.gen_ai.usage.cache_write_input_tokens — 1.25× input price
+  resource.attributes.service.name                — agentRuntimeId
+
+Older docs claimed "runtime-level spans do not carry usage tokens" — that
+was wrong; the invoke_agent span is both the call-counter (one per user
+turn) AND the token-carrier. We count calls with the same query, filtered
+by `name = "invoke_agent Strands Agents"`.
 
 Pricing table below is kept small + opinionated; `_unit_price()` returns
 `(0, 0)` for any model we don't price, making cost 0 rather than wrong.
@@ -106,9 +119,34 @@ def _unit_price(model_id: str) -> tuple[float, float]:
     return (0.0, 0.0)
 
 
-def _compute_cost(input_tokens: int, output_tokens: int, model_id: str) -> float:
+def _compute_cost(
+    input_tokens: int,
+    output_tokens: int,
+    model_id: str,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+) -> float:
+    """Apply Anthropic's 4-tier pricing to a single (model, usage) row.
+
+    Multipliers match the Anthropic public rate card as of 2026-05-06:
+      - regular input:        1.00× in_rate
+      - cache_read input:     0.10× in_rate
+      - cache_write input:    1.25× in_rate
+      - output:               1.00× out_rate
+
+    The cache_* attributes are always present in the span schema; they
+    just happen to be 0 when prompt caching isn't used. Passing them
+    through means the moment someone turns caching on, numbers stay
+    correct without another code change.
+    """
     in_rate, out_rate = _unit_price(model_id)
-    return (input_tokens / 1_000_000.0) * in_rate + (output_tokens / 1_000_000.0) * out_rate
+    per_million = 1_000_000.0
+    return (
+        (input_tokens / per_million) * in_rate
+        + (cache_read_tokens / per_million) * in_rate * 0.10
+        + (cache_write_tokens / per_million) * in_rate * 1.25
+        + (output_tokens / per_million) * out_rate
+    )
 
 
 # ── Logs Insights helpers ──────────────────────────────────────────────────
@@ -234,20 +272,25 @@ def _agent_ids_for_workspace(workspace_id: str) -> list[dict]:
 
 
 def _per_agent_totals_query() -> str:
-    """Per-agent call + token totals.
+    """Per-(agent, model) token totals.
 
-    Token totals come from gen_ai `chat` child spans (carry usage.* attrs).
-    Call count uses a separate pass below since Insights doesn't aggregate
-    boolean expressions reliably across fields.
+    Grouping by model (not just agent) means we price each span with its
+    own reported model — a Sonnet call and an Opus call on the same
+    agent get priced separately. See module docstring for span shape.
     """
     return """
 fields resource.attributes.service.name as agentRuntimeId,
+       coalesce(attributes.gen_ai.request.model, "") as model,
        coalesce(attributes.gen_ai.usage.input_tokens, 0) as inTok,
-       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok
+       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok,
+       coalesce(attributes.gen_ai.usage.cache_read_input_tokens, 0) as crTok,
+       coalesce(attributes.gen_ai.usage.cache_write_input_tokens, 0) as cwTok
 | filter ispresent(agentRuntimeId) and ispresent(attributes.gen_ai.usage.input_tokens)
 | stats sum(inTok) as inputTokens,
-        sum(outTok) as outputTokens
-        by agentRuntimeId
+        sum(outTok) as outputTokens,
+        sum(crTok) as cacheReadTokens,
+        sum(cwTok) as cacheWriteTokens
+        by agentRuntimeId, model
 """.strip()
 
 
@@ -263,12 +306,17 @@ fields resource.attributes.service.name as agentRuntimeId
 def _timeseries_query(bucket: str) -> str:
     return f"""
 fields resource.attributes.service.name as agentRuntimeId,
+       coalesce(attributes.gen_ai.request.model, "") as model,
        coalesce(attributes.gen_ai.usage.input_tokens, 0) as inTok,
-       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok
+       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok,
+       coalesce(attributes.gen_ai.usage.cache_read_input_tokens, 0) as crTok,
+       coalesce(attributes.gen_ai.usage.cache_write_input_tokens, 0) as cwTok
 | filter ispresent(agentRuntimeId) and ispresent(attributes.gen_ai.usage.input_tokens)
 | stats sum(inTok) as inputTokens,
-        sum(outTok) as outputTokens
-        by bin({bucket}) as bucket, agentRuntimeId
+        sum(outTok) as outputTokens,
+        sum(crTok) as cacheReadTokens,
+        sum(cwTok) as cacheWriteTokens
+        by bin({bucket}) as bucket, agentRuntimeId, model
 | sort bucket asc
 """.strip()
 
@@ -286,11 +334,17 @@ fields resource.attributes.service.name as agentRuntimeId
 def _single_agent_query(agent_id: str) -> str:
     # agent_id is validated upstream via validate_id().
     return f"""
-fields coalesce(attributes.gen_ai.usage.input_tokens, 0) as inTok,
-       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok
+fields coalesce(attributes.gen_ai.request.model, "") as model,
+       coalesce(attributes.gen_ai.usage.input_tokens, 0) as inTok,
+       coalesce(attributes.gen_ai.usage.output_tokens, 0) as outTok,
+       coalesce(attributes.gen_ai.usage.cache_read_input_tokens, 0) as crTok,
+       coalesce(attributes.gen_ai.usage.cache_write_input_tokens, 0) as cwTok
 | filter resource.attributes.service.name = "{agent_id}" and ispresent(attributes.gen_ai.usage.input_tokens)
 | stats sum(inTok) as inputTokens,
-        sum(outTok) as outputTokens
+        sum(outTok) as outputTokens,
+        sum(crTok) as cacheReadTokens,
+        sum(cwTok) as cacheWriteTokens
+        by model
 """.strip()
 
 
@@ -361,35 +415,59 @@ def workspace_costs(wsId: str):
         if rid:
             calls_by_id[rid] = _to_int(_field(row, "calls"))
 
+    # Rows come out as (agentRuntimeId, model) pairs. Collapse to per-agent
+    # totals, but keep the dominant model (by cost) as `modelId` so the UI
+    # has a single label. Pricing is applied per row with the span's
+    # actually-reported model — never DDB's stored model_id.
+    per_agent_accum: dict[str, dict] = {}
+    for row in rows:
+        rid = _field(row, "agentRuntimeId")
+        if not rid or rid not in by_id:
+            continue  # skip agents outside this workspace
+        model = _field(row, "model") or ""
+        in_tok = _to_int(_field(row, "inputTokens"))
+        out_tok = _to_int(_field(row, "outputTokens"))
+        cr_tok = _to_int(_field(row, "cacheReadTokens"))
+        cw_tok = _to_int(_field(row, "cacheWriteTokens"))
+        cost = _compute_cost(in_tok, out_tok, model, cr_tok, cw_tok)
+        acc = per_agent_accum.setdefault(rid, {
+            "inputTokens": 0, "outputTokens": 0,
+            "cacheReadTokens": 0, "cacheWriteTokens": 0,
+            "costUsd": 0.0, "topModel": "", "topModelCost": -1.0,
+        })
+        acc["inputTokens"] += in_tok
+        acc["outputTokens"] += out_tok
+        acc["cacheReadTokens"] += cr_tok
+        acc["cacheWriteTokens"] += cw_tok
+        acc["costUsd"] += cost
+        if cost > acc["topModelCost"]:
+            acc["topModelCost"] = cost
+            acc["topModel"] = model
+
     per_agent: list[dict] = []
     total_calls = 0
     total_in = 0
     total_out = 0
     total_cost = 0.0
 
-    for row in rows:
-        rid = _field(row, "agentRuntimeId")
-        if not rid or rid not in by_id:
-            continue  # skip agents outside this workspace
+    for rid, acc in per_agent_accum.items():
         info = by_id[rid]
-        in_tok = _to_int(_field(row, "inputTokens"))
-        out_tok = _to_int(_field(row, "outputTokens"))
         calls = calls_by_id.get(rid, 0)
-        cost = _compute_cost(in_tok, out_tok, info["model_id"])
+        model_label = acc["topModel"] or info["model_id"]
         per_agent.append({
             "agentId": rid,
             "name": info["name"],
-            "modelId": info["model_id"],
+            "modelId": model_label,
             "status": info.get("status", "active"),
             "calls": calls,
-            "inputTokens": in_tok,
-            "outputTokens": out_tok,
-            "costUsd": round(cost, 6),
+            "inputTokens": acc["inputTokens"],
+            "outputTokens": acc["outputTokens"],
+            "costUsd": round(acc["costUsd"], 6),
         })
         total_calls += calls
-        total_in += in_tok
-        total_out += out_tok
-        total_cost += cost
+        total_in += acc["inputTokens"]
+        total_out += acc["outputTokens"]
+        total_cost += acc["costUsd"]
 
     # Include zero-usage agents so the UI lists every agent in the workspace.
     seen = {a["agentId"] for a in per_agent}
@@ -419,7 +497,8 @@ def workspace_costs(wsId: str):
     except ClientError:
         ts_call_rows = []
 
-    # bucket -> {calls, cost}
+    # bucket -> {calls, cost}. Rows are (bucket, agent, model) triples;
+    # collapse to per-bucket totals with per-row pricing.
     buckets: dict[str, dict] = {}
     for row in ts_rows:
         rid = _field(row, "agentRuntimeId")
@@ -428,9 +507,12 @@ def workspace_costs(wsId: str):
         bkt = _field(row, "bucket") or ""
         if not bkt:
             continue
+        model = _field(row, "model") or ""
         in_tok = _to_int(_field(row, "inputTokens"))
         out_tok = _to_int(_field(row, "outputTokens"))
-        cost = _compute_cost(in_tok, out_tok, by_id[rid]["model_id"])
+        cr_tok = _to_int(_field(row, "cacheReadTokens"))
+        cw_tok = _to_int(_field(row, "cacheWriteTokens"))
+        cost = _compute_cost(in_tok, out_tok, model, cr_tok, cw_tok)
         slot = buckets.setdefault(bkt, {"calls": 0, "cost": 0.0})
         slot["cost"] += cost
 
@@ -598,6 +680,10 @@ def admin_costs():
     grand_out = 0
     grand_cost = 0.0
 
+    # Rows are (agent, model) pairs. Collapse into per-agent totals using
+    # the span-reported model for pricing. See workspace_costs for the
+    # same pattern + rationale.
+    admin_accum: dict[str, dict] = {}
     for row in token_rows:
         rid = _field(row, "agentRuntimeId")
         if not rid:
@@ -605,25 +691,45 @@ def admin_costs():
         info = agents_by_id.get(rid)
         if not info:
             continue
+        model = _field(row, "model") or ""
         in_tok = _to_int(_field(row, "inputTokens"))
         out_tok = _to_int(_field(row, "outputTokens"))
+        cr_tok = _to_int(_field(row, "cacheReadTokens"))
+        cw_tok = _to_int(_field(row, "cacheWriteTokens"))
+        cost = _compute_cost(in_tok, out_tok, model, cr_tok, cw_tok)
+        acc = admin_accum.setdefault(rid, {
+            "inputTokens": 0, "outputTokens": 0,
+            "cacheReadTokens": 0, "cacheWriteTokens": 0,
+            "costUsd": 0.0, "topModel": "", "topModelCost": -1.0,
+        })
+        acc["inputTokens"] += in_tok
+        acc["outputTokens"] += out_tok
+        acc["cacheReadTokens"] += cr_tok
+        acc["cacheWriteTokens"] += cw_tok
+        acc["costUsd"] += cost
+        if cost > acc["topModelCost"]:
+            acc["topModelCost"] = cost
+            acc["topModel"] = model
+
+    for rid, acc in admin_accum.items():
+        info = agents_by_id[rid]
         calls = calls_by_id.get(rid, 0)
-        cost = _compute_cost(in_tok, out_tok, info["model_id"])
+        model_label = acc["topModel"] or info["model_id"]
         per_agent.append({
             "agentId": rid,
             "name": info["name"],
-            "modelId": info["model_id"],
+            "modelId": model_label,
             "workspaceId": info["workspace_id"],
             "status": info["status"],
             "calls": calls,
-            "inputTokens": in_tok,
-            "outputTokens": out_tok,
-            "costUsd": round(cost, 6),
+            "inputTokens": acc["inputTokens"],
+            "outputTokens": acc["outputTokens"],
+            "costUsd": round(acc["costUsd"], 6),
         })
         grand_calls += calls
-        grand_in += in_tok
-        grand_out += out_tok
-        grand_cost += cost
+        grand_in += acc["inputTokens"]
+        grand_out += acc["outputTokens"]
+        grand_cost += acc["costUsd"]
 
     # Roll per-agent into per-workspace. Zero-usage workspaces included
     # so admin sees the full picture, including new/idle workspaces.
@@ -704,7 +810,7 @@ def agent_costs(wsId: str, agentId: str):
     qp = router.current_event.query_string_parameters or {}
     start, end, _bucket = _parse_range(qp)
 
-    model_id = item.get("model_id") or item.get("default_model_id") or ""
+    ddb_model_id = item.get("model_id") or item.get("default_model_id") or ""
 
     try:
         rows = _run_query(_single_agent_query(agentId), start, end)
@@ -717,15 +823,34 @@ def agent_costs(wsId: str, agentId: str):
     except ClientError:
         call_rows = []
 
-    in_tok = out_tok = 0
+    # Rows come out one per model the agent was actually invoked with.
+    # Price each separately, then sum, and surface the dominant model
+    # (by cost) as the single "modelId" label for the UI; fall back to
+    # the DDB-stored model_id when the agent has no spans yet.
+    in_tok = out_tok = cr_tok = cw_tok = 0
+    cost = 0.0
+    top_model = ""
+    top_model_cost = -1.0
     for row in rows:
-        in_tok += _to_int(_field(row, "inputTokens"))
-        out_tok += _to_int(_field(row, "outputTokens"))
+        model = _field(row, "model") or ""
+        row_in = _to_int(_field(row, "inputTokens"))
+        row_out = _to_int(_field(row, "outputTokens"))
+        row_cr = _to_int(_field(row, "cacheReadTokens"))
+        row_cw = _to_int(_field(row, "cacheWriteTokens"))
+        row_cost = _compute_cost(row_in, row_out, model, row_cr, row_cw)
+        in_tok += row_in
+        out_tok += row_out
+        cr_tok += row_cr
+        cw_tok += row_cw
+        cost += row_cost
+        if row_cost > top_model_cost:
+            top_model_cost = row_cost
+            top_model = model
+    model_id = top_model or ddb_model_id
+
     calls = 0
     for row in call_rows:
         calls += _to_int(_field(row, "calls"))
-
-    cost = _compute_cost(in_tok, out_tok, model_id)
 
     return success({
         "agentId": agentId,
