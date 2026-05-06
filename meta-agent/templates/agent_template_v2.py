@@ -115,7 +115,7 @@ async def invoke(payload, context):
             + "\\nBefore promising a file-generating task that depends on a specific skill, call check_capabilities() first. If a skill is missing or the wrong type, say so instead of trying and failing mid-turn."
         )
     prompt += "\\n\\n## File Sharing\\nFiles you generate via run_command / run_skill_script live inside the Code Interpreter sandbox, NOT on your own filesystem. /mnt/workspace/ is the agent's session storage — it does NOT exist inside the CI sandbox, so passing `--output /mnt/workspace/foo.pptx` to a script will fail with PermissionError. Save outputs to a relative path (e.g. `output.pptx`) or /tmp/ inside the sandbox, then call upload_to_s3(local_path) with the SAME path — it automatically reads from the sandbox when the file isn't local. Never tell the user you cannot send files. The download button appears automatically after upload — do NOT create markdown links like [filename](url) for downloads."
-    prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
+    prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead. read_document returns up to 50,000 characters per call — when the response ends with a `[TRUNCATED: returned chars N-M of TOTAL...]` hint, call read_document(file_key, offset=M) to read the next chunk, looping until no hint appears. Before making absolute claims about the whole file (e.g. category percentages), you MUST have read every chunk."
 
     # --- Memory pre-fetch (parallel) ---
     if _mem_ctx:
@@ -348,7 +348,7 @@ async def invoke(payload, context):
             + "\\nBefore promising a file-generating task that depends on a specific skill, call check_capabilities() first. If a skill is missing or the wrong type, say so instead of trying and failing mid-turn."
         )
     prompt += "\\n\\n## File Sharing\\nFiles you generate via run_command / run_skill_script live inside the Code Interpreter sandbox, NOT on your own filesystem. /mnt/workspace/ is the agent's session storage — it does NOT exist inside the CI sandbox, so passing `--output /mnt/workspace/foo.pptx` to a script will fail with PermissionError. Save outputs to a relative path (e.g. `output.pptx`) or /tmp/ inside the sandbox, then call upload_to_s3(local_path) with the SAME path — it automatically reads from the sandbox when the file isn't local. Never tell the user you cannot send files. The download button appears automatically after upload — do NOT create markdown links like [filename](url) for downloads."
-    prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead."
+    prompt += "\\n\\n## File Reading\\nWhen the user attaches a PDF, Excel workbook (.xlsx/.xlsm), CSV, or TSV, call read_document(file_key=<s3 key>) to extract its text. The attachment marker in the user message includes the exact S3 key to pass. For generic text files (source code, logs, plain .txt), use read_file against a local path instead. read_document returns up to 50,000 characters per call — when the response ends with a `[TRUNCATED: returned chars N-M of TOTAL...]` hint, call read_document(file_key, offset=M) to read the next chunk, looping until no hint appears. Before making absolute claims about the whole file (e.g. category percentages), you MUST have read every chunk."
 
     # --- Memory pre-fetch (parallel) ---
     if _mem_ctx:
@@ -2132,21 +2132,36 @@ def check_capabilities() -> str:
 
 # Per-invocation limits for read_document
 _DOC_MAX_BYTES = 10 * 1024 * 1024   # 10 MB download ceiling
-_DOC_MAX_CHARS = 50_000             # output truncation ceiling
+_DOC_DEFAULT_CHARS = 50_000         # default per-call output window
 
 
-def _doc_truncate(text: str) -> str:
-    """Truncate to _DOC_MAX_CHARS with a clear warning suffix."""
-    if len(text) <= _DOC_MAX_CHARS:
-        return text
-    return text[:_DOC_MAX_CHARS] + (
-        f"\\n\\n... [TRUNCATED: document exceeded "
-        f"{_DOC_MAX_CHARS} characters, showing first portion only]"
+def _doc_window(text: str, offset: int, limit: int) -> str:
+    """Return a slice starting at `offset` (in chars) capped at `limit`.
+
+    When the slice doesn't reach the end of the document, append a
+    clearly-worded continuation hint so the LLM can re-call with the
+    next offset. The hint uses a stable, grep-able shape because the
+    agent reasoner needs to recognise it without NL parsing.
+    """
+    total = len(text)
+    if offset < 0:
+        offset = 0
+    if offset >= total:
+        return (
+            f"[EMPTY: offset={offset} is past end of document (total_chars={total}).]"
+        )
+    end = offset + limit
+    body = text[offset:end]
+    if end >= total:
+        return body
+    return body + (
+        f"\\n\\n... [TRUNCATED: returned chars {offset}-{end} of {total}. "
+        f"To read more, call read_document again with offset={end}.]"
     )
 
 
 @_tool
-def read_document(file_key: str) -> str:
+def read_document(file_key: str, offset: int = 0, limit: int = _DOC_DEFAULT_CHARS) -> str:
     """Read an uploaded document from S3 and return its text content.
 
     Handles both binary documents (PDF, Excel, CSV, TSV) and plain-text
@@ -2161,15 +2176,41 @@ def read_document(file_key: str) -> str:
     cannot fetch S3 over HTTPS (bucket rejects anonymous GETs); always
     use this tool to read user-attached files.
 
+    Pagination: the default call returns up to 50,000 characters starting
+    from the beginning. When the document is larger, the returned body
+    ends with a ``[TRUNCATED: returned chars N-M of TOTAL...]`` hint
+    that tells you how to call again with the next ``offset`` to read
+    the rest. Loop until you've seen the whole file before making
+    absolute claims (e.g. "75% negative" — that requires every record).
+    Each call is capped at 50,000 characters regardless of the ``limit``
+    passed, to protect the LLM context.
+
     Args:
         file_key: Relative S3 key. Examples:
             ``workspaces/ws-abc/storage/uploads/u-xyz/report.pdf`` or
             ``uploads/attachments/sess-123/notes.md``.
+        offset: Start reading from this character offset into the
+            extracted text. Default 0.
+        limit: Maximum characters to return in this call (clamped to
+            50,000). Default 50,000.
 
     Returns:
-        Plain text extracted from the document, or a short diagnostic string on error.
-        Output is capped at 50,000 characters; downloads exceeding 10 MB are rejected.
+        Plain text extracted from the document (or a window of it if
+        ``offset``/``limit`` are set), or a short diagnostic string on
+        error. Downloads exceeding 10 MB are rejected.
     """
+    try:
+        offset = int(offset) if offset is not None else 0
+    except (TypeError, ValueError):
+        offset = 0
+    try:
+        limit = int(limit) if limit is not None else _DOC_DEFAULT_CHARS
+    except (TypeError, ValueError):
+        limit = _DOC_DEFAULT_CHARS
+    if offset < 0:
+        offset = 0
+    if limit <= 0 or limit > _DOC_DEFAULT_CHARS:
+        limit = _DOC_DEFAULT_CHARS
     if not file_key or not isinstance(file_key, str):
         return "Error: file_key is required."
 
@@ -2265,7 +2306,7 @@ def read_document(file_key: str) -> str:
                 body = data.decode("latin-1", errors="replace")
             if not body.strip():
                 return "(File is empty.)"
-            return _doc_truncate(body)
+            return _doc_window(body, offset, limit)
 
         if kind == "pdf":
             import io as _io
@@ -2287,7 +2328,7 @@ def read_document(file_key: str) -> str:
             body = "".join(pages).lstrip()
             if not body.strip():
                 return "(PDF contains no extractable text — it may be scanned or image-only.)"
-            return _doc_truncate(body)
+            return _doc_window(body, offset, limit)
 
         if kind == "xlsx":
             import io as _io
@@ -2308,7 +2349,7 @@ def read_document(file_key: str) -> str:
                     parts.append("\\t".join(cells))
                 parts.append("")  # blank line between sheets
             body = "\\n".join(parts).rstrip()
-            return _doc_truncate(body)
+            return _doc_window(body, offset, limit)
 
         # csv / tsv
         try:
@@ -2325,7 +2366,7 @@ def read_document(file_key: str) -> str:
             body = df.to_string(index=False)
         except Exception as e:
             return f"Error: failed to render {kind} as text: {e}"
-        return _doc_truncate(body)
+        return _doc_window(body, offset, limit)
     except Exception as e:
         return f"Error: unexpected failure while extracting document text: {e}"
 

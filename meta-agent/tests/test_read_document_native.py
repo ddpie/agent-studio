@@ -281,4 +281,41 @@ def test_read_document_truncates_large_output(monkeypatch):
     ns["_workspace_id"] = "ws-alpha"
     out = ns["read_document"]("workspaces/ws-alpha/storage/uploads/u/big.csv")
     assert "TRUNCATED" in out
-    assert len(out) <= 50_000 + 200  # plus warning suffix
+    assert len(out) <= 50_000 + 300  # plus continuation hint
+
+
+def test_read_document_paginates_with_offset(monkeypatch):
+    """When the document exceeds one call, offset lets the agent
+    continue reading the rest instead of giving up."""
+    # A plain-text JSON file large enough to need multiple reads.
+    # ~60k chars total so the second call returns the final 10k clean.
+    payload = "X" * 60_000
+    # Build a mock that returns a fresh BytesIO per get_object call so
+    # the second read_document call can re-consume the body.
+    s3 = MagicMock()
+    s3.head_object.return_value = {"ContentLength": len(payload)}
+    s3.get_object.side_effect = lambda **_: {"Body": io.BytesIO(payload.encode())}
+    ns = _exec_builtin(s3)
+    ns["_workspace_id"] = "ws-alpha"
+    key = "workspaces/ws-alpha/storage/uploads/u/big.json"
+
+    first = ns["read_document"](key)
+    assert "TRUNCATED" in first
+    # Hint must carry the continuation offset so the LLM can act.
+    assert "offset=50000" in first
+    assert "0-50000 of 60000" in first
+
+    second = ns["read_document"](key, offset=50_000)
+    assert "TRUNCATED" not in second
+    assert second == "X" * 10_000
+
+
+def test_read_document_offset_past_end_is_empty_but_not_an_error():
+    """Harmless overshoot should return a clear empty marker, not an
+    exception — the agent may legitimately try one offset too far."""
+    s3 = _make_s3_get_mock(b"hello world")
+    ns = _exec_builtin(s3)
+    ns["_workspace_id"] = "ws-alpha"
+    out = ns["read_document"]("workspaces/ws-alpha/storage/uploads/u/tiny.txt", offset=10_000)
+    assert "[EMPTY" in out
+    assert "past end" in out

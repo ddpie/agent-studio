@@ -281,6 +281,30 @@ def _save_metadata(agent_id: str, meta: dict) -> None:
         Body=json.dumps(meta, indent=2, ensure_ascii=False).encode("utf-8"),
         ContentType="application/json",
     )
+    # Mirror system_prompt + tool_definitions to their standalone files.
+    # The frontend edit form reads these (NOT metadata.json) when the
+    # user opens the agent. If we skip this mirror, clicking "更新"
+    # immediately after a link round-trip will re-upload whatever stale
+    # tool_definitions.py was last saved — clobbering the fresh
+    # call_agent code link_agent just wrote into metadata.json.
+    prompt = meta.get("system_prompt") or ""
+    tool_defs = meta.get("tool_definitions") or ""
+    try:
+        s3.put_object(
+            Bucket=S3_BUCKET,
+            Key=f"agents/{agent_id}/system_prompt.txt",
+            Body=prompt.encode("utf-8"),
+            ContentType="text/plain; charset=utf-8",
+        )
+        s3.put_object(
+            Bucket=S3_BUCKET,
+            Key=f"agents/{agent_id}/tool_definitions.py",
+            Body=tool_defs.encode("utf-8"),
+            ContentType="text/x-python; charset=utf-8",
+        )
+    except Exception:
+        # Best-effort — the canonical store is metadata.json.
+        pass
 
 
 def _redeploy_source(source_id: str, meta: dict) -> str:

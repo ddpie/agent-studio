@@ -134,7 +134,7 @@ You have specialized tools available. Use them proactively when relevant — do 
 - If multiple tools could help, use the most specific one first.
 - Report tool results clearly. If a tool fails, explain the error and suggest alternatives.
 - NEVER claim you cannot do something if you have a tool that can help.
-- For uploaded PDF or Excel/CSV attachments, prefer `read_document(file_key)` over `read_file`; it handles .pdf, .xlsx, .xlsm, .csv, .tsv natively and returns extracted text.
+- For uploaded PDF or Excel/CSV attachments, prefer `read_document(file_key)` over `read_file`; it handles .pdf, .xlsx, .xlsm, .csv, .tsv natively and returns extracted text. read_document caps each call at 50,000 chars — if the response ends with `[TRUNCATED: returned chars N-M of TOTAL ...]`, call `read_document(file_key, offset=M)` to continue. Loop until the hint disappears before making claims about the whole file.
 
 ### WRONG vs CORRECT
 
@@ -168,7 +168,7 @@ _TOOL_USAGE_GUIDE_ZH = """\
 - 多个工具都能解决时，优先用最精准的那个。
 - 清楚报告工具结果。工具失败时，解释错误并给出替代方案。
 - 有工具能帮忙时，绝不说"我做不到"。
-- 上传 PDF 或 Excel/CSV 附件时，优先用 `read_document(file_key)` 而不是 `read_file`；它原生支持 .pdf、.xlsx、.xlsm、.csv、.tsv 并返回提取后的文本。
+- 上传 PDF 或 Excel/CSV 附件时，优先用 `read_document(file_key)` 而不是 `read_file`；它原生支持 .pdf、.xlsx、.xlsm、.csv、.tsv 并返回提取后的文本。read_document 每次最多返回 50000 字符——如果返回末尾有 `[TRUNCATED: returned chars N-M of TOTAL ...]` 提示，必须再调 `read_document(file_key, offset=M)` 继续读，直到提示消失。在对整份文件下结论前（比如类别占比），必须读完所有分段。
 
 ### 错误 vs 正确
 
