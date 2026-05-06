@@ -54,6 +54,31 @@ export type StatusCallback = (status: string | null) => void;
  *   - "agent_edit"       → tool-less sidekick for /agents/:id/edit,
  *                          emits `__field_value:FIELD` fenced blocks only
  */
+// Known Kiro bug (upstream issue #7839): ~40% of fresh sessions never
+// register the MCP tool schema, so the Meta-Agent's Claude call runs
+// with an empty tools[] array and the model falls back to emitting
+// <tool_call> / <invoke name=...> text. Our server detects this and
+// emits {"__error":"tool_schema_missing"}; each retry here burns a
+// fresh runtimeSessionId so Kiro restarts its ACP session. With 5
+// retries (6 attempts total) the tail-failure rate is ~0.42^6 ≈ 0.6%
+// assuming independent Bernoulli trials — still not perfect but the
+// median user never sees more than one retry. Each retry costs ~15s
+// of wall-clock; worst case of 6 attempts ≈ 90s.
+const META_TOOL_SCHEMA_RETRIES = 5;
+const META_TOOL_SCHEMA_ERROR_MARKER = "tool_schema_missing";
+
+function freshMetaSessionId(): string {
+  // doubleUuid shape — matches what invoke-node/handler.mjs generates
+  // for memory-enabled agents. Length >= 33 chars (AgentCore
+  // requirement); character set passes the lambda-side ID_PATTERN.
+  const u = () =>
+    (crypto as Crypto & { randomUUID?: () => string }).randomUUID?.().replaceAll("-", "") ??
+    [...crypto.getRandomValues(new Uint8Array(16))]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  return `${u()}${u()}`;
+}
+
 export async function* invokeMetaAgent(
   prompt: string,
   history: ChatMessage[],
@@ -79,17 +104,43 @@ export async function* invokeMetaAgent(
     // Non-fatal: fall back to English. Happens in unit tests where the
     // store isn't mounted.
   }
-  const body: Record<string, unknown> = {
-    prompt,
-    history,
-    images,
-    model_id: modelId,
-    caller_id: callerId,
-    session_id: sessionId,
-    language,
+  // Base body is rebuilt per attempt because session_id rotates on retry.
+  const buildBody = (sid: string | undefined) => {
+    const body: Record<string, unknown> = {
+      prompt,
+      history,
+      images,
+      model_id: modelId,
+      caller_id: callerId,
+      session_id: sid,
+      language,
+    };
+    if (mode) body.mode = mode;
+    return body;
   };
-  if (mode) body.mode = mode;
-  yield* invokeAgent(url, body, onStatus);
+
+  let currentSid = sessionId;
+  for (let attempt = 0; attempt <= META_TOOL_SCHEMA_RETRIES; attempt++) {
+    try {
+      yield* invokeAgent(url, buildBody(currentSid), onStatus);
+      return;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (
+        msg.includes(META_TOOL_SCHEMA_ERROR_MARKER) &&
+        attempt < META_TOOL_SCHEMA_RETRIES
+      ) {
+        // Burn a fresh session so Kiro spawns a new ACP session; the
+        // broken one stays broken for its remaining lifespan.
+        currentSid = freshMetaSessionId();
+        onStatus?.(
+          `Tool registration glitch detected — retrying in a fresh session (attempt ${attempt + 2}/${META_TOOL_SCHEMA_RETRIES + 1})`,
+        );
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 export interface KiroModelInfo {

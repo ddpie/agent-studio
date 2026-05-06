@@ -814,6 +814,17 @@ async def invoke(payload, context):
 
             if state.marker_seen:
                 break
+            if state.fake_tool_seen:
+                # We already emitted tool_schema_missing and tore down
+                # the turn in _stream_with_keepalive. Re-prompting would
+                # just produce more fake-XML text on the same broken
+                # Kiro session — the frontend retry handler is the only
+                # correct recovery path.
+                log.warning(
+                    "fake-tool detected — skipping auto-continue, "
+                    "frontend should retry with a fresh session_id"
+                )
+                break
             if state.tool_events_seen == 0:
                 # Model answered in pure text (no tool use). Pretend
                 # the marker was there — most likely the model just
@@ -874,6 +885,31 @@ async def invoke(payload, context):
 # already sent the first half to the browser.
 _COMPLETION_MARKER = "[[TASK_COMPLETE]]"
 
+# Fingerprints of "the model printed a tool call as text" failure mode.
+# When Kiro's ACP session hits the known tool-schema-missing bug (issue
+# #7839 — affects ~40% of fresh sessions even on Kiro CLI 2.2.1), the
+# model has no real MCP tool_use affordance so it falls back to whatever
+# tool-use encoding it saw most during training. Three shapes observed:
+#
+#   1. `<invoke name="...">…</invoke>`       (legacy Anthropic XML)
+#   2. `<tool_call>{"name":…}</tool_call>`   (ChatML / OpenAI)
+#   3. `<function_calls>…</function_calls>`  (older Anthropic)
+#
+# These are pure text — nothing ever gets deployed. Detecting them
+# server-side lets us abort the turn, surface a retriable error code,
+# and let the frontend restart with a fresh session_id. That's strictly
+# cheaper than shipping the dead text to the browser and hoping the
+# user notices.
+_FAKE_TOOL_MARKERS = (
+    "<invoke name=",
+    "<tool_call>",
+    "<function_calls>",
+)
+# Longest marker length determines how many trailing bytes we must hold
+# back in case one is split across stream chunks. Mirrors the completion-
+# marker split-handling logic below.
+_FAKE_TOOL_MAX_LEN = max(len(m) for m in _FAKE_TOOL_MARKERS)
+
 
 class _TurnStreamState:
     """Carries per-turn stream metadata between _stream_with_keepalive
@@ -884,12 +920,16 @@ class _TurnStreamState:
     cheaply without triggering frozen-dataclass surprises.
     """
 
-    __slots__ = ("marker_seen", "tool_events_seen", "frames_out")
+    __slots__ = ("marker_seen", "tool_events_seen", "frames_out",
+                 "fake_tool_seen")
 
     def __init__(self) -> None:
         self.marker_seen = False
         self.tool_events_seen = 0
         self.frames_out = 0
+        # Set when we detect a text-encoded tool call (model stuck in
+        # fallback because Kiro dropped the tool schema this turn).
+        self.fake_tool_seen = False
 
 
 async def _stream_with_keepalive(
@@ -983,6 +1023,36 @@ async def _stream_with_keepalive(
     # marker could have arrived without completing.
     pending_tail = ""
     marker_len = len(_COMPLETION_MARKER)
+    # Running buffer of text already shipped this turn, capped at a bounded
+    # window so we catch fake-tool markers that straddle chunk boundaries.
+    # `_FAKE_TOOL_MAX_LEN - 1` would be the theoretical minimum; we keep a
+    # few kilobytes so the detector can still fire even if the marker lands
+    # in a chunk we've already shipped. Text frames are small enough that
+    # the memory cost is negligible vs the user-safety win.
+    _FAKE_SCAN_WINDOW = 4096
+    recent_text = ""
+
+    def _detect_fake_tool(chunk: str) -> str | None:
+        """Return the fake-tool marker found (if any) once we've seen it.
+
+        Scans a rolling window of recently-shipped text plus the new chunk.
+        Caller must still ship the prefix up to the match — trimming the
+        visible fake-text is done in `_stream_with_keepalive`'s main loop.
+        """
+        nonlocal recent_text
+        combined = recent_text + chunk
+        hit: str | None = None
+        for m in _FAKE_TOOL_MARKERS:
+            if m in combined:
+                hit = m
+                break
+        # Keep the tail within window for the next call. Preserve enough
+        # to detect a split marker across the boundary.
+        if len(combined) > _FAKE_SCAN_WINDOW:
+            recent_text = combined[-_FAKE_SCAN_WINDOW:]
+        else:
+            recent_text = combined
+        return hit
 
     def _filter_text(chunk: str) -> str | None:
         """Strip completion marker from a text chunk, handling split-across-chunks.
@@ -1061,6 +1131,38 @@ async def _stream_with_keepalive(
                 # Text chunk — run through marker filter.
                 shipped = _filter_text(frame)
                 if shipped is not None:
+                    # Fake-tool-call detection: if this chunk (combined
+                    # with the recent rolling window) contains a fake
+                    # tool marker, the turn is effectively dead text.
+                    # Truncate the ship to the point before the marker
+                    # so the browser doesn't render the fake XML, emit
+                    # a retriable error control frame, and bail out of
+                    # the turn entirely. Auto-continue is skipped by
+                    # the supervisor because tool_events_seen stays 0.
+                    hit = _detect_fake_tool(shipped)
+                    if hit:
+                        safe_prefix = shipped.split(hit, 1)[0]
+                        if safe_prefix:
+                            state.frames_out += 1
+                            yield safe_prefix
+                        state.fake_tool_seen = True
+                        err_payload = {
+                            "__error": "tool_schema_missing",
+                            "marker": hit,
+                            "hint": (
+                                "工具 schema 本轮未注入，请开启新会话后重试 / "
+                                "Tool schema was not registered this turn; "
+                                "please start a new session and retry."
+                            ),
+                        }
+                        state.frames_out += 1
+                        yield json.dumps(err_payload, ensure_ascii=False)
+                        log.warning(
+                            "fake-tool marker detected (%r) — bailing turn "
+                            "after frames_out=%d",
+                            hit, state.frames_out,
+                        )
+                        return
                     state.frames_out += 1
                     yield shipped
     finally:

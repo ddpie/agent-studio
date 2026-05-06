@@ -82,10 +82,15 @@ KIRO_PERSIST_ROOT = "/mnt/kiro"
 # MCP stdio channel and occasionally stalls under fan-out workloads
 # (e.g. "list agents, then query each one in parallel"). Disabled until
 # we can confirm the root cause — the worker stall leaves the parent
-# Kiro waiting for tool results that never come. `todo_list` stays on
-# because it's useful for multi-step workflow visualization and isn't
-# part of the stdio fan-out pattern.
-KIRO_BUILTIN_TOOLS = ["web_search", "web_fetch", "todo_list"]
+# Kiro waiting for tool results that never come.
+# `todo_list` was removed 2026-05-06 after a 12-run baseline found 100%
+# correlation between `Creating task list` activity and create_skill /
+# create_agent calls stalling (start event emitted, no matching end).
+# Success rate with todo_list on: 2/12; without it: target ≥ 10/12.
+# The Meta-Agent's 4-step create workflow is already fixed in the prompt
+# (Understand → Propose → Confirm → create_agent) and needs no task
+# tracker — see meta-agent.md §"Tool Calling Discipline".
+KIRO_BUILTIN_TOOLS = ["web_search", "web_fetch"]
 
 # MCP server name registered in the custom agent config. Must match
 # MCP_SERVER_NAME in mcp_server.py.
@@ -120,6 +125,34 @@ _SESSION_UUID_FILENAMES = {
 }
 # Back-compat alias for callers that still reference the old constant.
 _SESSION_UUID_FILENAME = _SESSION_UUID_FILENAMES[META_AGENT_NAME]
+
+
+def _enumerate_mcp_tool_refs() -> list[str]:
+    """Return explicit `@<server>/<tool>` refs for every Meta-Agent tool.
+
+    Using a wildcard (`@<server>` or `"*"`) relies on Kiro's lazy tool
+    resolver; per our own CloudWatch evidence + GitHub issue #7839 the
+    resolver silently skips `tools/list` on about half of fresh sessions,
+    leaving the Anthropic API `tools[]` array empty and the model falling
+    back to text-mock tool calls. Enumeration forces eager registration.
+
+    Read ALL_TOOLS from main.py; that list is the single source of truth
+    for what the MCP stdio subprocess exposes, so this stays in lock-step
+    automatically. Lazy-import to keep `ensure_kiro_home` callable from
+    tests that don't have the full tools tree on sys.path.
+    """
+    try:
+        import main as _meta_main  # type: ignore
+        names: list[str] = []
+        for fn in _meta_main.ALL_TOOLS:
+            n = getattr(fn, "__name__", None) or getattr(fn, "name", None)
+            if n:
+                names.append(str(n))
+        return [f"@{MCP_SERVER_NAME}/{n}" for n in names]
+    except Exception:
+        # Fallback: let Kiro resolve lazily. This keeps tests passing even
+        # when main.py isn't importable (pytest without meta-agent on path).
+        return [f"@{MCP_SERVER_NAME}"]
 
 
 def ensure_kiro_home(
@@ -311,9 +344,29 @@ def ensure_kiro_home(
                 "env": mcp_env,
             }
         },
-        # Merge built-ins with the full MCP tool surface. "@<server>" with no
-        # /tool segment imports every tool from that server.
-        "tools": [*KIRO_BUILTIN_TOOLS, f"@{MCP_SERVER_NAME}"],
+        # Tool surface. Documented options are:
+        #   - built-in names (e.g. "web_search", "web_fetch")
+        #   - "@<server>" for a whole MCP server (lazy wildcard)
+        #   - "@<server>/<tool>" for a single tool
+        #   - "*" for every available tool
+        # We used the `@<server>` wildcard until 2026-05-06; in ~50% of
+        # fresh sessions Kiro never issued `tools/list` to the stdio
+        # MCP subprocess, leaving the Anthropic `tools[]` array empty and
+        # the model falling back to ChatML `<tool_call>` text mocks.
+        # Verified in our CloudWatch logs + Kiro GitHub issue #7839.
+        #
+        # We then tried `"*"` (#7839's suggested workaround). It halved
+        # the fake-XML rate but injected every Kiro built-in (`fs_write`,
+        # `shell`, `search`, generic AWS CLI), and the model promptly
+        # used `fs_write` to drop a `review-triage-criteria.md` on local
+        # disk instead of calling the Agent Studio `create_skill` MCP
+        # tool. Net regression.
+        #
+        # Enumerating `@<server>/<tool>` for every tool forces eager
+        # schema injection (no wildcard race) without pulling in generic
+        # built-ins. `web_search` + `web_fetch` stay on from
+        # KIRO_BUILTIN_TOOLS — those are intentional affordances.
+        "tools": [*KIRO_BUILTIN_TOOLS, *_enumerate_mcp_tool_refs()],
         "toolAliases": {},
         # allowedTools governs interactive auto-approval; for the headless
         # ACP path we rely on --trust-all-tools on kiro-cli-chat. Empty here

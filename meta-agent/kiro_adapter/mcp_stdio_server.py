@@ -111,6 +111,38 @@ def main() -> None:
 
     srv = build_mcp_server(_meta_main.ALL_TOOLS)
 
+    # Diagnostic: record every JSON-RPC request Kiro sends so we can tell
+    # from CloudWatch whether a given session received a `tools/list`
+    # (and thus the MCP schema made it to the model). Installed before
+    # run_stdio_async via FastMCP's lowlevel server request handlers.
+    # Uses module-level attribute probe so a FastMCP API bump doesn't
+    # break the startup path; if the attribute moves we still boot.
+    try:
+        lowlevel = getattr(srv, "_mcp_server", None)
+        if lowlevel is not None:
+            orig_handlers = dict(getattr(lowlevel, "request_handlers", {}))
+            log.info("mcp diag: %d request_handlers registered: %s",
+                     len(orig_handlers), sorted(str(k) for k in orig_handlers))
+
+            def _wrap(name, fn):
+                async def _logged(req):
+                    log.info("mcp request: %s", name)
+                    try:
+                        res = await fn(req)
+                    except Exception:
+                        log.exception("mcp request %s raised", name)
+                        raise
+                    log.info("mcp reply   : %s ok", name)
+                    return res
+                return _logged
+
+            for key, fn in list(orig_handlers.items()):
+                lowlevel.request_handlers[key] = _wrap(str(key), fn)
+        else:
+            log.warning("mcp diag: srv._mcp_server not found; cannot wrap handlers")
+    except Exception:
+        log.exception("mcp diag hook install failed (non-fatal)")
+
     # Re-point sys.stdout at the quarantined MCP fd only for the duration
     # of run_stdio_async. FastMCP reads sys.stdout.buffer inside its
     # setup, so it captures the REAL stdout there; meanwhile fd 1 still
