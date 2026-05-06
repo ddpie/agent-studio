@@ -98,7 +98,16 @@ def test_update_agent_description_only_triggers_full_redeploy():
     ddb_resource = MagicMock()
     ddb_resource.Table = MagicMock(return_value=fake_table)
 
-    with patch("tools.update_agent.boto3.client", side_effect=_boto3_client), \
+    fake_control = MagicMock()
+
+    def _boto3_client_with_control(service, **_):
+        if service == "s3":
+            return fake_s3
+        if service == "bedrock-agentcore-control":
+            return fake_control
+        return MagicMock()
+
+    with patch("tools.update_agent.boto3.client", side_effect=_boto3_client_with_control), \
          patch("tools.update_agent.boto3.resource", return_value=ddb_resource), \
          patch("tools._scope.ensure_agent_in_workspace",
                return_value=({"agentId": AGENT_ID, "workspace_id": WS_ID, "agentName": "DataAnalyst"}, None)), \
@@ -109,8 +118,7 @@ def test_update_agent_description_only_triggers_full_redeploy():
          patch("tools.update_agent._get_agent_role_arn", return_value="arn:aws:iam::000:role/r"), \
          patch("tools.update_agent.build_skill_prompt_section", return_value=""), \
          patch("tools.update_agent.get_base_guidelines", return_value=""), \
-         patch("tools._scope.current_creator_language", return_value="en"), \
-         patch("threading.Thread") as mock_thread:
+         patch("tools._scope.current_creator_language", return_value="en"):
 
         out = json.loads(_ua_mod.update_agent(
             agent_id=AGENT_ID,
@@ -120,9 +128,9 @@ def test_update_agent_description_only_triggers_full_redeploy():
 
     assert "error" not in out, f"unexpected error: {out}"
     assert out.get("action") == "redeployed"
-    assert out.get("needs_redeploy") is True
-    assert out.get("status") == "QUEUED"
-    assert mock_thread.called, "expected background redeploy thread to be started"
+    assert out.get("status") == "UPDATING"
+    assert fake_control.update_agent_runtime.called, \
+        "expected update_agent_runtime to be called synchronously"
     assert fake_table.update_calls, "expected a DDB update_item call"
     last = fake_table.update_calls[-1]
     assert "description = :desc" in last["UpdateExpression"]
