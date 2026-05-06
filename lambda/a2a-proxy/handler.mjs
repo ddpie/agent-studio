@@ -308,7 +308,13 @@ async function handleAgentRpc({ route, event, responseStream, method, send, agen
   catch (e) { return send(400, rpcError(envelope.id ?? null, -32600, e.message)); }
 
   const internal = a2aToInternalPayload(parsed.params, { userId: key.userId });
-  if (route.type === "meta-rpc") internal.workspace_id = key.workspaceId;
+  // Forward the API key's workspace context to the target. Without this,
+  // the callee's agent_template sees an empty _workspace_id and rejects
+  // every read_document / list_workspace_files call with "workspace
+  // context is not available", which in turn makes every A2A-forwarded
+  // attachment invisible to the target. Applies to both agent-rpc and
+  // meta-rpc paths — there's no reason to strip it for peer-agent calls.
+  internal.workspace_id = key.workspaceId;
 
   if (parsed.method === "message/send") {
     const out = await invokeRuntimeUnary({ parsed, internal, agentArn });
