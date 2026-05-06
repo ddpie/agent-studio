@@ -86,6 +86,14 @@ def call_agent(agent_id: str, prompt: str, session_id: str = "") -> str:
         },
     }
     body = json.dumps(envelope).encode("utf-8")
+    # CloudFront OAC → Lambda Function URL (AuthType=AWS_IAM, RESPONSE_STREAM)
+    # requires `x-amz-content-sha256` in the request for SigV4 to validate
+    # at the origin. Without it the origin returns InvalidSignatureException
+    # and the request never reaches the a2a-proxy handler. See also
+    # frontend/src/lib/agentcore-client.ts which does the same thing for
+    # the /invoke/ path.
+    import hashlib as _hashlib
+    _body_sha256 = _hashlib.sha256(body).hexdigest()
     req = urllib.request.Request(
         url,
         data=body,
@@ -94,6 +102,7 @@ def call_agent(agent_id: str, prompt: str, session_id: str = "") -> str:
             "content-type": "application/json",
             "accept": "application/json",
             "authorization": f"Bearer {api_key}",
+            "x-amz-content-sha256": _body_sha256,
         },
     )
     try:

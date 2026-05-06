@@ -195,6 +195,9 @@ def _agent_response(item: dict) -> dict:
         "memory": item.get("memory"),
         "runtime_type": item.get("runtime_type", "zip"),
         "harness_arn": item.get("harness_arn", ""),
+        # A2A peer agents linked via Meta-Agent's link_agent tool. Written
+        # back into DDB by link_agent / unlink_agent so the frontend
+        "linked_agents": item.get("linked_agents", []),
     }
 
 

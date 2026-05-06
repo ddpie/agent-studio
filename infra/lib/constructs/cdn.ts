@@ -104,15 +104,24 @@ function handler(event) {
       runtime: cloudfront.FunctionRuntime.JS_2_0,
     });
 
-    // Forward x-a2a-authorization to origin; OAC owns Authorization.
-    const a2aOriginRequestPolicy = new cloudfront.OriginRequestPolicy(this, "A2aOriginRequestPolicy", {
-      originRequestPolicyName: "agent-studio-a2a-orp",
-      headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
-        "Content-Type", "Accept", "x-a2a-authorization"
-      ),
-      queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.all(),
-      cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
-    });
+    // Forward everything except the viewer-side Host header + Authorization
+    // (Authorization has already been renamed to x-a2a-authorization by the
+    // viewer-request Function at this point; preventing its forward is defense
+    // in depth in case the rename didn't fire for any reason).
+    //
+    // We MUST forward `x-amz-content-sha256` or the Lambda Function URL
+    // returns InvalidSignatureException because OAC SigV4 signs the body
+    // hash. Listing it explicitly with allowList is rejected by CloudFront
+    // ("x-amz-*" is reserved); the workaround is to use allViewerExcept and
+    // let the header through implicitly (CloudFront does allow its signing
+    // implementation to see x-amz-* even with this policy, verified via
+    // /invoke/ path which uses ALL_VIEWER_EXCEPT_HOST_HEADER successfully).
+    // Use AWS managed policy AllViewerExceptHostHeader — it forwards every
+    // viewer header (critically `x-amz-content-sha256`) except Host. Since
+    // the viewer-request Function already renamed `authorization` to
+    // `x-a2a-authorization` above, the Authorization slot at origin-request
+    // time is empty and safe for OAC to populate with its SigV4 signature.
+    const a2aOriginRequestPolicy = cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER;
 
     // CloudFront distribution
     this.distribution = new cloudfront.Distribution(this, "Distribution", {

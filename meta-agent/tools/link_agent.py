@@ -464,14 +464,26 @@ def link_agent(source_agent_id: str, target_agent_id: str) -> str:
     except Exception as e:
         return json.dumps({"error": f"Redeploy failed: {e}", "key_id": key_id})
 
-    # 5. Sync DDB tool_names for the UI.
+    # 5. Sync DDB tool_names + linked_agents for the UI. The frontend
+    # LinkedAgentsSection reads linked_agents off the DDB item (via the
+    # GET /agents/{id} endpoint); without this write the UI keeps
+    # showing "尚未关联" even after the tool succeeded end-to-end.
     ddb = boto3.resource("dynamodb", region_name=REGION)
+    _ddb_linked = [
+        {
+            "agent_id": l["agent_id"],
+            "display_name": l.get("display_name", ""),
+            "description": l.get("description", ""),
+        }
+        for l in linked
+    ]
     try:
         ddb.Table(AGENTS_TABLE).update_item(
             Key={"agentId": source_agent_id},
-            UpdateExpression="SET tool_names = :tn, updated_at = :ua",
+            UpdateExpression="SET tool_names = :tn, linked_agents = :la, updated_at = :ua",
             ExpressionAttributeValues={
                 ":tn": tools_list,
+                ":la": _ddb_linked,
                 ":ua": meta["updated_at"],
             },
         )
@@ -578,12 +590,21 @@ def unlink_agent(source_agent_id: str, target_agent_id: str) -> str:
         return json.dumps({"error": f"Redeploy failed: {e}"})
 
     ddb = boto3.resource("dynamodb", region_name=REGION)
+    _ddb_remaining = [
+        {
+            "agent_id": l["agent_id"],
+            "display_name": l.get("display_name", ""),
+            "description": l.get("description", ""),
+        }
+        for l in remaining_linked
+    ]
     try:
         ddb.Table(AGENTS_TABLE).update_item(
             Key={"agentId": source_agent_id},
-            UpdateExpression="SET tool_names = :tn, updated_at = :ua",
+            UpdateExpression="SET tool_names = :tn, linked_agents = :la, updated_at = :ua",
             ExpressionAttributeValues={
                 ":tn": tools_list,
+                ":la": _ddb_remaining,
                 ":ua": meta["updated_at"],
             },
         )
