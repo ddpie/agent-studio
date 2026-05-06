@@ -417,14 +417,14 @@ class TestGetMcpToolNames:
         mock_s3 = MagicMock()
         mock_boto.return_value = mock_s3
         manifest = json.dumps([
-            {"name": "generate_image", "description": "Generate images"},
-            {"name": "edit_image", "description": "Edit images"},
+            {"name": "get_metric_statistics", "description": "Get metrics"},
+            {"name": "describe_alarms", "description": "Describe alarms"},
         ]).encode()
         mock_s3.get_object.return_value = {"Body": MagicMock(read=lambda: manifest)}
 
-        result = _get_mcp_tool_names(["nova-canvas"])
-        assert "generate_image" in result
-        assert "edit_image" in result
+        result = _get_mcp_tool_names(["cloudwatch"])
+        assert "get_metric_statistics" in result
+        assert "describe_alarms" in result
 
     @patch("boto3.client")
     def test_hyphen_to_underscore_fallback(self, mock_boto):
@@ -433,15 +433,15 @@ class TestGetMcpToolNames:
 
         def side_effect(**kwargs):
             key = kwargs.get("Key", "")
-            if "nova-canvas" in key:
+            if "aws-pricing" in key:
                 raise Exception("NoSuchKey")
             return {"Body": MagicMock(read=lambda: json.dumps([
-                {"name": "gen_img", "description": "d"},
+                {"name": "get_pricing", "description": "d"},
             ]).encode())}
 
         mock_s3.get_object.side_effect = side_effect
-        result = _get_mcp_tool_names(["nova-canvas"])
-        assert "gen_img" in result
+        result = _get_mcp_tool_names(["aws-pricing"])
+        assert "get_pricing" in result
 
     @patch("boto3.client")
     def test_missing_manifest_returns_empty(self, mock_boto):

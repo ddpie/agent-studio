@@ -206,10 +206,11 @@ def list_mcp_servers() -> str:
         # (e.g. "cloudwatch") is the contract everywhere else: the frontend
         # /mcp/targets API returns short names, workspace policy stores short
         # names, and _resolve_mcp_endpoints expects short names so it can map
-        # "nova-canvas" → runtime "nova_canvas". Leaving the prefix on here
-        # caused Meta-Agent to write "mcp-cloudwatch" into proposals, which
-        # then failed to match the selector's short names in the editor and
-        # would have 404'd at runtime resolution.
+        # them to runtime ids (e.g. "cloudwatch" -> "mcp_cloudwatch").
+        # Leaving the prefix on here caused Meta-Agent to write
+        # "mcp-cloudwatch" into proposals, which then failed to match the
+        # selector's short names in the editor and would have 404'd at
+        # runtime resolution.
         merged = []
         for t in targets:
             gw_name = t["target_name"]
