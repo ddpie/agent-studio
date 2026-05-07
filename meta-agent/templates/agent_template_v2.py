@@ -1905,6 +1905,95 @@ def run_skill_script(
     except ValueError as e:
         return _tool_error(f"invalid args (shell parse failed): {e}")
 
+    # Auto-prefetch S3 attachment/workspace keys into the sandbox.
+    #
+    # Contract: if any arg looks like an S3 key the agent can legitimately
+    # read (chat attachment under ``uploads/attachments/<session>/`` or
+    # workspace storage under ``workspaces/<ws>/storage/``), download it
+    # into the sandbox and replace the arg with the sandbox path. This
+    # spares skill authors from having to write boto3 inside every
+    # script — ``run_skill_script`` owns the S3→sandbox bridge.
+    #
+    # Anything else (absolute paths, flag values, non-key strings) passes
+    # through untouched. ``s3://bucket/key`` URLs are intentionally not
+    # handled: the agent's IAM only trusts this bucket + these two
+    # prefixes, and the URL shape would invite skills to hit arbitrary
+    # buckets without the access-scoping check.
+    _REWRITE_PREFIXES = ("uploads/attachments/", "workspaces/")
+    _PREFETCH_MAX_BYTES = 20 * 1024 * 1024  # 10MB hard cap documented; 20MB headroom
+
+    def _looks_like_s3_key(value: str) -> bool:
+        if not value or len(value) > 1024:
+            return False
+        if value.startswith("-") or value.startswith("/"):
+            return False
+        if not value.startswith(_REWRITE_PREFIXES):
+            return False
+        # Reject obvious non-keys: no slash after the prefix, or no
+        # filename-looking tail segment. Keeps "uploads/attachments/"
+        # (bare prefix) from being treated as a key.
+        if "/" not in value[len("uploads/attachments/"):] and value.startswith("uploads/attachments/"):
+            return False
+        tail = value.rsplit("/", 1)[-1]
+        return bool(tail)
+
+    prefetch_notes = []
+    if argv_extra:
+        import os as _os_
+        import pathlib as _pathlib_
+        ws = _workspace_id or ""
+        for idx, token in enumerate(argv_extra):
+            if not _looks_like_s3_key(token):
+                continue
+            # Same access-scope gate read_document uses, so we don't
+            # open a wider door than the existing read path.
+            key = token.lstrip("/")
+            allowed = False
+            if ws and key.startswith(f"workspaces/{ws}/storage/"):
+                allowed = True
+            elif key.startswith("uploads/attachments/"):
+                remainder = key[len("uploads/attachments/"):]
+                seg, _sep, rest = remainder.partition("/")
+                if seg and rest:
+                    allowed = True
+            if not allowed:
+                return _tool_error(
+                    f"argv[{idx}] looks like an S3 key but isn't in this "
+                    f"workspace's allowed prefixes ('workspaces/{ws}/storage/' "
+                    "or 'uploads/attachments/<session>/'). Skills cannot read "
+                    "outside the agent's scope."
+                )
+            try:
+                head = _s3.head_object(Bucket=_S3_BUCKET, Key=key)
+                size = int(head.get("ContentLength") or 0)
+            except Exception as e:
+                return _tool_error(f"S3 head failed for {key}: {e}")
+            if size > _PREFETCH_MAX_BYTES:
+                return _tool_error(
+                    f"S3 object {key} is {size} bytes; run_skill_script "
+                    f"auto-prefetch cap is {_PREFETCH_MAX_BYTES}. Have the "
+                    "script read S3 directly via boto3 for files this large."
+                )
+            try:
+                obj = _s3.get_object(Bucket=_S3_BUCKET, Key=key)
+                payload = obj["Body"].read()
+            except Exception as e:
+                return _tool_error(f"S3 get failed for {key}: {e}")
+            # Sandbox path: preserve the filename so the script's error
+            # messages still mention the original name; stage under a
+            # per-key subdir to avoid collisions between different calls.
+            fname = _pathlib_.PurePosixPath(key).name or "attachment"
+            stage_rel = f"_staged_inputs/{idx}_{fname}"
+            werr = ci_fs.write_bytes(stage_rel, payload)
+            if werr:
+                return _tool_error(f"sandbox write failed for {key}: {werr}")
+            anchor = _ci_sandbox_anchor()
+            abs_path = f"{anchor}/{stage_rel}" if anchor else stage_rel
+            argv_extra[idx] = abs_path
+            prefetch_notes.append(
+                f"prefetched s3://.../{key} -> {stage_rel} ({size} bytes)"
+            )
+
     # cwd resolution: "" = preserve the CI session's current cwd (usually
     # where the user's output files live); "skill" = the skill's own
     # directory; any other value = treated as an absolute path. An invalid

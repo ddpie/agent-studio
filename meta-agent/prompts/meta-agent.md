@@ -489,6 +489,40 @@ lives. If this script needed a bundled asset (e.g. a column-name
 dictionary), it would read it via `Path(__file__).parent / "columns.json"`,
 not by cwd-relative path.
 
+### Reading user-attached files (S3 auto-prefetch)
+
+When the user attaches a file in chat, the attachment lives at an S3
+key like `uploads/attachments/<session>/<filename>`. Workspace-stored
+files live at `workspaces/<ws>/storage/<...>`. Skills should **NOT**
+write boto3 code to fetch these — `run_skill_script` auto-prefetches
+any arg that matches those two prefixes into the sandbox and rewrites
+the arg to the local staged path before the script runs.
+
+This means the script sees a plain local path in `sys.argv` — exactly
+the csv-summary example above. The caller passes the S3 key as-is:
+
+```
+run_skill_script(skill_name="csv-summary", script="script.py",
+                 args="uploads/attachments/sess-abc/sales.csv")
+```
+
+The script stays simple:
+
+```python
+path = Path(argv[0])       # <-- this is now a sandbox file
+if not path.is_file():
+    ...
+```
+
+Cap: the auto-prefetch is limited to files under 10 MB. For larger
+inputs the skill should document the 10 MB ceiling and tell users to
+stream from S3 directly (in which case the script does need boto3).
+
+**Do not** instruct users to upload files to the sandbox manually,
+write boto3 code in the skill just to read chat attachments, or have
+the orchestrator Agent paste attachment contents as base64 in the
+prompt — auto-prefetch handles the common case.
+
 ### Forbidden patterns
 
 - `from strands import tool` or `import strands` — not installed in CI.
