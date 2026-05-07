@@ -438,6 +438,19 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
     }
   };
 
+  // Keepalive heartbeat — the agent runtime can go silent for minutes
+  // at a time when its model is waiting on a long call_agent reply
+  // from a peer agent (IC -> PRA can be 3min). Without ticks on the
+  // wire CloudFront's 60s origin idle timeout closes the connection
+  // mid-chain and the browser sees only the first text chunk. Send a
+  // harmless keepalive frame the frontend parser already recognises
+  // (`{"__keepalive": true}`) every 25s — short enough to stay well
+  // under CloudFront 60s with jitter margin.
+  const keepaliveTimer = setInterval(() => {
+    try { responseStream.write(`data: ${JSON.stringify({ __keepalive: true })}\n\n`); }
+    catch { /* stream dead, next write will fail louder */ }
+  }, 25_000);
+
   try {
     const stream = agentResp.response;
     if (stream && Symbol.asyncIterator in stream) {
@@ -461,6 +474,8 @@ export const handler = awslambda.streamifyResponse(async (event, responseStream)
   } catch (err) {
     console.error("SSE streaming error:", err);
     responseStream.write(`data: ${JSON.stringify({ error: "Streaming error" })}\n\n`);
+  } finally {
+    clearInterval(keepaliveTimer);
   }
 
   responseStream.end();
