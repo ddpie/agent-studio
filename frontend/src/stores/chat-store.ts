@@ -46,7 +46,8 @@ export interface S3Download {
  */
 export type MessageBlock =
   | { kind: "text"; text: string }
-  | { kind: "tool_call"; call: ToolCallRecord };
+  | { kind: "tool_call"; call: ToolCallRecord }
+  | { kind: "error"; text: string };
 
 export interface Message {
   id: string;
@@ -793,9 +794,18 @@ export const useChatStore = create<ChatState>()(
           flushPending();
         } catch (err) {
           if (!signal.aborted) {
+            // Append an error block instead of overwriting content.
+            // Overwriting threw away every text chunk + tool-call that
+            // had already streamed in — users saw a partial answer,
+            // then hit Copy and got only "错误: network error", losing
+            // everything the agent had said. Preserving the received
+            // content + adding a trailing error block keeps the work
+            // visible and lets Copy still return the real answer.
+            const errText = i18next.t("chat.errorPrefix", "Error") +
+              `: ${err instanceof Error ? err.message : "Unknown error"}`;
             set((s) => setMessagesFor(s, sendingAgentKey, (msgs) =>
               msgs.map((m) => m.id === assistantMsg.id
-                ? { ...m, content: i18next.t("chat.errorPrefix", "Error") + `: ${err instanceof Error ? err.message : "Unknown error"}` }
+                ? { ...m, blocks: [...(m.blocks || []), { kind: "error", text: errText }] }
                 : m,
               ),
             ));

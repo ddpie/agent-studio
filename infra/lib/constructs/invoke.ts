@@ -37,7 +37,12 @@ export class Invoke extends Construct {
           ],
         },
       }),
-      timeout: cdk.Duration.seconds(300),
+      // Hard AWS-Lambda max is 900s. IC-orchestrated chains (PRA + GRM
+      // + RTG) can run 6-7 min end-to-end, and the previous 300s cap
+      // killed invoke before the SSE stream finished, leaving users
+      // with only the first text chunk rendered. Raise to 900s so the
+      // runtime can complete long chains without the transport dying.
+      timeout: cdk.Duration.seconds(900),
       memorySize: 1024,
       environment: {
         ACCOUNT_ID: props.config.accountId,

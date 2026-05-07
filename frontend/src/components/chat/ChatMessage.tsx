@@ -185,13 +185,26 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
             <>
               {useInline ? (
                 <div ref={contentDivRef}>
-                  {message.blocks!.map((b, i) =>
-                    b.kind === "text" ? (
-                      <ProseBlock key={i} text={stripAttachmentHints(b.text)} isUser={isUser} />
-                    ) : (
-                      <ToolCallDetails key={i} calls={[b.call]} />
-                    ),
-                  )}
+                  {message.blocks!.map((b, i) => {
+                    if (b.kind === "text") {
+                      return <ProseBlock key={i} text={stripAttachmentHints(b.text)} isUser={isUser} />;
+                    }
+                    if (b.kind === "tool_call") {
+                      return <ToolCallDetails key={i} calls={[b.call]} />;
+                    }
+                    // kind === "error" — streaming was interrupted. Show
+                    // a distinct inline banner so users can tell the
+                    // preceding text was cut short, without losing any
+                    // work the agent had already produced.
+                    return (
+                      <div
+                        key={i}
+                        className="mt-2 rounded border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-xs text-red-700 dark:text-red-300"
+                      >
+                        {b.text}
+                      </div>
+                    );
+                  })}
                   {showTypingIndicator && (
                     <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500 text-xs mt-2">
                       <Loader2 className="w-3 h-3 animate-spin" /> {t("chat.working")}

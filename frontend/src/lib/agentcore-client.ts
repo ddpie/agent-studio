@@ -288,9 +288,15 @@ async function* invokeAgent(
 }
 
 // Watchdog: if upstream is silent longer than this, cancel the reader and
-// throw. 2× the 30s keepalive cadence — real network stalls exceed that,
-// but a healthy stream never does.
-const SSE_IDLE_WATCHDOG_MS = 60_000;
+// throw. Not all agents emit keepalives on the SSE channel — Meta-Agent
+// does (15s tick) but plain-zip Agents like IncidentCoordinator only
+// yield bytes when their model produces tokens. When IC is blocked on
+// a long `call_agent` to a downstream peer (PRA taking 3+ minutes),
+// IC's own SSE to the browser goes silent the whole time even though
+// the Lambda/AgentCore pipeline is healthy. Give 6 minutes — longer
+// than any single realistic peer-agent turn while still shorter than
+// the Lambda 900s cap.
+const SSE_IDLE_WATCHDOG_MS = 6 * 60_000;
 
 async function* parseSSEStream(response: Response): AsyncGenerator<string> {
   const reader = response.body?.getReader();
