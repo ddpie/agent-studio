@@ -17,11 +17,40 @@ export async function uploadImageToS3(dataUrl: string): Promise<string> {
   return `https://s3.${agentConfig.region}.amazonaws.com/${agentConfig.s3Bucket}/${presigned.s3Key}`;
 }
 
+// Canonicalise content-type by file extension. Browsers are wildly
+// inconsistent here — Chrome/Safari/Firefox on Windows vs. macOS vs.
+// Linux report different `file.type` values for the same `.json`:
+// "application/json", "text/json", "application/octet-stream", or
+// empty string. Backend uses a strict whitelist so the mismatches get
+// rejected. Mapping here ensures the caller always sends the MIME
+// string the backend recognises.
+const EXT_TO_MIME: Record<string, string> = {
+  json: "application/json",
+  csv: "text/csv",
+  tsv: "text/csv",
+  txt: "text/plain",
+  md: "text/markdown",
+  log: "text/plain",
+  py: "text/plain",
+  yaml: "text/plain",
+  yml: "text/plain",
+  xml: "text/plain",
+  html: "text/plain",
+  sql: "text/plain",
+  pdf: "application/pdf",
+};
+
+function canonicalContentType(file: File): string {
+  const ext = (file.name.toLowerCase().match(/\.([a-z0-9]+)$/) || [])[1] || "";
+  if (ext && EXT_TO_MIME[ext]) return EXT_TO_MIME[ext];
+  return file.type || "application/octet-stream";
+}
+
 export async function uploadFileToS3(
   file: File,
   sessionId: string
 ): Promise<{ key: string; url: string }> {
-  const presigned = await getAttachmentUploadUrl(file.name, file.type || "application/octet-stream", sessionId);
+  const presigned = await getAttachmentUploadUrl(file.name, canonicalContentType(file), sessionId);
   await uploadWithPresignedPost({ url: presigned.uploadUrl, fields: presigned.fields }, file);
 
   return { key: presigned.s3Key, url: "" };
@@ -38,12 +67,21 @@ export function buildAttachmentHint(
   bucket: string,
 ): string {
   const lower = file.name.toLowerCase();
+  // read_document handles anything the agent_template's builtin can
+  // extract/stream — PDFs, spreadsheets, CSV/TSV, and the plain-text
+  // family (json/txt/md/log/source code). Script skills don't need the
+  // hint because run_skill_script auto-prefetches S3 attachment keys
+  // into the sandbox, but the orchestrator path still uses this.
   const isDocument =
     lower.endsWith(".pdf") ||
     lower.endsWith(".xlsx") ||
     lower.endsWith(".xlsm") ||
     lower.endsWith(".csv") ||
-    lower.endsWith(".tsv");
+    lower.endsWith(".tsv") ||
+    lower.endsWith(".json") ||
+    lower.endsWith(".txt") ||
+    lower.endsWith(".md") ||
+    lower.endsWith(".log");
   if (isDocument) {
     return `call read_document(file_key="${file.s3Key}") to read this file (fallback: s3_read(bucket="${bucket}", key="${file.s3Key}"))`;
   }
