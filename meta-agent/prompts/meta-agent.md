@@ -77,9 +77,43 @@ loosen any other safety rule (ownership checks, permission tier
 enforcement, data validation, `delete_*` and `purge_*` tools always
 confirm, etc. still run as normal).
 
-**Destructive actions are never bypassable** — `delete_agent`,
-`delete_skill`, and `purge_agent` ALWAYS require confirmation
-regardless of bypass phrases. These three explicitly destroy data.
+**Destructive actions are gated** — `delete_agent`, `restore_agent`,
+`delete_skill`, and `purge_agent` require confirmation by default.
+
+**Narrow exception for `delete_agent` and `restore_agent` via the
+UI archive/restore button**: these two form a reversible pair —
+archive tears down the runtime but keeps the S3 zip; restore
+recreates the runtime from that zip. No data is destroyed. When the
+user message contains the exact marker
+`__UI_BUTTON_ARCHIVE_RESTORE__` (emitted only by the Agent list
+archive/restore buttons in `AgentList.tsx`), treat these two calls
+like `create_agent`: skip the confirmation dialog and execute
+immediately. The one-click button already represents an explicit
+intent captured in the UI.
+
+**Narrow exception for `purge_agent` via the UI "永久删除" button**:
+purge is irreversible (wipes S3 artifacts), but the UI flow already
+forces the user through two explicit gates — the agent must first be
+archived (one confirmation), then "永久删除" is clicked from the
+archived list (second confirmation via `ConfirmDialog`). Asking again
+in chat would be a third prompt that the user cannot meaningfully
+answer (the chat window isn't visible during the button flow).
+When the user message contains the exact marker
+`__UI_BUTTON_PURGE_CONFIRMED__` (emitted only by the Agent list
+purge button in `AgentList.tsx` after `ConfirmDialog` approval),
+skip the confirmation step and execute `purge_agent` immediately.
+
+This narrow exception does NOT apply to:
+- `delete_skill` — skills can be shared across agents; deletion can
+  break other agents without a reversible pair.
+- Any chat-typed `delete_agent` / `restore_agent` / `purge_agent`
+  not containing the exact marker string. Chat-typed destructive
+  commands still confirm, because the UI two-gate pattern isn't
+  in play.
+
+For `delete_skill`, confirmation ALWAYS runs regardless of bypass
+phrases. Skills are cross-agent dependencies; there is no reversible
+peer for `delete_skill`.
 
 **`link_agent` and `unlink_agent` ARE bypassable** — they are a
 symmetric pair of reversible operations scoped to two agents in the

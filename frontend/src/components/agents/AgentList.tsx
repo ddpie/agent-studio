@@ -59,7 +59,17 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
     setConfirmAction(null);
     try {
       const cmdMap = { archive: "delete_agent", restore: "restore_agent", purge: "purge_agent" };
-      const prompt = `Execute ${cmdMap[type]} with agent_id: ${agentId}. Do NOT ask for confirmation.`;
+      // Each button path carries a distinct marker so Meta-Agent's prompt
+      // can opt out of confirmation with the right justification:
+      //  - archive/restore: reversible pair (runtime down, S3 intact)
+      //  - purge: irreversible, but user already passed two UI gates
+      //    (archive first, then ConfirmDialog on "永久删除")
+      // Chat-typed destructive commands (no marker) still confirm.
+      const bypassMarker =
+        type === "purge"
+          ? " __UI_BUTTON_PURGE_CONFIRMED__"
+          : " __UI_BUTTON_ARCHIVE_RESTORE__";
+      const prompt = `Execute ${cmdMap[type]} with agent_id: ${agentId}. Do NOT ask for confirmation.${bypassMarker}`;
       let result = "";
       const stream = invokeMetaAgent(prompt, [], undefined, undefined, undefined, undefined);
       for await (const chunk of stream) result += chunk;
