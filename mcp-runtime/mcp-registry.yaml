@@ -13,6 +13,10 @@ remote_targets:
     enabled: true
     description: "AWS 云资源操作，15000+ API"
     endpoint: "https://aws-mcp.us-east-1.api.aws/mcp"
+    # `aws-mcp.{region}.api.aws` currently resolves only for us-east-1 — DNS for
+    # us-west-2 / other regions does not exist as of 2026-05. Gate by
+    # deployment region; CRUD Lambda hides the target from non-matching stacks.
+    availability: ["us-east-1"]
     auth: sigv4
     category: general
     sensitivity: low

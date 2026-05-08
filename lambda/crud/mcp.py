@@ -127,6 +127,20 @@ def _filter_by_policy(targets, policy):
     return targets
 
 
+def _is_available_in_region(target: dict) -> bool:
+    """Honor the optional `availability` field on a registry entry.
+
+    Some targets (notably `aws-api`, whose endpoint only resolves in
+    us-east-1) are not usable from every deployment region. When the entry
+    declares an `availability` list, the stack must be deployed into one of
+    those regions for the target to appear. Missing/empty list = everywhere.
+    """
+    allowed = target.get("availability")
+    if not allowed:
+        return True
+    return REGION in allowed
+
+
 def _build_target_list():
     """Produce the /mcp/targets payload from registry + deployed runtimes.
 
@@ -145,6 +159,8 @@ def _build_target_list():
             continue
         if t.get("deprecated"):
             continue
+        if not _is_available_in_region(t):
+            continue
         out.append({
             "name": t["name"],
             "description": t.get("description", ""),
@@ -158,6 +174,8 @@ def _build_target_list():
         if not t.get("enabled"):
             continue
         if t.get("deprecated"):
+            continue
+        if not _is_available_in_region(t):
             continue
         candidates = _runtime_name_candidates(t["name"])
         live = next((deployed[n] for n in candidates if n in deployed), None)

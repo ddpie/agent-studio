@@ -78,15 +78,24 @@ def _resolve_mcp_endpoints(target_names: list) -> list:
         resp = s3.get_object(Bucket=S3_BUCKET, Key="mcp-runtime/mcp-registry.yaml")
         registry = yaml.safe_load(resp["Body"].read().decode())
         for rt in registry.get("remote_targets", []):
-            if rt.get("enabled"):
-                auth = "none" if rt.get("auth") == "none" else "aws-mcp"
-                remote_map[rt["name"]] = {"url": rt["endpoint"], "auth": auth}
+            if not rt.get("enabled"):
+                continue
+            # Skip targets that aren't shipped in this region (e.g. aws-api
+            # whose endpoint only resolves in us-east-1). Mirrors the filter
+            # in lambda/crud/mcp.py so Meta-Agent and the UI agree.
+            allowed = rt.get("availability")
+            if allowed and REGION not in allowed:
+                continue
+            auth = "none" if rt.get("auth") == "none" else "aws-mcp"
+            remote_map[rt["name"]] = {"url": rt["endpoint"], "auth": auth}
     except Exception:
-        # Fallback: hardcoded known remotes
+        # Fallback: hardcoded known remotes. aws-api is only listed when the
+        # Meta-Agent itself is running in us-east-1.
         remote_map = {
-            "aws-api": {"url": "https://aws-mcp.us-east-1.api.aws/mcp", "auth": "aws-mcp"},
             "aws-knowledge": {"url": "https://knowledge-mcp.global.api.aws", "auth": "none"},
         }
+        if REGION == "us-east-1":
+            remote_map["aws-api"] = {"url": "https://aws-mcp.us-east-1.api.aws/mcp", "auth": "aws-mcp"}
 
     # Verify runtime targets exist
     runtime_names = set()

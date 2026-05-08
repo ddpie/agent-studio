@@ -78,6 +78,11 @@ import yaml
 
 registry_file = os.environ["REGISTRY_FILE"]
 only_target = os.environ.get("ONLY_TARGET", "")
+region = os.environ["REGION"]
+
+def _in_region(target):
+    allowed = target.get("availability")
+    return (not allowed) or region in allowed
 
 with open(registry_file) as f:
     registry = yaml.safe_load(f)
@@ -86,6 +91,8 @@ remote = []
 for t in registry.get("remote_targets", []):
     if not t.get("enabled"):
         continue
+    if not _in_region(t):
+        continue
     if only_target and t["name"] != only_target:
         continue
     remote.append({"name": t["name"], "endpoint": t["endpoint"], "description": t.get("description", ""), "category": t.get("category", "general")})
@@ -93,6 +100,8 @@ for t in registry.get("remote_targets", []):
 runtime = []
 for t in registry.get("runtime_targets", []):
     if not t.get("enabled") or t.get("vpc_required") or t.get("deprecated"):
+        continue
+    if not _in_region(t):
         continue
     if only_target and t["name"] != only_target:
         continue
@@ -369,10 +378,16 @@ region = os.environ["REGION"]
 with open(registry_file) as f:
     registry = yaml.safe_load(f)
 
+def _in_region(target):
+    allowed = target.get("availability")
+    return (not allowed) or region in allowed
+
 catalog = []
 
 for target in registry.get("remote_targets", []):
     if not target.get("enabled", False):
+        continue
+    if not _in_region(target):
         continue
     catalog.append({
         "name": target["name"],
@@ -387,6 +402,8 @@ for target in registry.get("runtime_targets", []):
     if target.get("vpc_required", False):
         continue
     if target.get("deprecated", False):
+        continue
+    if not _in_region(target):
         continue
     catalog.append({
         "name": target["name"],
