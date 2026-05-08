@@ -66,15 +66,39 @@ Permission Boundary（天花板）
 - **敏感标识与二次确认** — 每个 target 标注 sensitivity 等级（low / medium / high）。medium 以上的授权操作弹出确认弹窗，展示风险原因和具体 action 列表
 - **实时权限检查** — `SimulatePrincipalPolicy` 实时模拟，每个 target 展示进度条和已授权/缺失 action 明细。Agent 创建时 `validate_agent` 自动校验 MCP 权限
 
-## 快速开始
+## 部署
+
+### 前置条件
+
+- 已配置凭据的 AWS 账号：`aws sts get-caller-identity` 能正常返回
+- 使用的 IAM 身份能够 `cdk bootstrap`，并能创建 IAM 角色、策略与 Permission Boundary
+- 本机装有 **Node.js 18+**、**Python 3.10+**、**Docker**（CDK Lambda bundling 需要 Docker daemon 在跑）；以及 `npm`、`jq`、`yq`——脚本会做版本预检
+
+### 一键部署
+
+首次部署两步走。先准备 `.env`：
 
 ```bash
-bash scripts/deploy-all.sh --region us-east-1
+cp .env.example .env
 ```
 
-首次部署约 15–20 分钟，依次开通：CDK 基础设施（Cognito / Lambda / CloudFront / WAF / DDB / S3）→ Base zip → Meta-Agent → 前端。
+打开 `.env` 填入三项必填：
 
-常用子命令：
+- `AGENT_STUDIO_REGION` — `us-east-1` 或 `us-west-2`
+- `AGENT_STUDIO_ACCOUNT_ID` — 12 位 AWS 账号 ID
+- `ORIGIN_VERIFY_SECRET` — 用 `openssl rand -hex 32` 生成
+
+其它字段（`META_AGENT_ID`、`COGNITO_*`、`CLOUDFRONT_*`）部署脚本会自动回填。
+
+然后一键部署，约 15–20 分钟：
+
+```bash
+bash scripts/deploy-all.sh --region us-east-1   # 或 --region us-west-2
+```
+
+脚本依次完成：CDK 基础设施（Cognito / Lambda / CloudFront / WAF / DDB / S3）→ Base zip → Meta-Agent → 前端 build 与同步 → CloudFront invalidation。重复执行时只更新有变化的部分。
+
+### 常用子命令
 
 ```bash
 bash scripts/deploy-all.sh --only-agent       # 仅更新 Meta-Agent
@@ -83,12 +107,15 @@ bash scripts/deploy-all.sh --skip-frontend    # 基础设施 + Meta-Agent
 bash scripts/deploy-all.sh --dry-run          # 预检 + cdk diff
 
 bash scripts/build-mcp.sh                     # 构建 MCP Docker 镜像
-bash scripts/deploy-mcp.sh                    # 部署 MCP targets
+bash scripts/deploy-mcp.sh                    # 部署 MCP targets（按 region 自动过滤不可用项）
 
 cd frontend && npm run dev                    # 本地开发
 ```
 
-脚本会自动复用 `.env` 中已记录的资源。
+### 常见问题
+
+- **`AGENT_STUDIO_REGION is not set`** — Vite 不再静默 fallback，必须在 `.env` 里显式写明
+- **Docker not running** — CDK 打包 Lambda 需要 Docker daemon；`--only-frontend` / `--only-agent` / `--dry-run` 不依赖 Docker
 
 ## 项目结构
 
@@ -177,15 +204,39 @@ Permission Boundary (ceiling)
 - **Sensitivity labels & confirmation** — Each target is labeled low / medium / high sensitivity. Medium+ grants trigger a confirmation dialog showing risk reasons and the specific IAM actions being granted
 - **Real-time checks** — `SimulatePrincipalPolicy` provides live simulation with progress bars and per-action granted/missing status. `validate_agent` automatically verifies MCP permissions at agent creation time
 
-## Quick Start
+## Deployment
+
+### Prerequisites
+
+- An AWS account with working credentials — `aws sts get-caller-identity` must succeed
+- An IAM identity allowed to run `cdk bootstrap` and to create IAM roles, policies, and a Permission Boundary
+- Local tooling: **Node.js 18+**, **Python 3.10+**, **Docker** (CDK Lambda bundling requires a running daemon), plus `npm`, `jq`, `yq` — the script preflight-checks all of them
+
+### One-Click Deploy
+
+First time? Two steps. Start with `.env`:
 
 ```bash
-bash scripts/deploy-all.sh --region us-east-1
+cp .env.example .env
 ```
 
-First run takes 15–20 minutes and provisions, in order: CDK infra (Cognito / Lambda / CloudFront / WAF / DDB / S3) → base zip → Meta-Agent → frontend.
+Open `.env` and fill in three required fields:
 
-Common subcommands:
+- `AGENT_STUDIO_REGION` — `us-east-1` or `us-west-2`
+- `AGENT_STUDIO_ACCOUNT_ID` — your 12-digit AWS account ID
+- `ORIGIN_VERIFY_SECRET` — generate with `openssl rand -hex 32`
+
+The rest (`META_AGENT_ID`, `COGNITO_*`, `CLOUDFRONT_*`) is filled in automatically by the deploy script.
+
+Then deploy — 15–20 minutes end-to-end:
+
+```bash
+bash scripts/deploy-all.sh --region us-east-1   # or --region us-west-2
+```
+
+The script runs: CDK infra (Cognito / Lambda / CloudFront / WAF / DDB / S3) → base zip → Meta-Agent → frontend build & sync → CloudFront invalidation. Re-runs only update what actually changed.
+
+### Common Subcommands
 
 ```bash
 bash scripts/deploy-all.sh --only-agent       # Meta-Agent code only
@@ -194,12 +245,15 @@ bash scripts/deploy-all.sh --skip-frontend    # Infra + Meta-Agent
 bash scripts/deploy-all.sh --dry-run          # Preflight + cdk diff
 
 bash scripts/build-mcp.sh                     # Build MCP Docker images
-bash scripts/deploy-mcp.sh                    # Deploy MCP targets
+bash scripts/deploy-mcp.sh                    # Deploy MCP targets (unavailable ones auto-filtered)
 
 cd frontend && npm run dev                    # Local dev
 ```
 
-Resources already recorded in `.env` are reused automatically.
+### Troubleshooting
+
+- **`AGENT_STUDIO_REGION is not set`** — Vite no longer silently falls back; set it explicitly in `.env`.
+- **Docker not running** — CDK Lambda bundling needs a running Docker daemon. `--only-frontend` / `--only-agent` / `--dry-run` do not.
 
 ## Project Structure
 
