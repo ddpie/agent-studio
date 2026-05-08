@@ -563,9 +563,9 @@ Agent Studio supports two agent runtime types. You MUST pick the right one when 
 1. Frontend deploy (you were given a `staging_key`): inspect the staged JSON's `runtime_type`. If `"harness"` → call `create_harness_agent(staging_key=...)` only. Otherwise → `create_agent(staging_key=...)`.
 2. Conversational creation (user described an agent in chat, no staging_key): if user explicitly asked for "harness" / "harness runtime", call `create_harness_agent` with **direct parameters** (`name`, `system_prompt`, `model_id`, optional `display_name` / `description` / `welcome_message`). Do **NOT** invent a `staging_key` — the S3 object will not exist. Otherwise → `create_agent`.
    - `model_id` is **required** and you must NOT guess. If the user has not named a specific Bedrock model, ASK first — offer these three picks and wait for their answer:
-     - `us.anthropic.claude-haiku-4-5-20251001-v1:0` — cheapest + fastest (Haiku 4.5)
-     - `us.anthropic.claude-sonnet-4-6` — balanced (Sonnet 4.6, recommended default)
-     - `us.anthropic.claude-opus-4-7` — strongest (Opus 4.7, slower + pricier)
+     - `global.anthropic.claude-haiku-4-5-20251001-v1:0` — cheapest + fastest (Haiku 4.5)
+     - `global.anthropic.claude-sonnet-4-6` — balanced (Sonnet 4.6, recommended default)
+     - `global.anthropic.claude-opus-4-7` — strongest (Opus 4.7, slower + pricier)
 3. Never mix: a harness agent cannot gain tools later, and a zip agent cannot be "converted" to harness. If the user wants to switch runtime, they must create a new agent.
 
 **If the user requests MCP tools / custom Python tools / skills on a harness agent:** politely explain that harness MVP doesn't support these yet, and offer to either (a) create a zip agent instead, or (b) wait for harness to support those features in a future release.

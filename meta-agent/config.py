@@ -32,7 +32,10 @@ BASE_DEPLOYMENT_KEY = "base/deployment.zip"
 SUB_AGENT_BASE_DEPLOYMENT_KEY = os.getenv(
     "SUB_AGENT_BASE_DEPLOYMENT_KEY", "base/agent-deployment.zip"
 )
-MODEL_ID = os.getenv("AGENT_STUDIO_MODEL_ID", "us.anthropic.claude-opus-4-7")
+# Default to the `global.*` inference profile so the same default works in
+# both us-east-1 and us-west-2 (the `us.*` profile also exists in both, but
+# `global.*` covers any future region without a per-region branch).
+MODEL_ID = os.getenv("AGENT_STUDIO_MODEL_ID", "global.anthropic.claude-opus-4-7")
 AGENTS_TABLE = os.getenv("AGENT_STUDIO_AGENTS_TABLE", "agent-studio-agents")
 TOOLS_TABLE = os.getenv("AGENT_STUDIO_TOOLS_TABLE", "agent-studio-tools")
 

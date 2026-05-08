@@ -81,7 +81,11 @@ export const MODEL_GROUPS: ModelGroup[] = [
   },
 ];
 
-export const DEFAULT_MODEL_ID = MODEL_GROUPS[0].models[0].id;
+// Default to the `global.*` inference profile so us-east-1 and us-west-2
+// stacks share the same default without a region branch.
+export const DEFAULT_MODEL_ID =
+  MODEL_GROUPS[0].models.find((m) => m.id.startsWith("global."))?.id ||
+  MODEL_GROUPS[0].models[0].id;
 
 /**
  * Default Kiro-native model id used for Meta-Agent chat. The Meta-Agent
