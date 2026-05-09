@@ -2,10 +2,6 @@
 
 基于 AWS Bedrock AgentCore 的 Agent 编排平台。用自然语言向 Meta-Agent 描述需求，它为你创建、部署、维护可直接运行的 Agent。Meta-Agent 由 Kiro CLI 驱动，Agent 基于 Strands。
 
-<video src="https://github.com/ddpie/agent-studio/releases/download/v0.1.0/demo-01.mp4" controls preload="none" width="100%">
-  你的浏览器不支持内嵌视频 — <a href="https://github.com/ddpie/agent-studio/releases/download/v0.1.0/demo-01.mp4">点此下载 Demo（258 MB）</a>
-</video>
-
 ## 能做什么
 
 - **对话创建 Agent** — 告诉 Meta-Agent 你的需求，它写 prompt、挑工具、生成代码、完成部署
@@ -152,10 +148,6 @@ bash scripts/run-tests.sh
 # Agent Studio (English)
 
 An agent orchestration platform on AWS Bedrock AgentCore. Describe what you need in natural language and the Meta-Agent creates, deploys, and maintains the agent for you. The Meta-Agent is powered by the Kiro CLI; agents run on Strands.
-
-<video src="https://github.com/ddpie/agent-studio/releases/download/v0.1.0/demo-01.mp4" controls preload="none" width="100%">
-  Your browser does not support embedded video — <a href="https://github.com/ddpie/agent-studio/releases/download/v0.1.0/demo-01.mp4">download the demo (258 MB)</a>
-</video>
 
 ## What It Does
 
