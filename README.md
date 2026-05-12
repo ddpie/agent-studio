@@ -68,6 +68,10 @@ graph LR
 
 完整系统图（CloudFront / Lambda / EventBridge / Evaluator 等）与关键设计说明见 [docs/architecture.md](docs/architecture.md)。
 
+## Workspace 协作模型
+
+**Workspace** 是 Agent Studio 的协作单元。一个 workspace 下的成员共享 Agent、Skill、知识库和 MCP 工具配置，协同开发和调用 Agent。每个 workspace 拥有独立的 IAM 角色和资源隔离边界，workspace 之间数据互不可见。通过 Marketplace 可跨 workspace 发布和克隆公开资产。
+
 ## 安全与权限
 
 Agent Studio 对每个 workspace 实施三层权限控制，在赋能 Agent 访问 AWS 资源的同时防止越权：
@@ -223,6 +227,10 @@ graph LR
 ```
 
 Full system diagram (CloudFront / Lambda / EventBridge / Evaluator, …) and key design notes live in [docs/architecture.md](docs/architecture.md).
+
+## Workspace Collaboration
+
+A **Workspace** is the unit of collaboration in Agent Studio. Members of a workspace share agents, skills, knowledge bases, and MCP tool configurations, collaborating on agent development and invocation. Each workspace has its own IAM role and resource isolation boundary — data is invisible across workspaces. The Marketplace enables cross-workspace publishing and cloning of public assets.
 
 ## Security & Permissions
 
