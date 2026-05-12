@@ -2,13 +2,14 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router";
 import { useTranslation } from "react-i18next";
-import { Bot, Package, Wrench, Plug, Store, DollarSign, Settings, ShieldCheck } from "lucide-react";
+import { Bot, Package, Wrench, Database, Plug, Store, DollarSign, Settings, ShieldCheck } from "lucide-react";
 import { isPlatformAdmin } from "../../lib/api-client";
 
 const navItems = [
   { to: "/agents", icon: Bot, labelKey: "nav.agents" },
   { to: "/skills", icon: Package, labelKey: "nav.skills" },
   { to: "/tools", icon: Wrench, labelKey: "nav.tools" },
+  { to: "/knowledge-bases", icon: Database, labelKey: "nav.knowledgeBases" },
   { to: "/mcp", icon: Plug, labelKey: "nav.mcp" },
   { to: "/marketplace", icon: Store, labelKey: "nav.marketplace" },
   { to: "/costs", icon: DollarSign, labelKey: "nav.costs" },

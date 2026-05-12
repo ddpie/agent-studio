@@ -9,6 +9,8 @@ import SkillsPage from "./components/pages/SkillsPage";
 import SkillDetail from "./components/pages/SkillDetail";
 import ToolLibraryPage from "./components/pages/ToolLibraryPage";
 import ToolDetail from "./components/pages/ToolDetail";
+import KBList from "./components/kb/KBList";
+import KBDetail from "./components/kb/KBDetail";
 import McpPage from "./components/pages/McpPage";
 import McpPolicyPage from "./components/pages/McpPolicyPage";
 import MarketplacePage from "./components/pages/MarketplacePage";
@@ -48,6 +50,8 @@ export function createRoutes(
         { path: "skills/:skillId", element: withBoundary(<SkillDetail />) },
         { path: "tools", element: withBoundary(<ToolLibraryPage />) },
         { path: "tools/:toolId", element: withBoundary(<ToolDetail />) },
+        { path: "knowledge-bases", element: withBoundary(<KBList />) },
+        { path: "knowledge-bases/:kbId", element: withBoundary(<KBDetail />) },
         { path: "mcp", element: withBoundary(<McpPage />) },
         { path: "mcp-policy", element: withBoundary(<McpPolicyPage />) },
         { path: "marketplace", element: withBoundary(<MarketplacePage />) },
