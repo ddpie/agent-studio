@@ -7,6 +7,7 @@
 - **对话创建 Agent** — 告诉 Meta-Agent 你的需求，它写 prompt、挑工具、生成代码、完成部署
 - **可视化调试** — 对话流式返回，每次 tool 调用的输入输出都显示在消息流里
 - **Agent 互调** — `link_agent` 把一个 Agent 挂为另一个的工具，通过 A2A 协议调用，密钥自动下发
+- **知识库 (RAG)** — 对话式创建 KB，上传文档自动向量化（S3 Vectors + Cohere Multilingual v3），Agent 通过 `kb_retrieve` 按需检索
 - **Skill 热插拔** — AgentSkills.io 格式，运行时按需加载，跨 Agent 复用
 - **多模态输入** — 图片 / PDF / Excel / CSV / TSV 自动解析，无需额外配置
 - **定时触发** — 可视化 cron 构建器，每次执行留痕为卡片，可直接查看运行详情
@@ -154,6 +155,7 @@ An agent orchestration platform on AWS Bedrock AgentCore. Describe what you need
 - **Conversational agent creation** — Tell the Meta-Agent what you need; it writes the prompt, picks tools, generates the code, deploys.
 - **Visualized debugging** — Streaming responses with every tool call's input and output surfaced in the chat stream.
 - **Agent-to-agent** — `link_agent` mounts one agent as another's tool over A2A; credentials are provisioned automatically.
+- **Knowledge Base (RAG)** — Create KBs via chat, upload documents for automatic vectorization (S3 Vectors + Cohere Multilingual v3), agents retrieve via `kb_retrieve` on demand.
 - **Hot-swappable skills** — AgentSkills.io format, lazy-loaded at runtime, reusable across agents.
 - **Multimodal input** — Images / PDF / Excel / CSV / TSV parsed out of the box, no extra setup.
 - **Scheduled triggers** — Visual cron builder; every run is archived as a card with a click-through to full run details.
