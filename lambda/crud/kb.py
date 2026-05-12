@@ -244,8 +244,8 @@ def create_knowledge_base(wsId: str):
 
     # 4. Write DDB item
     item = {
+        "ws_id": ws_id,
         "kb_id": kb_id,
-        "workspace_id": ws_id,
         "name": name,
         "description": description,
         "status": "ACTIVE",
@@ -254,8 +254,7 @@ def create_knowledge_base(wsId: str):
         "index_name": index_name,
         "index_arn": index_arn,
         "s3_prefix": s3_prefix,
-        "document_count": 0,
-        "attached_agent_ids": set(),
+        "embedding_model": "cohere.embed-multilingual-v3",
         "created_by": user_id,
         "created_at": now,
         "updated_at": now,
