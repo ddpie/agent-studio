@@ -9,7 +9,7 @@ import boto3
 from strands import tool
 
 from config import REGION, S3_BUCKET, KB_TABLE
-from tools._scope import current_workspace_id
+from tools._scope import current_workspace
 
 ALLOWED_EXTENSIONS = {"pdf", "md", "txt", "html", "csv", "docx", "xlsx", "pptx"}
 MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
@@ -35,7 +35,7 @@ def kb_upload_document(kb_id: str, staging_key: str, filename: str) -> str:
     Returns:
         JSON with document_key, ingestion_job_id, status, or error.
     """
-    ws_id = current_workspace_id()
+    ws_id = current_workspace()
     if not ws_id:
         return json.dumps({"error": "no_workspace"})
 

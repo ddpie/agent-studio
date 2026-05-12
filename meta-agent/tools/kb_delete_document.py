@@ -6,7 +6,7 @@ from strands import tool
 from datetime import datetime, timezone
 
 from config import REGION, S3_BUCKET, KB_TABLE
-from tools._scope import current_workspace_id
+from tools._scope import current_workspace
 
 
 @tool
@@ -20,7 +20,7 @@ def kb_delete_document(kb_id: str, document_key: str) -> str:
     Returns:
         JSON with deleted status and ingestion_job_id.
     """
-    ws_id = current_workspace_id()
+    ws_id = current_workspace()
     if not ws_id:
         return json.dumps({"error": "no_workspace"})
 

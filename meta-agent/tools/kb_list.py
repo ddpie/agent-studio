@@ -5,7 +5,7 @@ import boto3
 from strands import tool
 
 from config import REGION, S3_BUCKET, KB_TABLE
-from tools._scope import current_workspace_id
+from tools._scope import current_workspace
 
 
 @tool
@@ -15,7 +15,7 @@ def kb_list() -> str:
     Returns:
         JSON array of KB summaries with kb_id, name, status, doc_count, updated_at.
     """
-    ws_id = current_workspace_id()
+    ws_id = current_workspace()
     if not ws_id:
         return json.dumps({"error": "no_workspace"})
 

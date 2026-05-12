@@ -5,7 +5,7 @@ import boto3
 from strands import tool
 
 from config import REGION, KB_TABLE
-from tools._scope import current_workspace_id
+from tools._scope import current_workspace
 
 
 @tool
@@ -19,7 +19,7 @@ def kb_check_ingestion(kb_id: str, ingestion_job_id: str = "") -> str:
     Returns:
         JSON with status, documents_processed, documents_failed, failure_reasons.
     """
-    ws_id = current_workspace_id()
+    ws_id = current_workspace()
     if not ws_id:
         return json.dumps({"error": "no_workspace"})
 

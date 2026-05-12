@@ -7,7 +7,7 @@ from strands import tool
 from datetime import datetime, timezone
 
 from config import REGION, ACCOUNT_ID, KB_TABLE, AGENTS_TABLE
-from tools._scope import current_workspace_id
+from tools._scope import current_workspace
 
 
 def _update_workspace_role_kb_policy(workspace_id: str, bedrock_kb_id: str, action: str):
@@ -60,7 +60,7 @@ def kb_attach_to_agent(kb_id: str, agent_id: str) -> str:
     Returns:
         JSON with attached status and redeploy reminder.
     """
-    ws_id = current_workspace_id()
+    ws_id = current_workspace()
     if not ws_id:
         return json.dumps({"error": "no_workspace"})
 
@@ -129,7 +129,7 @@ def kb_detach_from_agent(kb_id: str, agent_id: str) -> str:
     Returns:
         JSON with detached status and redeploy reminder.
     """
-    ws_id = current_workspace_id()
+    ws_id = current_workspace()
     if not ws_id:
         return json.dumps({"error": "no_workspace"})
 

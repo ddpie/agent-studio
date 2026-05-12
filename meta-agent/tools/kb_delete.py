@@ -6,7 +6,7 @@ from strands import tool
 from datetime import datetime, timezone
 
 from config import REGION, S3_BUCKET, KB_TABLE, VECTORS_BUCKET, AGENTS_TABLE
-from tools._scope import current_workspace_id
+from tools._scope import current_workspace
 
 
 @tool
@@ -23,7 +23,7 @@ def kb_delete(kb_id: str, confirm: bool = False) -> str:
     Returns:
         JSON with requires_confirmation (if not confirmed) or deletion result.
     """
-    ws_id = current_workspace_id()
+    ws_id = current_workspace()
     if not ws_id:
         return json.dumps({"error": "no_workspace"})
 

@@ -25,8 +25,8 @@ def kb_create(name: str, description: str = "") -> str:
     Returns:
         JSON with kb_id, bedrock_kb_id, status, or error.
     """
-    ws_id = current_workspace_id()
-    caller_id = current_caller_id()
+    ws_id = current_workspace()
+    caller_id = current_caller()
 
     if not ws_id:
         return json.dumps({"error": "no_workspace", "message": "No workspace context."})
