@@ -130,6 +130,14 @@ from tools.validate_agent import validate_agent
 from tools.preview_code import preview_assembled_code
 from tools.link_agent import link_agent, unlink_agent
 from tools.check_workspace_permissions import check_workspace_permissions
+from tools.kb_create import kb_create
+from tools.kb_upload_document import kb_upload_document
+from tools.kb_list import kb_list
+from tools.kb_get import kb_get
+from tools.kb_check_ingestion import kb_check_ingestion
+from tools.kb_delete import kb_delete
+from tools.kb_delete_document import kb_delete_document
+from tools.kb_attach import kb_attach_to_agent, kb_detach_from_agent
 
 _log_phase("all tools imported")
 
@@ -225,6 +233,15 @@ ALL_TOOLS = [
     link_agent,
     unlink_agent,
     check_workspace_permissions,
+    kb_create,
+    kb_upload_document,
+    kb_list,
+    kb_get,
+    kb_check_ingestion,
+    kb_delete,
+    kb_delete_document,
+    kb_attach_to_agent,
+    kb_detach_from_agent,
 ]
 
 # Path to the meta-agent package root. Passed to the MCP stdio subprocess

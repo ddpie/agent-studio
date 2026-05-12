@@ -353,6 +353,29 @@ def create_agent(
     main_py = MAIN_PY_MCP_TEMPLATE if mcp_endpoints else MAIN_PY_TEMPLATE
     tools_py = TOOLS_PY_HEADER + "\n\n".join(builtin_code_parts + ([custom_code] if custom_code.strip() else []))
 
+    # Inject KB retrieval tool if agent has bound knowledge bases
+    _kb_ids = []
+    if staging_key and staged:
+        _kb_ids = staged.get("knowledge_bases", [])
+    if not _kb_ids:
+        # Check DDB for existing agent metadata
+        try:
+            _agent_item = boto3.client("dynamodb", region_name=REGION).get_item(
+                TableName=AGENTS_TABLE, Key={"agentId": {"S": agent_name}},
+                ProjectionExpression="knowledge_bases",
+            ).get("Item", {})
+            _kb_ids = _agent_item.get("knowledge_bases", {}).get("SS", [])
+        except Exception:
+            pass
+    if _kb_ids and workspace_id:
+        from tools.kb_inject import build_kb_injection, resolve_kb_bindings
+        _kb_records = resolve_kb_bindings(workspace_id, _kb_ids)
+        _kb_code = build_kb_injection(_kb_records)
+        if _kb_code:
+            tools_py = tools_py + "\n\n" + _kb_code
+            if "kb_retrieve" not in tool_names_list:
+                tool_names_list.append("kb_retrieve")
+
     # Inject skill content into prompt (progressive disclosure)
     skill_prompt_section = build_skill_prompt_section(skills_data)
     if skill_prompt_section:
