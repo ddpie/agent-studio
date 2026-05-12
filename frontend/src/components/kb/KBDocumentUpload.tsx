@@ -59,7 +59,7 @@ export default function KBDocumentUpload({ kbId, onUploaded }: Props) {
         const file = validFiles[i];
         try {
           // Get presigned URL using the attachment upload endpoint
-          const sessionId = `kb-${kbId}`;
+          const sessionId = `kb-${kbId.replace(/_/g, "")}`;
           const contentType = getContentType(file.name);
           const presigned = await getAttachmentUploadUrl(file.name, contentType, sessionId);
 
