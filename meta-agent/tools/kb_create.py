@@ -90,7 +90,6 @@ def kb_create(name: str, description: str = "") -> str:
                 "s3VectorsConfiguration": {
                     "vectorBucketArn": f"arn:aws:s3vectors:{REGION}:{ACCOUNT_ID}:bucket/{VECTORS_BUCKET}",
                     "indexArn": index_arn,
-                    "indexName": vector_index_name,
                 },
             },
         )
