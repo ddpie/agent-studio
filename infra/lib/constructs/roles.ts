@@ -216,6 +216,7 @@ export class AgentCoreRoles extends Construct {
         // miss. See .claude/specs/2026-05-06-meta-agent-a2a-keys-iam-missing.md
         `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-a2a-keys`,
         `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-a2a-keys/index/*`,
+        `arn:aws:dynamodb:${props.region}:${props.accountId}:table/agent-studio-knowledge-bases`,
       ],
     }));
     metaAgentRole.addToPolicy(new iam.PolicyStatement({

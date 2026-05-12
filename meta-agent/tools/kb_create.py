@@ -35,7 +35,7 @@ def kb_create(name: str, description: str = "") -> str:
         return json.dumps({"error": "region_unsupported", "message": f"Knowledge Bases with S3 Vectors not available in {REGION}"})
 
     kb_id = f"kb_{uuid.uuid4().hex[:16]}"
-    vector_index_name = f"kb-{kb_id}"
+    vector_index_name = f"kb{kb_id.replace('_', '').replace('-', '')}"
     s3_prefix = f"kb/{ws_id}/{kb_id}/documents/"
     now = datetime.now(timezone.utc).isoformat()
 
