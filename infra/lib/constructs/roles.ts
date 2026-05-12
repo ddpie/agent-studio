@@ -56,6 +56,10 @@ export class AgentCoreRoles extends Construct {
         ],
       }),
       new iam.PolicyStatement({
+        actions: ["bedrock-agent-runtime:Retrieve"],
+        resources: [`arn:aws:bedrock:${props.region}:${props.accountId}:knowledge-base/*`],
+      }),
+      new iam.PolicyStatement({
         actions: [
           "bedrock-agentcore:InvokeAgentRuntime",
           "bedrock-agentcore:ListAgentRuntimes",
