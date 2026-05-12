@@ -22,10 +22,15 @@ export interface ApiProps {
   toolsTable: dynamodb.ITable;
   a2aKeysTable: dynamodb.Table;
   runsTable: dynamodb.Table;
+  knowledgeBasesTable: dynamodb.Table;
   originVerifyValue: string;
   scheduleRunnerLambdaArn: string;
   /** ARN of the AgentStudioWorkspaceCeiling permission boundary policy. */
   workspaceBoundaryArn: string;
+  /** ARN of the KB service role (Bedrock assumes for ingestion). */
+  kbServiceRoleArn: string;
+  /** Name of the S3 Vectors bucket for KB embeddings. */
+  vectorsBucketName: string;
 }
 
 export class Api extends Construct {
@@ -77,6 +82,9 @@ export class Api extends Construct {
         SCHEDULER_TARGET_ROLE_ARN: props.schedulerTargetRoleArn,
         SCHEDULE_RUNNER_LAMBDA_ARN: props.scheduleRunnerLambdaArn,
         WORKSPACE_BOUNDARY_ARN: props.workspaceBoundaryArn,
+        KB_TABLE: props.knowledgeBasesTable.tableName,
+        KB_SERVICE_ROLE_ARN: props.kbServiceRoleArn,
+        VECTORS_BUCKET: props.vectorsBucketName,
       },
     });
 
@@ -85,6 +93,7 @@ export class Api extends Construct {
     props.skillsTable.grantReadWriteData(this.crudLambda);
     props.a2aKeysTable.grantReadWriteData(this.crudLambda);
     props.runsTable.grantReadWriteData(this.crudLambda);
+    props.knowledgeBasesTable.grantReadWriteData(this.crudLambda);
 
     // Imported tables: explicit IAM policy (grant on ITable misses GSI ARN)
     this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
@@ -336,6 +345,33 @@ export class Api extends Construct {
         "iam:SimulatePrincipalPolicy",
       ],
       resources: [`arn:aws:iam::${props.config.accountId}:role/AgentStudio-ws-*`],
+    }));
+
+    // ─── Knowledge Base management ───
+    // Bedrock KB control plane + S3 Vectors index lifecycle
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        "bedrock:CreateKnowledgeBase",
+        "bedrock:DeleteKnowledgeBase",
+        "bedrock:GetKnowledgeBase",
+        "bedrock:ListKnowledgeBases",
+        "bedrock:CreateDataSource",
+        "bedrock:DeleteDataSource",
+        "bedrock:StartIngestionJob",
+        "bedrock:GetIngestionJob",
+        "bedrock:ListIngestionJobs",
+        "s3vectors:CreateIndex",
+        "s3vectors:DeleteIndex",
+      ],
+      resources: ["*"],
+    }));
+    // PassRole scoped to the KB service role only
+    this.crudLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: ["iam:PassRole"],
+      resources: [props.kbServiceRoleArn],
+      conditions: {
+        StringEquals: { "iam:PassedToService": "bedrock.amazonaws.com" },
+      },
     }));
 
     // REST API with Cognito authorizer

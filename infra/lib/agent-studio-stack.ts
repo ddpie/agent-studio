@@ -115,9 +115,12 @@ export class AgentStudioStack extends cdk.Stack {
       toolsTable: database.toolsTable,
       a2aKeysTable: database.a2aKeysTable,
       runsTable: database.runsTable,
+      knowledgeBasesTable: database.knowledgeBasesTable,
       originVerifyValue,
       scheduleRunnerLambdaArn: scheduleRunner.lambda.functionArn,
       workspaceBoundaryArn: workspaceBoundary.boundaryPolicyArn,
+      kbServiceRoleArn: kbVectors.kbServiceRoleArn,
+      vectorsBucketName: kbVectors.vectorBucketName,
     });
 
     const invoke = new Invoke(this, "Invoke", {
