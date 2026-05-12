@@ -110,9 +110,54 @@ def get_knowledge_base(wsId: str, kbId: str):
     table = _get_table()
     resp = table.get_item(Key={"ws_id": ws_id, "kb_id": kbId}, ConsistentRead=True)
     item = resp.get("Item")
-    if not item or item.get("workspace_id") != ws_id:
+    if not item:
         return not_found("Knowledge base not found")
-    return success(_kb_response(item))
+
+    kb = _kb_response(item)
+    s3 = _get_s3()
+    prefix = item.get("s3_prefix", "")
+
+    # Documents
+    documents = []
+    if prefix:
+        try:
+            list_resp = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix, MaxKeys=50)
+            for obj in list_resp.get("Contents", []):
+                documents.append({
+                    "key": obj["Key"],
+                    "filename": obj["Key"].split("/")[-1],
+                    "sizeBytes": obj["Size"],
+                    "lastModified": obj["LastModified"].isoformat(),
+                })
+        except Exception:
+            pass
+    kb["documents"] = documents
+    kb["docCount"] = len(documents)
+
+    # Ingestion status
+    last_job = item.get("last_ingestion_job_id")
+    data_source_id = item.get("data_source_id", "")
+    bedrock_kb_id = item.get("bedrock_kb_id", "")
+    if last_job and data_source_id and bedrock_kb_id:
+        bedrock = _get_bedrock()
+        try:
+            job_resp = bedrock.get_ingestion_job(
+                knowledgeBaseId=bedrock_kb_id, dataSourceId=data_source_id, ingestionJobId=last_job
+            )
+            job = job_resp["ingestionJob"]
+            stats = job.get("statistics", {})
+            kb["ingestion"] = {
+                "jobId": last_job,
+                "status": job["status"],
+                "documentsScanned": stats.get("numberOfDocumentsScanned", 0),
+                "documentsIndexed": stats.get("numberOfNewDocumentsIndexed", 0) + stats.get("numberOfModifiedDocumentsIndexed", 0),
+                "documentsFailed": stats.get("numberOfDocumentsFailed", 0),
+                "failureReasons": job.get("failureReasons", []),
+            }
+        except Exception:
+            pass
+
+    return success(kb)
 
 
 # ── Create ──
