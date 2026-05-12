@@ -52,20 +52,10 @@ export class KbVectors extends Construct {
       ],
     }));
 
-    // Vector store operations
+    // Vector store operations — Bedrock KB engine needs full vector CRUD
     kbServiceRole.addToPolicy(new iam.PolicyStatement({
-      actions: [
-        "s3vectors:PutVectors",
-        "s3vectors:QueryVectors",
-        "s3vectors:DeleteVectors",
-        "s3vectors:ListVectors",
-        "s3vectors:GetVector",
-        "s3vectors:PutVector",
-      ],
-      resources: [
-        vectorBucket.attrVectorBucketArn,
-        `${vectorBucket.attrVectorBucketArn}/*`,
-      ],
+      actions: ["s3vectors:*"],
+      resources: ["*"],
     }));
 
     // Embedding model access
