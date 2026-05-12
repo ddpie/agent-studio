@@ -17,6 +17,23 @@
 - **平台级可观测性** — 调用追踪、延迟分位数、错误率、Token 成本按 Agent 和 workspace 自动聚合，一屏总览
 - **Marketplace** — 跨 workspace 发布和克隆 Agent / Skill / Tool，元数据公开，源码克隆后才可见
 
+## Meta-Agent 能力总览
+
+Meta-Agent 内置 47 个工具，覆盖 Agent 从创建到运维的完整生命周期：
+
+| 能力域 | 具体能力 |
+|--------|---------|
+| **Agent 全生命周期** | 创建、更新、验证（`validate_agent`）、部署、归档、恢复、永久删除；支持 zip 和 harness 两种运行时 |
+| **Skill 系统** | 创建、编辑脚本文件、从 URL/Markdown 导入、挂载到 Agent、跨 Agent 同步更新、删除 |
+| **多 Agent 编排** | A2A 链接/取消链接、调用其他 Agent、创建定时调度 |
+| **知识库 (RAG)** | 创建 KB、上传文档、检查摄取状态、挂载/卸载到 Agent、删除 |
+| **MCP 工具接入** | 浏览 50+ AWS 官方 MCP Server、查看 target 工具列表、workspace 权限校验后一键接入 |
+| **运维 & 调试** | 实时日志查看、调用 trace 分析、打包代码预览、Agent Secrets 管理、workspace 权限检查 |
+| **Prompt 工程** | 自动生成符合规范的 system prompt（约束分层、反模式预防、工具-Prompt 联动检查） |
+| **内置工具库** | 浏览预构建工具模板（web_search、s3_read、chart 等），优先复用再自定义 |
+
+所有操作通过自然语言对话触发，无需记忆工具名或参数。
+
 ## 两种 Agent 运行时
 
 | 运行时 | 适合 | 不支持 |
@@ -164,6 +181,23 @@ An agent orchestration platform on AWS Bedrock AgentCore. Describe what you need
 - **Cross-session memory** — Powered by AgentCore Memory: agents remember user preferences and facts across sessions and devices. Users can view and manage memories from the chat drawer.
 - **Platform-level observability** — Trace timeline, latency percentiles, error rates, and token costs aggregated per agent and per workspace on a single screen.
 - **Marketplace** — Publish and clone agents / skills / tools across workspaces; metadata is public, source stays private until cloned.
+
+## Meta-Agent Capabilities
+
+The Meta-Agent ships with 47 built-in tools covering the full agent lifecycle:
+
+| Domain | Capabilities |
+|--------|-------------|
+| **Agent lifecycle** | Create, update, validate (`validate_agent`), deploy, archive, restore, permanently delete; supports both zip and harness runtimes |
+| **Skill system** | Create, edit script files, import from URL/Markdown, attach to agents, sync updates across agents, delete |
+| **Multi-agent orchestration** | A2A link/unlink, invoke other agents, create scheduled triggers |
+| **Knowledge Base (RAG)** | Create KB, upload documents, check ingestion status, attach/detach from agents, delete |
+| **MCP integration** | Browse 50+ AWS-official MCP servers, inspect target tool lists, workspace permission check before enabling |
+| **Ops & debugging** | Live logs, invocation trace analysis, assembled code preview, agent secrets management, workspace permission audit |
+| **Prompt engineering** | Auto-generate standards-compliant system prompts (constraint layering, anti-pattern prevention, tool–prompt sync checks) |
+| **Built-in tool library** | Browse pre-built tool templates (web_search, s3_read, chart, …); prefer reuse over custom code |
+
+All operations are triggered through natural-language conversation — no need to memorize tool names or parameters.
 
 ## Architecture
 
