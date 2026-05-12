@@ -147,6 +147,7 @@ def _resolve_mcp_endpoints(target_names: list) -> list:
 @tool
 def create_agent(
     agent_name: str,
+    display_name: str = "",
     description: str = "",
     system_prompt: str = "",
     tool_definitions: str = "",
@@ -165,6 +166,7 @@ def create_agent(
 
     Args:
         agent_name: Name for the agent (alphanumeric only, max 36 chars).
+        display_name: Human-friendly display name (spaces, punctuation allowed). Falls back to agent_name if empty.
         description: Brief description of what the agent does.
         system_prompt: The system prompt defining the agent's behavior.
         tool_definitions: Python code defining @tool decorated functions.
@@ -197,6 +199,7 @@ def create_agent(
             obj = s3_client.get_object(Bucket=S3_BUCKET, Key=staging_key)
             staged = json.loads(obj["Body"].read().decode("utf-8"))
             agent_name = staged.get("name", agent_name) or agent_name
+            display_name = staged.get("display_name", display_name) or display_name
             description = staged.get("description", description) or description
             system_prompt = staged.get("system_prompt", system_prompt) or system_prompt
             tool_definitions = staged.get("tool_definitions", tool_definitions) or tool_definitions
@@ -464,7 +467,7 @@ def create_agent(
     metadata = {
         "agent_id": agent_id,
         "name": agent_name,
-        "display_name": agent_name,
+        "display_name": display_name or agent_name,
         "description": description,
         "model_id": MODEL_ID,
         "system_prompt": final_prompt,
@@ -520,7 +523,7 @@ def create_agent(
         "agentId": agent_id,
         "agentName": agent_name,
         "name": agent_name,
-        "display_name": agent_name,
+        "display_name": display_name or agent_name,
         "description": description,
         "visibility": "private",
         "permissionTier": tier,
