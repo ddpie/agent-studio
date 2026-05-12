@@ -1847,7 +1847,7 @@ export async function createKnowledgeBase(name: string, description: string): Pr
 }
 
 export async function deleteKnowledgeBase(kbId: string): Promise<{ deleted: boolean }> {
-  return apiDelete(`/knowledge-bases/${encodeURIComponent(kbId)}?confirm=true`);
+  return apiPost(`/knowledge-bases/${encodeURIComponent(kbId)}/delete`, { confirm: true });
 }
 
 export async function uploadKBDocument(kbId: string, stagingKey: string, filename: string): Promise<{ documentKey: string; ingestionJobId: string; status: string }> {

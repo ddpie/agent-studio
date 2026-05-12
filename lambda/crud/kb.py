@@ -296,14 +296,16 @@ def _cleanup_kb_infra(bedrock_kb_id: str | None, data_source_id: str | None, ind
 # ── Delete ──
 
 
+@router.post("/api/workspaces/<wsId>/knowledge-bases/<kbId>/delete")
 @router.delete("/api/workspaces/<wsId>/knowledge-bases/<kbId>")
 def delete_knowledge_base(wsId: str, kbId: str):
     user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
 
+    body = router.current_event.json_body or {}
     params = router.current_event.query_string_parameters or {}
-    if params.get("confirm") != "true":
+    if params.get("confirm") != "true" and not body.get("confirm"):
         return bad_request("Must pass ?confirm=true to delete a knowledge base")
 
     table = _get_table()
