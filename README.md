@@ -58,7 +58,7 @@ graph LR
             A1[Agent A] -->|A2A| A2[Agent B]
             A2 ~~~ A3[Agent C]
         end
-        KB[(知识库<br/>S3 Vectors)]
+        Res[Skills · 知识库 · MCP · Secrets]
     end
 
     Web -->|对话| Meta
@@ -66,8 +66,7 @@ graph LR
     Meta -.部署.-> Agents
     Cron -.触发.-> Agents
     Agents --> LLM[Bedrock LLMs]
-    Agents --> Ext[Skills · Tools · MCP]
-    Agents <-->|RAG 检索| KB
+    Agents <--> Res
     Agents <-->|记忆| Mem[AgentCore Memory]
     Agents -.observability.-> Obs[Traces · Evaluations<br/>Costs]
 ```
@@ -224,7 +223,7 @@ graph LR
             A1[Agent A] -->|A2A| A2[Agent B]
             A2 ~~~ A3[Agent C]
         end
-        KB[(Knowledge Base<br/>S3 Vectors)]
+        Res[Skills · KB · MCP · Secrets]
     end
 
     Web -->|chat| Meta
@@ -232,8 +231,7 @@ graph LR
     Meta -.deploy.-> Agents
     Cron -.fire.-> Agents
     Agents --> LLM[Bedrock LLMs]
-    Agents --> Ext[Skills · Tools · MCP]
-    Agents <-->|RAG retrieval| KB
+    Agents <--> Res
     Agents <-->|memory| Mem[AgentCore Memory]
     Agents -.observability.-> Obs[Traces · Evaluations<br/>Costs]
 ```
