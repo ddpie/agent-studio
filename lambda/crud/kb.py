@@ -195,6 +195,9 @@ def create_knowledge_base(wsId: str):
             dimension=1024,
             distanceMetric="cosine",
             dataType="float32",
+            metadataConfiguration={
+                "nonFilterableMetadataKeys": ["AMAZON_BEDROCK_TEXT", "AMAZON_BEDROCK_METADATA"],
+            },
         )
         index_arn = idx_resp["indexArn"]
 
@@ -221,10 +224,8 @@ def create_knowledge_base(wsId: str):
         )
         bedrock_kb_id = kb_resp["knowledgeBase"]["knowledgeBaseId"]
 
-        # 3. Create Data Source
-        # maxTokens=150 keeps each chunk's AMAZON_BEDROCK_TEXT within S3 Vectors'
-        # 2048-byte filterable metadata limit (150 CJK tokens ≈ 450 bytes text +
-        # ~600 bytes Bedrock metadata ≈ 1050 bytes, well under 2048).
+        # 3. Create Data Source (default chunking ~300 tokens is fine since
+        # nonFilterableMetadataKeys on the index prevents the 2048-byte limit issue)
         ds_resp = bedrock.create_data_source(
             knowledgeBaseId=bedrock_kb_id,
             name=f"{kb_id}-source",
@@ -236,15 +237,6 @@ def create_knowledge_base(wsId: str):
                 },
             },
             dataDeletionPolicy="DELETE",
-            vectorIngestionConfiguration={
-                "chunkingConfiguration": {
-                    "chunkingStrategy": "FIXED_SIZE",
-                    "fixedSizeChunkingConfiguration": {
-                        "maxTokens": 150,
-                        "overlapPercentage": 20,
-                    },
-                },
-            },
         )
         data_source_id = ds_resp["dataSource"]["dataSourceId"]
 

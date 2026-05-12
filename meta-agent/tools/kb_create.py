@@ -66,6 +66,9 @@ def kb_create(name: str, description: str = "") -> str:
             dimension=1024,
             distanceMetric="cosine",
             dataType="float32",
+            metadataConfiguration={
+                "nonFilterableMetadataKeys": ["AMAZON_BEDROCK_TEXT", "AMAZON_BEDROCK_METADATA"],
+            },
         )
         index_arn = idx_resp["indexArn"]
     except Exception as e:
@@ -116,15 +119,6 @@ def kb_create(name: str, description: str = "") -> str:
                 },
             },
             dataDeletionPolicy="DELETE",
-            vectorIngestionConfiguration={
-                "chunkingConfiguration": {
-                    "chunkingStrategy": "FIXED_SIZE",
-                    "fixedSizeChunkingConfiguration": {
-                        "maxTokens": 150,
-                        "overlapPercentage": 20,
-                    },
-                },
-            },
         )
         data_source_id = ds_resp["dataSource"]["dataSourceId"]
     except Exception as e:
