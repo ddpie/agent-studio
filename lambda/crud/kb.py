@@ -574,3 +574,4 @@ def get_ingestion_status(wsId: str, kbId: str):
     except Exception:
         logger.exception("Failed to list ingestion jobs for KB %s", kbId)
         return internal_error("Failed to fetch ingestion status")
+# KB v2
