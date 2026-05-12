@@ -154,8 +154,8 @@ def upload_attachment(wsId: str):
         return bad_request("sessionId is required")
 
     import re
-    if not re.match(r"^[a-zA-Z0-9-]+$", session_id):
-        return bad_request("Invalid sessionId: must match [a-zA-Z0-9-]+")
+    if not re.match(r"^[a-zA-Z0-9_-]+$", session_id):
+        return bad_request("Invalid sessionId: must match [a-zA-Z0-9_-]+")
     if not re.match(r"^[a-zA-Z0-9._-]+$", filename):
         return bad_request("Invalid filename: must match [a-zA-Z0-9._-]+")
 
