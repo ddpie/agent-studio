@@ -116,6 +116,15 @@ def kb_create(name: str, description: str = "") -> str:
                 },
             },
             dataDeletionPolicy="DELETE",
+            vectorIngestionConfiguration={
+                "chunkingConfiguration": {
+                    "chunkingStrategy": "FIXED_SIZE",
+                    "fixedSizeChunkingConfiguration": {
+                        "maxTokens": 150,
+                        "overlapPercentage": 20,
+                    },
+                },
+            },
         )
         data_source_id = ds_resp["dataSource"]["dataSourceId"]
     except Exception as e:
