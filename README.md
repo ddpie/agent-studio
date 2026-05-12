@@ -49,19 +49,25 @@ Meta-Agent 内置 47 个工具，覆盖 Agent 从创建到运维的完整生命�
 graph LR
     User((用户)) --> Web[Web Console]
     Cron[定时器]
-    Web -->|对话| Meta[Meta-Agent<br/>创建 / 管理]
 
-    subgraph Agents
+    subgraph Workspace
         direction TB
-        A1[Agent A] -->|A2A| A2[Agent B]
-        A2 ~~~ A3[Agent C]
+        Meta[Meta-Agent<br/>创建 / 管理]
+        subgraph Agents
+            direction TB
+            A1[Agent A] -->|A2A| A2[Agent B]
+            A2 ~~~ A3[Agent C]
+        end
+        KB[(知识库<br/>S3 Vectors)]
     end
 
+    Web -->|对话| Meta
     Web -->|对话| Agents
     Meta -.部署.-> Agents
     Cron -.触发.-> Agents
     Agents --> LLM[Bedrock LLMs]
     Agents --> Ext[Skills · Tools · MCP]
+    Agents <-->|RAG 检索| KB
     Agents <-->|记忆| Mem[AgentCore Memory]
     Agents -.observability.-> Obs[Traces · Evaluations<br/>Costs]
 ```
@@ -209,19 +215,25 @@ All operations are triggered through natural-language conversation — no need t
 graph LR
     User((User)) --> Web[Web Console]
     Cron[Scheduled trigger]
-    Web -->|chat| Meta[Meta-Agent<br/>build / manage]
 
-    subgraph Agents
+    subgraph Workspace
         direction TB
-        A1[Agent A] -->|A2A| A2[Agent B]
-        A2 ~~~ A3[Agent C]
+        Meta[Meta-Agent<br/>build / manage]
+        subgraph Agents
+            direction TB
+            A1[Agent A] -->|A2A| A2[Agent B]
+            A2 ~~~ A3[Agent C]
+        end
+        KB[(Knowledge Base<br/>S3 Vectors)]
     end
 
+    Web -->|chat| Meta
     Web -->|chat| Agents
     Meta -.deploy.-> Agents
     Cron -.fire.-> Agents
     Agents --> LLM[Bedrock LLMs]
     Agents --> Ext[Skills · Tools · MCP]
+    Agents <-->|RAG retrieval| KB
     Agents <-->|memory| Mem[AgentCore Memory]
     Agents -.observability.-> Obs[Traces · Evaluations<br/>Costs]
 ```
