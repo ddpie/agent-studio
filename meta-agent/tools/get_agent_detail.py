@@ -34,7 +34,7 @@ from datetime import datetime, timezone
 import boto3
 from strands import tool
 
-from config import REGION, S3_BUCKET
+from config import REGION, S3_BUCKET, AGENTS_TABLE
 from tools._scope import ensure_agent_in_workspace, ROLE_VIEWER
 
 
@@ -211,5 +211,18 @@ def get_agent_detail(agent_id: str) -> str:
     except Exception:
         result["metadata"] = None
         result["metadata_note"] = "No metadata.json found (agent may have been created before metadata support)"
+
+    # Knowledge base bindings (stored in DDB, not metadata.json)
+    try:
+        ddb = boto3.client("dynamodb", region_name=REGION)
+        ddb_resp = ddb.get_item(
+            TableName=AGENTS_TABLE, Key={"agentId": {"S": agent_id}},
+            ProjectionExpression="knowledge_bases",
+        )
+        kb_ids = ddb_resp.get("Item", {}).get("knowledge_bases", {}).get("SS", [])
+        if kb_ids:
+            result["knowledge_bases"] = list(kb_ids)
+    except Exception:
+        pass
 
     return json.dumps(result, indent=2, ensure_ascii=False, default=str)
