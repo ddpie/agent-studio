@@ -384,8 +384,8 @@ export class AgentCoreRoles extends Construct {
       resources: ["*"],
     }));
     metaAgentRole.addToPolicy(new iam.PolicyStatement({
-      actions: ["s3vectors:CreateIndex", "s3vectors:DeleteIndex"],
-      resources: [`arn:aws:s3vectors:${props.region}:${props.accountId}:vector-bucket/*`],
+      actions: ["s3vectors:CreateIndex", "s3vectors:DeleteIndex", "s3vectors:ListIndexes"],
+      resources: ["*"],
     }));
     metaAgentRole.addToPolicy(new iam.PolicyStatement({
       actions: ["s3:CopyObject", "s3:PutObject", "s3:DeleteObject"],

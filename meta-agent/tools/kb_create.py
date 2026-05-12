@@ -67,7 +67,7 @@ def kb_create(name: str, description: str = "") -> str:
             distanceMetric="cosine",
             dataType="float32",
         )
-        index_arn = idx_resp["index"]["indexArn"]
+        index_arn = idx_resp["indexArn"]
     except Exception as e:
         return json.dumps({"error": "vector_index_failed", "message": str(e)})
 
@@ -88,7 +88,7 @@ def kb_create(name: str, description: str = "") -> str:
             storageConfiguration={
                 "type": "S3_VECTORS",
                 "s3VectorsConfiguration": {
-                    "bucketArn": f"arn:aws:s3vectors:{REGION}:{ACCOUNT_ID}:vector-bucket/{VECTORS_BUCKET}",
+                    "bucketArn": f"arn:aws:s3vectors:{REGION}:{ACCOUNT_ID}:bucket/{VECTORS_BUCKET}",
                     "indexName": vector_index_name,
                 },
             },
