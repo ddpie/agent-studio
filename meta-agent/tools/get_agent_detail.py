@@ -212,16 +212,27 @@ def get_agent_detail(agent_id: str) -> str:
         result["metadata"] = None
         result["metadata_note"] = "No metadata.json found (agent may have been created before metadata support)"
 
-    # Knowledge base bindings (stored in DDB, not metadata.json)
+    # DDB-only fields not present in metadata.json
     try:
-        ddb = boto3.client("dynamodb", region_name=REGION)
-        ddb_resp = ddb.get_item(
-            TableName=AGENTS_TABLE, Key={"agentId": {"S": agent_id}},
-            ProjectionExpression="knowledge_bases",
+        ddb = boto3.resource("dynamodb", region_name=REGION)
+        table = ddb.Table(AGENTS_TABLE)
+        ddb_resp = table.get_item(
+            Key={"agentId": agent_id},
+            ProjectionExpression="display_name, linked_agents, memory, default_model_id, runtime_type, knowledge_bases",
         )
-        kb_ids = ddb_resp.get("Item", {}).get("knowledge_bases", {}).get("SS", [])
-        if kb_ids:
-            result["knowledge_bases"] = list(kb_ids)
+        ddb_item = ddb_resp.get("Item") or {}
+        if ddb_item.get("display_name"):
+            result["display_name"] = ddb_item["display_name"]
+        if ddb_item.get("linked_agents"):
+            result["linked_agents"] = ddb_item["linked_agents"]
+        if ddb_item.get("memory"):
+            result["memory"] = ddb_item["memory"]
+        if ddb_item.get("default_model_id"):
+            result["default_model_id"] = ddb_item["default_model_id"]
+        if ddb_item.get("runtime_type"):
+            result["runtime_type"] = ddb_item["runtime_type"]
+        if ddb_item.get("knowledge_bases"):
+            result["knowledge_bases"] = list(ddb_item["knowledge_bases"])
     except Exception:
         pass
 
