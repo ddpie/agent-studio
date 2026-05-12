@@ -450,14 +450,6 @@ def upload_document(wsId: str, kbId: str):
         logger.exception("Failed to copy document from staging to KB prefix")
         return internal_error("Failed to copy document")
 
-    # Update document count
-    now = datetime.utcnow().isoformat() + "Z"
-    table.update_item(
-        Key={"ws_id": ws_id, "kb_id": kbId},
-        UpdateExpression="SET document_count = document_count + :one, updated_at = :now",
-        ExpressionAttributeValues={":one": 1, ":now": now},
-    )
-
     # Start ingestion job
     ingestion_job_id = None
     try:
@@ -470,12 +462,27 @@ def upload_document(wsId: str, kbId: str):
     except Exception:
         logger.warning("Failed to start ingestion job for KB %s", kbId)
 
+    # Update DDB metadata
+    now = datetime.utcnow().isoformat() + "Z"
+    update_expr = "SET updated_at = :now"
+    expr_vals: dict = {":now": now}
+    if ingestion_job_id:
+        update_expr += ", last_ingestion_job_id = :job"
+        expr_vals[":job"] = ingestion_job_id
+    try:
+        table.update_item(
+            Key={"ws_id": ws_id, "kb_id": kbId},
+            UpdateExpression=update_expr,
+            ExpressionAttributeValues=expr_vals,
+        )
+    except Exception:
+        pass
+
     return success({
         "kbId": kbId,
         "fileName": file_name,
         "destKey": dest_key,
         "ingestionJobId": ingestion_job_id,
-        "uploadedAt": now,
     }, status_code=201)
 
 
@@ -511,13 +518,16 @@ def delete_document(wsId: str, kbId: str):
         logger.exception("Failed to delete document %s", doc_key)
         return internal_error("Failed to delete document")
 
-    # Decrement document count
+    # Update metadata
     now = datetime.utcnow().isoformat() + "Z"
-    table.update_item(
-        Key={"ws_id": ws_id, "kb_id": kbId},
-        UpdateExpression="SET document_count = document_count - :one, updated_at = :now",
-        ExpressionAttributeValues={":one": 1, ":now": now},
-    )
+    try:
+        table.update_item(
+            Key={"ws_id": ws_id, "kb_id": kbId},
+            UpdateExpression="SET updated_at = :now",
+            ExpressionAttributeValues={":now": now},
+        )
+    except Exception:
+        pass
 
     # Start re-ingestion to sync the index
     try:
