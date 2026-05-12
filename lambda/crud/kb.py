@@ -108,7 +108,7 @@ def get_knowledge_base(wsId: str, kbId: str):
         return err
 
     table = _get_table()
-    resp = table.get_item(Key={"kb_id": kbId}, ConsistentRead=True)
+    resp = table.get_item(Key={"ws_id": ws_id, "kb_id": kbId}, ConsistentRead=True)
     item = resp.get("Item")
     if not item or item.get("workspace_id") != ws_id:
         return not_found("Knowledge base not found")
@@ -263,7 +263,7 @@ def delete_knowledge_base(wsId: str, kbId: str):
         return bad_request("Must pass ?confirm=true to delete a knowledge base")
 
     table = _get_table()
-    resp = table.get_item(Key={"kb_id": kbId}, ConsistentRead=True)
+    resp = table.get_item(Key={"ws_id": ws_id, "kb_id": kbId}, ConsistentRead=True)
     item = resp.get("Item")
     if not item or item.get("workspace_id") != ws_id:
         return not_found("Knowledge base not found")
@@ -271,7 +271,7 @@ def delete_knowledge_base(wsId: str, kbId: str):
     # Mark as DELETING
     now = datetime.utcnow().isoformat() + "Z"
     table.update_item(
-        Key={"kb_id": kbId},
+        Key={"ws_id": ws_id, "kb_id": kbId},
         UpdateExpression="SET #s = :del, updated_at = :now",
         ExpressionAttributeNames={"#s": "status"},
         ExpressionAttributeValues={":del": "DELETING", ":now": now},
@@ -342,7 +342,7 @@ def delete_knowledge_base(wsId: str, kbId: str):
                 logger.warning("Delete KB: failed to unlink agent %s", agent_id)
 
     # 6. Delete DDB item
-    table.delete_item(Key={"kb_id": kbId})
+    table.delete_item(Key={"ws_id": ws_id, "kb_id": kbId})
 
     return success({"deleted": True, "kbId": kbId})
 
@@ -372,7 +372,7 @@ def upload_document(wsId: str, kbId: str):
 
     # Verify KB exists and belongs to workspace
     table = _get_table()
-    resp = table.get_item(Key={"kb_id": kbId}, ConsistentRead=True)
+    resp = table.get_item(Key={"ws_id": ws_id, "kb_id": kbId}, ConsistentRead=True)
     item = resp.get("Item")
     if not item or item.get("workspace_id") != ws_id:
         return not_found("Knowledge base not found")
@@ -407,7 +407,7 @@ def upload_document(wsId: str, kbId: str):
     # Update document count
     now = datetime.utcnow().isoformat() + "Z"
     table.update_item(
-        Key={"kb_id": kbId},
+        Key={"ws_id": ws_id, "kb_id": kbId},
         UpdateExpression="SET document_count = document_count + :one, updated_at = :now",
         ExpressionAttributeValues={":one": 1, ":now": now},
     )
@@ -449,7 +449,7 @@ def delete_document(wsId: str, kbId: str):
 
     # Verify KB
     table = _get_table()
-    resp = table.get_item(Key={"kb_id": kbId}, ConsistentRead=True)
+    resp = table.get_item(Key={"ws_id": ws_id, "kb_id": kbId}, ConsistentRead=True)
     item = resp.get("Item")
     if not item or item.get("workspace_id") != ws_id:
         return not_found("Knowledge base not found")
@@ -468,7 +468,7 @@ def delete_document(wsId: str, kbId: str):
     # Decrement document count
     now = datetime.utcnow().isoformat() + "Z"
     table.update_item(
-        Key={"kb_id": kbId},
+        Key={"ws_id": ws_id, "kb_id": kbId},
         UpdateExpression="SET document_count = document_count - :one, updated_at = :now",
         ExpressionAttributeValues={":one": 1, ":now": now},
     )
@@ -497,7 +497,7 @@ def get_ingestion_status(wsId: str, kbId: str):
 
     # Verify KB
     table = _get_table()
-    resp = table.get_item(Key={"kb_id": kbId}, ConsistentRead=True)
+    resp = table.get_item(Key={"ws_id": ws_id, "kb_id": kbId}, ConsistentRead=True)
     item = resp.get("Item")
     if not item or item.get("workspace_id") != ws_id:
         return not_found("Knowledge base not found")
