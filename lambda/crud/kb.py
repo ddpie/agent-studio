@@ -404,7 +404,7 @@ def upload_document(wsId: str, kbId: str):
 
     body = router.current_event.json_body or {}
     staging_key = body.get("stagingKey", "").strip()
-    file_name = body.get("fileName", "").strip()
+    file_name = (body.get("fileName") or body.get("filename") or "").strip()
 
     if not staging_key:
         return bad_request("stagingKey is required")
@@ -489,7 +489,7 @@ def delete_document(wsId: str, kbId: str):
         return err
 
     body = router.current_event.json_body or {}
-    file_name = body.get("fileName", "").strip()
+    file_name = (body.get("fileName") or body.get("filename") or "").strip()
     if not file_name:
         return bad_request("fileName is required")
 
