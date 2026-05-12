@@ -1804,3 +1804,60 @@ export async function getTraceStats(agentId: string, range = "24h"): Promise<Tra
 export async function getWorkspaceCosts(range = "24h"): Promise<WorkspaceCosts> {
   return apiGet<WorkspaceCosts>(`/costs?range=${range}`);
 }
+
+// ─── Knowledge Base ───
+
+export interface KBListItem {
+  kbId: string;
+  name: string;
+  description: string;
+  status: string;
+  docCount: number;
+  updatedAt: string;
+}
+
+export interface KBDetailResponse extends KBListItem {
+  bedrockKbId: string;
+  embeddingModel: string;
+  documents: Array<{ key: string; filename: string; sizeBytes: number; lastModified: string }>;
+  ingestion: { jobId: string; status: string; documentsScanned: number; documentsIndexed: number; documentsFailed: number; failureReasons?: string[] } | null;
+  attachedAgentIds: string[];
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface KBIngestionResponse {
+  status: string;
+  documentsScanned: number;
+  documentsIndexed: number;
+  documentsFailed: number;
+  failureReasons: string[];
+}
+
+export async function fetchKnowledgeBases(): Promise<{ items: KBListItem[] }> {
+  return apiGet<{ items: KBListItem[] }>("/knowledge-bases");
+}
+
+export async function fetchKnowledgeBase(kbId: string): Promise<KBDetailResponse> {
+  return apiGet<KBDetailResponse>(`/knowledge-bases/${encodeURIComponent(kbId)}`);
+}
+
+export async function createKnowledgeBase(name: string, description: string): Promise<{ kbId: string; bedrockKbId: string; status: string }> {
+  return apiPost("/knowledge-bases", { name, description });
+}
+
+export async function deleteKnowledgeBase(kbId: string): Promise<{ deleted: boolean }> {
+  return apiDelete(`/knowledge-bases/${encodeURIComponent(kbId)}?confirm=true`);
+}
+
+export async function uploadKBDocument(kbId: string, stagingKey: string, filename: string): Promise<{ documentKey: string; ingestionJobId: string; status: string }> {
+  return apiPost(`/knowledge-bases/${encodeURIComponent(kbId)}/documents`, { stagingKey, filename });
+}
+
+export async function deleteKBDocument(kbId: string, documentKey: string): Promise<{ deleted: boolean; ingestionJobId: string }> {
+  return apiPost(`/knowledge-bases/${encodeURIComponent(kbId)}/documents/delete`, { documentKey });
+}
+
+export async function fetchKBIngestion(kbId: string): Promise<KBIngestionResponse> {
+  return apiGet<KBIngestionResponse>(`/knowledge-bases/${encodeURIComponent(kbId)}/ingestion`);
+}
