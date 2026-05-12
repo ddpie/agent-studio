@@ -92,9 +92,7 @@ def list_knowledge_bases(wsId: str):
     table = _get_table()
     from boto3.dynamodb.conditions import Key
     resp = table.query(
-        IndexName="workspace-index",
-        KeyConditionExpression=Key("workspace_id").eq(ws_id),
-        ScanIndexForward=False,
+        KeyConditionExpression=Key("ws_id").eq(ws_id),
     )
     items = [_kb_response(i) for i in resp.get("Items", []) if i.get("status") != "DELETED"]
     return success({"items": items})
