@@ -3,10 +3,10 @@ import { test as setup, expect } from "@playwright/test";
 setup("authenticate", async ({ page }) => {
   await page.goto("/");
 
-  // Amplify Authenticator renders username + password fields
-  const username = page.getByRole("textbox", { name: /username|email/i });
+  // Amplify Authenticator — supports both English and Chinese labels
+  const username = page.getByRole("textbox", { name: /username|email|用户名/i });
   const password = page.locator('input[type="password"]');
-  const signIn = page.getByRole("button", { name: /sign in/i });
+  const signIn = page.getByRole("button", { name: /sign in|登录/i });
 
   await expect(username).toBeVisible({ timeout: 15_000 });
 
