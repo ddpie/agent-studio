@@ -46,31 +46,38 @@ Meta-Agent 内置 47 个工具，覆盖 Agent 从创建到运维的完整生命�
 ## 架构
 
 ```mermaid
-graph LR
+%%{init: {'flowchart': {'nodeSpacing': 20, 'rankSpacing': 30}} }%%
+flowchart LR
     User((用户)) --> Web[Web Console]
-    Cron[定时器]
+    Web & Cron[定时器] --> WS
 
-    subgraph Workspace
-        direction TB
-        Meta[Meta-Agent<br/>创建 / 管理]
-        subgraph Agents
-            direction TB
-            A1[Agent A] -->|A2A| A2[Agent B]
-            A2 ~~~ A3[Agent C]
-        end
-        Res[Skills · 知识库 · MCP · Secrets]
+    subgraph WS["Workspace · Agent 编排"]
+        direction LR
+        Meta[Meta-Agent] -.编排.-> A1 & A2 & A3
+        A1[Agent A] -->|A2A| A2[Agent B]
+        A3[Agent C]
+        A1 ~~~ A3
     end
 
-    Web -->|对话| Meta
-    Web -->|对话| Agents
-    Meta -.部署.-> Agents
-    Cron -.触发.-> Agents
-    Agents --> LLM[Bedrock LLMs]
-    Agents <--> Res
-    Agents -->|代码执行| CI[Code Interpreter<br/>Python · JS · Shell]
-    Agents -->|网页操作| BW[Browser<br/>Headless Chrome]
-    Agents <-->|记忆| Mem[AgentCore Memory]
-    Agents -.observability.-> Obs[Traces · Evaluations<br/>Costs]
+    subgraph Res["Workspace 资源"]
+        direction TB
+        S[Skills]
+        K[(知识库)]
+        M[MCP]
+        Se[Secrets]
+    end
+
+    subgraph AC[AgentCore]
+        direction TB
+        L[LLMs]
+        CI[Code Interpreter]
+        B[Browser]
+        Me[Memory]
+        O[Observability]
+    end
+
+    WS <--> Res
+    WS --> AC
 ```
 
 完整系统图（CloudFront / Lambda / EventBridge / Evaluator 等）与关键设计说明见 [docs/architecture.md](docs/architecture.md)。
@@ -213,31 +220,38 @@ All operations are triggered through natural-language conversation — no need t
 ## Architecture
 
 ```mermaid
-graph LR
+%%{init: {'flowchart': {'nodeSpacing': 20, 'rankSpacing': 30}} }%%
+flowchart LR
     User((User)) --> Web[Web Console]
-    Cron[Scheduled trigger]
+    Web & Cron[Scheduled trigger] --> WS
 
-    subgraph Workspace
-        direction TB
-        Meta[Meta-Agent<br/>build / manage]
-        subgraph Agents
-            direction TB
-            A1[Agent A] -->|A2A| A2[Agent B]
-            A2 ~~~ A3[Agent C]
-        end
-        Res[Skills · KB · MCP · Secrets]
+    subgraph WS["Workspace · Agent Orchestration"]
+        direction LR
+        Meta[Meta-Agent] -.orchestrate.-> A1 & A2 & A3
+        A1[Agent A] -->|A2A| A2[Agent B]
+        A3[Agent C]
+        A1 ~~~ A3
     end
 
-    Web -->|chat| Meta
-    Web -->|chat| Agents
-    Meta -.deploy.-> Agents
-    Cron -.fire.-> Agents
-    Agents --> LLM[Bedrock LLMs]
-    Agents <--> Res
-    Agents -->|code exec| CI[Code Interpreter<br/>Python · JS · Shell]
-    Agents -->|web browse| BW[Browser<br/>Headless Chrome]
-    Agents <-->|memory| Mem[AgentCore Memory]
-    Agents -.observability.-> Obs[Traces · Evaluations<br/>Costs]
+    subgraph Res["Workspace Resources"]
+        direction TB
+        S[Skills]
+        K[(Knowledge Base)]
+        M[MCP]
+        Se[Secrets]
+    end
+
+    subgraph AC[AgentCore]
+        direction TB
+        L[LLMs]
+        CI[Code Interpreter]
+        B[Browser]
+        Me[Memory]
+        O[Observability]
+    end
+
+    WS <--> Res
+    WS --> AC
 ```
 
 Full system diagram (CloudFront / Lambda / EventBridge / Evaluator, …) and key design notes live in [docs/architecture.md](docs/architecture.md).
