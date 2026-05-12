@@ -402,6 +402,12 @@ export class AgentCoreRoles extends Construct {
       }));
     }
 
+    // KB attach/detach needs to update workspace role inline policies
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["iam:PutRolePolicy", "iam:GetRolePolicy"],
+      resources: [`arn:aws:iam::${props.accountId}:role/AgentStudio-ws-*`],
+    }));
+
     this.subAgentRoleArn = subAgentRole.roleArn;
     this.metaAgentRoleArn = metaAgentRole.roleArn;
     this.basicRoleArn = subAgentRole.roleArn;
