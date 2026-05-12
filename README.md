@@ -67,6 +67,8 @@ graph LR
     Cron -.触发.-> Agents
     Agents --> LLM[Bedrock LLMs]
     Agents <--> Res
+    Agents -->|代码执行| CI[Code Interpreter<br/>Python · JS · Shell]
+    Agents -->|网页操作| BW[Browser<br/>Headless Chrome]
     Agents <-->|记忆| Mem[AgentCore Memory]
     Agents -.observability.-> Obs[Traces · Evaluations<br/>Costs]
 ```
@@ -232,6 +234,8 @@ graph LR
     Cron -.fire.-> Agents
     Agents --> LLM[Bedrock LLMs]
     Agents <--> Res
+    Agents -->|code exec| CI[Code Interpreter<br/>Python · JS · Shell]
+    Agents -->|web browse| BW[Browser<br/>Headless Chrome]
     Agents <-->|memory| Mem[AgentCore Memory]
     Agents -.observability.-> Obs[Traces · Evaluations<br/>Costs]
 ```
