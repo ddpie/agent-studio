@@ -83,6 +83,17 @@ def get_max_tokens(model_id: str) -> int:
     return 16384  # conservative default for unknown models
 
 
+# Knowledge Base infrastructure
+KB_TABLE = os.getenv("AGENT_STUDIO_KB_TABLE", "agent-studio-knowledge-bases")
+KB_SERVICE_ROLE_ARN = os.getenv(
+    "AGENT_STUDIO_KB_SERVICE_ROLE_ARN",
+    f"arn:aws:iam::{ACCOUNT_ID}:role/AgentStudioKBServiceRole-{REGION}",
+)
+VECTORS_BUCKET = os.getenv(
+    "AGENT_STUDIO_VECTORS_BUCKET",
+    f"studio-vectors-{ACCOUNT_ID}-{REGION}",
+)
+
 MCP_GATEWAY_URL = os.getenv("MCP_GATEWAY_URL", "") or os.getenv(
     "AGENT_STUDIO_MCP_GATEWAY_URL", ""
 )

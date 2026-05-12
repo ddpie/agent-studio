@@ -205,6 +205,10 @@ for _k in (
     # per-workspace Secrets Manager (hydrated at invoke time by the
     # Invoke Lambda) so it no longer ships in Runtime env at all.
     "AGENT_STUDIO_KIRO_MODEL",
+    # Knowledge Base infrastructure references
+    "AGENT_STUDIO_KB_TABLE",
+    "AGENT_STUDIO_KB_SERVICE_ROLE_ARN",
+    "AGENT_STUDIO_VECTORS_BUCKET",
 ):
     _v = os.environ.get(_k, "")
     if _v:

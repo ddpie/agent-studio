@@ -6,6 +6,7 @@ export interface AgentCoreRolesProps {
   region: string;
   accountId: string;
   s3Bucket: string;
+  kbServiceRoleArn?: string;
 }
 
 export class AgentCoreRoles extends Construct {
@@ -365,6 +366,40 @@ export class AgentCoreRoles extends Construct {
         `arn:aws:logs:${props.region}:${props.accountId}:log-group:/aws/bedrock-agentcore/runtimes/*:*`,
       ],
     }));
+
+    // ─── Knowledge Base management ───
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: [
+        "bedrock:CreateKnowledgeBase",
+        "bedrock:DeleteKnowledgeBase",
+        "bedrock:GetKnowledgeBase",
+        "bedrock:ListKnowledgeBases",
+        "bedrock:CreateDataSource",
+        "bedrock:DeleteDataSource",
+        "bedrock:StartIngestionJob",
+        "bedrock:GetIngestionJob",
+        "bedrock:ListIngestionJobs",
+      ],
+      resources: ["*"],
+    }));
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["s3vectors:CreateIndex", "s3vectors:DeleteIndex"],
+      resources: [`arn:aws:s3vectors:${props.region}:${props.accountId}:vector-bucket/*`],
+    }));
+    metaAgentRole.addToPolicy(new iam.PolicyStatement({
+      actions: ["s3:CopyObject", "s3:PutObject", "s3:DeleteObject"],
+      resources: [`arn:aws:s3:::${props.s3Bucket}/kb/*`],
+    }));
+    // PassRole for KB service role → Bedrock (only if ARN is provided)
+    if (props.kbServiceRoleArn) {
+      metaAgentRole.addToPolicy(new iam.PolicyStatement({
+        actions: ["iam:PassRole"],
+        resources: [props.kbServiceRoleArn],
+        conditions: {
+          StringEquals: { "iam:PassedToService": "bedrock.amazonaws.com" },
+        },
+      }));
+    }
 
     this.subAgentRoleArn = subAgentRole.roleArn;
     this.metaAgentRoleArn = metaAgentRole.roleArn;

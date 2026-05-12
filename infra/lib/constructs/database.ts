@@ -9,6 +9,7 @@ export class Database extends Construct {
   public readonly toolsTable: dynamodb.ITable;
   public readonly a2aKeysTable: dynamodb.Table;
   public readonly runsTable: dynamodb.Table;
+  public readonly knowledgeBasesTable: dynamodb.Table;
 
   constructor(scope: Construct, id: string, props: {
     existingAgentsTableName: string;
@@ -81,6 +82,15 @@ export class Database extends Construct {
       partitionKey: { name: "scheduleId", type: dynamodb.AttributeType.STRING },
       sortKey: { name: "startedAt", type: dynamodb.AttributeType.STRING },
       projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    this.knowledgeBasesTable = new dynamodb.Table(this, "KnowledgeBases", {
+      tableName: "agent-studio-knowledge-bases",
+      partitionKey: { name: "ws_id", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "kb_id", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecovery: true,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
   }
 }

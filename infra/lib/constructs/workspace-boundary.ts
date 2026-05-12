@@ -238,6 +238,7 @@ export class WorkspaceBoundary extends Construct {
             "budgets:Describe*", "budgets:View*",
             // AI/ML — bedrock:Retrieve is read-only KB retrieval (billable, not a write)
             "bedrock:Get*", "bedrock:List*", "bedrock:Retrieve*",
+            "bedrock-agent-runtime:Retrieve",
             "bedrock-agentcore:Get*", "bedrock-agentcore:List*",
             "sagemaker:Describe*", "sagemaker:List*",
             "kendra:Describe*", "kendra:List*", "kendra:Query", "kendra:Retrieve",

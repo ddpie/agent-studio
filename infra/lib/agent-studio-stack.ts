@@ -14,6 +14,7 @@ import { BaseDeployment } from "./constructs/base-deployment";
 import { ScheduleRunner } from "./constructs/schedule-runner";
 import { WorkspaceBoundary } from "./constructs/workspace-boundary";
 import { McpRoles } from "./constructs/mcp-roles";
+import { KbVectors } from "./constructs/kb-vectors";
 import * as path from "path";
 
 export interface AgentStudioStackProps extends cdk.StackProps {
@@ -36,11 +37,19 @@ export class AgentStudioStack extends cdk.Stack {
       existingClientId: props.existingCognitoClientId!,
     } : undefined);
 
+    // Knowledge Base vectors + service role (must precede Roles for PassRole ref)
+    const kbVectors = new KbVectors(this, "KbVectors", {
+      region: config.region,
+      accountId: config.accountId,
+      s3Bucket: config.s3Bucket,
+    });
+
     // IAM Roles for Sub-Agent permission tiers
     const roles = new AgentCoreRoles(this, "Roles", {
       region: config.region,
       accountId: config.accountId,
       s3Bucket: config.s3Bucket,
+      kbServiceRoleArn: kbVectors.kbServiceRoleArn,
     });
 
     // Permission Boundary — caps workspace IAM role permissions
