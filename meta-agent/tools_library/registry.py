@@ -3,7 +3,7 @@
 import json
 from strands import tool
 
-from tools_library import web_search, fetch_webpage, s3_read, sql_readonly, translate, chart_generator, agent_caller
+from tools_library import web_search, fetch_webpage, s3_read, sql_readonly, translate, chart_generator, agent_caller, kb_retrieve
 
 _ALL_TOOLS = [
     web_search,
@@ -13,6 +13,7 @@ _ALL_TOOLS = [
     translate,
     chart_generator,
     agent_caller,
+    kb_retrieve,
 ]
 
 # Pre-built indexes for O(1) lookup instead of linear scan
