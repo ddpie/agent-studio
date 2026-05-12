@@ -311,7 +311,7 @@ def delete_knowledge_base(wsId: str, kbId: str):
     table = _get_table()
     resp = table.get_item(Key={"ws_id": ws_id, "kb_id": kbId}, ConsistentRead=True)
     item = resp.get("Item")
-    if not item or item.get("workspace_id") != ws_id:
+    if not item:
         return not_found("Knowledge base not found")
 
     # Mark as DELETING
@@ -420,7 +420,7 @@ def upload_document(wsId: str, kbId: str):
     table = _get_table()
     resp = table.get_item(Key={"ws_id": ws_id, "kb_id": kbId}, ConsistentRead=True)
     item = resp.get("Item")
-    if not item or item.get("workspace_id") != ws_id:
+    if not item:
         return not_found("Knowledge base not found")
     if item.get("status") != "ACTIVE":
         return bad_request("Knowledge base is not active")
@@ -497,7 +497,7 @@ def delete_document(wsId: str, kbId: str):
     table = _get_table()
     resp = table.get_item(Key={"ws_id": ws_id, "kb_id": kbId}, ConsistentRead=True)
     item = resp.get("Item")
-    if not item or item.get("workspace_id") != ws_id:
+    if not item:
         return not_found("Knowledge base not found")
 
     s3_prefix = item.get("s3_prefix", "")
@@ -545,7 +545,7 @@ def get_ingestion_status(wsId: str, kbId: str):
     table = _get_table()
     resp = table.get_item(Key={"ws_id": ws_id, "kb_id": kbId}, ConsistentRead=True)
     item = resp.get("Item")
-    if not item or item.get("workspace_id") != ws_id:
+    if not item:
         return not_found("Knowledge base not found")
 
     bedrock_kb_id = item.get("bedrock_kb_id", "")
