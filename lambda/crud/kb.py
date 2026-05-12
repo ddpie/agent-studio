@@ -496,9 +496,11 @@ def delete_document(wsId: str, kbId: str):
         return err
 
     body = router.current_event.json_body or {}
-    file_name = (body.get("fileName") or body.get("filename") or "").strip()
-    if not file_name:
-        return bad_request("fileName is required")
+    doc_key = (body.get("documentKey") or "").strip()
+    if not doc_key:
+        file_name = (body.get("fileName") or body.get("filename") or "").strip()
+        if not file_name:
+            return bad_request("documentKey or fileName is required")
 
     # Verify KB
     table = _get_table()
@@ -508,7 +510,10 @@ def delete_document(wsId: str, kbId: str):
         return not_found("Knowledge base not found")
 
     s3_prefix = item.get("s3_prefix", "")
-    doc_key = f"{s3_prefix}{file_name}"
+    if not doc_key:
+        doc_key = f"{s3_prefix}{file_name}"
+    elif not doc_key.startswith(s3_prefix):
+        return bad_request("Document key does not belong to this knowledge base")
 
     # Delete from S3
     s3 = _get_s3()
