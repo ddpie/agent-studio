@@ -301,7 +301,7 @@ def update_agent(
         # Check DDB for existing agent metadata
         try:
             _agent_item = boto3.client("dynamodb", region_name=REGION).get_item(
-                TableName=AGENTS_TABLE, Key={"agentId": {"S": agent_name}},
+                TableName=AGENTS_TABLE, Key={"agentId": {"S": agent_id}},
                 ProjectionExpression="knowledge_bases",
             ).get("Item", {})
             _kb_ids = _agent_item.get("knowledge_bases", {}).get("SS", [])

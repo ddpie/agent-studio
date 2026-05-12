@@ -357,16 +357,6 @@ def create_agent(
     _kb_ids = []
     if staging_key and staged:
         _kb_ids = staged.get("knowledge_bases", [])
-    if not _kb_ids:
-        # Check DDB for existing agent metadata
-        try:
-            _agent_item = boto3.client("dynamodb", region_name=REGION).get_item(
-                TableName=AGENTS_TABLE, Key={"agentId": {"S": agent_name}},
-                ProjectionExpression="knowledge_bases",
-            ).get("Item", {})
-            _kb_ids = _agent_item.get("knowledge_bases", {}).get("SS", [])
-        except Exception:
-            pass
     if _kb_ids and workspace_id:
         from tools.kb_inject import build_kb_injection, resolve_kb_bindings
         _kb_records = resolve_kb_bindings(workspace_id, _kb_ids)

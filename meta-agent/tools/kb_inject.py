@@ -20,7 +20,8 @@ def build_kb_injection(kb_records: list[dict]) -> str:
         return ""
 
     bound_kbs_json = json.dumps(kb_records, ensure_ascii=False)
-    return f"BOUND_KBS = {bound_kbs_json}\n\n{KB_RETRIEVE_TOOL_CODE.strip()}\n"
+    region_line = 'import os as _os_kb; REGION = _os_kb.getenv("AWS_REGION", "us-east-1")'
+    return f"{region_line}\nBOUND_KBS = {bound_kbs_json}\n\n{KB_RETRIEVE_TOOL_CODE.strip()}\n"
 
 
 def resolve_kb_bindings(ws_id: str, kb_ids: list[str]) -> list[dict]:

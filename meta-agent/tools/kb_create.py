@@ -8,7 +8,7 @@ import boto3
 from strands import tool
 
 from config import REGION, ACCOUNT_ID, S3_BUCKET, KB_TABLE, KB_SERVICE_ROLE_ARN, VECTORS_BUCKET
-from tools._scope import current_workspace as current_workspace_id, current_caller as current_caller_id
+from tools._scope import current_workspace, current_caller
 
 
 @tool
