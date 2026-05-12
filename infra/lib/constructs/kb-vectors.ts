@@ -59,8 +59,13 @@ export class KbVectors extends Construct {
         "s3vectors:QueryVectors",
         "s3vectors:DeleteVectors",
         "s3vectors:ListVectors",
+        "s3vectors:GetVector",
+        "s3vectors:PutVector",
       ],
-      resources: [vectorBucket.attrVectorBucketArn],
+      resources: [
+        vectorBucket.attrVectorBucketArn,
+        `${vectorBucket.attrVectorBucketArn}/*`,
+      ],
     }));
 
     // Embedding model access
