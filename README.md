@@ -69,15 +69,17 @@ flowchart LR
 
     subgraph AC[AgentCore]
         direction TB
-        L[LLMs]
         CI[Code Interpreter]
         B[Browser]
         Me[Memory]
         O[Observability]
     end
 
+    LLM[LLMs · Bedrock]
+
     WS <--> Res
     WS --> AC
+    WS --> LLM
 ```
 
 完整系统图（CloudFront / Lambda / EventBridge / Evaluator 等）与关键设计说明见 [docs/architecture.md](docs/architecture.md)。
@@ -243,15 +245,17 @@ flowchart LR
 
     subgraph AC[AgentCore]
         direction TB
-        L[LLMs]
         CI[Code Interpreter]
         B[Browser]
         Me[Memory]
         O[Observability]
     end
 
+    LLM[LLMs · Bedrock]
+
     WS <--> Res
     WS --> AC
+    WS --> LLM
 ```
 
 Full system diagram (CloudFront / Lambda / EventBridge / Evaluator, …) and key design notes live in [docs/architecture.md](docs/architecture.md).
