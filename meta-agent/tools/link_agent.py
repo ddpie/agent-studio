@@ -337,6 +337,28 @@ def _redeploy_source(source_id: str, meta: dict) -> str:
     tools_py = TOOLS_PY_HEADER + "\n\n".join(
         builtin_parts + ([custom_code] if custom_code.strip() else [])
     )
+
+    # Inject KB retrieval tool if agent has bound knowledge bases
+    _ws_id = meta.get("workspace_id", "")
+    _kb_ids = []
+    if not _kb_ids:
+        try:
+            _agent_item = boto3.client("dynamodb", region_name=REGION).get_item(
+                TableName=AGENTS_TABLE, Key={"agentId": {"S": source_id}},
+                ProjectionExpression="knowledge_bases",
+            ).get("Item", {})
+            _kb_ids = _agent_item.get("knowledge_bases", {}).get("SS", [])
+        except Exception:
+            pass
+    if _kb_ids and _ws_id:
+        from tools.kb_inject import build_kb_injection, resolve_kb_bindings
+        _kb_records = resolve_kb_bindings(_ws_id, _kb_ids)
+        _kb_code = build_kb_injection(_kb_records)
+        if _kb_code:
+            tools_py = tools_py + "\n\n" + _kb_code
+            if "kb_retrieve" not in tool_names_list:
+                tool_names_list.append("kb_retrieve")
+
     prompt_txt = meta.get("system_prompt", "")
     config_data = {
         "model_id": meta.get("model_id") or MODEL_ID,
