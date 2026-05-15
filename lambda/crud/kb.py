@@ -78,7 +78,7 @@ def _kb_response(item: dict, count_docs: bool = False) -> dict:
     doc_count = _count_s3_documents(s3_prefix) if count_docs else item.get("document_count", 0)
     return {
         "kbId": item.get("kb_id", ""),
-        "workspaceId": item.get("workspace_id", ""),
+        "workspaceId": item.get("ws_id", ""),
         "name": item.get("name", ""),
         "description": item.get("description", ""),
         "status": item.get("status", ""),
@@ -400,7 +400,7 @@ def delete_knowledge_base(wsId: str, kbId: str):
             try:
                 agents_table.update_item(
                     Key={"agentId": agent_id},
-                    UpdateExpression="DELETE knowledge_base_ids :kb_set",
+                    UpdateExpression="DELETE knowledge_bases :kb_set",
                     ExpressionAttributeValues={":kb_set": {kbId}},
                 )
             except Exception:

@@ -430,6 +430,11 @@ def update_agent(
         "updated_at = :ua",
         "mcp_targets = :mcp",
         "skills = :sk",
+        "default_model_id = :mid",
+        "system_prompt = :sp",
+        "welcome_message = :wm",
+        "suggestions = :sug",
+        "supports_images = :si",
     ]
     expr_values = {
         ":dn": final_display,
@@ -437,6 +442,11 @@ def update_agent(
         ":ua": metadata["updated_at"],
         ":mcp": mcp_targets_list,
         ":sk": final_skills,
+        ":mid": metadata.get("model_id", ""),
+        ":sp": metadata.get("system_prompt", ""),
+        ":wm": metadata.get("welcome_message", ""),
+        ":sug": metadata.get("suggestions", []),
+        ":si": metadata.get("supports_images", False),
     }
     if tool_names_list:
         update_expr_parts.append("tool_names = :tn")

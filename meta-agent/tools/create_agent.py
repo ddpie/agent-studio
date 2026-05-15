@@ -525,6 +525,8 @@ def create_agent(
         "name": agent_name,
         "display_name": display_name or agent_name,
         "description": description,
+        "default_model_id": MODEL_ID,
+        "system_prompt": final_prompt,
         "visibility": "private",
         "permissionTier": tier,
         "tool_names": tool_names_list,
