@@ -33,6 +33,7 @@ export interface AgentMetadata {
   mcp_targets?: string[];
   gateway_url?: string;
   linked_agents?: LinkedAgentEntry[];
+  knowledge_bases?: string[];
   memory?: {
     enabled: boolean;
     strategies: string[];
@@ -80,6 +81,7 @@ export async function fetchAgentMetadataLight(agentId: string): Promise<AgentMet
       mcp_targets: item.mcp_targets || [],
       gateway_url: item.gateway_url,
       linked_agents: item.linked_agents || [],
+      knowledge_bases: item.knowledge_bases || [],
       memory: item.memory,
       runtime_type: (item.runtime_type as "zip" | "harness" | undefined) || "zip",
       harness_arn: item.harness_arn || "",
@@ -144,6 +146,7 @@ export async function fetchAgentMetadata(agentId: string): Promise<AgentMetadata
       mcp_targets: item.mcp_targets || [],
       gateway_url: item.gateway_url,
       linked_agents: item.linked_agents || [],
+      knowledge_bases: item.knowledge_bases || [],
       memory: item.memory,
       runtime_type: runtimeType,
       harness_arn: item.harness_arn || "",

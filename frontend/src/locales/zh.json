@@ -904,6 +904,23 @@
     "title": "Agent Studio",
     "signOut": "退出登录"
   },
+  "knowledgeBases": {
+    "title": "知识库",
+    "description": "绑定知识库以启用 RAG 检索。更改在下次部署时生效。",
+    "empty": "未绑定知识库",
+    "selectKb": "选择知识库...",
+    "noAvailable": "暂无可用知识库",
+    "attach": "绑定",
+    "detach": "解绑",
+    "attaching": "绑定中...",
+    "detaching": "解绑中...",
+    "attachFailed": "绑定知识库失败",
+    "detachFailed": "解绑知识库失败",
+    "maxReached": "每个 Agent 最多绑定 5 个知识库",
+    "docs": "篇文档",
+    "viewDetail": "管理文档",
+    "editorRequired": "需要编辑者权限"
+  },
   "linkedAgents": {
     "title": "关联 Agent",
     "description": "让当前 Agent 通过 A2A 协议调用工作区中的其他 Agent。关联会生成一个 API Key、向当前 Agent 添加 call_agent 工具并原地重新部署（约 60 秒）。",

@@ -19,6 +19,7 @@ _s3 = None
 _bedrock = None
 _s3vectors = None
 _agents_table = None
+_ddb_client = None
 
 ALLOWED_EXTENSIONS = {"pdf", "md", "txt", "html", "csv", "docx", "xlsx", "pptx"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
@@ -59,8 +60,22 @@ def _get_s3vectors():
     return _s3vectors
 
 
-def _kb_response(item: dict) -> dict:
+def _count_s3_documents(s3_prefix: str) -> int:
+    """Count documents under a KB's S3 prefix."""
+    if not s3_prefix:
+        return 0
+    try:
+        s3 = _get_s3()
+        resp = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=s3_prefix, MaxKeys=1000)
+        return resp.get("KeyCount", 0)
+    except Exception:
+        return 0
+
+
+def _kb_response(item: dict, count_docs: bool = False) -> dict:
     """Convert DDB item to camelCase API response."""
+    s3_prefix = item.get("s3_prefix", "")
+    doc_count = _count_s3_documents(s3_prefix) if count_docs else item.get("document_count", 0)
     return {
         "kbId": item.get("kb_id", ""),
         "workspaceId": item.get("workspace_id", ""),
@@ -71,8 +86,8 @@ def _kb_response(item: dict) -> dict:
         "dataSourceId": item.get("data_source_id", ""),
         "indexName": item.get("index_name", ""),
         "indexArn": item.get("index_arn", ""),
-        "s3Prefix": item.get("s3_prefix", ""),
-        "documentCount": item.get("document_count", 0),
+        "s3Prefix": s3_prefix,
+        "docCount": doc_count,
         "attachedAgentIds": list(item.get("attached_agent_ids", set())),
         "createdBy": item.get("created_by", ""),
         "createdAt": item.get("created_at", ""),
@@ -94,7 +109,7 @@ def list_knowledge_bases(wsId: str):
     resp = table.query(
         KeyConditionExpression=Key("ws_id").eq(ws_id),
     )
-    items = [_kb_response(i) for i in resp.get("Items", []) if i.get("status") != "DELETED"]
+    items = [_kb_response(i, count_docs=True) for i in resp.get("Items", []) if i.get("status") != "DELETED"]
     return success({"items": items})
 
 
@@ -466,13 +481,14 @@ def upload_document(wsId: str, kbId: str):
     except Exception:
         logger.warning("Failed to start ingestion job for KB %s", kbId)
 
-    # Update DDB metadata
+    # Update DDB metadata + increment document_count
     now = datetime.utcnow().isoformat() + "Z"
-    update_expr = "SET updated_at = :now"
-    expr_vals: dict = {":now": now}
+    set_parts = ["updated_at = :now"]
+    expr_vals: dict = {":now": now, ":one": 1}
     if ingestion_job_id:
-        update_expr += ", last_ingestion_job_id = :job"
+        set_parts.append("last_ingestion_job_id = :job")
         expr_vals[":job"] = ingestion_job_id
+    update_expr = f"SET {', '.join(set_parts)} ADD document_count :one"
     try:
         table.update_item(
             Key={"ws_id": ws_id, "kb_id": kbId},
@@ -527,13 +543,13 @@ def delete_document(wsId: str, kbId: str):
         logger.exception("Failed to delete document %s", doc_key)
         return internal_error("Failed to delete document")
 
-    # Update metadata
+    # Update metadata + decrement document_count
     now = datetime.utcnow().isoformat() + "Z"
     try:
         table.update_item(
             Key={"ws_id": ws_id, "kb_id": kbId},
-            UpdateExpression="SET updated_at = :now",
-            ExpressionAttributeValues={":now": now},
+            UpdateExpression="SET updated_at = :now ADD document_count :neg",
+            ExpressionAttributeValues={":now": now, ":neg": -1},
         )
     except Exception:
         pass
@@ -594,4 +610,153 @@ def get_ingestion_status(wsId: str, kbId: str):
     except Exception:
         logger.exception("Failed to list ingestion jobs for KB %s", kbId)
         return internal_error("Failed to fetch ingestion status")
-# KB v2
+
+
+def _get_ddb_client():
+    global _ddb_client
+    if _ddb_client is None:
+        _ddb_client = boto3.client("dynamodb", region_name=REGION)
+    return _ddb_client
+
+
+# ── Attach KB to Agent ──
+
+MAX_KBS_PER_AGENT = 5
+
+
+@router.post("/api/workspaces/<wsId>/agents/<agentId>/knowledge-bases/<kbId>")
+def attach_knowledge_base(wsId: str, agentId: str, kbId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
+    if err:
+        return err
+
+    # Verify KB exists and is active
+    table = _get_table()
+    kb_resp = table.get_item(Key={"ws_id": ws_id, "kb_id": kbId}, ConsistentRead=True)
+    kb_item = kb_resp.get("Item")
+    if not kb_item:
+        return not_found("Knowledge base not found")
+    if kb_item.get("status") in ("DELETED", "DELETING"):
+        return bad_request("Knowledge base is being deleted or already deleted")
+
+    # Verify agent exists and belongs to this workspace
+    agents_table = _get_agents_table()
+    agent_resp = agents_table.get_item(Key={"agentId": agentId}, ConsistentRead=True)
+    agent_item = agent_resp.get("Item")
+    if not agent_item:
+        return not_found("Agent not found")
+    if agent_item.get("workspace_id") != ws_id:
+        return not_found("Agent not found")
+
+    # Check if already attached (idempotent)
+    current_kb_ids = agent_item.get("knowledge_bases") or set()
+    if isinstance(current_kb_ids, list):
+        current_kb_ids = set(current_kb_ids)
+    if kbId in current_kb_ids:
+        return success({"status": "attached", "agentId": agentId, "kbId": kbId})
+
+    # Check max KBs per agent limit
+    if len(current_kb_ids) >= MAX_KBS_PER_AGENT:
+        return bad_request(f"Agent already has {MAX_KBS_PER_AGENT} knowledge bases attached (maximum)")
+
+    # Transactional write: add KB to agent + add agent to KB
+    try:
+        _get_ddb_client().transact_write_items(
+            TransactItems=[
+                {
+                    "Update": {
+                        "TableName": agents_table.name,
+                        "Key": {"agentId": {"S": agentId}},
+                        "UpdateExpression": "ADD knowledge_bases :kb_set",
+                        "ConditionExpression": "attribute_exists(agentId) AND workspace_id = :ws",
+                        "ExpressionAttributeValues": {
+                            ":kb_set": {"SS": [kbId]},
+                            ":ws": {"S": ws_id},
+                        },
+                    }
+                },
+                {
+                    "Update": {
+                        "TableName": table.name,
+                        "Key": {"ws_id": {"S": ws_id}, "kb_id": {"S": kbId}},
+                        "UpdateExpression": "ADD attached_agent_ids :agent_set",
+                        "ExpressionAttributeValues": {
+                            ":agent_set": {"SS": [agentId]},
+                        },
+                    }
+                },
+            ]
+        )
+    except Exception as e:
+        logger.exception("Failed to attach KB %s to agent %s", kbId, agentId)
+        return internal_error(f"Failed to attach knowledge base: {str(e)}")
+
+    return success({"status": "attached", "agentId": agentId, "kbId": kbId})
+
+
+# ── Detach KB from Agent ──
+
+
+@router.delete("/api/workspaces/<wsId>/agents/<agentId>/knowledge-bases/<kbId>")
+@router.post("/api/workspaces/<wsId>/agents/<agentId>/knowledge-bases/<kbId>/detach")
+def detach_knowledge_base(wsId: str, agentId: str, kbId: str):
+    user_id, ws_id, member, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
+    if err:
+        return err
+
+    # Verify KB exists in this workspace
+    table = _get_table()
+    kb_resp = table.get_item(Key={"ws_id": ws_id, "kb_id": kbId}, ConsistentRead=True)
+    kb_item = kb_resp.get("Item")
+    if not kb_item:
+        return not_found("Knowledge base not found")
+
+    # Verify agent exists and belongs to this workspace
+    agents_table = _get_agents_table()
+    agent_resp = agents_table.get_item(Key={"agentId": agentId}, ConsistentRead=True)
+    agent_item = agent_resp.get("Item")
+    if not agent_item:
+        return not_found("Agent not found")
+    if agent_item.get("workspace_id") != ws_id:
+        return not_found("Agent not found")
+
+    # Check if not attached (idempotent)
+    current_kb_ids = agent_item.get("knowledge_bases") or set()
+    if isinstance(current_kb_ids, list):
+        current_kb_ids = set(current_kb_ids)
+    if kbId not in current_kb_ids:
+        return success({"status": "detached", "agentId": agentId, "kbId": kbId})
+
+    # Transactional write: remove KB from agent + remove agent from KB
+    try:
+        _get_ddb_client().transact_write_items(
+            TransactItems=[
+                {
+                    "Update": {
+                        "TableName": agents_table.name,
+                        "Key": {"agentId": {"S": agentId}},
+                        "UpdateExpression": "DELETE knowledge_bases :kb_set",
+                        "ConditionExpression": "attribute_exists(agentId) AND workspace_id = :ws",
+                        "ExpressionAttributeValues": {
+                            ":kb_set": {"SS": [kbId]},
+                            ":ws": {"S": ws_id},
+                        },
+                    }
+                },
+                {
+                    "Update": {
+                        "TableName": table.name,
+                        "Key": {"ws_id": {"S": ws_id}, "kb_id": {"S": kbId}},
+                        "UpdateExpression": "DELETE attached_agent_ids :agent_set",
+                        "ExpressionAttributeValues": {
+                            ":agent_set": {"SS": [agentId]},
+                        },
+                    }
+                },
+            ]
+        )
+    except Exception as e:
+        logger.exception("Failed to detach KB %s from agent %s", kbId, agentId)
+        return internal_error(f"Failed to detach knowledge base: {str(e)}")
+
+    return success({"status": "detached", "agentId": agentId, "kbId": kbId})

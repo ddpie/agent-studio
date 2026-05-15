@@ -1861,3 +1861,15 @@ export async function deleteKBDocument(kbId: string, documentKey: string): Promi
 export async function fetchKBIngestion(kbId: string): Promise<KBIngestionResponse> {
   return apiGet<KBIngestionResponse>(`/knowledge-bases/${encodeURIComponent(kbId)}/ingestion`);
 }
+
+export async function attachKnowledgeBase(agentId: string, kbId: string): Promise<{ status: string }> {
+  return apiPost<{ status: string }>(
+    `/agents/${encodeURIComponent(agentId)}/knowledge-bases/${encodeURIComponent(kbId)}`,
+  );
+}
+
+export async function detachKnowledgeBase(agentId: string, kbId: string): Promise<{ status: string }> {
+  return apiDelete<{ status: string }>(
+    `/agents/${encodeURIComponent(agentId)}/knowledge-bases/${encodeURIComponent(kbId)}`,
+  );
+}

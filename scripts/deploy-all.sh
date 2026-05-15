@@ -93,7 +93,8 @@ if [[ "$ONLY_FRONTEND" == false ]]; then
   if ! python3 "${SCRIPT_DIR}/check-mcp-runtime-roles.py" --region "$REGION" >/dev/null 2>&1; then
     echo ""
     echo "WARNING: MCP runtime execution-role drift detected."
-    python3 "${SCRIPT_DIR}/check-mcp-runtime-roles.py" --region "$REGION" 2>&1 | sed 's/^/  /'
+    python3 "${SCRIPT_DIR}/check-mcp-runtime-roles.py" --region "$REGION" 2>&1 | sed 's/^/  /' || true
+    echo ""
     echo "  Fix with: bash scripts/deploy-mcp.sh   (or scripts/check-mcp-runtime-roles.py --fix)"
     echo ""
   fi

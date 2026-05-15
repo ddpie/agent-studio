@@ -904,6 +904,23 @@
     "title": "Agent Studio",
     "signOut": "Sign out"
   },
+  "knowledgeBases": {
+    "title": "Knowledge Bases",
+    "description": "Attach knowledge bases to enable RAG retrieval. Changes take effect on next deploy.",
+    "empty": "No knowledge bases attached",
+    "selectKb": "Select a knowledge base...",
+    "noAvailable": "No knowledge bases available",
+    "attach": "Attach",
+    "detach": "Detach",
+    "attaching": "Attaching...",
+    "detaching": "Detaching...",
+    "attachFailed": "Failed to attach knowledge base",
+    "detachFailed": "Failed to detach knowledge base",
+    "maxReached": "Maximum 5 knowledge bases per agent",
+    "docs": "documents",
+    "viewDetail": "Manage documents",
+    "editorRequired": "Editor role required to modify"
+  },
   "linkedAgents": {
     "title": "Linked Agents",
     "description": "Let this agent call other workspace peers via the A2A protocol. Linking mints an API key, adds the call_agent tool to this agent, and redeploys in place (~60s).",

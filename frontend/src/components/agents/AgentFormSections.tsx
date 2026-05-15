@@ -9,6 +9,7 @@ import SkillsSection from "./SkillsSection";
 import ToolsEditor from "./ToolsEditor";
 import SecretsSection from "./SecretsSection";
 import McpTargetSelector from "./McpTargetSelector";
+import KnowledgeBaseSection from "./KnowledgeBaseSection";
 import LinkedAgentsSection from "./LinkedAgentsSection";
 import MemorySection from "./MemorySection";
 
@@ -232,6 +233,15 @@ export default function AgentFormSections({
             hasLegacyConfig={!!formData.gateway_url && !formData.mcp_targets?.length}
           />
         </Section>
+      )}
+
+      {/* Knowledge Bases — RAG retrieval via Bedrock KB */}
+      {!isCreateMode && formData.runtime_type !== "harness" && (
+        <KnowledgeBaseSection
+          agentId={agentId}
+          knowledgeBases={formData.knowledge_bases || []}
+          onChange={(kbs) => updateField("knowledge_bases", kbs)}
+        />
       )}
 
       {/* Linked Agents — A2A requires injecting a call_agent tool into

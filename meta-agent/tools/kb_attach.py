@@ -1,12 +1,15 @@
 """kb_attach — Attach/detach Knowledge Bases to/from agents."""
 
 import json
+import logging
 import boto3
 from strands import tool
 from datetime import datetime, timezone
 
 from config import REGION, KB_TABLE, AGENTS_TABLE
-from tools._scope import current_workspace
+from tools._scope import current_workspace, ensure_agent_in_workspace, ROLE_EDITOR
+
+log = logging.getLogger("meta_agent.kb_attach")
 
 
 @tool
@@ -36,12 +39,10 @@ def kb_attach_to_agent(kb_id: str, agent_id: str) -> str:
 
     kb_name = kb_item.get("name", {}).get("S", kb_id)
 
-    try:
-        agent_resp = ddb.get_item(TableName=AGENTS_TABLE, Key={"agentId": {"S": agent_id}})
-        if not agent_resp.get("Item"):
-            return json.dumps({"error": "agent_not_found"})
-    except Exception as e:
-        return json.dumps({"error": "agent_lookup_failed", "message": str(e)})
+    # Verify agent belongs to this workspace (prevents cross-workspace attach)
+    agent_record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_EDITOR)
+    if err:
+        return json.dumps(err)
 
     now = datetime.now(timezone.utc).isoformat()
 
@@ -62,8 +63,8 @@ def kb_attach_to_agent(kb_id: str, agent_id: str) -> str:
             UpdateExpression="ADD attached_agent_ids :agent_set SET updated_at = :now",
             ExpressionAttributeValues={":agent_set": {"SS": [agent_id]}, ":now": {"S": now}},
         )
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("Failed to update KB %s attached_agent_ids: %s", kb_id, e)
 
     return json.dumps({
         "attached": True, "kb_id": kb_id, "kb_name": kb_name, "agent_id": agent_id,
@@ -97,6 +98,11 @@ def kb_detach_from_agent(kb_id: str, agent_id: str) -> str:
     except Exception as e:
         return json.dumps({"error": "ddb_read_failed", "message": str(e)})
 
+    # Verify agent belongs to this workspace (prevents cross-workspace detach)
+    agent_record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_EDITOR)
+    if err:
+        return json.dumps(err)
+
     now = datetime.now(timezone.utc).isoformat()
 
     try:
@@ -116,8 +122,8 @@ def kb_detach_from_agent(kb_id: str, agent_id: str) -> str:
             UpdateExpression="DELETE attached_agent_ids :agent_set SET updated_at = :now",
             ExpressionAttributeValues={":agent_set": {"SS": [agent_id]}, ":now": {"S": now}},
         )
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("Failed to update KB %s attached_agent_ids: %s", kb_id, e)
 
     return json.dumps({
         "detached": True, "kb_id": kb_id, "agent_id": agent_id,
