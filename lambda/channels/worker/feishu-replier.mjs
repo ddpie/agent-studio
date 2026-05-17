@@ -252,12 +252,16 @@ export class FeishuReplier {
       ],
     };
     try {
-      await fetch(`${FEISHU_BASE}/open-apis/interactive/v1/card/update`, {
+      const resp = await fetch(`${FEISHU_BASE}/open-apis/interactive/v1/card/update`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ token: cardToken, card: updatedCard }),
       });
-    } catch { /* best-effort */ }
+      const result = await resp.json().catch(() => ({}));
+      if (result.code !== 0) {
+        console.warn("Card update failed:", JSON.stringify(result).slice(0, 300));
+      }
+    } catch (err) { console.warn("Card update error:", err.message); }
   }
 
   /**
