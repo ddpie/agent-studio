@@ -103,7 +103,7 @@ export default function KBIngestionStatus({ ingestion, onRefresh }: Props) {
         <div className="mt-1 text-[11px] text-green-600 dark:text-green-400 ml-6">
           {ingestion.documentsFailed === 0
             ? t("kb.ingestionStatsSuccess", { count: ingestion.processedSuccessfully ?? ingestion.documentsScanned })
-            : t("kb.ingestionStatsPartial", { success: (ingestion.processedSuccessfully ?? ingestion.documentsScanned) - ingestion.documentsFailed, failed: ingestion.documentsFailed })}
+            : t("kb.ingestionStatsPartial", { success: ingestion.processedSuccessfully ?? (ingestion.documentsScanned - ingestion.documentsFailed), failed: ingestion.documentsFailed })}
         </div>
       </div>
     );
