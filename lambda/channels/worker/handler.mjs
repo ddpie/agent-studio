@@ -124,6 +124,7 @@ export async function handler(event) {
     });
     const maxTurns = config.maxHistoryTurns || 10;
     const history = await loadHistory(ddb, historyPk, maxTurns);
+    console.log("history loaded:", { pk: historyPk, turns: history.length });
 
     // Build agent request payload
     const agentPayload = {
