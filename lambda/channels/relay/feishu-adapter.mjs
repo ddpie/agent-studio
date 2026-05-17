@@ -183,7 +183,7 @@ export class FeishuAdapter {
   async #handleCardAction(data) {
     if (!this.#eventCallback || !this.connected) return;
 
-    console.log("[FeishuAdapter] card_action raw:", JSON.stringify(data).slice(0, 500));
+    console.log("[FeishuAdapter] card_action raw:", JSON.stringify(data).slice(0, 800));
 
     const action = data.action;
     const operator = data.operator;

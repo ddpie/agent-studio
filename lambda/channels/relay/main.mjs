@@ -183,7 +183,7 @@ async function refreshConfigCache() {
     );
     channelConfigCache = new Map();
     for (const item of result.Items || []) {
-      channelConfigCache.set(item.channelId, item);
+      channelConfigCache.set(item.sk, item);
     }
   } catch (err) {
     console.error(`[Relay] Failed to refresh config cache:`, err);
