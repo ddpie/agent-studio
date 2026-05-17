@@ -25,4 +25,5 @@ STRATEGY_NAMESPACE_PREFIX = {
     "userPreference": "/users/{actor_id}/preferences/",
     "semantic":       "/users/{actor_id}/facts/",
     "summary":        "/users/{actor_id}/summaries/",
+    "episodic":       "/users/{actor_id}/episodes/",
 }
