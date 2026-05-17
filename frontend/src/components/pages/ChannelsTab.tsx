@@ -219,6 +219,7 @@ export default function ChannelsTab() {
                   <GitBranch className="w-3.5 h-3.5" />
                 </button>
                 <button
+                  onClick={() => setRoutingChannel(ch)}
                   title={t("common.edit")}
                   className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400"
                 >
