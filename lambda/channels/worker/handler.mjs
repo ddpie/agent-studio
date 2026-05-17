@@ -55,9 +55,13 @@ export async function handler(event) {
     // Handle card_action (user clicked agent selection button)
     if (type === "card_action") {
       console.log("card_action payload:", JSON.stringify(message.action));
-      const config = await loadChannelConfig(workspaceId, channelId);
-      const accessToken = await getToken(channelId, config);
-      await handleCardAction(ddb, message, config, replier, accessToken);
+      try {
+        const config = await loadChannelConfig(workspaceId, channelId);
+        const accessToken = await getToken(channelId, config);
+        await handleCardAction(ddb, message, config, replier, accessToken);
+      } catch (err) {
+        console.error("card_action error:", err.message, err.stack);
+      }
       return { statusCode: 200, body: "card_action_handled" };
     }
 
