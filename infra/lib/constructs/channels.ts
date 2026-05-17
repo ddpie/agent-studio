@@ -14,6 +14,7 @@ import { AgentStudioConfig } from "../config";
 
 export interface ChannelsProps {
   config: AgentStudioConfig;
+  agentsTable: dynamodb.ITable;
 }
 
 /**
@@ -35,6 +36,7 @@ export class Channels extends Construct {
     super(scope, id);
 
     const { region, accountId } = props.config;
+    const { agentsTable } = props;
 
     // ─────────────────────────────────────────────────────────────────────
     // DynamoDB Tables
@@ -195,7 +197,7 @@ export class Channels extends Construct {
         TOKENS_TABLE: this.tokensTable.tableName,
         HISTORY_TABLE: this.historyTable.tableName,
         INFLIGHT_TABLE: this.inflightTable.tableName,
-        AGENTS_TABLE: "agent-studio-agents",
+        AGENTS_TABLE: agentsTable.tableName,
         REGION: region,
         ACCOUNT_ID: accountId,
       },
@@ -308,8 +310,8 @@ export class Channels extends Construct {
       sid: "DynamoReadAgents",
       actions: ["dynamodb:GetItem", "dynamodb:Query"],
       resources: [
-        `arn:aws:dynamodb:${region}:${accountId}:table/agent-studio-agents`,
-        `arn:aws:dynamodb:${region}:${accountId}:table/agent-studio-agents/index/*`,
+        agentsTable.tableArn,
+        `${agentsTable.tableArn}/index/*`,
       ],
     }));
 
