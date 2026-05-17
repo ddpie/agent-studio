@@ -511,6 +511,7 @@ def link_agent(source_agent_id: str, target_agent_id: str) -> str:
     extra[_A2A_INVOKE_URL_ENV_KEY] = invoke_base
     extra[_A2A_KEYS_ENV_KEY] = keys_blob
     meta["extra_env_vars"] = extra
+    meta["workspace_id"] = src_ws
     meta["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     # Persist metadata first so a concurrent update_agent won't clobber us.
@@ -638,6 +639,7 @@ def unlink_agent(source_agent_id: str, target_agent_id: str) -> str:
         extra.pop(_A2A_KEYS_ENV_KEY, None)
         extra.pop(_A2A_INVOKE_URL_ENV_KEY, None)
     meta["extra_env_vars"] = extra
+    meta["workspace_id"] = src_ws
     meta["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     _save_metadata(source_agent_id, meta)
