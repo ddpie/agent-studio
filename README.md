@@ -190,7 +190,7 @@ bash scripts/run-tests.sh
 
 | 场景 | 描述 | 链接 |
 |------|------|------|
-| 游戏内容工厂 | 9 个 Agent 组成创作→审核→翻译流水线，挂载世界观知识库，自动拦截版本泄露和设定冲突 | [docs/demos/game-content-factory](docs/demos/game-content-factory/) |
+| 游戏内容工厂 | 用自然语言编排验证第三条路：运营团队通过对话搭建 9-Agent 流水线（创作→审核→翻译），挂载世界观知识库，自动拦截版本泄露和设定冲突，不写代码 | [docs/demos/game-content-factory](docs/demos/game-content-factory/) |
 
 ---
 
@@ -377,4 +377,4 @@ A "do-everything" agent sounds ideal but proves fragile in practice. Too many to
 
 | Scenario | Description | Link |
 |------|------|------|
-| Game Content Factory | 9 agents form a create→review→translate pipeline backed by a lore knowledge base, automatically blocking version leaks and lore conflicts | [docs/demos/game-content-factory](docs/demos/game-content-factory/) |
+| Game Content Factory | A third way validated through natural-language orchestration: ops teams build a 9-agent pipeline (create→review→translate) via conversation, backed by a lore knowledge base that auto-blocks version leaks and lore conflicts — no code required | [docs/demos/game-content-factory](docs/demos/game-content-factory/) |
