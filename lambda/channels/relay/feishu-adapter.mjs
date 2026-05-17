@@ -74,12 +74,14 @@ export class FeishuAdapter {
       domain: platformConfig.domain === "lark" ? lark.Domain.Lark : lark.Domain.Feishu,
     });
 
-    // Create event dispatcher with handlers (one register() call per event type)
+    // Create event dispatcher with handlers (SDK register() takes an object map)
     const eventDispatcher = new lark.EventDispatcher({});
-    eventDispatcher.register("im.message.receive_v1", (data) => this.#handleMessage(data));
-    eventDispatcher.register("card.action.trigger", (data) => this.#handleCardAction(data));
-    eventDispatcher.register("im.chat.member.bot.added_v1", (data) => this.#handleBotAdded(data));
-    eventDispatcher.register("im.chat.member.bot.deleted_v1", (data) => this.#handleBotRemoved(data));
+    eventDispatcher.register({
+      "im.message.receive_v1": (data) => this.#handleMessage(data),
+      "card.action.trigger": (data) => this.#handleCardAction(data),
+      "im.chat.member.bot.added_v1": (data) => this.#handleBotAdded(data),
+      "im.chat.member.bot.deleted_v1": (data) => this.#handleBotRemoved(data),
+    });
 
     // Create WebSocket client
     this.#wsClient = new lark.WSClient({
