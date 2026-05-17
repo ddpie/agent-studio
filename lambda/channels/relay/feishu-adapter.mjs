@@ -85,11 +85,10 @@ export class FeishuAdapter {
     this.#wsClient = new lark.WSClient({
       appId: this.#appId,
       appSecret: this.#appSecret,
-      eventDispatcher,
       loggerLevel: lark.LoggerLevel.WARN,
     });
 
-    await this.#wsClient.start();
+    await this.#wsClient.start({ eventDispatcher });
     this.connected = true;
 
     console.log(`[FeishuAdapter] Connected: channelId=${this.#channelId}`);
