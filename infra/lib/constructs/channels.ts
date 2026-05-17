@@ -181,9 +181,8 @@ export class Channels extends Construct {
         bundling: {
           image: lambda.Runtime.NODEJS_22_X.bundlingImage,
           command: ["bash", "-c",
-            "cp package.json /asset-output/ && " +
-            "cp handler.mjs /asset-output/ && " +
-            "cd /asset-output && HOME=/tmp npm install --omit=dev"
+            "cp package.json package-lock.json *.mjs /asset-output/ && " +
+            "cd /asset-output && HOME=/tmp npm ci --omit=dev"
           ],
         },
       }),
@@ -219,9 +218,8 @@ export class Channels extends Construct {
         bundling: {
           image: lambda.Runtime.NODEJS_22_X.bundlingImage,
           command: ["bash", "-c",
-            "cp package.json /asset-output/ && " +
-            "cp handler.mjs /asset-output/ && " +
-            "cd /asset-output && HOME=/tmp npm install --omit=dev"
+            "cp package.json package-lock.json *.mjs /asset-output/ && " +
+            "cd /asset-output && HOME=/tmp npm ci --omit=dev"
           ],
         },
       }),
