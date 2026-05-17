@@ -67,22 +67,29 @@ export async function streamToReplier({ agentcore, agentArn, payload, sessionId,
       if (!chunk) continue;
 
       if (chunk.kind === "text") {
-        // Skip internal control markers from AgentCore SSE stream
-        if (
-          chunk.text.includes('"__tool"') ||
-          chunk.text.includes('"__keepalive"') ||
-          chunk.text.includes('"__error"') ||
-          chunk.text.includes('"__auto_continue"') ||
-          chunk.text.includes('"__file_content"') ||
-          chunk.text.includes('"__models"')
-        ) {
+        // Handle internal control markers — render some, skip others
+        if (chunk.text.includes('"__')) {
+          try {
+            const obj = JSON.parse(chunk.text);
+            if (obj.__tool === "start" && obj.name) {
+              accumulated += `\n🔧 *调用 ${obj.name}...*\n`;
+            } else if (obj.__tool === "result" && obj.name) {
+              accumulated += `\n> ✅ ${obj.name} 完成\n`;
+            }
+            // __tool end, __keepalive, __auto_continue, __error, __file_content, __models → skip
+          } catch { /* not valid JSON with __, skip */ }
           continue;
         }
         accumulated += chunk.text;
       } else if (chunk.kind === "keepalive") {
         continue;
       } else if (chunk.kind === "tool") {
-        continue;
+        // Already parsed as tool in parseChunk — render inline
+        if (chunk.phase === "start" && chunk.name) {
+          accumulated += `\n🔧 *调用 ${chunk.name}...*\n`;
+        } else if (chunk.phase === "end" && chunk.name) {
+          accumulated += `\n> ✅ ${chunk.name} 完成\n`;
+        }
       }
 
       // Flush if interval elapsed or char threshold reached
