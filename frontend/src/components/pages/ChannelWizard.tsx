@@ -143,25 +143,33 @@ export default function ChannelWizard({ onClose, onCreated }: ChannelWizardProps
               {t("channels.wizard_step1")}
             </p>
             <div className="grid grid-cols-3 gap-3">
-              {(["feishu", "dingtalk", "slack"] as Platform[]).map((p) => (
+              {(["feishu", "dingtalk", "slack"] as Platform[]).map((p) => {
+                const isAvailable = p === "feishu";
+                return (
                 <button
                   key={p}
+                  disabled={!isAvailable}
                   onClick={() => {
+                    if (!isAvailable) return;
                     setPlatform(p);
                     setChannelName(`${p}-bot`);
                   }}
                   className={`flex flex-col items-center gap-2 p-4 rounded-lg border transition-colors ${
-                    platform === p
-                      ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-                      : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    !isAvailable
+                      ? "border-gray-200 dark:border-gray-700 opacity-50 cursor-not-allowed"
+                      : platform === p
+                        ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                        : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
                   }`}
                 >
                   <MessageSquare className={`w-6 h-6 ${platform === p ? "text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-gray-400"}`} />
                   <span className={`text-xs font-medium ${platform === p ? "text-blue-700 dark:text-blue-300" : "text-gray-700 dark:text-gray-300"}`}>
                     {t(`channels.${p}`)}
                   </span>
+                  {!isAvailable && <span className="text-[10px] text-gray-400 dark:text-gray-500">Coming soon</span>}
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
