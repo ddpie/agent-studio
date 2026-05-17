@@ -1,46 +1,57 @@
 # Game Content Factory
 
-多 Agent 协作的游戏内容生产 + 审核流水线。策划用自然语言造 Agent，Agent 写完自动交给审核 Agent 守门。
+多 Agent 协作的游戏内容生产 + 审核流水线。3 个独立知识库分别由叙事组、法务组、本地化组维护，Agent 按需绑定多源 KB 交叉验证。
 
 ## 目录结构
 
 ```
 game-content-factory/
-├── kb/            # 知识库文档（上传到 Bedrock KB）
-│   ├── world/     # 世界观基础设定
-│   ├── characters/# 角色设定卡 × 6
-│   ├── locations/ # 地点设定 × 6
-│   ├── timeline/  # 时间线与事件
-│   └── guidelines/# 审核红线 + 对白风格 + 版本公开信息 + 术语表 + 翻译语感对照
-├── script.md      # 对 Meta-Agent 的完整对话脚本
+├── kb/
+│   ├── worldview/         # KB① 世界观设定（叙事组维护）
+│   │   ├── world/         # 世界观基础设定
+│   │   ├── characters/    # 角色设定卡 × 6
+│   │   ├── locations/     # 地点设定 × 6
+│   │   ├── timeline/      # 时间线与事件
+│   │   ├── 审核红线总表.md
+│   │   └── 版本公开信息总表.md
+│   ├── compliance/        # KB② 合规规则（法务组维护）
+│   │   ├── 合规审核细则.md
+│   │   ├── 文化敏感词禁忌表.md
+│   │   └── 全球概率型道具监管总表.md
+│   └── localization/      # KB③ 本地化规范（本地化组维护）
+│       ├── 术语表.md
+│       ├── 翻译语感对照表.md
+│       ├── 对白风格指南.md
+│       └── 本地化技术规范.md
+├── script.md              # 对 Meta-Agent 的完整对话脚本
 └── README.md
 ```
 
 ## 架构
 
 ```
-         ┌─→ worldview-reviewer (挂 KB，检索设定做判定)
-创作 Agent ─┼─→ emotion-reviewer  (语感打分)
-         └─→ compliance-reviewer (法律合规)
+         ┌─ KB①世界观 ─┐
+创作 Agent ─┼─ KB③本地化 ─┼─→ 世界观审核(KB①+KB②)
+         └─────────────┘  → 语感评审(KB①+KB③)
+                           → 合规审核(KB②)
 
 🔴BLOCK → 自动修改 → 重新送审（最多 3 轮）
-🟢PASS  → 输出成品
-3 轮未过 → 升级给人决策
+🟢PASS  → 输出成品 → 本地化翻译(KB③) → 译文校对(KB③+KB②)
 ```
 
 ## 9 个 Agent
 
-| Agent | 角色 | 绑 KB | Link 目标 |
+| Agent | 角色 | 绑定 KB | Link 目标 |
 |---|---|---|---|
-| worldview-reviewer | 世界观审核（三级判定 + KB 引用） | ✅ | — |
-| emotion-reviewer | 角色语感评审（1-10 打分） | ✅ | — |
-| compliance-reviewer | 法律合规审核 | — | — |
-| dialog-writer | NPC 对白创作（idle/剧情/战斗） | ✅ | → 三审 |
-| event-copywriter | 活动文案（公告/push/帖子） | — | → 世界观审核, 翻译, 合规 |
-| localizer | 本地化翻译（中→日/英/韩） | ✅ | → 译审 |
-| translation-reviewer | 译文校对 | ✅ | — |
-| community-responder | 社区回复起草 | ✅ | → 世界观审核 |
-| patch-notes-writer | 版本更新说明 | — | → 世界观审核, 合规 |
+| worldview-reviewer | 世界观审核 | ①+② | — |
+| emotion-reviewer | 角色语感评审 | ①+③ | — |
+| compliance-reviewer | 合规审核 | ② | — |
+| dialog-writer | 对白创作 | ①+③ | → 三审 |
+| event-copywriter | 活动文案 | ② | → 世界观审核, 合规, 翻译 |
+| localizer | 本地化翻译 | ③ | → 译审 |
+| translation-reviewer | 译文校对 | ③+② | — |
+| community-responder | 社区回复 | ①+② | → 世界观审核 |
+| patch-notes-writer | 版本更新说明 | ② | → 世界观审核, 合规 |
 
 ## 连接关系（10 条 link）
 
@@ -55,22 +66,32 @@ patch-notes-writer  → worldview-reviewer, compliance-reviewer
 ## 工厂特质
 
 - **专业分工** — 每个 Agent 精而专，prompt 短而聚焦
+- **独立演进** — 法务/叙事/本地化各自更新知识库，互不干扰
+- **多源检索** — 单个 Agent 可同时查询多个知识库交叉验证
 - **自动流转** — 创作完成即送审，无需人工中转
 - **有据可查** — 审核报告引用 KB 原文段落作为依据
 - **可组合** — 新增审核维度 = 新增 Agent + link
 - **可追溯** — 每步独立输出，问题定位到具体环节和规则
 
+## 独立演进
+
+3-KB 分治的核心收益：
+
+- **各团队自治** — 叙事组更新世界观、法务组更新合规规则、本地化组更新术语表，各自上传文档即可，互不干扰
+- **热更新生效** — 合规规则更新后，所有绑定 KB② 的 Agent 下次检索立即使用新规则，无需重新部署
+- **无需 Agent 重建** — 知识库内容变更不影响 Agent 代码，上传文档 → ingestion 完成 → 即时生效
+
 ## 使用
 
-打开 [script.md](script.md)，按顺序对 Meta-Agent 输入即可。script.md 分三部分：Part 1 搭建工厂（KB + Agent + 连接），Part 2 工厂运转（实际使用），Part 3 深度验证（边界案例）。
+打开 [script.md](script.md)，按顺序对 Meta-Agent 输入即可。script.md 分三部分：Part 1 搭建工厂（KB + Agent + 连接），Part 2 工厂运转（实际使用 + 热更新），Part 3 深度验证（边界案例）。
 
 ## 录制准备
 
-- Part 1 建议提前完成，录制时可快进或剪辑
-- 确认所有 Agent 状态 READY、KB ingestion 完成
-- Pre-warm all agents（各调用一次避免冷启动）
+- 提前 ingest 3 个知识库，确认 ingestion 状态全部 COMPLETE
+- 提前创建 6 个 Agent（剩余 3 个留到录制时 live 创建）
+- 准备"热更新"文档（Part 2 演示 KB 即时生效用）
+- Pre-warm 所有已创建的 Agent（各调用一次避免冷启动）
 - Dry-run Part 2 和 Part 3 prompts，确认输出符合预期
-- 审核类 Agent 设低 temperature 保证一致性
 
 ## 虚构游戏
 
