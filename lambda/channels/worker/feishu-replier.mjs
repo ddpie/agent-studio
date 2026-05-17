@@ -333,7 +333,7 @@ export class FeishuReplier {
 
     // Legacy card format (no schema field, top-level elements)
     const cardJson = {
-      config: { wide_screen_mode: true },
+      config: { wide_screen_mode: true, update_multi: true },
       header: {
         title: { tag: "plain_text", content: t(this.#lang, "selectPrompt") },
         template: "blue",
