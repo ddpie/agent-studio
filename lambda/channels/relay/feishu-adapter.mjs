@@ -201,7 +201,8 @@ export class FeishuAdapter {
       userId: operator?.open_id || "",
       action: {
         agentId: action?.value?.agentId || "",
-        cardId: data.token || data.context?.open_message_id || "",
+        cardToken: data.token || "",
+        messageId: data.context?.open_message_id || "",
       },
       timestamp: Date.now(),
     };

@@ -144,9 +144,8 @@ export async function handleCardAction(ddb, message, channelConfig, replier, acc
   }));
 
   // Update the selection card to show confirmation
-  const messageId = action.cardId;
-  if (messageId) {
-    await replier.updateCardToConfirmation(messageId, agentName, accessToken);
+  if (action.messageId) {
+    await replier.updateCardToConfirmation(action.messageId, agentName, accessToken);
   }
 
   // Send confirmation message

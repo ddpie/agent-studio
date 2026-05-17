@@ -240,9 +240,9 @@ export class FeishuReplier {
   /**
    * Update a selection card to show confirmation after user picks an agent.
    */
-  async updateCardToConfirmation(cardToken, agentName, accessToken) {
+  async updateCardToConfirmation(messageId, agentName, accessToken) {
     const updatedCard = {
-      config: { wide_screen_mode: true, update_multi: true },
+      config: { wide_screen_mode: true },
       header: {
         title: { tag: "plain_text", content: `✓ ${agentName}` },
         template: "green",
@@ -252,10 +252,10 @@ export class FeishuReplier {
       ],
     };
     try {
-      const resp = await fetch(`${FEISHU_BASE}/open-apis/interactive/v1/card/update`, {
-        method: "POST",
+      const resp = await fetch(`${FEISHU_BASE}/open-apis/im/v1/messages/${messageId}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ token: cardToken, card: updatedCard }),
+        body: JSON.stringify({ content: JSON.stringify(updatedCard) }),
       });
       const result = await resp.json().catch(() => ({}));
       if (result.code !== 0) {
