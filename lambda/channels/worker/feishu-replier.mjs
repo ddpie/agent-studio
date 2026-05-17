@@ -238,6 +238,29 @@ export class FeishuReplier {
   }
 
   /**
+   * Update a selection card to show confirmation after user picks an agent.
+   */
+  async updateCardToConfirmation(messageId, agentName, accessToken) {
+    const updatedCard = {
+      config: { wide_screen_mode: true },
+      header: {
+        title: { tag: "plain_text", content: `✓ ${agentName}` },
+        template: "green",
+      },
+      elements: [
+        { tag: "markdown", content: this.#lang === "zh" ? `已选择 **${agentName}**，直接发消息开始对话。` : `Selected **${agentName}**. Send a message to start chatting.` },
+      ],
+    };
+    try {
+      await fetch(`${FEISHU_BASE}/open-apis/im/v1/messages/${messageId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ content: JSON.stringify(updatedCard) }),
+      });
+    } catch { /* best-effort */ }
+  }
+
+  /**
    * Add a reaction emoji to a message (e.g., THINKING indicator).
    * Returns the reaction_id for later removal.
    */

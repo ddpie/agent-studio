@@ -143,6 +143,12 @@ export async function handleCardAction(ddb, message, channelConfig, replier, acc
     },
   }));
 
+  // Update the selection card to show confirmation
+  const messageId = action.cardId;
+  if (messageId) {
+    await replier.updateCardToConfirmation(messageId, agentName, accessToken);
+  }
+
   // Send confirmation message
   const lang = channelConfig.language || "zh";
   const confirmText = lang === "zh"

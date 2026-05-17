@@ -1320,6 +1320,7 @@
     "status_error": "Error",
     "status_provisioning": "Provisioning",
     "trigger_mode": "Trigger mode",
+    "trigger_mode_label": "Trigger Mode",
     "trigger_mention": "@mention only",
     "trigger_all": "All messages",
     "trigger_keyword": "Keyword trigger",

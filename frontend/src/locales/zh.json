@@ -1320,6 +1320,7 @@
     "status_error": "异常",
     "status_provisioning": "配置中",
     "trigger_mode": "触发方式",
+    "trigger_mode_label": "触发方式",
     "trigger_mention": "仅 @提及",
     "trigger_all": "所有消息",
     "trigger_keyword": "关键词触发",

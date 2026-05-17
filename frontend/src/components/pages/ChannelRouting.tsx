@@ -85,6 +85,11 @@ export default function ChannelRouting({ channel, onClose }: ChannelRoutingProps
             </label>
           ))}
         </div>
+        {triggerMode === "all" && (
+          <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1.5">
+            ⚠️ {t("channels.trigger_all_hint") || "Requires 'im:message:group_msg' permission on Feishu. Add it in 权限管理 on the Feishu Open Platform."}
+          </p>
+        )}
       </section>
 
       {/* Default Agent */}
