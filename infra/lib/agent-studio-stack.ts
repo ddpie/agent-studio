@@ -15,6 +15,7 @@ import { ScheduleRunner } from "./constructs/schedule-runner";
 import { WorkspaceBoundary } from "./constructs/workspace-boundary";
 import { McpRoles } from "./constructs/mcp-roles";
 import { KbVectors } from "./constructs/kb-vectors";
+import { Channels } from "./constructs/channels";
 import * as path from "path";
 
 export interface AgentStudioStackProps extends cdk.StackProps {
@@ -139,6 +140,9 @@ export class AgentStudioStack extends cdk.Stack {
       a2aKeysTable: database.a2aKeysTable,
       publicHost: process.env.AGENT_STUDIO_CLOUDFRONT_DOMAIN || "",
     });
+
+    // Channel Integration — relay, worker, reaper, tables
+    new Channels(this, "Channels", { config });
 
     new Cdn(this, "Cdn", {
       config,

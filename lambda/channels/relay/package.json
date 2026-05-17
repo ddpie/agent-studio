@@ -1,0 +1,12 @@
+{
+  "type": "module",
+  "name": "agent-studio-channel-relay",
+  "private": true,
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.62.0",
+    "@aws-sdk/client-lambda": "^3.1026.0",
+    "@aws-sdk/client-dynamodb": "^3.1026.0",
+    "@aws-sdk/lib-dynamodb": "^3.1026.0",
+    "@aws-sdk/client-secrets-manager": "^3.1026.0"
+  }
+}

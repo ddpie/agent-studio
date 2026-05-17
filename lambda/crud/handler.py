@@ -27,6 +27,7 @@ from crud.kiro_key import router as kiro_key_router
 from crud.chat import router as chat_router
 from crud.workspace_iam import router as workspace_iam_router
 from crud.kb import router as kb_router
+from crud.channels import router as channels_router
 
 logger = Logger(service="agent-studio-crud")
 
@@ -58,6 +59,7 @@ app.include_router(runs_router)
 app.include_router(kiro_key_router)
 app.include_router(chat_router)
 app.include_router(kb_router)
+app.include_router(channels_router)
 
 
 @app.get("/api/health")

@@ -1,0 +1,12 @@
+{
+  "name": "agent-studio-channel-worker",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Channel Worker Lambda — routes channel messages to agents and streams replies via CardKit",
+  "dependencies": {
+    "@aws-sdk/client-bedrock-agentcore": "^3.800.0",
+    "@aws-sdk/client-dynamodb": "^3.800.0",
+    "@aws-sdk/client-secrets-manager": "^3.800.0",
+    "@aws-sdk/lib-dynamodb": "^3.800.0"
+  }
+}

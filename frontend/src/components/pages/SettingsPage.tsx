@@ -1,4 +1,4 @@
-import { Settings, Download, Trash2, Shield, Sun, Moon, Monitor, Languages, Users, UserCog, KeyRound } from "lucide-react";
+import { Settings, Download, Trash2, Shield, Sun, Moon, Monitor, Languages, Users, UserCog, KeyRound, MessageSquare } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
@@ -9,10 +9,11 @@ import WorkspaceMembersTab from "./WorkspaceMembersTab";
 import WorkspaceSettingsTab from "./WorkspaceSettingsTab";
 import AccountSettingsTab from "./AccountSettingsTab";
 import IamPermissionsTab from "./IamPermissionsTab";
+import ChannelsTab from "./ChannelsTab";
 
-type TabId = "general" | "account" | "workspace" | "iam";
+type TabId = "general" | "account" | "workspace" | "iam" | "channels";
 
-const VALID_TABS: TabId[] = ["general", "account", "workspace", "iam"];
+const VALID_TABS: TabId[] = ["general", "account", "workspace", "iam", "channels"];
 
 export default function SettingsPage() {
   const { t } = useTranslation();
@@ -69,6 +70,7 @@ export default function SettingsPage() {
           { id: "general" as const, icon: Settings, label: t("settings.tabGeneral") },
           { id: "account" as const, icon: UserCog, label: t("settings.tabAccount") },
           { id: "workspace" as const, icon: Users, label: t("settings.tabWorkspace") },
+          { id: "channels" as const, icon: MessageSquare, label: t("channels.title") },
           ...(canSeeIam ? [{ id: "iam" as const, icon: KeyRound, label: t("settings.tabIam") }] : []),
         ]).map(({ id, icon: Icon, label }) => (
           <button
@@ -86,6 +88,8 @@ export default function SettingsPage() {
       </div>
 
       {tab === "iam" && canSeeIam && <IamPermissionsTab readOnly />}
+
+      {tab === "channels" && <ChannelsTab />}
 
       {tab === "account" && <AccountSettingsTab />}
 

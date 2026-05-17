@@ -1,0 +1,9 @@
+{
+  "name": "agent-studio-card-reaper",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1026.0",
+    "@aws-sdk/lib-dynamodb": "^3.1026.0"
+  }
+}
