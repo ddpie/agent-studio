@@ -37,15 +37,18 @@ export async function resolveRoute(ddb, message, channelConfig, replier, accessT
     return { action: "switch_sent" };
   }
 
+  // Strip @mention placeholders from content (Feishu encodes as @_user_N)
+  const userContent = (content || "").replace(/@_user_\d+/g, "").trim();
+
   // Group chat: /switch or /agents command → send selection card
-  if (chatType === "group" && content && (content.trim() === "/switch" || content.trim() === "/agents")) {
+  if (chatType === "group" && (userContent === "/switch" || userContent === "/agents")) {
     const agents = collectAvailableAgents(channelConfig);
     await replier.sendSelectionCard(chatId, agents, accessToken);
     return { action: "selection_sent" };
   }
 
-  // Group chat: empty @mention (no content) → send selection card
-  if (chatType === "group" && (!content || !content.trim())) {
+  // Group chat: empty @mention (no real content) → send selection card
+  if (chatType === "group" && !userContent) {
     const agents = collectAvailableAgents(channelConfig);
     await replier.sendSelectionCard(chatId, agents, accessToken);
     return { action: "selection_sent" };

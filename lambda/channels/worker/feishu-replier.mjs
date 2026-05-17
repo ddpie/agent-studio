@@ -238,6 +238,43 @@ export class FeishuReplier {
   }
 
   /**
+   * Add a reaction emoji to a message (e.g., THINKING indicator).
+   * Returns the reaction_id for later removal.
+   */
+  async addReaction(messageId, emojiType, accessToken) {
+    try {
+      const resp = await fetch(
+        `${FEISHU_BASE}/open-apis/im/v1/messages/${messageId}/reactions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ reaction_type: { emoji_type: emojiType } }),
+        }
+      );
+      const data = await resp.json();
+      return data?.data?.reaction_id || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Remove a previously added reaction.
+   */
+  async removeReaction(messageId, reactionId, accessToken) {
+    if (!reactionId) return;
+    try {
+      await fetch(
+        `${FEISHU_BASE}/open-apis/im/v1/messages/${messageId}/reactions/${reactionId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      );
+    } catch { /* best-effort */ }
+  }
+
+  /**
    * Send an agent selection card with buttons for each available agent.
    *
    * @param {string} chatId

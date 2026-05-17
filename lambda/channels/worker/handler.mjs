@@ -139,6 +139,12 @@ export async function handler(event) {
       agentId,
     });
 
+    // Add THINKING reaction to the user's message
+    let reactionId = null;
+    if (message.messageId) {
+      reactionId = await replier.addReaction(message.messageId, "THINKING", accessToken);
+    }
+
     // Create streaming card
     let ctx;
     let useCardKit = true;
@@ -190,6 +196,10 @@ export async function handler(event) {
       await updateChannelError(workspaceId, channelId, err.message);
       return { statusCode: 500, body: "agent_error" };
     } finally {
+      // Remove THINKING reaction
+      if (reactionId && message.messageId) {
+        await replier.removeReaction(message.messageId, reactionId, accessToken);
+      }
       // Remove from inflight
       if (useCardKit && ctx) {
         await removeInflight(ctx.cardId);
