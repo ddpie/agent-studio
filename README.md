@@ -356,3 +356,11 @@ agent-studio/
 ```bash
 bash scripts/run-tests.sh
 ```
+
+## 应用场景示例
+
+单体 Agent 什么都能做，但工具一多选不准、逻辑一复杂难以定位问题。拆成多个单职责 Agent，各司其职、按需检索、自动流转，才是生产级的做法。
+
+| 场景 | 描述 | 链接 |
+|------|------|------|
+| 游戏内容工厂 | 9 个 Agent 组成创作→审核→翻译流水线，挂载世界观知识库，自动拦截版本泄露和设定冲突 | [docs/demos/game-content-factory](docs/demos/game-content-factory/) |
