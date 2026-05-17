@@ -241,6 +241,7 @@ export class FeishuReplier {
    * Update a selection card to show confirmation after user picks an agent.
    */
   async updateCardToConfirmation(messageId, agentName, accessToken) {
+    console.log("updateCardToConfirmation called:", { messageId, agentName });
     const updatedCard = {
       config: { wide_screen_mode: true },
       header: {
@@ -258,9 +259,7 @@ export class FeishuReplier {
         body: JSON.stringify({ content: JSON.stringify(updatedCard) }),
       });
       const result = await resp.json().catch(() => ({}));
-      if (result.code !== 0) {
-        console.warn("Card update failed:", JSON.stringify(result).slice(0, 300));
-      }
+      console.log("Card update response:", JSON.stringify(result).slice(0, 300));
     } catch (err) { console.warn("Card update error:", err.message); }
   }
 
