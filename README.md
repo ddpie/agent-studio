@@ -186,7 +186,7 @@ bash scripts/run-tests.sh
 
 ## 应用场景示例
 
-单体 Agent 什么都能做，但工具一多选不准、逻辑一复杂难以定位问题。拆成多个单职责 Agent，各司其职、按需检索、自动流转，才是生产级的做法。
+一个"什么都会"的 Agent 理想丰满，实践脆弱。工具多了选不准，逻辑一复杂牵一发动全身，出了问题难以定位具体环节。拆分、专注、协作才是出路——每个 Agent 只做好一件事，扩展时不动现有环节，出了问题可追溯到具体环节和规则。
 
 | 场景 | 描述 | 链接 |
 |------|------|------|
@@ -373,7 +373,7 @@ bash scripts/run-tests.sh
 
 ## Example Scenarios
 
-A single "do-everything" agent sounds ideal but breaks in practice — too many tools cause selection errors, complex logic becomes brittle, and failures are hard to isolate. Splitting into focused, single-responsibility agents that collaborate is the production-grade approach.
+A "do-everything" agent sounds ideal but proves fragile in practice. Too many tools lead to selection errors, complex logic creates cascading failures, and when something breaks it's hard to pinpoint which step went wrong. The way out mirrors microservices: split, focus, collaborate — each agent does one thing well, new capabilities plug in without touching existing ones, and issues trace back to a specific step and rule.
 
 | Scenario | Description | Link |
 |------|------|------|
