@@ -43,14 +43,16 @@ export async function resolveRoute(ddb, message, channelConfig, replier, accessT
   // Group chat: /switch or /agents command → send selection card
   if (chatType === "group" && (userContent === "/switch" || userContent === "/agents")) {
     const agents = await collectAvailableAgents(channelConfig, ddb);
-    await replier.sendSelectionCard(chatId, agents, accessToken);
+    const currentSelection = await getSelection(ddb, channelId, `${chatId}#${userId}`);
+    await replier.sendSelectionCard(chatId, agents, accessToken, currentSelection?.agentId);
     return { action: "selection_sent" };
   }
 
   // Group chat: empty @mention (no real content) → send selection card
   if (chatType === "group" && !userContent) {
     const agents = await collectAvailableAgents(channelConfig, ddb);
-    await replier.sendSelectionCard(chatId, agents, accessToken);
+    const currentSelection = await getSelection(ddb, channelId, `${chatId}#${userId}`);
+    await replier.sendSelectionCard(chatId, agents, accessToken, currentSelection?.agentId);
     return { action: "selection_sent" };
   }
 
@@ -194,12 +196,12 @@ async function collectAvailableAgents(channelConfig, ddb) {
       IndexName: "workspace-index",
       KeyConditionExpression: "workspace_id = :ws",
       ExpressionAttributeValues: { ":ws": workspaceId },
-      ProjectionExpression: "agentId, #n",
+      ProjectionExpression: "agentId, #n, description",
       ExpressionAttributeNames: { "#n": "name" },
     }));
     return (resp.Items || [])
       .filter((item) => item.agentId)
-      .map((item) => ({ agentId: item.agentId, agentName: item.name || item.agentId }));
+      .map((item) => ({ agentId: item.agentId, agentName: item.name || item.agentId, description: item.description || "" }));
   } catch (err) {
     console.warn("Failed to query workspace agents:", err.message);
     // Fallback: return only what's in channel config

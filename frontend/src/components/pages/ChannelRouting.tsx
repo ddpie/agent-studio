@@ -16,6 +16,7 @@ export default function ChannelRouting({ channel, onClose }: ChannelRoutingProps
   const { agents } = useAgentListStore();
 
   const [defaultAgentId, setDefaultAgentId] = useState(channel.defaultAgentId);
+  const [triggerMode, setTriggerMode] = useState(channel.triggerMode || "mention");
   const [rules, setRules] = useState<RoutingRule[]>(channel.routingRules || []);
   const [saving, setSaving] = useState(false);
 
@@ -36,6 +37,7 @@ export default function ChannelRouting({ channel, onClose }: ChannelRoutingProps
     try {
       await updateChannel(channel.channelId, {
         defaultAgentId,
+        triggerMode,
         routingRules: rules.filter((r) => r.agentId),
       });
       toast.success(t("common.success"));
@@ -62,6 +64,28 @@ export default function ChannelRouting({ channel, onClose }: ChannelRoutingProps
           {t("channels.routing")} — {channel.channelName}
         </h3>
       </div>
+
+      {/* Trigger Mode */}
+      <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <label className="block text-[10px] font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400 mb-1">
+          {t("channels.trigger_mode_label") || "Trigger Mode"}
+        </label>
+        <div className="flex gap-3 mt-1">
+          {(["mention", "all", "keyword"] as const).map((mode) => (
+            <label key={mode} className="flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 cursor-pointer">
+              <input
+                type="radio"
+                name="triggerMode"
+                value={mode}
+                checked={triggerMode === mode}
+                onChange={() => setTriggerMode(mode)}
+                className="accent-blue-500"
+              />
+              {t(`channels.trigger_${mode}`)}
+            </label>
+          ))}
+        </div>
+      </section>
 
       {/* Default Agent */}
       <section className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">

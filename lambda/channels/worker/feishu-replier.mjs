@@ -281,12 +281,12 @@ export class FeishuReplier {
    * @param {Array<{agentId: string, agentName: string}>} agents
    * @param {string} accessToken
    */
-  async sendSelectionCard(chatId, agents, accessToken) {
-    // Build buttons (legacy card format — schema V2 doesn't support action tag)
+  async sendSelectionCard(chatId, agents, accessToken, currentAgentId = null) {
+    // Build buttons — highlight current selection
     const actions = agents.map((agent) => ({
       tag: "button",
-      text: { tag: "plain_text", content: agent.agentName },
-      type: "primary",
+      text: { tag: "plain_text", content: agent.agentId === currentAgentId ? `✓ ${agent.agentName}` : agent.agentName },
+      type: agent.agentId === currentAgentId ? "default" : "primary",
       value: { agentId: agent.agentId },
     }));
 
@@ -296,6 +296,15 @@ export class FeishuReplier {
       actionElements.push({ tag: "action", actions: actions.slice(i, i + 3) });
     }
 
+    // Build description list
+    const descLines = agents
+      .map((a) => `• **${a.agentName}**${a.description ? ` — ${a.description}` : ""}`)
+      .join("\n");
+
+    const currentHint = currentAgentId
+      ? `当前: **${agents.find(a => a.agentId === currentAgentId)?.agentName || currentAgentId}**\n\n`
+      : "";
+
     // Legacy card format (no schema field, top-level elements)
     const cardJson = {
       config: { wide_screen_mode: true },
@@ -304,7 +313,8 @@ export class FeishuReplier {
         template: "blue",
       },
       elements: [
-        { tag: "markdown", content: `**${t(this.#lang, "selectPrompt")}**` },
+        { tag: "markdown", content: `${currentHint}${descLines}` },
+        { tag: "hr" },
         ...actionElements,
       ],
     };
