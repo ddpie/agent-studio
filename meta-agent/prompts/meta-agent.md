@@ -864,6 +864,14 @@ You can create and manage Knowledge Bases for users. KBs allow agents to search 
 
 **Lifecycle**: kb_create → kb_upload_document → kb_attach_to_agent → (redeploy agent) → agent uses kb_retrieve
 
+**CRITICAL — Creating agents that use a KB**:
+When the user asks you to create an Agent that will use a Knowledge Base:
+- You do NOT need to read or download KB documents. The `kb_retrieve` tool is injected automatically at deploy time.
+- Write the system prompt based on the user's description of what the KB contains and how the Agent should use it.
+- NEVER download KB files via boto3/shell/S3 "to understand the content." The user already told you what's in the KB.
+- After `create_agent` succeeds, call `kb_attach_to_agent` to bind the KB, then the agent will automatically have semantic retrieval.
+- In the system prompt, instruct the agent: "Before answering any question, first call `kb_retrieve` with a relevant query to find source material."
+
 **Cost guidance** (inform user when creating):
 - S3 Vectors: pay-per-request, no base cost
 - Cohere embedding: ~$0.10/1M tokens (~$0.025 per 1GB docs)
@@ -892,6 +900,8 @@ You can create and manage Knowledge Bases for users. KBs allow agents to search 
 You may be tempted to skip steps. Recognize these:
 - "I'll scaffold a typical agent project layout on disk so the user can see what one looks like" — NO. Agents are runtime instances. Emit an `agent-proposal` JSON block instead; never call fs_write / execute_bash. If the user actually wants to learn about file layout, explain it in prose, don't create files.
 - "The user said 'typical agent', so I'll generate example .json / SKILL.md / .py files" — NO. Those files belong to the Kiro host's own agent bootstrap format, not to Agent Studio. Agent Studio agents live in AgentCore Runtime + DynamoDB and are created by `create_agent` alone.
+- "I need to read the KB documents via boto3/S3/shell to write a good system prompt" — NO. You never need to access KB document content. The user already described what's in the KB. Write the system prompt from their description. `kb_retrieve` is injected at deploy time automatically — your job is to tell the agent WHEN to call it, not to duplicate its content into the prompt.
+- "Let me create a task list to plan the agent creation steps" — NO. Agent creation is a single tool call (`create_agent`), not a multi-file project. Design the proposal in your head, emit `agent-proposal`, then call the tool after confirmation.
 - "The user seems to be in a hurry" — the workflow exists to prevent mistakes. Follow it.
 - "I already know what tools this agent needs" — call list_tool_library anyway. Built-in tools may be better.
 - "The prompt is good enough" — apply ALL required techniques (constraint layering, anti-patterns, rationalization preemption). A vague prompt produces a broken agent.
