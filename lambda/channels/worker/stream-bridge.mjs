@@ -67,8 +67,15 @@ export async function streamToReplier({ agentcore, agentArn, payload, sessionId,
       if (!chunk) continue;
 
       if (chunk.kind === "text") {
-        // Skip any internal markers (all use "__" prefix: __tool, __auto_continue, __error, etc.)
-        if (chunk.text.includes('"__')) {
+        // Skip internal control markers from AgentCore SSE stream
+        if (
+          chunk.text.includes('"__tool"') ||
+          chunk.text.includes('"__keepalive"') ||
+          chunk.text.includes('"__error"') ||
+          chunk.text.includes('"__auto_continue"') ||
+          chunk.text.includes('"__file_content"') ||
+          chunk.text.includes('"__models"')
+        ) {
           continue;
         }
         accumulated += chunk.text;
