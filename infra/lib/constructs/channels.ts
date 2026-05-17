@@ -142,10 +142,16 @@ export class Channels extends Construct {
       cpu: 256,
       memoryLimitMiB: 512,
       taskRole: relayRole,
+      runtimePlatform: {
+        cpuArchitecture: ecs.CpuArchitecture.ARM64,
+        operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
+      },
     });
 
     taskDef.addContainer("relay", {
-      image: ecs.ContainerImage.fromAsset("../lambda/channels/relay"),
+      image: ecs.ContainerImage.fromAsset("../lambda/channels/relay", {
+        platform: cdk.aws_ecr_assets.Platform.LINUX_ARM64,
+      }),
       logging: ecs.LogDrivers.awsLogs({
         logGroup: relayLogGroup,
         streamPrefix: "relay",
