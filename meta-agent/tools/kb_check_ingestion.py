@@ -17,7 +17,7 @@ def kb_check_ingestion(kb_id: str, ingestion_job_id: str = "") -> str:
         ingestion_job_id: Specific job ID. If empty, checks the most recent job.
 
     Returns:
-        JSON with status, documents_processed, documents_failed, failure_reasons.
+        JSON with summary (human-readable), status, total_documents_processed, documents_failed, documents_new, documents_updated, documents_unchanged, failure_reasons.
     """
     ws_id = current_workspace()
     if not ws_id:
