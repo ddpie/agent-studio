@@ -161,12 +161,15 @@ def get_knowledge_base(wsId: str, kbId: str):
             )
             job = job_resp["ingestionJob"]
             stats = job.get("statistics", {})
+            scanned = stats.get("numberOfDocumentsScanned", 0)
+            failed = stats.get("numberOfDocumentsFailed", 0)
             kb["ingestion"] = {
                 "jobId": last_job,
                 "status": job["status"],
-                "documentsScanned": stats.get("numberOfDocumentsScanned", 0),
+                "documentsScanned": scanned,
                 "documentsIndexed": stats.get("numberOfNewDocumentsIndexed", 0) + stats.get("numberOfModifiedDocumentsIndexed", 0),
-                "documentsFailed": stats.get("numberOfDocumentsFailed", 0),
+                "documentsFailed": failed,
+                "processedSuccessfully": scanned - failed,
                 "failureReasons": job.get("failureReasons", []),
             }
         except Exception:

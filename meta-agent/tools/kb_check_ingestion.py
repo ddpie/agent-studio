@@ -48,12 +48,26 @@ def kb_check_ingestion(kb_id: str, ingestion_job_id: str = "") -> str:
         job = job_resp["ingestionJob"]
         stats = job.get("statistics", {})
 
+        scanned = stats.get("numberOfDocumentsScanned", 0)
+        new_indexed = stats.get("numberOfNewDocumentsIndexed", 0)
+        modified = stats.get("numberOfModifiedDocumentsIndexed", 0)
+        failed = stats.get("numberOfDocumentsFailed", 0)
+        successful = scanned - failed
+
+        if failed == 0:
+            summary = f"全部 {scanned} 个文档索引完成（{new_indexed} 个新增，{modified} 个更新，{scanned - new_indexed - modified} 个无变化）"
+        else:
+            summary = f"{scanned} 个文档中 {successful} 个成功，{failed} 个失败"
+
         return json.dumps({
             "ingestion_job_id": job_id,
             "status": job["status"],
-            "documents_scanned": stats.get("numberOfDocumentsScanned", 0),
-            "documents_indexed": stats.get("numberOfNewDocumentsIndexed", 0) + stats.get("numberOfModifiedDocumentsIndexed", 0),
-            "documents_failed": stats.get("numberOfDocumentsFailed", 0),
+            "summary": summary,
+            "total_documents_processed": successful,
+            "documents_failed": failed,
+            "documents_new": new_indexed,
+            "documents_updated": modified,
+            "documents_unchanged": scanned - new_indexed - modified - failed,
             "failure_reasons": job.get("failureReasons", []),
             "started_at": str(job.get("startedAt", "")),
             "updated_at": str(job.get("updatedAt", "")),

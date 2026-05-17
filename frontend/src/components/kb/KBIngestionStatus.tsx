@@ -7,6 +7,7 @@ interface IngestionInfo {
   documentsScanned: number;
   documentsIndexed: number;
   documentsFailed: number;
+  processedSuccessfully?: number;
   failureReasons?: string[];
 }
 
@@ -73,7 +74,7 @@ export default function KBIngestionStatus({ ingestion, onRefresh }: Props) {
       <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
         <Clock className="w-4 h-4 text-gray-400 dark:text-gray-500" />
         <span className="text-xs text-gray-500 dark:text-gray-400">
-          No indexing jobs yet
+          {t("kb.ingestionNone")}
         </span>
       </div>
     );
@@ -100,8 +101,9 @@ export default function KBIngestionStatus({ ingestion, onRefresh }: Props) {
           </span>
         </div>
         <div className="mt-1 text-[11px] text-green-600 dark:text-green-400 ml-6">
-          {ingestion.documentsScanned} scanned / {ingestion.documentsIndexed}{" "}
-          indexed / {ingestion.documentsFailed} failed
+          {ingestion.documentsFailed === 0
+            ? t("kb.ingestionStatsSuccess", { count: ingestion.processedSuccessfully ?? ingestion.documentsScanned })
+            : t("kb.ingestionStatsPartial", { success: (ingestion.processedSuccessfully ?? ingestion.documentsScanned) - ingestion.documentsFailed, failed: ingestion.documentsFailed })}
         </div>
       </div>
     );
