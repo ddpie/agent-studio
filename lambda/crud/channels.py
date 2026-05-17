@@ -91,12 +91,18 @@ def _channel_response(item: dict) -> dict:
         "channelType": item.get("channelType", ""),
         "channelName": item.get("channelName", ""),
         "defaultAgentId": item.get("defaultAgentId", ""),
+        "routingMode": item.get("routingMode", "single"),
+        "routingRules": item.get("routingRules", []),
         "platformConfig": item.get("platformConfig", {}),
-        "triggerMode": item.get("triggerMode", "at_bot"),
+        "triggerMode": item.get("triggerMode", "mention"),
         "maxHistoryTurns": item.get("maxHistoryTurns", DEFAULT_HISTORY_TURNS),
         "language": item.get("language", "zh"),
         "status": item.get("status", "provisioning"),
         "configVersion": item.get("configVersion", 1),
+        "lastMessageAt": item.get("lastMessageAt"),
+        "messageCount": item.get("messageCount", 0),
+        "lastError": item.get("lastError"),
+        "errorCount": item.get("errorCount", 0),
         "createdAt": item.get("createdAt", ""),
         "updatedAt": item.get("updatedAt", ""),
         "createdBy": item.get("createdBy", ""),
@@ -335,6 +341,22 @@ def update_channel(wsId: str, chId: str):
             return bad_request(f"maxHistoryTurns must be an integer between 0 and {MAX_HISTORY_TURNS}")
         update_expr_parts.append("maxHistoryTurns = :mht")
         expr_attr_values[":mht"] = mht
+
+    # routingRules
+    if "routingRules" in body:
+        rules = body["routingRules"]
+        if not isinstance(rules, list):
+            return bad_request("routingRules must be a list")
+        update_expr_parts.append("routingRules = :rr")
+        expr_attr_values[":rr"] = rules
+
+    # routingMode
+    if "routingMode" in body:
+        rm = (body["routingMode"] or "").strip()
+        if rm not in ("single", "per-group", "command"):
+            return bad_request("routingMode must be one of: single, per-group, command")
+        update_expr_parts.append("routingMode = :rm")
+        expr_attr_values[":rm"] = rm
 
     # language
     if "language" in body:
