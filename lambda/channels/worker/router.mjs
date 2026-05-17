@@ -130,18 +130,23 @@ export async function handleCardAction(ddb, message, channelConfig, replier, acc
   const agent = agents.find((a) => a.agentId === agentId);
   const agentName = agent ? agent.agentName : agentId;
 
-  // Store selection — different key for group vs p2p
-  const selectionKey = chatType === "group" ? `${chatId}#${userId}` : `p2p#${userId}`;
-  await ddb.send(new PutCommand({
-    TableName: HISTORY_TABLE,
-    Item: {
-      pk: `${channelId}#${selectionKey}`,
-      sk: 0,
-      agentId,
-      agentName,
-      selectedAt: new Date().toISOString(),
-    },
-  }));
+  // Store selection under both keys — card_action events lack reliable
+  // chatType detection (all Feishu chat_ids start with oc_), so we write
+  // both group-style and p2p-style keys to guarantee lookup hits.
+  const groupKey = `${chatId}#${userId}`;
+  const p2pKey = `p2p#${userId}`;
+  const selectionItem = { agentId, agentName, selectedAt: new Date().toISOString() };
+
+  await Promise.all([
+    ddb.send(new PutCommand({
+      TableName: HISTORY_TABLE,
+      Item: { pk: `${channelId}#${groupKey}`, sk: 0, ...selectionItem },
+    })),
+    ddb.send(new PutCommand({
+      TableName: HISTORY_TABLE,
+      Item: { pk: `${channelId}#${p2pKey}`, sk: 0, ...selectionItem },
+    })),
+  ]);
 
   // Update the selection card to show confirmation
   if (action.messageId) {
