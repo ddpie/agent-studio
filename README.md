@@ -18,6 +18,14 @@
 - **Channel 集成** — Agent 接入飞书 / Slack / 钉钉，用户在 IM 中直接对话，流式卡片回复；零公网端点暴露（全部出站 WebSocket）
 - **Marketplace** — 跨 workspace 发布和克隆 Agent / Skill / Tool，元数据公开，源码克隆后才可见
 
+## 应用场景示例
+
+一个"什么都会"的 Agent 理想丰满，实践脆弱。工具多了选不准，逻辑一复杂牵一发动全身，出了问题难以定位具体环节。这和单体应用的困境如出一辙：拆分、专注、协作才是出路。业务团队通常面临两个选择：忍受单体 Agent 复杂度膨胀带来的脆弱，或者等工程团队逐个开发、联调、部署垂类 Agent。
+
+| 场景 | 描述 | 链接 |
+|------|------|------|
+| 游戏内容工厂 | 用自然语言编排验证第三条路：运营团队通过对话搭建 9-Agent 流水线（创作→审核→翻译），挂载世界观知识库，自动拦截版本泄露和设定冲突，不写代码 | [docs/demos/game-content-factory](docs/demos/game-content-factory/) |
+
 ## Meta-Agent 能力总览
 
 Meta-Agent 内置 47 个工具，覆盖 Agent 从创建到运维的完整生命周期：
@@ -184,14 +192,6 @@ agent-studio/
 bash scripts/run-tests.sh
 ```
 
-## 应用场景示例
-
-一个"什么都会"的 Agent 理想丰满，实践脆弱。工具多了选不准，逻辑一复杂牵一发动全身，出了问题难以定位具体环节。这和单体应用的困境如出一辙：拆分、专注、协作才是出路。业务团队通常面临两个选择：忍受单体 Agent 复杂度膨胀带来的脆弱，或者等工程团队逐个开发、联调、部署垂类 Agent。
-
-| 场景 | 描述 | 链接 |
-|------|------|------|
-| 游戏内容工厂 | 用自然语言编排验证第三条路：运营团队通过对话搭建 9-Agent 流水线（创作→审核→翻译），挂载世界观知识库，自动拦截版本泄露和设定冲突，不写代码 | [docs/demos/game-content-factory](docs/demos/game-content-factory/) |
-
 ---
 
 # Agent Studio (English)
@@ -213,6 +213,14 @@ An agent orchestration platform on AWS Bedrock AgentCore. Describe what you need
 - **Platform-level observability** — Trace timeline, latency percentiles, error rates, and token costs aggregated per agent and per workspace on a single screen.
 - **Channel integration** — Connect agents to Feishu / Slack / DingTalk; users chat directly in IM with streaming card replies. Zero public endpoints (all outbound WebSocket).
 - **Marketplace** — Publish and clone agents / skills / tools across workspaces; metadata is public, source stays private until cloned.
+
+## Example Scenarios
+
+A "do-everything" agent sounds ideal but proves fragile in practice. Too many tools lead to selection errors, complex logic creates cascading failures, and when something breaks it's hard to pinpoint which step went wrong. This mirrors the monolith problem in software: split, focus, collaborate is the way out. Teams typically face two choices: tolerate the brittleness of a bloated monolith agent, or wait for engineering to build, integrate, and deploy specialized agents one by one.
+
+| Scenario | Description | Link |
+|------|------|------|
+| Game Content Factory | A third way validated through natural-language orchestration: ops teams build a 9-agent pipeline (create→review→translate) via conversation, backed by a lore knowledge base that auto-blocks version leaks and lore conflicts — no code required | [docs/demos/game-content-factory](docs/demos/game-content-factory/) |
 
 ## Meta-Agent Capabilities
 
@@ -371,10 +379,3 @@ agent-studio/
 bash scripts/run-tests.sh
 ```
 
-## Example Scenarios
-
-A "do-everything" agent sounds ideal but proves fragile in practice. Too many tools lead to selection errors, complex logic creates cascading failures, and when something breaks it's hard to pinpoint which step went wrong. This mirrors the monolith problem in software: split, focus, collaborate is the way out. Teams typically face two choices: tolerate the brittleness of a bloated monolith agent, or wait for engineering to build, integrate, and deploy specialized agents one by one.
-
-| Scenario | Description | Link |
-|------|------|------|
-| Game Content Factory | A third way validated through natural-language orchestration: ops teams build a 9-agent pipeline (create→review→translate) via conversation, backed by a lore knowledge base that auto-blocks version leaks and lore conflicts — no code required | [docs/demos/game-content-factory](docs/demos/game-content-factory/) |
