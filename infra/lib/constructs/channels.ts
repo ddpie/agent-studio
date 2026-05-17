@@ -256,7 +256,7 @@ export class Channels extends Construct {
 
     relayRole.addToPolicy(new iam.PolicyStatement({
       sid: "DynamoHeartbeat",
-      actions: ["dynamodb:PutItem"],
+      actions: ["dynamodb:PutItem", "dynamodb:UpdateItem"],
       resources: [this.channelsTable.tableArn],
     }));
 

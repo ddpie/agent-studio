@@ -163,7 +163,7 @@ export class AdapterManager {
    * @param {object} channel — DDB item
    */
   async #startAdapter(channel) {
-    const channelId = channel.channelId;
+    const channelId = channel.sk;
     const channelType = channel.channelType;
 
     // Only Feishu supported in V1
@@ -215,7 +215,7 @@ export class AdapterManager {
   #scheduleRestart(channel) {
     if (this.#stopped) return;
 
-    const channelId = channel.channelId;
+    const channelId = channel.sk;
     console.log(
       `[AdapterManager] Scheduling restart for ${channelId} in ${RESTART_DELAY_MS}ms`,
     );
@@ -260,7 +260,7 @@ export class AdapterManager {
       const currentIds = new Set();
 
       for (const channel of channels) {
-        const channelId = channel.channelId;
+        const channelId = channel.sk;
         currentIds.add(channelId);
 
         const existing = this.#adapters.get(channelId);

@@ -67,7 +67,7 @@ async function loadSecrets() {
   const secrets = new Map();
 
   for (const channel of channels) {
-    const channelId = channel.channelId;
+    const channelId = channel.sk;
     const secretArn = channel.secretArn;
 
     if (!secretArn) {
