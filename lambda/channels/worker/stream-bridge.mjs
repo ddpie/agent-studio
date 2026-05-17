@@ -67,11 +67,14 @@ export async function streamToReplier({ agentcore, agentArn, payload, sessionId,
       if (!chunk) continue;
 
       if (chunk.kind === "text") {
+        // Skip any text that looks like a tool marker (double-encoded or partial)
+        if (chunk.text.includes('"__tool"') || chunk.text.includes("__tool")) {
+          continue;
+        }
         accumulated += chunk.text;
       } else if (chunk.kind === "keepalive") {
         continue;
       } else if (chunk.kind === "tool") {
-        // For now, ignore tool markers in card output
         continue;
       }
 

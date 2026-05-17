@@ -328,7 +328,9 @@ export class FeishuReplier {
       }
     );
 
-    if (!resp.ok) {
+    const respData = await resp.json().catch(() => ({}));
+    if (!resp.ok || respData.code !== 0) {
+      console.warn("Selection card send failed:", JSON.stringify(respData).slice(0, 300));
       const names = agents.map((a) => a.agentName).join(", ");
       await this.sendFallbackMessage(chatId, `${t(this.#lang, "selectPrompt")} ${names}`, accessToken);
     }
