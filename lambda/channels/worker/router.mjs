@@ -32,7 +32,7 @@ export async function resolveRoute(ddb, message, channelConfig, replier, accessT
   // Handle /switch command (private chat)
   if (chatType === "p2p" && content && content.trim() === "/switch") {
     await clearSelection(ddb, channelId, `p2p#${userId}`);
-    const agents = collectAvailableAgents(channelConfig);
+    const agents = await collectAvailableAgents(channelConfig, ddb);
     await replier.sendSelectionCard(chatId, agents, accessToken);
     return { action: "switch_sent" };
   }
@@ -42,14 +42,14 @@ export async function resolveRoute(ddb, message, channelConfig, replier, accessT
 
   // Group chat: /switch or /agents command → send selection card
   if (chatType === "group" && (userContent === "/switch" || userContent === "/agents")) {
-    const agents = collectAvailableAgents(channelConfig);
+    const agents = await collectAvailableAgents(channelConfig, ddb);
     await replier.sendSelectionCard(chatId, agents, accessToken);
     return { action: "selection_sent" };
   }
 
   // Group chat: empty @mention (no real content) → send selection card
   if (chatType === "group" && !userContent) {
-    const agents = collectAvailableAgents(channelConfig);
+    const agents = await collectAvailableAgents(channelConfig, ddb);
     await replier.sendSelectionCard(chatId, agents, accessToken);
     return { action: "selection_sent" };
   }
@@ -59,7 +59,7 @@ export async function resolveRoute(ddb, message, channelConfig, replier, accessT
     // Check if user has a per-user selection in this group
     const groupSelection = await getSelection(ddb, channelId, `${chatId}#${userId}`);
     if (groupSelection) {
-      const agents = collectAvailableAgents(channelConfig);
+      const agents = await collectAvailableAgents(channelConfig, ddb);
       const agentExists = agents.some((a) => a.agentId === groupSelection.agentId);
       if (agentExists) {
         return { action: "invoke", agentId: groupSelection.agentId, agentName: groupSelection.agentName || groupSelection.agentId };
@@ -87,7 +87,7 @@ export async function resolveRoute(ddb, message, channelConfig, replier, accessT
 
   if (selection) {
     // Check if agent still exists in config (stale detection)
-    const agents = collectAvailableAgents(channelConfig);
+    const agents = await collectAvailableAgents(channelConfig, ddb);
     const agentExists = agents.some((a) => a.agentId === selection.agentId);
 
     if (!agentExists) {
@@ -104,7 +104,7 @@ export async function resolveRoute(ddb, message, channelConfig, replier, accessT
   }
 
   // No selection — send selection card
-  const agents = collectAvailableAgents(channelConfig);
+  const agents = await collectAvailableAgents(channelConfig, ddb);
   await replier.sendSelectionCard(chatId, agents, accessToken);
   return { action: "selection_sent" };
 }
@@ -124,7 +124,7 @@ export async function handleCardAction(ddb, message, channelConfig, replier, acc
   const { agentId } = action;
 
   // Resolve agent name from config
-  const agents = collectAvailableAgents(channelConfig);
+  const agents = await collectAvailableAgents(channelConfig, ddb);
   const agent = agents.find((a) => a.agentId === agentId);
   const agentName = agent ? agent.agentName : agentId;
 
@@ -180,31 +180,33 @@ async function clearSelection(ddb, channelId, selectionKey) {
   }));
 }
 
+const AGENTS_TABLE = process.env.AGENTS_TABLE || "agent-studio-agents";
+
 /**
- * Collect all available agents from channel config for the selection card.
- * Sources: defaultAgentId + agents referenced in routingRules.
+ * Collect all available agents from channel config, enriched with display names from agents table.
  */
-function collectAvailableAgents(channelConfig) {
-  const agentMap = new Map();
-
-  // Default agent always available
-  if (channelConfig.defaultAgentId) {
-    agentMap.set(channelConfig.defaultAgentId, {
-      agentId: channelConfig.defaultAgentId,
-      agentName: channelConfig.defaultAgentName || channelConfig.defaultAgentId,
-    });
+async function collectAvailableAgents(channelConfig, ddb) {
+  const agentIds = new Set();
+  if (channelConfig.defaultAgentId) agentIds.add(channelConfig.defaultAgentId);
+  for (const rule of (channelConfig.routingRules || [])) {
+    if (rule.agentId) agentIds.add(rule.agentId);
   }
 
-  // Agents from routing rules
-  const rules = channelConfig.routingRules || [];
-  for (const rule of rules) {
-    if (rule.agentId && !agentMap.has(rule.agentId)) {
-      agentMap.set(rule.agentId, {
-        agentId: rule.agentId,
-        agentName: rule.agentName || rule.agentId,
-      });
-    }
+  const agents = [];
+  for (const agentId of agentIds) {
+    let agentName = agentId;
+    try {
+      const resp = await ddb.send(new GetCommand({
+        TableName: AGENTS_TABLE,
+        Key: { agentId },
+        ProjectionExpression: "agentId, #n, description",
+        ExpressionAttributeNames: { "#n": "name" },
+      }));
+      if (resp.Item) {
+        agentName = resp.Item.name || agentId;
+      }
+    } catch { /* fallback to ID */ }
+    agents.push({ agentId, agentName });
   }
-
-  return Array.from(agentMap.values());
+  return agents;
 }
