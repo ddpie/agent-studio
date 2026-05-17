@@ -1323,6 +1323,7 @@
     "trigger_mode_label": "触发方式",
     "trigger_mention": "仅 @提及",
     "trigger_all": "所有消息",
+    "trigger_all_hint": "需要在飞书开放平台添加「获取群组中所有消息」(im:message:group_msg) 权限并重新发布版本。",
     "trigger_keyword": "关键词触发",
     "wizard_step1": "选择平台",
     "wizard_step2": "配置指引",

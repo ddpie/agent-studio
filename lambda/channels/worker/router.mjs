@@ -202,12 +202,16 @@ async function collectAvailableAgents(channelConfig, ddb) {
       IndexName: "workspace-index",
       KeyConditionExpression: "workspace_id = :ws",
       ExpressionAttributeValues: { ":ws": workspaceId },
-      ProjectionExpression: "agentId, #n, description",
+      ProjectionExpression: "agentId, #n, display_name, description",
       ExpressionAttributeNames: { "#n": "name" },
     }));
     return (resp.Items || [])
       .filter((item) => item.agentId)
-      .map((item) => ({ agentId: item.agentId, agentName: item.name || item.agentId, description: item.description || "" }));
+      .map((item) => ({
+        agentId: item.agentId,
+        agentName: item.display_name || item.name || item.agentId,
+        description: item.description || "",
+      }));
   } catch (err) {
     console.warn("Failed to query workspace agents:", err.message);
     // Fallback: return only what's in channel config

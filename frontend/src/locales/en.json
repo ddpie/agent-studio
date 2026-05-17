@@ -1323,6 +1323,7 @@
     "trigger_mode_label": "Trigger Mode",
     "trigger_mention": "@mention only",
     "trigger_all": "All messages",
+    "trigger_all_hint": "Requires 'im:message:group_msg' permission on Feishu Open Platform. Add it and republish your app.",
     "trigger_keyword": "Keyword trigger",
     "wizard_step1": "Select Platform",
     "wizard_step2": "Setup Guide",
