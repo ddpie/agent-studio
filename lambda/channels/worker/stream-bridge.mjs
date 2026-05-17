@@ -67,8 +67,8 @@ export async function streamToReplier({ agentcore, agentArn, payload, sessionId,
       if (!chunk) continue;
 
       if (chunk.kind === "text") {
-        // Skip any text that looks like a tool marker (double-encoded or partial)
-        if (chunk.text.includes('"__tool"') || chunk.text.includes("__tool")) {
+        // Skip any internal markers (all use "__" prefix: __tool, __auto_continue, __error, etc.)
+        if (chunk.text.includes('"__')) {
           continue;
         }
         accumulated += chunk.text;
