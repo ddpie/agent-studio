@@ -56,8 +56,12 @@ export default function WorkspaceSwitcher() {
       }
       window.location.reload();
     } catch (err) {
-      const msg = err instanceof ApiError ? err.body?.error : undefined;
-      toast.error(msg || t("workspace.create.failed"));
+      if (err instanceof ApiError && err.body?.code === "WORKSPACE_NAME_DUPLICATE") {
+        toast.error(t("workspace.create.nameDuplicate"));
+      } else {
+        const msg = err instanceof ApiError ? err.body?.error : undefined;
+        toast.error(msg || t("workspace.create.failed"));
+      }
     } finally {
       setSubmitting(false);
     }

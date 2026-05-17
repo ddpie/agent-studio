@@ -12,7 +12,7 @@ from shared.auth import verify_jwt, get_membership, check_permission, ROLE_LEVEL
 from shared.config import WORKSPACES_TABLE, REGION, COGNITO_USER_POOL_ID
 from shared.memory_strategies import DEFAULT_MEMORY_STRATEGIES
 from shared.middleware import auth_check, check_platform_admin
-from shared.response import success, paginated, forbidden, not_found, bad_request, version_conflict, internal_error
+from shared.response import success, paginated, forbidden, not_found, bad_request, version_conflict, internal_error, error
 from shared.validators import validate_id, parse_pagination
 
 _iam_client = None
@@ -58,6 +58,28 @@ def _delete_workspace_memory(memory_id: str) -> None:
         _get_control().delete_memory(memoryId=memory_id)
     except Exception as e:
         logger.warning("delete_memory failed for %s: %s", memory_id, e)
+
+
+def _workspace_name_exists(table, name: str, exclude_ws_id: str = "") -> bool:
+    """Check if any workspace globally has this name (case-insensitive)."""
+    name_lower = name.strip().lower()
+    scan_kwargs = {
+        "FilterExpression": "sk = :meta",
+        "ExpressionAttributeValues": {":meta": "META"},
+        "ProjectionExpression": "workspaceId, #n",
+        "ExpressionAttributeNames": {"#n": "name"},
+    }
+    while True:
+        resp = table.scan(**scan_kwargs)
+        for item in resp.get("Items", []):
+            if item.get("name", "").strip().lower() == name_lower:
+                if exclude_ws_id and item.get("workspaceId") == exclude_ws_id:
+                    continue
+                return True
+        if not resp.get("LastEvaluatedKey"):
+            break
+        scan_kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
+    return False
 
 
 def _create_workspace_memory(workspace_id: str) -> str | None:
@@ -291,9 +313,14 @@ def create_workspace():
     if len(name) > 100:
         return bad_request("name must be 100 characters or less")
 
+    table = _get_table()
+
+    # Global duplicate name check (case-insensitive): paginated scan
+    if _workspace_name_exists(table, name):
+        return error("workspace_name_duplicate", "WORKSPACE_NAME_DUPLICATE", 409)
+
     ws_id = str(uuid.uuid4())
     now = datetime.utcnow().isoformat() + "Z"
-    table = _get_table()
 
     meta_item = {
         "workspaceId": ws_id,
@@ -349,6 +376,31 @@ def onboarding():
     ws_id = str(uuid.uuid4())
     now = datetime.utcnow().isoformat() + "Z"
 
+    # Generate a unique default workspace name from user's email prefix
+    default_name = "My Workspace"
+    email_prefix = ""
+    email_domain = ""
+    try:
+        if COGNITO_USER_POOL_ID:
+            cogn_resp = _get_cognito().admin_get_user(UserPoolId=COGNITO_USER_POOL_ID, Username=user_id)
+            attrs = {a["Name"]: a["Value"] for a in cogn_resp.get("UserAttributes", [])}
+            email = attrs.get("email", "")
+            if "@" in email:
+                email_prefix = email.split("@")[0]
+                email_domain = email.split("@")[1].split(".")[0]
+                default_name = email_prefix
+    except Exception:
+        pass
+    # Dedup: first try with domain disambiguation, then numeric suffix
+    if _workspace_name_exists(table, default_name) and email_domain:
+        default_name = f"{email_prefix}({email_domain})"
+    candidate = default_name
+    suffix = 1
+    while _workspace_name_exists(table, candidate):
+        suffix += 1
+        candidate = f"{default_name} {suffix}"
+    default_name = candidate
+
     try:
         table.meta.client.transact_write_items(
             TransactItems=[
@@ -358,7 +410,7 @@ def onboarding():
                         "Item": {
                             "workspaceId": {"S": ws_id},
                             "sk": {"S": "META"},
-                            "name": {"S": "My Workspace"},
+                            "name": {"S": default_name},
                             "description": {"S": "Default workspace"},
                             "owner_id": {"S": user_id},
                             "created_at": {"S": now},
@@ -413,7 +465,7 @@ def onboarding():
 
     return success({
         "workspaceId": ws_id,
-        "name": "My Workspace",
+        "name": default_name,
         "description": "Default workspace",
         "role": "owner",
         "created_at": now,
@@ -481,6 +533,10 @@ def update_workspace(wsId: str):
         return bad_request("expected_updated_at is required for optimistic concurrency control")
 
     table = _get_table()
+
+    # Duplicate name check on rename (exclude self)
+    if _workspace_name_exists(table, name, exclude_ws_id=ws_id):
+        return error("workspace_name_duplicate", "WORKSPACE_NAME_DUPLICATE", 409)
     update_expr = "SET #n = :name, description = :desc, updated_at = :now"
     expr_values = {
         ":name": name,

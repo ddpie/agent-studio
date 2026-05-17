@@ -279,6 +279,7 @@
       "creating": "Creating…",
       "success": "Workspace created",
       "failed": "Failed to create workspace",
+      "nameDuplicate": "A workspace with this name already exists",
       "nameRequired": "Name is required"
     },
     "role": {

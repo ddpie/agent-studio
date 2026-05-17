@@ -141,8 +141,12 @@ export default function WorkspaceSettingsTab() {
       await refreshWorkspaces();
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        toast.error(t("workspace.settings.conflict"));
-        await load();
+        if (err.body?.code === "WORKSPACE_NAME_DUPLICATE") {
+          toast.error(t("workspace.create.nameDuplicate"));
+        } else {
+          toast.error(t("workspace.settings.conflict"));
+          await load();
+        }
       } else {
         const msg =
           err instanceof ApiError && err.body?.error

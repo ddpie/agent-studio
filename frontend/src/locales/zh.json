@@ -279,6 +279,7 @@
       "creating": "创建中…",
       "success": "工作区已创建",
       "failed": "创建工作区失败",
+      "nameDuplicate": "已存在同名工作区",
       "nameRequired": "名称必填"
     },
     "role": {
