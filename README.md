@@ -186,7 +186,7 @@ bash scripts/run-tests.sh
 
 ## 应用场景示例
 
-一个"什么都会"的 Agent 理想丰满，实践脆弱。工具多了选不准，逻辑一复杂牵一发动全身，出了问题难以定位具体环节。拆分、专注、协作才是出路——每个 Agent 只做好一件事，扩展时不动现有环节，出了问题可追溯到具体环节和规则。
+一个"什么都会"的 Agent 理想丰满，实践脆弱。工具多了选不准，逻辑一复杂牵一发动全身，出了问题难以定位具体环节。这和单体应用的困境如出一辙：拆分、专注、协作才是出路。业务团队通常面临两个选择：忍受单体 Agent 复杂度膨胀带来的脆弱，或者等工程团队逐个开发、联调、部署垂类 Agent。
 
 | 场景 | 描述 | 链接 |
 |------|------|------|
@@ -373,7 +373,7 @@ bash scripts/run-tests.sh
 
 ## Example Scenarios
 
-A "do-everything" agent sounds ideal but proves fragile in practice. Too many tools lead to selection errors, complex logic creates cascading failures, and when something breaks it's hard to pinpoint which step went wrong. The way out mirrors microservices: split, focus, collaborate — each agent does one thing well, new capabilities plug in without touching existing ones, and issues trace back to a specific step and rule.
+A "do-everything" agent sounds ideal but proves fragile in practice. Too many tools lead to selection errors, complex logic creates cascading failures, and when something breaks it's hard to pinpoint which step went wrong. This mirrors the monolith problem in software: split, focus, collaborate is the way out. Teams typically face two choices: tolerate the brittleness of a bloated monolith agent, or wait for engineering to build, integrate, and deploy specialized agents one by one.
 
 | Scenario | Description | Link |
 |------|------|------|
