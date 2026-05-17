@@ -106,8 +106,8 @@ def upload_image(wsId: str):
         return bad_request("filename is required")
 
     import re
-    if not re.match(r"^[a-zA-Z0-9._-]+$", filename):
-        return bad_request("Invalid filename: must match [a-zA-Z0-9._-]+")
+    if not filename or len(filename) > 255 or re.search(r'[/\\\x00]|\.\.', filename):
+        return bad_request("Invalid filename: must not contain / \\ .. or null bytes, max 255 chars")
 
     ext = filename.rsplit(".", 1)[-1] if "." in filename else "png"
     upload_id = str(uuid.uuid4())
@@ -156,8 +156,8 @@ def upload_attachment(wsId: str):
     import re
     if not re.match(r"^[a-zA-Z0-9_-]+$", session_id):
         return bad_request("Invalid sessionId: must match [a-zA-Z0-9_-]+")
-    if not re.match(r"^[a-zA-Z0-9._-]+$", filename):
-        return bad_request("Invalid filename: must match [a-zA-Z0-9._-]+")
+    if not filename or len(filename) > 255 or re.search(r'[/\\\x00]|\.\.', filename):
+        return bad_request("Invalid filename: must not contain / \\ .. or null bytes, max 255 chars")
 
     s3_key = f"uploads/attachments/{session_id}/{filename}"
 
