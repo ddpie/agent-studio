@@ -15,7 +15,7 @@
 - **Workspace IAM 隔离** — 三层权限模型（Permission Boundary 天花板 → per-workspace 角色 → target 级授权）；Admin Console 一键授权，敏感 target 二次确认；`SimulatePrincipalPolicy` 实时检查，进度条展示每个 target 的已授权/缺失 action
 - **跨会话记忆** — 基于 AgentCore Memory，Agent 自动记住用户偏好与事实，跨 session、跨设备持续生效；用户可在记忆抽屉中查看和删除
 - **平台级可观测性** — 调用追踪、延迟分位数、错误率、Token 成本按 Agent 和 workspace 自动聚合，一屏总览
-- **Channel 集成** — Agent 接入飞书 / Slack / 钉钉，用户在 IM 中直接对话，流式卡片回复；零公网端点暴露（全部出站 WebSocket）
+- **Channel 集成** — Agent 接入 IM 平台，用户直接在聊天工具中对话，流式卡片回复；零公网端点暴露（全部出站 WebSocket）。已支持飞书，Slack 和钉钉计划中
 - **Marketplace** — 跨 workspace 发布和克隆 Agent / Skill / Tool，元数据公开，源码克隆后才可见
 
 ## 应用场景示例
@@ -211,7 +211,7 @@ An agent orchestration platform on AWS Bedrock AgentCore. Describe what you need
 - **Workspace IAM isolation** — Three-layer permission model (Permission Boundary ceiling → per-workspace role → target-level grants); Admin Console one-click grants with sensitivity badges and confirmation dialogs; `SimulatePrincipalPolicy` real-time checks with progress bars per target.
 - **Cross-session memory** — Powered by AgentCore Memory: agents remember user preferences and facts across sessions and devices. Users can view and manage memories from the chat drawer.
 - **Platform-level observability** — Trace timeline, latency percentiles, error rates, and token costs aggregated per agent and per workspace on a single screen.
-- **Channel integration** — Connect agents to Feishu / Slack / DingTalk; users chat directly in IM with streaming card replies. Zero public endpoints (all outbound WebSocket).
+- **Channel integration** — Connect agents to IM platforms; users chat directly with streaming card replies. Zero public endpoints (all outbound WebSocket). Feishu shipped; Slack and DingTalk planned
 - **Marketplace** — Publish and clone agents / skills / tools across workspaces; metadata is public, source stays private until cloned.
 
 ## Example Scenarios
