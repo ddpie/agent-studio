@@ -142,7 +142,14 @@ export class AgentStudioStack extends cdk.Stack {
     });
 
     // Channel Integration — relay, worker, reaper, tables
-    new Channels(this, "Channels", { config });
+    const channels = new Channels(this, "Channels", { config });
+
+    // Inject channel table names into CRUD Lambda
+    api.crudLambda.addEnvironment("CHANNELS_TABLE", channels.channelsTable.tableName);
+    api.crudLambda.addEnvironment("CHANNEL_HISTORY_TABLE", channels.historyTable.tableName);
+    api.crudLambda.addEnvironment("CHANNEL_TOKENS_TABLE", channels.tokensTable.tableName);
+    channels.channelsTable.grantReadWriteData(api.crudLambda);
+    channels.historyTable.grantReadData(api.crudLambda);
 
     new Cdn(this, "Cdn", {
       config,

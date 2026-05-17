@@ -137,7 +137,7 @@ export class Channels extends Construct {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
-    // Task definition (placeholder — actual container image set at deploy time)
+    // Task definition — CDK builds + pushes the Docker image automatically
     const taskDef = new ecs.FargateTaskDefinition(this, "TaskDef", {
       cpu: 256,
       memoryLimitMiB: 512,
@@ -145,7 +145,7 @@ export class Channels extends Construct {
     });
 
     taskDef.addContainer("relay", {
-      image: ecs.ContainerImage.fromEcrRepository(ecrRepo, "latest"),
+      image: ecs.ContainerImage.fromAsset("../lambda/channels/relay"),
       logging: ecs.LogDrivers.awsLogs({
         logGroup: relayLogGroup,
         streamPrefix: "relay",
