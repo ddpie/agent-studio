@@ -81,8 +81,7 @@ export class FeishuReplier {
     };
 
     // Footer: always show agent identity; private chat also gets switch button
-    const footerNote = { tag: "note", elements: [{ tag: "plain_text", content: t(this.#lang, "respondingAs", agentName) }] };
-    cardData.body.elements.push(footerNote);
+    cardData.body.elements.push({ tag: "markdown", content: `*${t(this.#lang, "respondingAs", agentName)}*`, element_id: "footer_el" });
     if (isPrivateChat) {
       cardData.body.elements.push({
         tag: "action",
