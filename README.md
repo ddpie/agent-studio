@@ -58,7 +58,7 @@ Meta-Agent 内置 47 个工具，覆盖 Agent 从创建到运维的完整生命�
 %%{init: {'flowchart': {'nodeSpacing': 20, 'rankSpacing': 30}} }%%
 flowchart LR
     User((用户)) --> Web[Web Console]
-    User --> Ch[Channel<br/>飞书/Slack/钉钉]
+    User --> Ch[Channel<br/>飞书 ...]
     Web & Cron[定时器] & Ch --> WS
 
     subgraph WS["Workspace · Agent 编排"]
@@ -245,7 +245,7 @@ All operations are triggered through natural-language conversation — no need t
 %%{init: {'flowchart': {'nodeSpacing': 20, 'rankSpacing': 30}} }%%
 flowchart LR
     User((User)) --> Web[Web Console]
-    User --> Ch[Channel<br/>Feishu/Slack/DingTalk]
+    User --> Ch[Channel<br/>Feishu ...]
     Web & Cron[Scheduled trigger] & Ch --> WS
 
     subgraph WS["Workspace · Agent Orchestration"]
