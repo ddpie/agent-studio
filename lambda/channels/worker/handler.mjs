@@ -164,6 +164,7 @@ export async function handler(event) {
       ctx = await replier.createStreamingReply(message.chatId, accessToken, {
         agentName,
         isPrivateChat: message.chatType === "p2p",
+        replyToMessageId: message.messageId,
       });
       await replier.writeThinking(ctx);
 

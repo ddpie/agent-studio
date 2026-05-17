@@ -71,7 +71,7 @@ export class FeishuReplier {
    * @returns {Promise<StreamContext>}
    */
   async createStreamingReply(chatId, accessToken, opts = {}) {
-    const { agentName = "Assistant", isPrivateChat = false } = opts;
+    const { agentName = "Assistant", isPrivateChat = false, replyToMessageId } = opts;
 
     // Step 1: Create card with streaming_mode
     const cardData = {
@@ -87,19 +87,8 @@ export class FeishuReplier {
     // Status indicator + Footer
     cardData.body.elements.push({ tag: "markdown", content: t(this.#lang, "generating"), element_id: "status_el" });
     cardData.body.elements.push({ tag: "markdown", content: `*${t(this.#lang, "respondingAs", agentName)}*`, element_id: "footer_el" });
-    if (isPrivateChat) {
-      cardData.body.elements.push({
-        tag: "action",
-        actions: [
-          {
-            tag: "button",
-            text: { tag: "plain_text", content: t(this.#lang, "switchAssistant") },
-            type: "default",
-            value: { action: "switch" },
-          },
-        ],
-      });
-    }
+    // Note: schema 2.0 streaming cards don't support "action" tag.
+    // Private chat users can send /switch to change agent.
 
     const createResp = await fetch(`${FEISHU_BASE}/open-apis/cardkit/v1/cards`, {
       method: "POST",
@@ -125,22 +114,41 @@ export class FeishuReplier {
 
     const cardId = createData.data.card_id;
 
-    // Step 2: Send card to chat
-    const sendResp = await fetch(
-      `${FEISHU_BASE}/open-apis/im/v1/messages?receive_id_type=chat_id`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          receive_id: chatId,
-          msg_type: "interactive",
-          content: JSON.stringify({ type: "card", data: { card_id: cardId } }),
-        }),
-      }
-    );
+    // Step 2: Send card — reply to user's message if messageId available
+    const cardContent = JSON.stringify({ type: "card", data: { card_id: cardId } });
+    let sendResp;
+    if (replyToMessageId) {
+      sendResp = await fetch(
+        `${FEISHU_BASE}/open-apis/im/v1/messages/${replyToMessageId}/reply`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            msg_type: "interactive",
+            content: cardContent,
+          }),
+        }
+      );
+    } else {
+      sendResp = await fetch(
+        `${FEISHU_BASE}/open-apis/im/v1/messages?receive_id_type=chat_id`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            receive_id: chatId,
+            msg_type: "interactive",
+            content: cardContent,
+          }),
+        }
+      );
+    }
 
     if (!sendResp.ok) {
       const err = await sendResp.text();
