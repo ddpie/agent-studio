@@ -5,7 +5,7 @@
  * Private chat: read user's stored selection, or send selection card.
  */
 
-import { GetCommand, PutCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, DeleteCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 
 const HISTORY_TABLE = process.env.HISTORY_TABLE || "agent-studio-channel-history";
 
@@ -183,30 +183,30 @@ async function clearSelection(ddb, channelId, selectionKey) {
 const AGENTS_TABLE = process.env.AGENTS_TABLE || "agent-studio-agents";
 
 /**
- * Collect all available agents from channel config, enriched with display names from agents table.
+ * Collect ALL agents in the workspace for the selection card.
+ * Queries the agents table by workspace_id (GSI).
  */
 async function collectAvailableAgents(channelConfig, ddb) {
-  const agentIds = new Set();
-  if (channelConfig.defaultAgentId) agentIds.add(channelConfig.defaultAgentId);
-  for (const rule of (channelConfig.routingRules || [])) {
-    if (rule.agentId) agentIds.add(rule.agentId);
+  const workspaceId = channelConfig.workspaceId;
+  try {
+    const resp = await ddb.send(new QueryCommand({
+      TableName: AGENTS_TABLE,
+      IndexName: "workspace-index",
+      KeyConditionExpression: "workspace_id = :ws",
+      ExpressionAttributeValues: { ":ws": workspaceId },
+      ProjectionExpression: "agentId, #n",
+      ExpressionAttributeNames: { "#n": "name" },
+    }));
+    return (resp.Items || [])
+      .filter((item) => item.agentId)
+      .map((item) => ({ agentId: item.agentId, agentName: item.name || item.agentId }));
+  } catch (err) {
+    console.warn("Failed to query workspace agents:", err.message);
+    // Fallback: return only what's in channel config
+    const agents = [];
+    if (channelConfig.defaultAgentId) {
+      agents.push({ agentId: channelConfig.defaultAgentId, agentName: channelConfig.defaultAgentId });
+    }
+    return agents;
   }
-
-  const agents = [];
-  for (const agentId of agentIds) {
-    let agentName = agentId;
-    try {
-      const resp = await ddb.send(new GetCommand({
-        TableName: AGENTS_TABLE,
-        Key: { agentId },
-        ProjectionExpression: "agentId, #n, description",
-        ExpressionAttributeNames: { "#n": "name" },
-      }));
-      if (resp.Item) {
-        agentName = resp.Item.name || agentId;
-      }
-    } catch { /* fallback to ID */ }
-    agents.push({ agentId, agentName });
-  }
-  return agents;
 }

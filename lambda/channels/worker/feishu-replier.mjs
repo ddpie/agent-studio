@@ -289,22 +289,19 @@ export class FeishuReplier {
       value: { agentId: agent.agentId },
     }));
 
+    // Split actions into rows of 3 buttons each (Feishu limit)
+    const actionElements = [];
+    for (let i = 0; i < actions.length; i += 3) {
+      actionElements.push({ tag: "action", actions: actions.slice(i, i + 3) });
+    }
+
     const cardData = {
       schema: "2.0",
       config: { wide_screen_mode: true },
-      header: {
-        title: { tag: "plain_text", content: t(this.#lang, "selectPrompt") },
-      },
       body: {
         elements: [
-          {
-            tag: "markdown",
-            content: t(this.#lang, "selectPrompt"),
-          },
-          {
-            tag: "action",
-            actions,
-          },
+          { tag: "markdown", content: `**${t(this.#lang, "selectPrompt")}**` },
+          ...actionElements,
         ],
       },
     };
