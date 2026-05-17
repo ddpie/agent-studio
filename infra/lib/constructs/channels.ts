@@ -91,7 +91,7 @@ export class Channels extends Construct {
 
     const securityGroup = new ec2.SecurityGroup(this, "RelaySG", {
       vpc,
-      description: "Channel relay — egress 443 only, zero ingress",
+      description: "Channel relay - egress 443 only, zero ingress",
       allowAllOutbound: false,
     });
     securityGroup.addEgressRule(
