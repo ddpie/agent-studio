@@ -15,6 +15,7 @@
 - **Workspace IAM 隔离** — 三层权限模型（Permission Boundary 天花板 → per-workspace 角色 → target 级授权）；Admin Console 一键授权，敏感 target 二次确认；`SimulatePrincipalPolicy` 实时检查，进度条展示每个 target 的已授权/缺失 action
 - **跨会话记忆** — 基于 AgentCore Memory，Agent 自动记住用户偏好与事实，跨 session、跨设备持续生效；用户可在记忆抽屉中查看和删除
 - **平台级可观测性** — 调用追踪、延迟分位数、错误率、Token 成本按 Agent 和 workspace 自动聚合，一屏总览
+- **Channel 集成** — Agent 接入飞书 / Slack / 钉钉，用户在 IM 中直接对话，流式卡片回复；零公网端点暴露（全部出站 WebSocket）
 - **Marketplace** — 跨 workspace 发布和克隆 Agent / Skill / Tool，元数据公开，源码克隆后才可见
 
 ## Meta-Agent 能力总览
@@ -49,7 +50,8 @@ Meta-Agent 内置 47 个工具，覆盖 Agent 从创建到运维的完整生命�
 %%{init: {'flowchart': {'nodeSpacing': 20, 'rankSpacing': 30}} }%%
 flowchart LR
     User((用户)) --> Web[Web Console]
-    Web & Cron[定时器] --> WS
+    User --> Ch[Channel<br/>飞书/Slack/钉钉]
+    Web & Cron[定时器] & Ch --> WS
 
     subgraph WS["Workspace · Agent 编排"]
         direction LR
@@ -357,10 +359,12 @@ agent-studio/
 bash scripts/run-tests.sh
 ```
 
-## 应用场景示例
+## 应用场景示例 / Example Scenarios
 
 单体 Agent 什么都能做，但工具一多选不准、逻辑一复杂难以定位问题。拆成多个单职责 Agent，各司其职、按需检索、自动流转，才是生产级的做法。
 
-| 场景 | 描述 | 链接 |
+A single "do-everything" agent sounds ideal but breaks in practice — too many tools cause selection errors, complex logic becomes brittle, and failures are hard to isolate. Splitting into focused, single-responsibility agents that collaborate is the production-grade approach.
+
+| 场景 / Scenario | 描述 / Description | 链接 / Link |
 |------|------|------|
-| 游戏内容工厂 | 9 个 Agent 组成创作→审核→翻译流水线，挂载世界观知识库，自动拦截版本泄露和设定冲突 | [docs/demos/game-content-factory](docs/demos/game-content-factory/) |
+| 游戏内容工厂 / Game Content Factory | 9 个 Agent 组成创作→审核→翻译流水线，挂载世界观知识库，自动拦截版本泄露和设定冲突 / 9 agents form a create→review→translate pipeline backed by a lore knowledge base, automatically blocking version leaks and lore conflicts | [docs/demos/game-content-factory](docs/demos/game-content-factory/) |
