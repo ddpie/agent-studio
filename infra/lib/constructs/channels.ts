@@ -195,6 +195,7 @@ export class Channels extends Construct {
         TOKENS_TABLE: this.tokensTable.tableName,
         HISTORY_TABLE: this.historyTable.tableName,
         INFLIGHT_TABLE: this.inflightTable.tableName,
+        AGENTS_TABLE: "agent-studio-agents",
         REGION: region,
         ACCOUNT_ID: accountId,
       },
@@ -300,6 +301,15 @@ export class Channels extends Construct {
       resources: [
         this.channelsTable.tableArn,
         this.historyTable.tableArn,
+      ],
+    }));
+
+    workerRole.addToPolicy(new iam.PolicyStatement({
+      sid: "DynamoReadAgents",
+      actions: ["dynamodb:GetItem", "dynamodb:Query"],
+      resources: [
+        `arn:aws:dynamodb:${region}:${accountId}:table/agent-studio-agents`,
+        `arn:aws:dynamodb:${region}:${accountId}:table/agent-studio-agents/index/*`,
       ],
     }));
 
