@@ -186,12 +186,16 @@ export class FeishuAdapter {
     const action = data.action;
     const operator = data.operator;
 
+    const chatId = data.context?.open_chat_id || "";
+    // Feishu group chat IDs start with "oc_", P2P starts with other prefixes
+    const chatType = chatId.startsWith("oc_") ? "group" : "p2p";
+
     const inboundCardAction = {
       type: "card_action",
       channelId: this.#channelId,
       workspaceId: this.#workspaceId,
-      chatId: data.context?.open_chat_id || "",
-      chatType: "p2p",
+      chatId,
+      chatType,
       userId: operator?.open_id || "",
       action: {
         agentId: action?.value?.agentId || "",
