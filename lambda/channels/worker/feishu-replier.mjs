@@ -282,12 +282,12 @@ export class FeishuReplier {
    * @param {string} accessToken
    */
   async sendSelectionCard(chatId, agents, accessToken) {
-    // Build buttons with callback behaviors
+    // Build buttons (legacy card format — schema V2 doesn't support action tag)
     const actions = agents.map((agent) => ({
       tag: "button",
       text: { tag: "plain_text", content: agent.agentName },
       type: "primary",
-      behaviors: [{ type: "callback", value: { agentId: agent.agentId } }],
+      value: { agentId: agent.agentId },
     }));
 
     // Split into rows of 3
@@ -296,19 +296,17 @@ export class FeishuReplier {
       actionElements.push({ tag: "action", actions: actions.slice(i, i + 3) });
     }
 
-    // Inline interactive card (no CardKit creation needed)
+    // Legacy card format (no schema field, top-level elements)
     const cardJson = {
-      schema: "2.0",
+      config: { wide_screen_mode: true },
       header: {
         title: { tag: "plain_text", content: t(this.#lang, "selectPrompt") },
         template: "blue",
       },
-      body: {
-        elements: [
-          { tag: "markdown", content: t(this.#lang, "selectPrompt") },
-          ...actionElements,
-        ],
-      },
+      elements: [
+        { tag: "markdown", content: `**${t(this.#lang, "selectPrompt")}**` },
+        ...actionElements,
+      ],
     };
 
     // Send directly as msg_type "interactive" with inline card content

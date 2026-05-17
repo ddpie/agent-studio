@@ -67,18 +67,30 @@ export async function streamToReplier({ agentcore, agentArn, payload, sessionId,
       if (!chunk) continue;
 
       if (chunk.kind === "text") {
-        // Handle internal control markers — render some, skip others
-        if (chunk.text.includes('"__')) {
+        // Check if this text line is actually a JSON control marker
+        if (chunk.text.startsWith("{")) {
           try {
             const obj = JSON.parse(chunk.text);
+            // Enumerate all known internal markers and handle each explicitly
             if (obj.__tool === "start" && obj.name) {
               accumulated += `\n🔧 *调用 ${obj.name}...*\n`;
-            } else if (obj.__tool === "result" && obj.name) {
-              accumulated += `\n> ✅ ${obj.name} 完成\n`;
+              continue;
             }
-            // __tool end, __keepalive, __auto_continue, __error, __file_content, __models → skip
-          } catch { /* not valid JSON with __, skip */ }
-          continue;
+            if (obj.__tool === "result" && obj.name) {
+              accumulated += `\n> ✅ ${obj.name} 完成\n`;
+              continue;
+            }
+            if (obj.__tool === "end") { continue; }
+            if (obj.__keepalive === true) { continue; }
+            if (obj.__auto_continue !== undefined) { continue; }
+            if (obj.__error !== undefined) {
+              accumulated += `\n⚠️ ${obj.__error}\n`;
+              continue;
+            }
+            if (obj.__file_content !== undefined) { continue; }
+            if (obj.__models !== undefined) { continue; }
+            // Not a known marker — treat as normal text
+          } catch { /* not valid JSON, treat as text */ }
         }
         accumulated += chunk.text;
       } else if (chunk.kind === "keepalive") {
