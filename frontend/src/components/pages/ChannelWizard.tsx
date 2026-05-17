@@ -8,7 +8,7 @@ import {
   MessageSquare,
   X,
 } from "lucide-react";
-import { useChannelStore, type Channel } from "../../stores/channel-store";
+import { useChannelStore } from "../../stores/channel-store";
 import { useAgentListStore } from "../../stores/agent-list-store";
 import { toast } from "../../lib/toast";
 
