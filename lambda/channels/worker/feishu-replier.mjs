@@ -282,61 +282,37 @@ export class FeishuReplier {
    * @param {string} accessToken
    */
   async sendSelectionCard(chatId, agents, accessToken) {
+    // Build buttons with callback behaviors
     const actions = agents.map((agent) => ({
       tag: "button",
       text: { tag: "plain_text", content: agent.agentName },
       type: "primary",
-      value: { agentId: agent.agentId },
+      behaviors: [{ type: "callback", value: { agentId: agent.agentId } }],
     }));
 
-    // Split actions into rows of 3 buttons each (Feishu limit)
+    // Split into rows of 3
     const actionElements = [];
     for (let i = 0; i < actions.length; i += 3) {
       actionElements.push({ tag: "action", actions: actions.slice(i, i + 3) });
     }
 
-    const cardData = {
+    // Inline interactive card (no CardKit creation needed)
+    const cardJson = {
       schema: "2.0",
-      config: { wide_screen_mode: true },
+      header: {
+        title: { tag: "plain_text", content: t(this.#lang, "selectPrompt") },
+        template: "blue",
+      },
       body: {
         elements: [
-          { tag: "markdown", content: `**${t(this.#lang, "selectPrompt")}**` },
+          { tag: "markdown", content: t(this.#lang, "selectPrompt") },
           ...actionElements,
         ],
       },
     };
 
-    // Create card first
-    const createResp = await fetch(`${FEISHU_BASE}/open-apis/cardkit/v1/cards`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({
-        type: "card_json",
-        data: JSON.stringify(cardData),
-      }),
-    });
-
-    if (!createResp.ok) {
-      // Fallback to plain text if card creation fails
-      const names = agents.map((a) => a.agentName).join(", ");
-      await this.sendFallbackMessage(chatId, `${t(this.#lang, "selectPrompt")} ${names}`, accessToken);
-      return;
-    }
-
-    const createData = await createResp.json();
-    if (createData.code !== 0) {
-      const names = agents.map((a) => a.agentName).join(", ");
-      await this.sendFallbackMessage(chatId, `${t(this.#lang, "selectPrompt")} ${names}`, accessToken);
-      return;
-    }
-
-    const cardId = createData.data.card_id;
-
-    // Send card to chat
-    await fetch(
+    // Send directly as msg_type "interactive" with inline card content
+    const resp = await fetch(
       `${FEISHU_BASE}/open-apis/im/v1/messages?receive_id_type=chat_id`,
       {
         method: "POST",
@@ -347,10 +323,15 @@ export class FeishuReplier {
         body: JSON.stringify({
           receive_id: chatId,
           msg_type: "interactive",
-          content: JSON.stringify({ type: "card", data: { card_id: cardId } }),
+          content: JSON.stringify(cardJson),
         }),
       }
     );
+
+    if (!resp.ok) {
+      const names = agents.map((a) => a.agentName).join(", ");
+      await this.sendFallbackMessage(chatId, `${t(this.#lang, "selectPrompt")} ${names}`, accessToken);
+    }
   }
 
   /**
