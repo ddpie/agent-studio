@@ -20,6 +20,8 @@ const I18N = {
     selectedConfirm: (name) => `Got it! You're now chatting with ${name}. Send me your question!`,
     errorGeneric: "Something went wrong. Please try again.",
     truncated: "[Response truncated due to timeout]",
+    generating: "⏳ Generating...",
+    done: "✓",
   },
   zh: {
     thinking: "思考中...",
@@ -29,6 +31,8 @@ const I18N = {
     selectedConfirm: (name) => `好的！你现在正在和「${name}」对话。请发送你的问题！`,
     errorGeneric: "出了点问题，请重试。",
     truncated: "[回复因超时被截断]",
+    generating: "⏳ 生成中...",
+    done: "✓",
   },
 };
 
@@ -80,7 +84,8 @@ export class FeishuReplier {
       },
     };
 
-    // Footer: always show agent identity; private chat also gets switch button
+    // Status indicator + Footer
+    cardData.body.elements.push({ tag: "markdown", content: t(this.#lang, "generating"), element_id: "status_el" });
     cardData.body.elements.push({ tag: "markdown", content: `*${t(this.#lang, "respondingAs", agentName)}*`, element_id: "footer_el" });
     if (isPrivateChat) {
       cardData.body.elements.push({
@@ -180,6 +185,10 @@ export class FeishuReplier {
    * @param {StreamContext} ctx
    */
   async finalizeReply(ctx) {
+    // Update status indicator to "done"
+    await this._putElementContentById(ctx, "status_el", t(this.#lang, "done"));
+
+    // Close streaming mode
     ctx.sequence++;
     const resp = await fetch(
       `${FEISHU_BASE}/open-apis/cardkit/v1/cards/${ctx.cardId}/settings`,
@@ -371,11 +380,18 @@ export class FeishuReplier {
   }
 
   /**
-   * Internal: PUT element content to update the streaming card.
+   * Internal: PUT element content to update the streaming card (stream_el).
    */
   async _putElementContent(ctx, content) {
+    await this._putElementContentById(ctx, "stream_el", content);
+  }
+
+  /**
+   * Internal: PUT content to a specific element by ID.
+   */
+  async _putElementContentById(ctx, elementId, content) {
     const resp = await fetch(
-      `${FEISHU_BASE}/open-apis/cardkit/v1/cards/${ctx.cardId}/elements/stream_el/content`,
+      `${FEISHU_BASE}/open-apis/cardkit/v1/cards/${ctx.cardId}/elements/${elementId}/content`,
       {
         method: "PUT",
         headers: {
@@ -390,7 +406,7 @@ export class FeishuReplier {
     );
 
     if (!resp.ok) {
-      console.warn(`CardKit PUT element warning: ${resp.status}`);
+      console.warn(`CardKit PUT element warning: ${resp.status} (${elementId})`);
     }
     ctx.sequence++;
   }

@@ -32,13 +32,19 @@ const agentcore = new BedrockAgentCoreClient({ region: REGION });
 const replier = new FeishuReplier();
 
 /**
- * Lambda handler — entry point invoked by the relay (async invocation).
+ * Lambda handler — entry point triggered by SQS FIFO queue.
+ * Accepts both SQS event format (Records[]) and direct invocation.
  */
 export async function handler(event) {
   const startTime = Date.now();
 
   try {
-    const message = typeof event === "string" ? JSON.parse(event) : event;
+    // Unwrap SQS record if present (batchSize=1, so only one record)
+    let raw = event;
+    if (event.Records && event.Records.length > 0) {
+      raw = event.Records[0].body;
+    }
+    const message = typeof raw === "string" ? JSON.parse(raw) : raw;
     const { type, channelId, workspaceId } = message;
 
     console.log(JSON.stringify({

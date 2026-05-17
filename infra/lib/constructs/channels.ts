@@ -7,7 +7,9 @@ import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as lambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
 import * as logs from "aws-cdk-lib/aws-logs";
+import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as path from "path";
 import { Construct } from "constructs";
 import { AgentStudioConfig } from "../config";
@@ -73,6 +75,25 @@ export class Channels extends Construct {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       timeToLiveAttribute: "ttl",
       removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
+    // ─────────────────────────────────────────────────────────────────────
+    // SQS FIFO Queue — serializes messages per conversation
+    // ─────────────────────────────────────────────────────────────────────
+
+    const workerDlq = new sqs.Queue(this, "WorkerDLQ", {
+      queueName: "agent-studio-channel-worker-dlq.fifo",
+      fifo: true,
+      retentionPeriod: cdk.Duration.days(14),
+    });
+
+    const workerQueue = new sqs.Queue(this, "WorkerQueue", {
+      queueName: "agent-studio-channel-worker.fifo",
+      fifo: true,
+      contentBasedDeduplication: true,
+      visibilityTimeout: cdk.Duration.seconds(910),
+      retentionPeriod: cdk.Duration.days(1),
+      deadLetterQueue: { queue: workerDlq, maxReceiveCount: 3 },
     });
 
     // ─────────────────────────────────────────────────────────────────────
@@ -161,6 +182,7 @@ export class Channels extends Construct {
       environment: {
         CHANNELS_TABLE: this.channelsTable.tableName,
         TOKENS_TABLE: this.tokensTable.tableName,
+        WORKER_QUEUE_URL: workerQueue.queueUrl,
         REGION: region,
       },
     });
@@ -203,6 +225,11 @@ export class Channels extends Construct {
       },
     });
 
+    // Wire SQS FIFO → Worker Lambda (batchSize=1 for serialized processing)
+    this.workerLambda.addEventSource(new lambdaEventSources.SqsEventSource(workerQueue, {
+      batchSize: 1,
+    }));
+
     // ─────────────────────────────────────────────────────────────────────
     // Lambda — Card Reaper
     // ─────────────────────────────────────────────────────────────────────
@@ -241,9 +268,9 @@ export class Channels extends Construct {
     // ─────────────────────────────────────────────────────────────────────
 
     relayRole.addToPolicy(new iam.PolicyStatement({
-      sid: "InvokeWorker",
-      actions: ["lambda:InvokeFunction"],
-      resources: [this.workerLambda.functionArn],
+      sid: "SendToWorkerQueue",
+      actions: ["sqs:SendMessage"],
+      resources: [workerQueue.queueArn],
     }));
 
     relayRole.addToPolicy(new iam.PolicyStatement({

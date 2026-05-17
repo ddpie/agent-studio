@@ -2,15 +2,15 @@
  * Channel Relay — Entry point.
  *
  * Reads environment variables, loads secrets from Secrets Manager,
- * starts the AdapterManager, and forwards events to the Worker Lambda.
+ * starts the AdapterManager, and forwards events to the Worker FIFO queue.
  *
  * Env vars:
- *   WORKSPACE_ID        — workspace this relay serves
- *   WORKER_FUNCTION_NAME — Worker Lambda function name/ARN
- *   AWS_REGION          — AWS region
+ *   WORKSPACE_ID   — workspace this relay serves
+ *   WORKER_QUEUE_URL — SQS FIFO queue URL for the worker
+ *   AWS_REGION     — AWS region
  */
 
-import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
+import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import {
@@ -22,7 +22,7 @@ import { AdapterManager } from "./adapter-manager.mjs";
 // ─── Configuration ───────────────────────────────────────────────────────────
 
 const WORKSPACE_ID = process.env.WORKSPACE_ID;
-const WORKER_FUNCTION_NAME = process.env.WORKER_FUNCTION_NAME;
+const WORKER_QUEUE_URL = process.env.WORKER_QUEUE_URL;
 const REGION = process.env.AWS_REGION || "us-east-1";
 const TABLE_NAME = "agent-studio-channels";
 
@@ -30,14 +30,14 @@ if (!WORKSPACE_ID) {
   console.error("[Relay] WORKSPACE_ID env var is required");
   process.exit(1);
 }
-if (!WORKER_FUNCTION_NAME) {
-  console.error("[Relay] WORKER_FUNCTION_NAME env var is required");
+if (!WORKER_QUEUE_URL) {
+  console.error("[Relay] WORKER_QUEUE_URL env var is required");
   process.exit(1);
 }
 
 // ─── AWS Clients ─────────────────────────────────────────────────────────────
 
-const lambdaClient = new LambdaClient({ region: REGION });
+const sqsClient = new SQSClient({ region: REGION });
 const smClient = new SecretsManagerClient({ region: REGION });
 const ddbClient = DynamoDBDocumentClient.from(
   new DynamoDBClient({ region: REGION }),
@@ -138,29 +138,33 @@ function shouldForward(event, channelConfig) {
   return true;
 }
 
-// ─── Worker Lambda Invocation ────────────────────────────────────────────────
+// ─── Worker Queue Dispatch ───────────────────────────────────────────────────
 
 /**
- * Async-invoke the Worker Lambda with the event payload.
- * Uses InvocationType "Event" for fire-and-forget.
+ * Send event to the Worker FIFO queue.
+ * MessageGroupId serializes messages per user-agent-chat tuple.
  * @param {object} event — normalized InboundEvent
  */
 async function invokeWorker(event) {
   const payload = JSON.stringify(event);
 
+  // MessageGroupId determines serialization scope.
+  // Messages for the same user+chat are processed sequentially.
+  const groupId = `${event.channelId}#${event.chatId || ""}#${event.userId || ""}`;
+
   try {
-    await lambdaClient.send(
-      new InvokeCommand({
-        FunctionName: WORKER_FUNCTION_NAME,
-        InvocationType: "Event",
-        Payload: new TextEncoder().encode(payload),
+    await sqsClient.send(
+      new SendMessageCommand({
+        QueueUrl: WORKER_QUEUE_URL,
+        MessageBody: payload,
+        MessageGroupId: groupId,
       }),
     );
     console.log(
-      `[Relay] Invoked worker: type=${event.type}, channelId=${event.channelId}, messageId=${event.messageId || "N/A"}`,
+      `[Relay] Queued: type=${event.type}, channelId=${event.channelId}, group=${groupId}`,
     );
   } catch (err) {
-    console.error(`[Relay] Failed to invoke worker:`, err);
+    console.error(`[Relay] Failed to queue message:`, err);
   }
 }
 
