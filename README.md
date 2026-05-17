@@ -170,7 +170,8 @@ agent-studio/
 ├── lambda/
 │   ├── crud/              # Python CRUD Lambda（含 kiro_key.py 管理 key + usage）
 │   ├── invoke-node/       # Node.js SSE streaming proxy
-│   └── a2a-proxy/         # A2A JSON-RPC proxy
+│   ├── a2a-proxy/         # A2A JSON-RPC proxy
+│   └── channels/          # IM Channel relay（飞书/Slack/钉钉 WebSocket）+ worker
 ├── mcp-runtime/           # AWS MCP 目录接入（mcp-registry.yaml 控制启用项）+ Dockerfile
 ├── infra/                 # AWS CDK (TypeScript)
 ├── scripts/               # 部署 / 测试脚本
@@ -182,6 +183,14 @@ agent-studio/
 ```bash
 bash scripts/run-tests.sh
 ```
+
+## 应用场景示例
+
+单体 Agent 什么都能做，但工具一多选不准、逻辑一复杂难以定位问题。拆成多个单职责 Agent，各司其职、按需检索、自动流转，才是生产级的做法。
+
+| 场景 | 描述 | 链接 |
+|------|------|------|
+| 游戏内容工厂 | 9 个 Agent 组成创作→审核→翻译流水线，挂载世界观知识库，自动拦截版本泄露和设定冲突 | [docs/demos/game-content-factory](docs/demos/game-content-factory/) |
 
 ---
 
@@ -202,6 +211,7 @@ An agent orchestration platform on AWS Bedrock AgentCore. Describe what you need
 - **Workspace IAM isolation** — Three-layer permission model (Permission Boundary ceiling → per-workspace role → target-level grants); Admin Console one-click grants with sensitivity badges and confirmation dialogs; `SimulatePrincipalPolicy` real-time checks with progress bars per target.
 - **Cross-session memory** — Powered by AgentCore Memory: agents remember user preferences and facts across sessions and devices. Users can view and manage memories from the chat drawer.
 - **Platform-level observability** — Trace timeline, latency percentiles, error rates, and token costs aggregated per agent and per workspace on a single screen.
+- **Channel integration** — Connect agents to Feishu / Slack / DingTalk; users chat directly in IM with streaming card replies. Zero public endpoints (all outbound WebSocket).
 - **Marketplace** — Publish and clone agents / skills / tools across workspaces; metadata is public, source stays private until cloned.
 
 ## Meta-Agent Capabilities
@@ -227,7 +237,8 @@ All operations are triggered through natural-language conversation — no need t
 %%{init: {'flowchart': {'nodeSpacing': 20, 'rankSpacing': 30}} }%%
 flowchart LR
     User((User)) --> Web[Web Console]
-    Web & Cron[Scheduled trigger] --> WS
+    User --> Ch[Channel<br/>Feishu/Slack/DingTalk]
+    Web & Cron[Scheduled trigger] & Ch --> WS
 
     subgraph WS["Workspace · Agent Orchestration"]
         direction LR
@@ -346,7 +357,8 @@ agent-studio/
 ├── lambda/
 │   ├── crud/              # Python CRUD Lambda (includes kiro_key.py — key + usage)
 │   ├── invoke-node/       # Node.js SSE streaming proxy
-│   └── a2a-proxy/         # A2A JSON-RPC proxy
+│   ├── a2a-proxy/         # A2A JSON-RPC proxy
+│   └── channels/          # IM channel relay (Feishu/Slack/DingTalk WebSocket) + worker
 ├── mcp-runtime/           # AWS MCP catalog integration (mcp-registry.yaml gates what's enabled) + Dockerfile
 ├── infra/                 # AWS CDK (TypeScript)
 ├── scripts/               # Deploy + test scripts
@@ -359,12 +371,10 @@ agent-studio/
 bash scripts/run-tests.sh
 ```
 
-## 应用场景示例 / Example Scenarios
-
-单体 Agent 什么都能做，但工具一多选不准、逻辑一复杂难以定位问题。拆成多个单职责 Agent，各司其职、按需检索、自动流转，才是生产级的做法。
+## Example Scenarios
 
 A single "do-everything" agent sounds ideal but breaks in practice — too many tools cause selection errors, complex logic becomes brittle, and failures are hard to isolate. Splitting into focused, single-responsibility agents that collaborate is the production-grade approach.
 
-| 场景 / Scenario | 描述 / Description | 链接 / Link |
+| Scenario | Description | Link |
 |------|------|------|
-| 游戏内容工厂 / Game Content Factory | 9 个 Agent 组成创作→审核→翻译流水线，挂载世界观知识库，自动拦截版本泄露和设定冲突 / 9 agents form a create→review→translate pipeline backed by a lore knowledge base, automatically blocking version leaks and lore conflicts | [docs/demos/game-content-factory](docs/demos/game-content-factory/) |
+| Game Content Factory | 9 agents form a create→review→translate pipeline backed by a lore knowledge base, automatically blocking version leaks and lore conflicts | [docs/demos/game-content-factory](docs/demos/game-content-factory/) |
