@@ -29,18 +29,42 @@ const HISTORY_TABLE = process.env.HISTORY_TABLE || "agent-studio-channel-history
 export async function resolveRoute(ddb, message, channelConfig, replier, accessToken) {
   const { chatType, chatId, userId, content, channelId } = message;
 
-  // Handle /switch command (private chat only)
+  // Handle /switch command (private chat)
   if (chatType === "p2p" && content && content.trim() === "/switch") {
-    // Clear existing selection
-    await clearSelection(ddb, channelId, userId);
-    // Send selection card
+    await clearSelection(ddb, channelId, `p2p#${userId}`);
     const agents = collectAvailableAgents(channelConfig);
     await replier.sendSelectionCard(chatId, agents, accessToken);
     return { action: "switch_sent" };
   }
 
+  // Group chat: /switch or /agents command → send selection card
+  if (chatType === "group" && content && (content.trim() === "/switch" || content.trim() === "/agents")) {
+    const agents = collectAvailableAgents(channelConfig);
+    await replier.sendSelectionCard(chatId, agents, accessToken);
+    return { action: "selection_sent" };
+  }
+
+  // Group chat: empty @mention (no content) → send selection card
+  if (chatType === "group" && (!content || !content.trim())) {
+    const agents = collectAvailableAgents(channelConfig);
+    await replier.sendSelectionCard(chatId, agents, accessToken);
+    return { action: "selection_sent" };
+  }
+
   // Group chat routing
   if (chatType === "group") {
+    // Check if user has a per-user selection in this group
+    const groupSelection = await getSelection(ddb, channelId, `${chatId}#${userId}`);
+    if (groupSelection) {
+      const agents = collectAvailableAgents(channelConfig);
+      const agentExists = agents.some((a) => a.agentId === groupSelection.agentId);
+      if (agentExists) {
+        return { action: "invoke", agentId: groupSelection.agentId, agentName: groupSelection.agentName || groupSelection.agentId };
+      }
+      await clearSelection(ddb, channelId, `${chatId}#${userId}`);
+    }
+
+    // Check routing rules (admin-configured per-group binding)
     const rules = channelConfig.routingRules || [];
     for (const rule of rules) {
       if (rule.type === "group" && rule.chatId === chatId) {
@@ -56,7 +80,7 @@ export async function resolveRoute(ddb, message, channelConfig, replier, accessT
   }
 
   // Private chat routing — check stored selection
-  const selection = await getSelection(ddb, channelId, userId);
+  const selection = await getSelection(ddb, channelId, `p2p#${userId}`);
 
   if (selection) {
     // Check if agent still exists in config (stale detection)
@@ -64,8 +88,7 @@ export async function resolveRoute(ddb, message, channelConfig, replier, accessT
     const agentExists = agents.some((a) => a.agentId === selection.agentId);
 
     if (!agentExists) {
-      // Agent was deleted — clear selection and send new card
-      await clearSelection(ddb, channelId, userId);
+      await clearSelection(ddb, channelId, `p2p#${userId}`);
       await replier.sendSelectionCard(chatId, agents, accessToken);
       return { action: "selection_sent" };
     }
@@ -94,7 +117,7 @@ export async function resolveRoute(ddb, message, channelConfig, replier, accessT
  * @returns {Promise<RouteResult>}
  */
 export async function handleCardAction(ddb, message, channelConfig, replier, accessToken) {
-  const { channelId, userId, chatId, action } = message;
+  const { channelId, userId, chatId, chatType, action } = message;
   const { agentId } = action;
 
   // Resolve agent name from config
@@ -102,11 +125,12 @@ export async function handleCardAction(ddb, message, channelConfig, replier, acc
   const agent = agents.find((a) => a.agentId === agentId);
   const agentName = agent ? agent.agentName : agentId;
 
-  // Store selection (SK=0, Number type)
+  // Store selection — different key for group vs p2p
+  const selectionKey = chatType === "group" ? `${chatId}#${userId}` : `p2p#${userId}`;
   await ddb.send(new PutCommand({
     TableName: HISTORY_TABLE,
     Item: {
-      pk: `${channelId}#p2p#${userId}`,
+      pk: `${channelId}#${selectionKey}`,
       sk: 0,
       agentId,
       agentName,
@@ -115,7 +139,10 @@ export async function handleCardAction(ddb, message, channelConfig, replier, acc
   }));
 
   // Send confirmation message
-  const confirmText = `Got it! You're now chatting with ${agentName}. Send me your question!`;
+  const lang = channelConfig.language || "zh";
+  const confirmText = lang === "zh"
+    ? `好的！你现在正在和「${agentName}」对话。直接发消息吧！`
+    : `Got it! You're now chatting with ${agentName}. Send me your question!`;
   await replier.sendFallbackMessage(chatId, confirmText, accessToken);
 
   return { action: "confirmation_sent" };
@@ -123,12 +150,13 @@ export async function handleCardAction(ddb, message, channelConfig, replier, acc
 
 /**
  * Get the user's stored agent selection.
+ * @param {string} selectionKey - e.g. "p2p#userId" or "chatId#userId"
  */
-async function getSelection(ddb, channelId, userId) {
+async function getSelection(ddb, channelId, selectionKey) {
   const result = await ddb.send(new GetCommand({
     TableName: HISTORY_TABLE,
     Key: {
-      pk: `${channelId}#p2p#${userId}`,
+      pk: `${channelId}#${selectionKey}`,
       sk: 0,
     },
   }));
@@ -137,12 +165,13 @@ async function getSelection(ddb, channelId, userId) {
 
 /**
  * Clear the user's stored agent selection.
+ * @param {string} selectionKey - e.g. "p2p#userId" or "chatId#userId"
  */
-async function clearSelection(ddb, channelId, userId) {
+async function clearSelection(ddb, channelId, selectionKey) {
   await ddb.send(new DeleteCommand({
     TableName: HISTORY_TABLE,
     Key: {
-      pk: `${channelId}#p2p#${userId}`,
+      pk: `${channelId}#${selectionKey}`,
       sk: 0,
     },
   }));
