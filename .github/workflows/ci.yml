@@ -49,6 +49,10 @@ jobs:
 
       - name: pytest — lambda CRUD
         working-directory: lambda
+        env:
+          AWS_ACCESS_KEY_ID: testing
+          AWS_SECRET_ACCESS_KEY: testing
+          AWS_DEFAULT_REGION: us-east-1
         run: |
           PYTHONPATH=. python -m pytest tests/ \
             --cov=shared --cov=crud \
@@ -59,6 +63,10 @@ jobs:
 
       - name: pytest — meta-agent
         working-directory: meta-agent
+        env:
+          AWS_ACCESS_KEY_ID: testing
+          AWS_SECRET_ACCESS_KEY: testing
+          AWS_DEFAULT_REGION: us-east-1
         run: |
           PYTHONPATH=. python -m pytest tests/ \
             --cov=tools \
