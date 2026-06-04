@@ -34,7 +34,7 @@ jobs:
           pip install ruff pytest pytest-cov pytest-mock \
                       boto3 aws-lambda-powertools \
                       strands-agents bedrock-agentcore \
-                      pyyaml beautifulsoup4 markdownify pypdf openpyxl \
+                      pyyaml beautifulsoup4 markdownify pypdf openpyxl pandas \
                       requests httpx websocket-client exceptiongroup \
                       "python-jose[cryptography]" cryptography
 
