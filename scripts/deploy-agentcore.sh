@@ -8,10 +8,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="${PROJECT_ROOT}/.env"
 
-# Load .env if it exists
-if [[ -f "$ENV_FILE" ]]; then
-  set -a; source "$ENV_FILE"; set +a
-fi
+# Shared .env helpers
+source "${SCRIPT_DIR}/lib/env-utils.sh"
+
+# Load .env if it exists (safe: no shell expansion of values)
+safe_source_env "$ENV_FILE"
 
 # Validate required vars
 REGION="${AGENT_STUDIO_REGION:?AGENT_STUDIO_REGION is required}"
@@ -257,6 +258,7 @@ if mode == "update":
     print(f"  Update triggered for {agent_id}", file=sys.stderr)
 else:
     s3_key = "agents/agentStudioMeta/deployment.zip"
+    network_mode = os.environ.get("AGENT_STUDIO_NETWORK_MODE", "PUBLIC")
     resp = control.create_agent_runtime(
         agentRuntimeName="agentStudioMeta",
         description="Agent Studio Meta-Agent",
@@ -268,7 +270,7 @@ else:
                 "entryPoint": ["main.py"],
             }
         },
-        networkConfiguration={"networkMode": "PUBLIC"},
+        networkConfiguration={"networkMode": network_mode},
         protocolConfiguration={"serverProtocol": "HTTP"},
         filesystemConfigurations=_filesystem_configs,
         environmentVariables=env_vars,
@@ -300,6 +302,9 @@ PYEOF
 )
 
 echo "  Meta-Agent deployed: $META_AGENT_ID"
+
+# Export the (possibly new) agent ID so step 4's Python can see it
+export AGENT_STUDIO_META_AGENT_ID="$META_AGENT_ID"
 
 # --- Ensure Meta-Agent role has required permissions ---
 echo ""
@@ -360,6 +365,11 @@ print("  Added: MCP config S3 read")
 PYEOF
 
 export AGENT_STUDIO_META_AGENT_ID="$META_AGENT_ID"
+
+# Persist the agent ID back to .env so subsequent runs are idempotent
+if [[ -f "$ENV_FILE" ]]; then
+  update_env "$ENV_FILE" "AGENT_STUDIO_META_AGENT_ID" "$META_AGENT_ID"
+fi
 
 echo ""
 echo "=== Deploy complete ==="

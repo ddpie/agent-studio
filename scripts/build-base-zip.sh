@@ -146,10 +146,10 @@ build_zip() {
     --platform manylinux2014_aarch64 \
     --python-version 3.10 \
     --only-binary=:all: \
+    --no-compile \
     --upgrade
 
   find "$stage_dir" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-  find "$stage_dir" -name "*.pyc" -delete
 
   if [[ -f "$stage_dir/playwright/driver/node" ]]; then
     chmod +x "$stage_dir/playwright/driver/node"
