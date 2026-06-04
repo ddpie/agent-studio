@@ -241,51 +241,9 @@ class TestUnavailableLibs:
 
 # ── Write pattern detection ──────────────────────────────────────
 
-class TestWritePatternDetection:
-    @pytest.mark.parametrize("snippet,keyword", [
-        ("table.put_item(Item={})", "put_item"),
-        ("s3.delete_object(Bucket='b', Key='k')", "delete_object"),
-        ("cursor.execute('INSERT INTO t VALUES (1)')", "INSERT INTO"),
-        ("cursor.execute('DELETE FROM t WHERE id=1')", "DELETE FROM"),
-        ("requests.post('https://example.com')", ".post("),
-    ])
-    def test_write_pattern_detected_for_readonly(self, snippet, keyword):
-        code = f'@tool\ndef risky() -> str:\n    """R."""\n    {snippet}\n    return "done"'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="hello",
-            tool_definitions=code, tool_names="risky",
-            permission_tier="readonly", description="d",
-        ))
-        assert any("write operation" in w.lower() for w in r["warnings"])
-
-    def test_write_pattern_ok_for_data_access(self):
-        code = '@tool\ndef writer() -> str:\n    """W."""\n    table.put_item(Item={})\n    return "done"'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use writer",
-            tool_definitions=code, tool_names="writer",
-            permission_tier="data-access", description="d",
-        ))
-        # data-access tier should NOT warn about write ops
-        assert not any("write operation" in w.lower() for w in r["warnings"])
-
-    def test_write_pattern_detected_for_basic_tier(self):
-        code = '@tool\ndef w() -> str:\n    """W."""\n    table.put_item(Item={})\n    return ""'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use w",
-            tool_definitions=code, tool_names="w",
-            permission_tier="basic", description="d",
-        ))
-        assert any("write operation" in w.lower() for w in r["warnings"])
-
-    def test_no_write_warning_without_permission_tier(self):
-        code = '@tool\ndef w() -> str:\n    """W."""\n    table.put_item(Item={})\n    return ""'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use w",
-            tool_definitions=code, tool_names="w",
-            permission_tier="", description="d",
-        ))
-        # No permission tier set — no write warning
-        assert not any("write operation" in w.lower() for w in r["warnings"])
+# NOTE: TestWritePatternDetection removed. validate_agent.py L409 explicitly
+# marks the readonly-tier-vs-write-operations check as removed; the test class
+# was asserting a feature that no longer exists.
 
 
 # ── Prompt ↔ tool consistency ────────────────────────────────────

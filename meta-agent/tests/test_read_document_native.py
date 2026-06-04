@@ -206,10 +206,12 @@ def test_read_document_rejects_url_as_key():
 
 
 def test_read_document_rejects_unsupported_extension():
+    # Note: .txt is supported (added to _PLAINTEXT_EXTS); use a binary
+    # extension that genuinely is not handled.
     s3 = _make_s3_get_mock(b"")
     ns = _exec_builtin(s3)
     ns["_workspace_id"] = "ws-alpha"
-    result = ns["read_document"]("workspaces/ws-alpha/storage/a.txt")
+    result = ns["read_document"]("workspaces/ws-alpha/storage/a.exe")
     assert "unsupported file type" in result.lower()
     assert not s3.get_object.called
 

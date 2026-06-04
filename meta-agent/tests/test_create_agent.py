@@ -71,11 +71,9 @@ _mock_tl.registry = _mock_registry
 sys.modules["tools_library"] = _mock_tl
 sys.modules["tools_library.registry"] = _mock_registry
 
-# Mock yaml (used inside _resolve_mcp_endpoints)
-_mock_yaml = sys.modules.get("yaml") or types.ModuleType("yaml")
-if not hasattr(_mock_yaml, "safe_load"):
-    _mock_yaml.safe_load = lambda x: {"remote_targets": []}
-sys.modules["yaml"] = _mock_yaml
+# Real yaml is available via base/requirements.txt; do NOT stub sys.modules["yaml"]
+# here — that pollutes other tests (e.g. import_skill.py uses yaml.safe_load to
+# parse SKILL.md frontmatter, and would receive the stub's hard-coded value).
 
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
