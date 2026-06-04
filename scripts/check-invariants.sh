@@ -9,9 +9,18 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_DIR"
 
+# Most checks require CLAUDE.md; skip gracefully in CI where it's gitignored.
+if [ ! -f "$PROJECT_DIR/CLAUDE.md" ]; then
+  echo "SKIP: CLAUDE.md not in tree (gitignored) — running subset only" >&2
+  # Only run checks that don't need CLAUDE.md
+  # i18n parity + tool naming are still useful
+fi
+
 fail=0
 note() { echo "FAIL: $1" >&2; fail=1; }
 warn() { echo "WARN: $1" >&2; }
+HAS_CLAUDE_MD=false
+[ -f "$PROJECT_DIR/CLAUDE.md" ] && HAS_CLAUDE_MD=true
 
 # ---------------------------------------------------------------------------
 # 1. CLAUDE.md references to files/directories that must exist
@@ -48,7 +57,7 @@ check_paths_in_claude_md() {
     [ -e "$PROJECT_DIR/$f" ] || note "CLAUDE.md references '$f' but it does not exist"
   done
 }
-check_paths_in_claude_md
+if $HAS_CLAUDE_MD; then check_paths_in_claude_md; fi
 
 # ---------------------------------------------------------------------------
 # 2. CDK constructs referenced in CLAUDE.md must exist in infra/lib/constructs/
@@ -72,7 +81,7 @@ check_cdk_constructs() {
     [ -f "$PROJECT_DIR/infra/lib/constructs/$c" ] || note "CLAUDE.md references construct '$c' but infra/lib/constructs/$c does not exist"
   done
 }
-check_cdk_constructs
+if $HAS_CLAUDE_MD; then check_cdk_constructs; fi
 
 # ---------------------------------------------------------------------------
 # 3. CDK aspects referenced in CLAUDE.md must exist
@@ -94,7 +103,7 @@ check_aspects() {
     fi
   fi
 }
-check_aspects
+if $HAS_CLAUDE_MD; then check_aspects; fi
 
 # ---------------------------------------------------------------------------
 # 4. Lambda handler files referenced in CLAUDE.md directory structure
@@ -109,7 +118,7 @@ check_lambda_structure() {
     [ -d "$PROJECT_DIR/$d" ] || note "CLAUDE.md directory structure claims '$d/' exists but it doesn't"
   done
 }
-check_lambda_structure
+if $HAS_CLAUDE_MD; then check_lambda_structure; fi
 
 # ---------------------------------------------------------------------------
 # 5. Frontend i18n key parity (en.json vs zh.json)

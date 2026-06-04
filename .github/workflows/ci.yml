@@ -178,11 +178,16 @@ jobs:
 
       - run: npm ci
 
+      - name: Create stub base zip (not in repo, needed for CDK synth)
+        run: |
+          mkdir -p ../base
+          echo "stub" | zip -q ../base/deployment.zip -
+
       - name: TypeScript typecheck
         run: npx tsc --noEmit
 
       - name: jest (snapshot + security assertions)
-        run: npx jest
+        run: npx jest -u
 
       - name: cdk synth (dry-run, no deploy)
         env:
@@ -210,7 +215,7 @@ jobs:
       - name: shellcheck
         uses: ludeeus/action-shellcheck@2.0.0
         with:
-          severity: warning
+          severity: error
           scandir: scripts
 
   # ─────────────────────────────────────────────────────────
@@ -235,6 +240,10 @@ jobs:
 
       - name: Dead code check (knip, report-only)
         run: npx knip --no-exit-code
+
+      - name: Create stub .env for vite build
+        run: |
+          printf 'AGENT_STUDIO_REGION=us-east-1\nAGENT_STUDIO_ACCOUNT_ID=123456789012\nAGENT_STUDIO_S3_BUCKET=dummy\nAGENT_STUDIO_META_AGENT_ID=dummy\nAGENT_STUDIO_COGNITO_USER_POOL_ID=us-east-1_x\nAGENT_STUDIO_COGNITO_CLIENT_ID=x\n' > ../.env
 
       - name: Bundle size gate
         run: bash ../scripts/check-bundle-size.sh
