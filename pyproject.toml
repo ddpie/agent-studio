@@ -38,7 +38,9 @@ select = [
 ignore = [
     "E501",   # line-length — handled by formatter, don't lint
     "S101",   # assert in tests is fine
+    "S310",   # urlopen audit — controlled URLs from config, not user input
     "S311",   # random — we use it for non-crypto IDs
+    "S324",   # sha1 — used for non-crypto identifier hashing (short IDs)
     "S603",   # subprocess.run with check=False is intentional
     "S607",   # subprocess with partial path — fine inside controlled env
     "B008",   # do not perform function call in default arg — fastapi/typer pattern
@@ -62,6 +64,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = [
     "S105", "S106", "S107",   # hardcoded passwords in tests are fine
+    "SIM117",                  # nested with — test mocking patterns
     "S108",                    # /tmp paths in tests
     "PT004", "PT011",          # pytest fixture / raises strictness — too noisy
     "B017",                    # raises-Exception — common in tests

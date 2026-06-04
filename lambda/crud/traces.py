@@ -113,7 +113,7 @@ def _as_utc_iso(ts: str | None) -> str | None:
     s = ts.strip()
     if not s:
         return s
-    if s.endswith("Z") or "+" in s[10:] or s.endswith("UTC"):
+    if s.endswith(("Z", "UTC")) or "+" in s[10:]:
         return s
     return s.replace(" ", "T", 1) + "Z"
 
@@ -328,7 +328,7 @@ def _to_int(v, default: int = 0) -> int:
 
 def _round_ms(v) -> int | None:
     f = _to_float(v)
-    return int(round(f)) if f is not None else None
+    return round(f) if f is not None else None
 
 
 @router.get("/api/workspaces/<wsId>/agents/<agentId>/traces/stats")

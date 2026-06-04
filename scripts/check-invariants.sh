@@ -21,7 +21,7 @@ warn() { echo "WARN: $1" >&2; }
 # real paths (contain / and end in known extensions or are directories)
 check_paths_in_claude_md() {
   local claude_md="$PROJECT_DIR/CLAUDE.md"
-  [ -f "$claude_md" ] || { note "CLAUDE.md not found at project root"; return; }
+  [ -f "$claude_md" ] || { echo "SKIP: CLAUDE.md not in tree (gitignored)" >&2; return; }
 
   # Key files/dirs explicitly called out in CLAUDE.md that MUST exist
   local -a required_files=(

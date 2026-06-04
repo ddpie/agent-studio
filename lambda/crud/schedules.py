@@ -377,9 +377,8 @@ def update_schedule(wsId: str, agentId: str, name: str):
         if len(prompt) > 4000:
             return bad_request("prompt must be 4000 characters or less")
 
-    if state is not None:
-        if state not in ("ENABLED", "DISABLED"):
-            return bad_request("state must be 'ENABLED' or 'DISABLED'")
+    if state is not None and state not in ("ENABLED", "DISABLED"):
+        return bad_request("state must be 'ENABLED' or 'DISABLED'")
 
     scheduler = _get_scheduler()
     try:

@@ -8,12 +8,11 @@ lookups, and permission comparisons are caught.
 import json
 import os
 import time
-from io import BytesIO
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
-from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from jose import jwt as jose_jwt
 
 # --- Environment setup (before importing shared modules) ---
@@ -27,12 +26,10 @@ from shared.auth import (
     _fetch_jwks,
     _get_signing_key,
     check_permission,
-    get_membership,
     is_platform_admin,
     verify_jwt,
 )
 from shared.middleware import auth_check, check_platform_admin
-
 
 # ---------------------------------------------------------------------------
 # RSA Key Infrastructure

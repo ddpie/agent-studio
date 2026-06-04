@@ -256,7 +256,7 @@ def get_storage(wsId: str):
         return bad_request("Invalid key prefix")
 
     # staging/drafts auto-inject userId for user isolation
-    if key.startswith("staging/") or key.startswith("drafts/"):
+    if key.startswith(("staging/", "drafts/")):
         parts = key.split("/", 1)
         key = f"{parts[0]}/{user_id}/{parts[1]}"
 
@@ -297,7 +297,7 @@ def put_storage(wsId: str):
         return bad_request("Invalid key prefix")
 
     # staging/drafts auto-inject userId for user isolation
-    if key.startswith("staging/") or key.startswith("drafts/"):
+    if key.startswith(("staging/", "drafts/")):
         parts = key.split("/", 1)
         key = f"{parts[0]}/{user_id}/{parts[1]}"
 
@@ -330,7 +330,7 @@ def delete_storage(wsId: str):
         return bad_request("Invalid key prefix")
 
     # staging/drafts auto-inject userId for user isolation
-    if key.startswith("staging/") or key.startswith("drafts/"):
+    if key.startswith(("staging/", "drafts/")):
         parts = key.split("/", 1)
         key = f"{parts[0]}/{user_id}/{parts[1]}"
 
@@ -602,7 +602,7 @@ def clone_public_agent(agentId: str):
                 # Skip deployment.zip — clone must be (re-)deployed via Meta-Agent.
                 # Skip assistant-history and staging — session-specific.
                 rel = src_key[len(src_prefix):]
-                if rel.startswith("deployment.zip") or rel.startswith("assistant-history") or rel.startswith("staging"):
+                if rel.startswith(("deployment.zip", "assistant-history", "staging")):
                     continue
                 dst_key = dst_prefix + rel
                 s3.copy_object(

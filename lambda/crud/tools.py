@@ -143,9 +143,8 @@ def get_tool(wsId: str, toolId: str):
     table = _get_table()
     resp = table.get_item(Key={"toolId": toolId}, ConsistentRead=True)
     item = resp.get("Item")
-    if not item or item.get("workspace_id") != ws_id:
-        if not item or not item.get("builtin") == True:
-            return forbidden()
+    if (not item or item.get("workspace_id") != ws_id) and (not item or not item.get("builtin")):
+        return forbidden()
     if item.get("deleted"):
         return not_found()
 

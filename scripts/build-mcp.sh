@@ -135,7 +135,7 @@ FAILED=0
 
 # Build each target
 for i in $(seq 0 $((TARGET_COUNT - 1))); do
-  TARGET=$(echo "$TARGETS" | python3 -c "import sys, json; print(json.dumps(json.load(sys.stdin)[$i]))" <<< "$TARGETS")
+  TARGET=$(echo "$TARGETS" | python3 -c "import sys, json; print(json.dumps(json.load(sys.stdin)[$i]))")
 
   NAME=$(echo "$TARGET" | python3 -c "import sys, json; print(json.load(sys.stdin)['name'])")
   PACKAGE=$(echo "$TARGET" | python3 -c "import sys, json; print(json.load(sys.stdin)['package'])")

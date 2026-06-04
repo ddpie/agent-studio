@@ -480,7 +480,7 @@ def test_create_workspace_persists_description(mock_jwt, mock_ws_table, mock_age
     resp = _invoke(_apigw("POST", "/api/workspaces", body={"name": "WSDesc", "description": "hello"}))
     assert resp["statusCode"] == 201
     # Inspect the FIRST put_item call (META item) for description.
-    put_calls = [c for c in mock_ws_table.put_item.call_args_list]
+    put_calls = list(mock_ws_table.put_item.call_args_list)
     meta_item = put_calls[0].kwargs["Item"]
     assert meta_item["description"] == "hello"
 
@@ -1038,7 +1038,7 @@ def test_verify_invitation_paginates_until_found(mock_ws_table):
 
 
 def test_accept_invitation_success(mock_jwt, mock_ws_table):
-    user_id = mock_jwt.return_value["sub"]
+    mock_jwt.return_value["sub"]
     mock_ws_table.scan.return_value = {
         "Items": [{"workspaceId": "ws-acc", "sk": "INVITE#tok", "role": "editor"}],
         "LastEvaluatedKey": None,

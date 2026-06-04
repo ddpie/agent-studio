@@ -56,8 +56,8 @@ def verify_jwt(token: str) -> dict:
         if claims.get("token_use") != "id":
             raise ValueError("Not an id token")
         return claims
-    except JWTError:
-        raise ValueError("Authentication failed")
+    except JWTError as exc:
+        raise ValueError("Authentication failed") from exc
 
 
 def get_membership(workspace_id: str, user_id: str) -> dict | None:

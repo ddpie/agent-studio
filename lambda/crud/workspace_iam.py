@@ -496,7 +496,7 @@ def revoke_mcp(wsId: str):
 
     # Rebuild and write IAM policy.
     try:
-        policy_size = _write_mcp_policy(role_name, updated_grants)
+        _write_mcp_policy(role_name, updated_grants)
     except Exception as e:
         logger.exception("Failed to write WorkspaceGrants policy", extra={"roleName": role_name})
         try:
