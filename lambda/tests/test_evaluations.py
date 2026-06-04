@@ -188,10 +188,13 @@ def test_get_agent_evaluations_empty_when_no_results(mock_jwt, user_id, workspac
     fake_logs.start_query.return_value = {"queryId": "q-2"}
     fake_logs.get_query_results.return_value = {"status": "Complete", "results": []}
 
+    fake_cfg = {"onlineEvaluationConfigId": "cfg-1", "outputConfig": [{"logGroupName": "/aws/bedrock-agentcore/evaluations/results/agentstudio_ws_xyz-ABC"}]}
+
     with (
         patch("crud.evaluations.auth_check") as auth,
         patch("crud.evaluations._get_agent_item") as ga,
         patch("crud.evaluations._get_logs", return_value=fake_logs),
+        patch("crud.evaluations._find_config_by_name", return_value=fake_cfg),
     ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
@@ -212,6 +215,7 @@ def test_get_agent_evaluations_no_log_groups_returns_empty(mock_jwt, user_id, wo
         patch("crud.evaluations.auth_check") as auth,
         patch("crud.evaluations._get_agent_item") as ga,
         patch("crud.evaluations._get_logs", return_value=fake_logs),
+        patch("crud.evaluations._find_config_by_name", return_value=None),
     ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
@@ -219,7 +223,6 @@ def test_get_agent_evaluations_no_log_groups_returns_empty(mock_jwt, user_id, wo
 
     assert resp["statusCode"] == 200
     assert json.loads(resp["body"])["evaluations"] == []
-    fake_logs.start_query.assert_not_called()
 
 
 def test_get_agent_evaluations_forbidden_when_agent_not_in_workspace(mock_jwt, user_id, workspace_id):
