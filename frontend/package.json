@@ -31,7 +31,7 @@
     "react": "^19.2.4",
     "react-arborist": "^3.4.3",
     "react-dom": "^19.2.4",
-    "react-error-boundary": "^5.0.0",
+    "react-error-boundary": "^6.1.2",
     "react-i18next": "^17.0.2",
     "react-json-view-lite": "^2.5.0",
     "react-markdown": "^10.1.0",
