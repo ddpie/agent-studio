@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:contracts": "vitest run src/__tests__/contracts/",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
@@ -51,6 +52,7 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "sonner": "^1.7.4",
+    "zod": "^4.4.3",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
@@ -77,6 +79,7 @@
     "globals": "^17.4.0",
     "jsdom": "^29.0.2",
     "knip": "^6.15.0",
+    "msw": "^2.14.6",
     "rollup-plugin-visualizer": "^7.0.1",
     "storybook": "^10.4.2",
     "tailwindcss": "^4.2.2",
