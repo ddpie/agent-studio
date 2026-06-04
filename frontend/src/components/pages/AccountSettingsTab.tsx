@@ -63,7 +63,7 @@ function MfaSection() {
       const email = (await fetchUserAttributes()).email || "user";
       setQrUri(`otpauth://totp/AgentStudio:${email}?secret=${secretKey}&issuer=AgentStudio`);
       setSetupMode(true);
-    } catch {
+    } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to set up TOTP");
     }
   };
@@ -206,8 +206,8 @@ export default function AccountSettingsTab() {
       setEmail(attrs.email || "");
       setInitialName(attrs.name || "");
       setName(attrs.name || "");
-    } catch {
-      toast.error(err instanceof Error ? err : t("settings.account.loadFailed"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("settings.account.loadFailed"));
     } finally {
       setLoadingProfile(false);
     }
@@ -226,8 +226,8 @@ export default function AccountSettingsTab() {
       await updateUserAttributes({ userAttributes: { name: name.trim() } });
       setInitialName(name.trim());
       toast.success(t("settings.account.profileSaved"));
-    } catch {
-      toast.error(err instanceof Error ? err : t("settings.account.profileSaveFailed"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("settings.account.profileSaveFailed"));
     } finally {
       setSavingProfile(false);
     }
@@ -258,10 +258,8 @@ export default function AccountSettingsTab() {
       await updatePassword({ oldPassword, newPassword });
       clearPasswordFields();
       toast.success(t("settings.account.passwordChanged"));
-    } catch {
-      // Never log password values. Only the (non-sensitive) error message is surfaced.
-      toast.error(err instanceof Error ? err : t("settings.account.passwordChangeFailed"));
-      // Clear the old password field so a retry requires re-typing.
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("settings.account.passwordChangeFailed"));
       setOldPassword("");
     } finally {
       setChangingPassword(false);
@@ -282,8 +280,8 @@ export default function AccountSettingsTab() {
       await signOut({ global: true });
       toast.success(t("settings.account.signedOutAll"));
       // The Authenticator wrapper in App.tsx will re-render back to sign-in automatically.
-    } catch {
-      toast.error(err instanceof Error ? err : t("settings.account.signOutAllFailed"));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("settings.account.signOutAllFailed"));
     } finally {
       setSigningOutAll(false);
     }

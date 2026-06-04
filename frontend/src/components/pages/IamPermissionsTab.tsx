@@ -136,7 +136,7 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
       onRoleCreated?.();
       // Re-check permissions after role creation
       await checkPermissions();
-    } catch {
+    } catch (err) {
       const msg = err instanceof Error ? err.message : t("iam.createFailed");
       toast.error(msg);
     } finally {
@@ -161,7 +161,7 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
       toast.success(t("iam.grantSuccess", { target: targetName }));
       await new Promise((r) => setTimeout(r, 3000));
       await checkPermissions(true);
-    } catch {
+    } catch (err) {
       const msg = err instanceof Error ? err.message : t("iam.grantFailed");
       toast.error(msg);
     } finally {
