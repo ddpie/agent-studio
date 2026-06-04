@@ -7,9 +7,13 @@
 #   --typecheck     tsc --noEmit on frontend + infra
 #   --lint          eslint (frontend) + ruff (python) + bash -n + check-invariants
 #   --security      pre-commit-security.sh against all staged+tracked files
+#   --contracts     Zod schema + MSW contract tests (frontend)
+#   --mutations     mutmut mutation tests on lambda/shared/auth (slow ~40s)
+#   --deadcode      knip dead code detection (frontend)
+#   --bundle        bundle size gate (frontend build + threshold check)
 #   --e2e           playwright E2E tests (needs running app + .env.e2e)
-#   --all           all offline tiers (unit + typecheck + lint + security)
-#   --full          everything including integration + e2e
+#   --all           all offline tiers (unit + typecheck + lint + security + contracts + deadcode)
+#   --full          everything including integration + mutations + bundle + e2e
 #
 # Default (no args): --all (offline only, safe to run anywhere)
 #
@@ -26,10 +30,11 @@ hdr() { echo -e "\n${CYAN}══════════════════
 ok()  { echo -e "${GREEN}✓ $1 PASSED${NC}"; }
 bad() { echo -e "${RED}✗ $1 FAILED (exit $2)${NC}"; }
 
-DO_UNIT=0; DO_INTEGRATION=0; DO_TYPECHECK=0; DO_LINT=0; DO_SECURITY=0; DO_E2E=0
+DO_UNIT=0; DO_INTEGRATION=0; DO_TYPECHECK=0; DO_LINT=0; DO_SECURITY=0
+DO_CONTRACTS=0; DO_MUTATIONS=0; DO_DEADCODE=0; DO_BUNDLE=0; DO_E2E=0
 
 if [ $# -eq 0 ]; then
-  DO_UNIT=1; DO_TYPECHECK=1; DO_LINT=1; DO_SECURITY=1
+  DO_UNIT=1; DO_TYPECHECK=1; DO_LINT=1; DO_SECURITY=1; DO_CONTRACTS=1; DO_DEADCODE=1
 fi
 
 while [[ $# -gt 0 ]]; do
@@ -39,10 +44,14 @@ while [[ $# -gt 0 ]]; do
     --typecheck)   DO_TYPECHECK=1; shift ;;
     --lint)        DO_LINT=1; shift ;;
     --security)    DO_SECURITY=1; shift ;;
+    --contracts)   DO_CONTRACTS=1; shift ;;
+    --mutations)   DO_MUTATIONS=1; shift ;;
+    --deadcode)    DO_DEADCODE=1; shift ;;
+    --bundle)      DO_BUNDLE=1; shift ;;
     --e2e)         DO_E2E=1; shift ;;
-    --all)         DO_UNIT=1; DO_TYPECHECK=1; DO_LINT=1; DO_SECURITY=1; shift ;;
-    --full)        DO_UNIT=1; DO_INTEGRATION=1; DO_TYPECHECK=1; DO_LINT=1; DO_SECURITY=1; DO_E2E=1; shift ;;
-    -h|--help)     sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --all)         DO_UNIT=1; DO_TYPECHECK=1; DO_LINT=1; DO_SECURITY=1; DO_CONTRACTS=1; DO_DEADCODE=1; shift ;;
+    --full)        DO_UNIT=1; DO_INTEGRATION=1; DO_TYPECHECK=1; DO_LINT=1; DO_SECURITY=1; DO_CONTRACTS=1; DO_MUTATIONS=1; DO_DEADCODE=1; DO_BUNDLE=1; DO_E2E=1; shift ;;
+    -h|--help)     sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -131,6 +140,30 @@ if [ "$DO_INTEGRATION" = 1 ]; then
   else
     echo "  moto not installed — skipping integration (pip install 'moto[dynamodb,s3,secretsmanager]')"
   fi
+fi
+
+# --- Contract tests ---
+if [ "$DO_CONTRACTS" = 1 ]; then
+  run_tier "contracts (zod + msw)" bash -c "cd '$ROOT/frontend' && npx vitest run src/__tests__/contracts/"
+fi
+
+# --- Dead code ---
+if [ "$DO_DEADCODE" = 1 ]; then
+  run_tier "deadcode (knip)" bash -c "cd '$ROOT/frontend' && npx knip --no-exit-code"
+fi
+
+# --- Mutation testing ---
+if [ "$DO_MUTATIONS" = 1 ]; then
+  if command -v mutmut >/dev/null 2>&1; then
+    run_tier "mutations (mutmut)" bash -c "cd '$ROOT/lambda' && mutmut run"
+  else
+    echo "  mutmut not installed — skipping (pip install mutmut)"
+  fi
+fi
+
+# --- Bundle size ---
+if [ "$DO_BUNDLE" = 1 ]; then
+  run_tier "bundle (size gate)" "$ROOT/scripts/check-bundle-size.sh"
 fi
 
 # --- E2E ---
