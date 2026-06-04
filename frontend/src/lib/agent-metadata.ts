@@ -42,7 +42,7 @@ export interface AgentMetadata {
   harness_arn?: string;
 }
 
-export interface LinkedAgentEntry {
+interface LinkedAgentEntry {
   agent_id: string;
   display_name?: string;
   description?: string;

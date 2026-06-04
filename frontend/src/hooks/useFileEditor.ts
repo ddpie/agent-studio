@@ -10,7 +10,7 @@ import { buildTreeData } from "../lib/tree-helpers"
 import { validateSkill } from "../lib/validators/skill-validator"
 import { createDebouncedSaver, loadDraftWithMeta, clearDraft } from "../lib/draft-autosave"
 
-export type { SkillStorageOps }
+// SkillStorageOps re-exported from useSkillStorage is consumed only internally here
 
 interface UseFileEditorParams {
   storage: SkillStorageOps

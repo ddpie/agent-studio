@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { fetchAgents, type AgentListItem } from "../lib/api-client";
 
-export interface AgentInfo {
+interface AgentInfo {
   name: string;
   displayName: string;
   id: string;

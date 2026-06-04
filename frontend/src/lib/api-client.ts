@@ -627,7 +627,7 @@ export async function fetchAgentLogs(
 
 // ── Meta-Agent AgentCard (Sprint 2 F1c) ──
 
-export interface AgentCardSkill {
+interface AgentCardSkill {
   id: string;
   name?: string;
   description?: string;
@@ -1559,7 +1559,7 @@ export interface CostAgentRow {
   costUsd: number;
 }
 
-export interface CostTimeseriesPoint {
+interface CostTimeseriesPoint {
   bucket: string;
   calls: number;
   costUsd: number;
@@ -1606,7 +1606,7 @@ export async function createWorkspaceRole(wsId: string): Promise<CreateWorkspace
   );
 }
 
-export interface WorkspacePermissionResult {
+interface WorkspacePermissionResult {
   action: string;
   allowed: boolean;
 }
@@ -1669,7 +1669,7 @@ export async function fetchAgentCosts(agentId: string, range: CostRange = "7d") 
   );
 }
 
-export interface AdminCostsWorkspaceRow {
+interface AdminCostsWorkspaceRow {
   workspaceId: string;
   name: string;
   agentCount: number;
@@ -1679,7 +1679,7 @@ export interface AdminCostsWorkspaceRow {
   costUsd: number;
 }
 
-export interface AdminCostsAgentRow extends CostAgentRow {
+interface AdminCostsAgentRow extends CostAgentRow {
   workspaceId: string;
 }
 
@@ -1714,7 +1714,7 @@ export interface TraceSession {
   model: string | null;
 }
 
-export interface TraceSpan {
+interface TraceSpan {
   spanId: string;
   parentSpanId: string | null;
   name: string;
@@ -1759,7 +1759,7 @@ export interface TraceStats {
   }>;
 }
 
-export interface WorkspaceCostAgent {
+interface WorkspaceCostAgent {
   agentId: string;
   name: string;
   calls: number;

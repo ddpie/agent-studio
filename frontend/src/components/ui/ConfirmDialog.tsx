@@ -38,7 +38,7 @@ export default function ConfirmDialog({
       <div className="absolute inset-0 bg-black/30" onClick={onCancel} />
       <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-xl w-[380px] p-5 animate-in fade-in zoom-in-95">
         <h3 id={titleId} className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">{message}</p>
+        <p className="text-xs text-gray-600 dark:text-gray-300 mt-1.5 leading-relaxed">{message}</p>
         <div className="flex justify-end gap-2 mt-4">
           <button
             onClick={onCancel}

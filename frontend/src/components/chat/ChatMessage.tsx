@@ -150,7 +150,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
               >
                 <FileText className="w-3.5 h-3.5 flex-shrink-0" />
                 <span className="font-medium max-w-40 truncate">{f.name}</span>
-                <span className={isUser ? "text-white/50" : "text-gray-400 dark:text-gray-500"}>{(f.size / 1024).toFixed(1)}KB</span>
+                <span className={isUser ? "text-white/50" : "text-gray-500 dark:text-gray-400"}>{(f.size / 1024).toFixed(1)}KB</span>
                 <Download className="w-3 h-3 flex-shrink-0 opacity-50" />
               </button>
             ))}
@@ -162,7 +162,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
           const hasDownloads = !!(message.s3Downloads?.length);
           if (!hasContent && !hasTools && !hasDownloads) {
             return (
-              <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500 text-sm">
+              <span className="inline-flex items-center gap-1 text-gray-500 dark:text-gray-400 text-sm">
                 <Loader2 className="w-3 h-3 animate-spin" /> {t("assistant.thinking")}
               </span>
             );
@@ -206,7 +206,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
                     );
                   })}
                   {showTypingIndicator && (
-                    <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500 text-xs mt-2">
+                    <span className="inline-flex items-center gap-1 text-gray-500 dark:text-gray-400 text-xs mt-2">
                       <Loader2 className="w-3 h-3 animate-spin" /> {t("chat.working")}
                     </span>
                   )}
@@ -217,7 +217,7 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
                     <div ref={contentDivRef}>
                       <ProseBlock text={stripAttachmentHints(message.content)} isUser={isUser} />
                       {showTypingIndicator && (
-                        <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500 text-xs mt-2">
+                        <span className="inline-flex items-center gap-1 text-gray-500 dark:text-gray-400 text-xs mt-2">
                           <Loader2 className="w-3 h-3 animate-spin" /> {t("chat.working")}
                         </span>
                       )}

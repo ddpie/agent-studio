@@ -214,6 +214,36 @@ jobs:
           scandir: scripts
 
   # ─────────────────────────────────────────────────────────
+  # Quality gates: knip (dead code) + bundle size
+  # ─────────────────────────────────────────────────────────
+  quality-gates:
+    runs-on: ubuntu-latest
+    needs: frontend
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Dead code check (knip, report-only)
+        run: npx knip --no-exit-code
+
+      - name: Bundle size gate
+        run: bash ../scripts/check-bundle-size.sh
+
+      # TODO: A11y audit (needs browser, skipped in CI for now)
+      # - name: A11y audit
+      #   run: npx playwright install --with-deps chromium && npx ...
+
+  # ─────────────────────────────────────────────────────────
   # check-invariants — CLAUDE.md ↔ code consistency
   # ─────────────────────────────────────────────────────────
   invariants:

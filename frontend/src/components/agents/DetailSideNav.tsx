@@ -183,7 +183,7 @@ function GroupBlock({
         onClick={toggle}
         aria-expanded={open}
         data-testid={`nav-group-toggle-${group.id}`}
-        className="w-full flex items-center gap-1 px-2.5 py-1 text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+        className="w-full flex items-center gap-1 px-2.5 py-1 text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
       >
         <span className="inline-block w-2">{open ? "▾" : "▸"}</span>
         <span className="truncate">{group.label}</span>

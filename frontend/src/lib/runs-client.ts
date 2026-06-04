@@ -16,7 +16,7 @@ export interface RunSummary {
   completedAt: string | null;
 }
 
-export interface RunArtifact {
+interface RunArtifact {
   key: string;
   filename: string;
 }

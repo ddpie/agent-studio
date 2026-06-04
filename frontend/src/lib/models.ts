@@ -1,6 +1,6 @@
 /** Shared model definitions used across ChatPanel and EditAssistant */
 
-export interface ModelOption {
+interface ModelOption {
   id: string;
   label: string;
 }

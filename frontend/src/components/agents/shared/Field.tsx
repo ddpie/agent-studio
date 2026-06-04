@@ -13,7 +13,7 @@ function Field({ label, hint, changed, onOptimize, children }: { label: string; 
 
   return (
     <div>
-      <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-0.5 flex items-center gap-1">
+      <div className="text-[11px] font-medium text-gray-600 dark:text-gray-300 mb-0.5 flex items-center gap-1">
         <label htmlFor={fieldId}>{label}</label>
         {changed && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0" title={t("agentEditor.modified")} />}
         {onOptimize && (
@@ -28,7 +28,7 @@ function Field({ label, hint, changed, onOptimize, children }: { label: string; 
         )}
       </div>
       {enhanced}
-      {hint && <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{hint}</p>}
+      {hint && <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">{hint}</p>}
     </div>
   );
 }

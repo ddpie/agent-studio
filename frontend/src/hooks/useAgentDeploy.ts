@@ -8,7 +8,7 @@ import i18n from "../i18n";
 import type { AgentMetadata } from "../lib/agent-metadata";
 
 /** Validation result with optional prompt quality scores */
-export interface DeployValidationResult {
+interface DeployValidationResult {
   valid: boolean;
   errors: string[];
   warnings: string[];
