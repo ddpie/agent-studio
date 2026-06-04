@@ -1,5 +1,4 @@
 """Test run_command routes to invoke_code_interpreter."""
-import json
 import sys
 import types
 from unittest.mock import MagicMock, patch

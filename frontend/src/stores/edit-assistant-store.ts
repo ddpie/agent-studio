@@ -163,7 +163,7 @@ ${(formContext.system_prompt as string || "(empty)")}
 ${toolDefs ? `## Current Tool Code (source of truth)\n\`\`\`python\n${toolDefs}\n\`\`\`` : "## Tools\nNo tools defined yet."}
 
 ${(() => {
-  const allSkills = (formContext.skills as Array<{ id: string; name: string; description: string; files: string[] }>) || [];
+  const allSkills = (formContext.skills as { id: string; name: string; description: string; files: string[] }[]) || [];
   const editStore = useAgentEditStore.getState();
   const editingSkillId = editStore.editingSkillId;
   const skills = editingSkillId ? allSkills.filter(s => s.id === editingSkillId) : allSkills;
@@ -354,7 +354,7 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
     const history = get()
       .messages.filter((m) => m.id !== assistantMsg.id && m.content)
       .map(({ role, content: c }) => ({
-        role: role as "user" | "assistant",
+        role: role,
         content: c.length > 1000 ? c.slice(0, 1000) + "..." : c,
       }));
 
@@ -420,13 +420,13 @@ When optimizing a system prompt (Mode B), mention that the agent can use load_sk
         let i = 0;
         while (i < lines.length) {
           // Match 4-backtick fence: ````__field_value:FIELD_NAME
-          const openMatch = lines[i].match(/^````__field_value:(.+)/);
+          const openMatch = /^````__field_value:(.+)/.exec(lines[i]);
           if (openMatch) {
             const fieldName = openMatch[1].trim();
             const startLine = i;
             i++;
             // Find closing ```` (exactly 4 backticks on its own line)
-            while (i < lines.length && !lines[i].match(/^````\s*$/)) {
+            while (i < lines.length && !(/^````\s*$/.exec(lines[i]))) {
               i++;
             }
             if (i >= lines.length) {

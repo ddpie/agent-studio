@@ -76,8 +76,9 @@ def test_get_runtime_returns_filtered_fields(mock_jwt, user_id, workspace_id, aw
 
 
 def test_get_runtime_returns_404_when_runtime_missing(mock_jwt, user_id, workspace_id, aws_event_factory):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.runtime._get_control") as mock_control_factory, \
          patch("crud.runtime._get_agent_item") as mock_get_agent, \
          patch("crud.runtime.auth_check") as auth_mock:
@@ -181,8 +182,9 @@ def test_create_endpoint_requires_editor(mock_jwt, user_id, workspace_id, aws_ev
 
 
 def test_update_endpoint_not_found_version(mock_jwt, user_id, workspace_id, aws_event_factory):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.runtime._get_control") as f, \
          patch("crud.runtime._get_agent_item") as ga, \
          patch("crud.runtime.auth_check") as auth:
@@ -388,8 +390,9 @@ def test_get_runtime_harness_branch(mock_jwt, user_id, workspace_id, aws_event_f
 
 
 def test_get_runtime_other_clienterror_500(mock_jwt, user_id, workspace_id, aws_event_factory):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.runtime._get_control") as f, \
          patch("crud.runtime._get_agent_item") as ga, \
          patch("crud.runtime.auth_check") as auth:
@@ -445,8 +448,9 @@ def test_list_versions_cross_workspace_403(mock_jwt, user_id, workspace_id, aws_
 
 
 def test_list_versions_runtime_not_found_404(mock_jwt, user_id, workspace_id, aws_event_factory):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.runtime._get_control") as f, \
          patch("crud.runtime._get_agent_item") as ga, \
          patch("crud.runtime.auth_check") as auth:
@@ -464,8 +468,9 @@ def test_list_versions_runtime_not_found_404(mock_jwt, user_id, workspace_id, aw
 
 
 def test_list_versions_other_clienterror_500(mock_jwt, user_id, workspace_id, aws_event_factory):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.runtime._get_control") as f, \
          patch("crud.runtime._get_agent_item") as ga, \
          patch("crud.runtime.auth_check") as auth:
@@ -546,8 +551,9 @@ def test_list_endpoints_cross_workspace(mock_jwt, user_id, workspace_id, aws_eve
 
 
 def test_list_endpoints_runtime_not_found_404(mock_jwt, user_id, workspace_id, aws_event_factory):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.runtime._get_control") as f, \
          patch("crud.runtime._get_agent_item") as ga, \
          patch("crud.runtime.auth_check") as auth:
@@ -565,8 +571,9 @@ def test_list_endpoints_runtime_not_found_404(mock_jwt, user_id, workspace_id, a
 
 
 def test_list_endpoints_other_clienterror_500(mock_jwt, user_id, workspace_id, aws_event_factory):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.runtime._get_control") as f, \
          patch("crud.runtime._get_agent_item") as ga, \
          patch("crud.runtime.auth_check") as auth:
@@ -689,8 +696,9 @@ def test_create_endpoint_succeeds_202(mock_jwt, user_id, workspace_id, aws_event
 
 
 def test_create_endpoint_validation_clienterror_400(mock_jwt, user_id, workspace_id, aws_event_factory):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.runtime._get_control") as f, \
          patch("crud.runtime._get_agent_item") as ga, \
          patch("crud.runtime.auth_check") as auth:
@@ -712,8 +720,9 @@ def test_create_endpoint_validation_clienterror_400(mock_jwt, user_id, workspace
 
 
 def test_create_endpoint_conflict_400(mock_jwt, user_id, workspace_id, aws_event_factory):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.runtime._get_control") as f, \
          patch("crud.runtime._get_agent_item") as ga, \
          patch("crud.runtime.auth_check") as auth:
@@ -735,8 +744,9 @@ def test_create_endpoint_conflict_400(mock_jwt, user_id, workspace_id, aws_event
 
 
 def test_create_endpoint_runtime_not_found_404(mock_jwt, user_id, workspace_id, aws_event_factory):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.runtime._get_control") as f, \
          patch("crud.runtime._get_agent_item") as ga, \
          patch("crud.runtime.auth_check") as auth:
@@ -758,8 +768,9 @@ def test_create_endpoint_runtime_not_found_404(mock_jwt, user_id, workspace_id, 
 
 
 def test_create_endpoint_other_clienterror_500(mock_jwt, user_id, workspace_id, aws_event_factory):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.runtime._get_control") as f, \
          patch("crud.runtime._get_agent_item") as ga, \
          patch("crud.runtime.auth_check") as auth:
@@ -870,8 +881,9 @@ def test_update_endpoint_succeeds_202(mock_jwt, user_id, workspace_id, aws_event
 
 
 def test_update_endpoint_validation_clienterror_400(mock_jwt, user_id, workspace_id, aws_event_factory):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.runtime._get_control") as f, \
          patch("crud.runtime._get_agent_item") as ga, \
          patch("crud.runtime.auth_check") as auth:
@@ -894,8 +906,9 @@ def test_update_endpoint_validation_clienterror_400(mock_jwt, user_id, workspace
 
 
 def test_update_endpoint_other_clienterror_500(mock_jwt, user_id, workspace_id, aws_event_factory):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.runtime._get_control") as f, \
          patch("crud.runtime._get_agent_item") as ga, \
          patch("crud.runtime.auth_check") as auth:
@@ -998,8 +1011,9 @@ def test_delete_endpoint_succeeds(mock_jwt, user_id, workspace_id, aws_event_fac
 
 
 def test_delete_endpoint_not_found_404(mock_jwt, user_id, workspace_id, aws_event_factory):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.runtime._get_control") as f, \
          patch("crud.runtime._get_agent_item") as ga, \
          patch("crud.runtime.auth_check") as auth:
@@ -1021,8 +1035,9 @@ def test_delete_endpoint_not_found_404(mock_jwt, user_id, workspace_id, aws_even
 
 
 def test_delete_endpoint_other_clienterror_500(mock_jwt, user_id, workspace_id, aws_event_factory):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.runtime._get_control") as f, \
          patch("crud.runtime._get_agent_item") as ga, \
          patch("crud.runtime.auth_check") as auth:

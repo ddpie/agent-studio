@@ -19,11 +19,9 @@ Covers:
 import json
 import sys
 import types
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ── Module stubs (mirror test_create_agent.py) ────────────────────────────────
 
@@ -249,31 +247,31 @@ class TestCleanToolDefinitions:
 
 class TestDefaultWelcome:
     def test_default_welcome_en(self, monkeypatch):
-        from tools.update_agent import _default_welcome
         from tools import _scope
+        from tools.update_agent import _default_welcome
         monkeypatch.setattr(_scope, "_creator_language", "en", raising=False)
         result = _default_welcome("Bot", "An assistant")
         assert "I'm Bot" in result
         assert "An assistant" in result
 
     def test_default_welcome_en_no_description(self, monkeypatch):
-        from tools.update_agent import _default_welcome
         from tools import _scope
+        from tools.update_agent import _default_welcome
         monkeypatch.setattr(_scope, "_creator_language", "en", raising=False)
         result = _default_welcome("Bot", "")
-        assert "I'm Bot." == result
+        assert result == "I'm Bot."
 
     def test_default_welcome_zh(self, monkeypatch):
-        from tools.update_agent import _default_welcome
         from tools import _scope
+        from tools.update_agent import _default_welcome
         monkeypatch.setattr(_scope, "_creator_language", "zh-CN", raising=False)
         result = _default_welcome("机器人", "数据分析师")
         assert "我是 机器人" in result
         assert "数据分析师" in result
 
     def test_default_welcome_zh_no_description(self, monkeypatch):
-        from tools.update_agent import _default_welcome
         from tools import _scope
+        from tools.update_agent import _default_welcome
         monkeypatch.setattr(_scope, "_creator_language", "zh", raising=False)
         result = _default_welcome("机器人", "")
         assert result == "我是 机器人。"
@@ -911,8 +909,7 @@ class TestExistingConfigPreservation:
 class TestWorkspaceFallback:
     def test_no_staging_uses_module_workspace(self, monkeypatch):
         """update_agent reads tools.create_agent._workspace_id when no staging."""
-        from tools import update_agent as mod
-        from tools import create_agent as ca_mod
+        from tools import create_agent as ca_mod, update_agent as mod
 
         # Set the module-level workspace
         monkeypatch.setattr(ca_mod, "_workspace_id", "ws-fallback", raising=False)

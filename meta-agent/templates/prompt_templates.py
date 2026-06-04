@@ -27,7 +27,6 @@ to fix at the call site, not something to stub here.
 
 from __future__ import annotations
 
-
 _BASE_GUIDELINES_EN = """\
 
 ## Behavioral Guidelines

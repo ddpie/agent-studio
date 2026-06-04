@@ -3,10 +3,10 @@
 import json
 
 import boto3
+from config import REGION
 from strands import tool
 
-from config import REGION
-from tools._scope import current_workspace, list_workspace_agents, require_role, ROLE_VIEWER
+from tools._scope import ROLE_VIEWER, list_workspace_agents, require_role
 
 
 @tool

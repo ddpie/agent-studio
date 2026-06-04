@@ -57,7 +57,7 @@ export default function CopyButtons({ content, contentRef }: { content: string; 
       clone.querySelectorAll("details.tool-call").forEach(el => el.remove());
       const svgs = clone.querySelectorAll("svg");
       for (const svg of svgs) {
-        const png = await svgToPng(svg as SVGSVGElement);
+        const png = await svgToPng(svg);
         if (png) {
           const img = document.createElement("img");
           img.src = png;

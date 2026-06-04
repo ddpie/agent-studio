@@ -13,7 +13,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ── Stub modules the template expects at import time ──────────────────────
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
 if not hasattr(_mock_strands, "tool"):

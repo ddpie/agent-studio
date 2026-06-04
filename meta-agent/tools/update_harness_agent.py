@@ -7,9 +7,8 @@ import json
 from datetime import datetime
 
 import boto3
+from config import AGENTS_TABLE, REGION, S3_BUCKET
 from strands import tool
-
-from config import REGION, AGENTS_TABLE, S3_BUCKET
 
 
 def _get_control_client():

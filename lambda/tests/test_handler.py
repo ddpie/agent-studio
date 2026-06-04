@@ -19,7 +19,7 @@ import crud.handler as h
 def origin_verify_value(monkeypatch):
     """Set the module-level ORIGIN_VERIFY_VALUE without reloading."""
     monkeypatch.setattr(h, "ORIGIN_VERIFY_VALUE", "test-origin")
-    yield h
+    return h
 
 
 def _make_event(method, path, headers=None, body=None):

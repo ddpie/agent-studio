@@ -42,7 +42,7 @@ describe("cron-builder: build", () => {
 });
 
 describe("cron-builder: parse round-trip", () => {
-  const cases: Array<[string, string]> = [
+  const cases: [string, string][] = [
     ["minutes", "rate(5 minutes)"],
     ["hourly", "cron(30 * * * ? *)"],
     ["daily", "cron(0 9 * * ? *)"],

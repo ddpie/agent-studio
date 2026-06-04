@@ -6,29 +6,28 @@ from aws_lambda_powertools.event_handler import APIGatewayRestResolver, Response
 from aws_lambda_powertools.event_handler.api_gateway import CORSConfig
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
-from crud.workspaces import router as workspaces_router
+from crud.a2a_keys import router as a2a_keys_router
 from crud.agents import router as agents_router
+from crud.channels import router as channels_router
+from crud.chat import router as chat_router
+from crud.costs import router as costs_router
+from crud.evaluations import router as evaluations_router
+from crud.kb import router as kb_router
+from crud.kiro_key import router as kiro_key_router
+from crud.logs import router as logs_router
+from crud.mcp import router as mcp_router
+from crud.memories import router as memories_router
+from crud.meta_agent import router as meta_agent_router
+from crud.runs import router as runs_router
+from crud.runtime import router as runtime_router
+from crud.schedules import router as schedules_router
+from crud.secrets import router as secrets_router
 from crud.skills import router as skills_router
 from crud.tools import router as tools_router
-from crud.uploads import router as uploads_router
-from crud.secrets import router as secrets_router
-from crud.mcp import router as mcp_router
-from crud.runtime import router as runtime_router
-
 from crud.traces import router as traces_router
-from crud.meta_agent import router as meta_agent_router
-from crud.a2a_keys import router as a2a_keys_router
-from crud.schedules import router as schedules_router
-from crud.costs import router as costs_router
-from crud.logs import router as logs_router
-from crud.memories import router as memories_router
-from crud.runs import router as runs_router
-from crud.kiro_key import router as kiro_key_router
-from crud.chat import router as chat_router
+from crud.uploads import router as uploads_router
 from crud.workspace_iam import router as workspace_iam_router
-from crud.kb import router as kb_router
-from crud.channels import router as channels_router
-from crud.evaluations import router as evaluations_router
+from crud.workspaces import router as workspaces_router
 
 logger = Logger(service="agent-studio-crud")
 
@@ -72,7 +71,6 @@ def health():
 @app.exception_handler(Exception)
 def handle_unhandled(ex: Exception):
     logger.exception("Unhandled exception")
-    from aws_lambda_powertools.event_handler import Response
     return Response(
         status_code=500,
         content_type="application/json",

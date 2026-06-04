@@ -15,7 +15,6 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
-
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
 if not hasattr(_mock_strands, "tool"):
     _mock_strands.tool = lambda f: f
@@ -45,8 +44,7 @@ for _k, _v in {
 sys.modules["config"] = _mock_config
 
 
-from tools import write_skill_file as _wsf  # noqa: E402
-
+from tools import write_skill_file as _wsf
 
 WS = "ws-alpha"
 OTHER_WS = "ws-beta"

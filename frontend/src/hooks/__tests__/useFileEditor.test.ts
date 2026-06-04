@@ -4,7 +4,7 @@
  * draft autosave/restore integration.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook, act } from "@testing-library/react";
 
 // --- Mock draft-autosave: keep behavior simple and observable -------------
 const loadDraftWithMeta = vi.fn();

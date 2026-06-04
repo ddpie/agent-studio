@@ -5,13 +5,19 @@ import re
 from datetime import datetime, timezone
 
 import boto3
+from config import AGENTS_TABLE, MODEL_ID, REGION, S3_BUCKET
+from deploy import (
+    _shared_env_vars,
+    build_deployment_package_v2,
+    build_skill_prompt_section,
+    upload_deployment,
+    validate_agent_files,
+)
 from strands import tool
 
-from config import MODEL_ID, REGION, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE, SUB_AGENT_ROLE_ARN
-from tools._workspace import _get_agent_role_arn
-from deploy import build_deployment_package_v2, upload_deployment, validate_agent_files, build_skill_prompt_section, _shared_env_vars
-from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
+from templates.agent_template_v2 import MAIN_PY_MCP_TEMPLATE, MAIN_PY_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_base_guidelines
+from tools._workspace import _get_agent_role_arn
 
 
 def _default_welcome(agent_name: str, description: str) -> str:
@@ -27,8 +33,9 @@ def _default_welcome(agent_name: str, description: str) -> str:
     if lang.startswith("zh"):
         return f"我是 {agent_name}。{description}" if description else f"我是 {agent_name}。"
     return f"I'm {agent_name}. {description}" if description else f"I'm {agent_name}."
+from tools.create_agent import _check_mcp_policy, _get_workspace_mcp_policy, _resolve_mcp_endpoints
 from tools_library.registry import get_tool_code_by_func_name as _get_builtin_code
-from tools.create_agent import _get_workspace_mcp_policy, _check_mcp_policy, _resolve_mcp_endpoints
+
 
 def _clean_tool_definitions(defs: str) -> str:
     """Strip template boilerplate from tool_definitions, keeping only @tool functions."""
@@ -44,7 +51,7 @@ def _clean_tool_definitions(defs: str) -> str:
             result.append(line)
             continue
         if in_tool:
-            if stripped and not line[0:1] in (" ", "\t") and not stripped.startswith("def ") and not stripped.startswith("#") and not stripped.startswith("@"):
+            if stripped and line[0:1] not in (" ", "\t") and not stripped.startswith("def ") and not stripped.startswith("#") and not stripped.startswith("@"):
                 in_tool = False
                 if stripped.startswith(("async def _", "def _", "@app.", "import json as _json",
                                         "import base64 as _b64", "if __name__", "app.run()")):
@@ -207,7 +214,7 @@ def update_agent(
     # (The old comment here claimed CRUD Lambda would enforce this, but
     # Meta-Agent calls update_agent via Strands tools — NOT through the
     # CRUD HTTP API — so this is the only enforcement point.)
-    from tools._scope import ensure_agent_in_workspace, ROLE_EDITOR
+    from tools._scope import ROLE_EDITOR, ensure_agent_in_workspace
     record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_EDITOR)
     if err:
         return json.dumps(err)

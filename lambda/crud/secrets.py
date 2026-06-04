@@ -1,15 +1,12 @@
 """Agent secrets CRUD endpoints (AWS Secrets Manager)."""
-import json
-import re
 
 import boto3
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler.api_gateway import Router
 
-from shared.auth import verify_jwt, get_membership, check_permission
-from shared.config import REGION, AGENTS_TABLE
+from shared.config import AGENTS_TABLE, REGION
 from shared.middleware import auth_check
-from shared.response import success, forbidden, not_found, bad_request
+from shared.response import bad_request, forbidden, not_found, success
 from shared.validators import validate_id, validate_secret_key
 
 router = Router()

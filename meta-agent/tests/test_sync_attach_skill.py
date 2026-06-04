@@ -19,7 +19,6 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
-
 # ── Module stubs so `from strands import tool` etc. work in-process ──────
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
 if not hasattr(_mock_strands, "tool"):
@@ -66,9 +65,6 @@ _install_config_stub()
 # resolve the attribute. Without this, patch() calls pkgutil.resolve_name
 # which tries to getattr(tools, "sync_agent_skill") before anything has
 # imported that submodule — AttributeError.
-from tools import sync_agent_skill as _sync_mod  # noqa: E402
-from tools import attach_agent_skill as _attach_mod  # noqa: E402
-
 
 # ── Shared fakes ─────────────────────────────────────────────────────────
 

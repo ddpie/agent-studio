@@ -109,7 +109,7 @@ export default function SecretsTab({ agentId }: Props) {
         </div>
       )}
 
-      {secrets && secrets.length === 0 && !loading && (
+      {secrets?.length === 0 && !loading && (
         <div className="text-sm text-gray-500 dark:text-gray-400" data-testid="secrets-empty">
           {t("secrets.empty")}
         </div>

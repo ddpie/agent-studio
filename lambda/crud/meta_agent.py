@@ -19,7 +19,7 @@ from botocore.exceptions import ClientError
 
 from shared.config import META_AGENT_ARN, REGION
 from shared.middleware import auth_check
-from shared.response import success, bad_request, internal_error
+from shared.response import bad_request, internal_error, success
 
 router = Router()
 logger = Logger(child=True)

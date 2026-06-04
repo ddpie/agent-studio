@@ -28,11 +28,11 @@ type ChunkSource = {
   close: () => void;
 };
 
-const streamSources: Map<string, ChunkSource> = new Map();
+const streamSources = new Map<string, ChunkSource>();
 
 function makeAsyncGenerator(key: string): AsyncGenerator<string> {
   const chunks: string[] = [];
-  let resolvers: Array<() => void> = [];
+  let resolvers: (() => void)[] = [];
   let closed = false;
 
   const source: ChunkSource = {

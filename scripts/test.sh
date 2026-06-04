@@ -2,13 +2,14 @@
 # scripts/test.sh — single entry point for all tests in Agent Studio.
 #
 # Tiers (can be selected individually):
-#   --unit          vitest (frontend) + pytest (meta-agent)
+#   --unit          vitest (frontend) + pytest (lambda + meta-agent)
+#   --integration   pytest -m integration (lambda + moto)
 #   --typecheck     tsc --noEmit on frontend + infra
-#   --lint          eslint (frontend) + bash -n (scripts) + check-invariants
+#   --lint          eslint (frontend) + ruff (python) + bash -n + check-invariants
 #   --security      pre-commit-security.sh against all staged+tracked files
 #   --e2e           playwright E2E tests (needs running app + .env.e2e)
 #   --all           all offline tiers (unit + typecheck + lint + security)
-#   --full          everything including e2e
+#   --full          everything including integration + e2e
 #
 # Default (no args): --all (offline only, safe to run anywhere)
 #
@@ -25,7 +26,7 @@ hdr() { echo -e "\n${CYAN}══════════════════
 ok()  { echo -e "${GREEN}✓ $1 PASSED${NC}"; }
 bad() { echo -e "${RED}✗ $1 FAILED (exit $2)${NC}"; }
 
-DO_UNIT=0; DO_TYPECHECK=0; DO_LINT=0; DO_SECURITY=0; DO_E2E=0
+DO_UNIT=0; DO_INTEGRATION=0; DO_TYPECHECK=0; DO_LINT=0; DO_SECURITY=0; DO_E2E=0
 
 if [ $# -eq 0 ]; then
   DO_UNIT=1; DO_TYPECHECK=1; DO_LINT=1; DO_SECURITY=1
@@ -33,15 +34,16 @@ fi
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --unit)      DO_UNIT=1; shift ;;
-    --typecheck) DO_TYPECHECK=1; shift ;;
-    --lint)      DO_LINT=1; shift ;;
-    --security)  DO_SECURITY=1; shift ;;
-    --e2e)       DO_E2E=1; shift ;;
-    --all)       DO_UNIT=1; DO_TYPECHECK=1; DO_LINT=1; DO_SECURITY=1; shift ;;
-    --full)      DO_UNIT=1; DO_TYPECHECK=1; DO_LINT=1; DO_SECURITY=1; DO_E2E=1; shift ;;
-    -h|--help)   sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *)           echo "Unknown argument: $1" >&2; exit 2 ;;
+    --unit)        DO_UNIT=1; shift ;;
+    --integration) DO_INTEGRATION=1; shift ;;
+    --typecheck)   DO_TYPECHECK=1; shift ;;
+    --lint)        DO_LINT=1; shift ;;
+    --security)    DO_SECURITY=1; shift ;;
+    --e2e)         DO_E2E=1; shift ;;
+    --all)         DO_UNIT=1; DO_TYPECHECK=1; DO_LINT=1; DO_SECURITY=1; shift ;;
+    --full)        DO_UNIT=1; DO_INTEGRATION=1; DO_TYPECHECK=1; DO_LINT=1; DO_SECURITY=1; DO_E2E=1; shift ;;
+    -h|--help)     sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *)             echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
@@ -68,6 +70,12 @@ if [ "$DO_LINT" = 1 ]; then
     for f in "'"$ROOT"'"/scripts/*.sh; do bash -n "$f" || exit 1; done
   '
   run_tier "lint (eslint)" bash -c "cd '$ROOT/frontend' && npx eslint . --max-warnings 0"
+  if command -v ruff >/dev/null 2>&1; then
+    run_tier "lint (ruff)" bash -c "cd '$ROOT' && ruff check lambda/ meta-agent/ scripts/"
+    run_tier "format (ruff)" bash -c "cd '$ROOT' && ruff format --check lambda/ meta-agent/"
+  else
+    echo "  ruff not installed — skipping (pip install ruff)"
+  fi
   run_tier "lint (invariants)" "$ROOT/scripts/check-invariants.sh"
 fi
 
@@ -101,10 +109,27 @@ fi
 if [ "$DO_UNIT" = 1 ]; then
   run_tier "unit (frontend vitest)" bash -c "cd '$ROOT/frontend' && npx vitest run"
 
+  if [ -d "$ROOT/lambda/tests" ]; then
+    run_tier "unit (lambda pytest)" bash -c "
+      cd '$ROOT/lambda' && PYTHONPATH=. python3 -m pytest tests/ --tb=short -q
+    "
+  fi
+
   if [ -d "$ROOT/meta-agent/tests" ]; then
     run_tier "unit (meta-agent pytest)" bash -c "
-      cd '$ROOT/meta-agent' && PYTHONPATH=. python3 -m pytest tests/ -v --tb=short
+      cd '$ROOT/meta-agent' && PYTHONPATH=. python3 -m pytest tests/ --tb=short -q
     "
+  fi
+fi
+
+# --- Integration tests ---
+if [ "$DO_INTEGRATION" = 1 ]; then
+  if python3 -c "import moto" 2>/dev/null; then
+    run_tier "integration (lambda moto)" bash -c "
+      cd '$ROOT/lambda' && PYTHONPATH=. python3 -m pytest tests/integration/ --tb=short -q
+    "
+  else
+    echo "  moto not installed — skipping integration (pip install 'moto[dynamodb,s3,secretsmanager]')"
   fi
 fi
 

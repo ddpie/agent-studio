@@ -290,7 +290,7 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
               <button
                 onClick={() => {
                   const name = prompt(t("skillEditor.newFileName", "New file name (e.g. scripts/run.py):"))
-                  if (!name || !name.trim()) return
+                  if (!name?.trim()) return
                   const path = name.trim()
                   if (!editor.stageNewFile(path)) {
                     setError(t("skillEditor.fileExists", "File already exists"))
@@ -307,7 +307,7 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
               <button
                 onClick={() => {
                   const name = prompt(t("skillEditor.newFolderTitle", "New folder name:"))
-                  if (!name || !name.trim()) return
+                  if (!name?.trim()) return
                   const path = `${name.trim()}/untitled`
                   if (!editor.stageNewFile(path, "")) return
                   editor.setCurrentFile(path)

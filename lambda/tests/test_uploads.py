@@ -1,11 +1,9 @@
 """Tests for crud.uploads — presigned URLs, public listings, and clones."""
 import base64
 import json
-from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -193,7 +191,7 @@ class TestUploadAttachment:
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/uploads/attachments", body=body))
         assert resp["statusCode"] == 200
         data = json.loads(resp["body"])
-        assert "uploads/attachments/sess_abc-123/doc.pdf" == data["s3Key"]
+        assert data["s3Key"] == "uploads/attachments/sess_abc-123/doc.pdf"
 
     def test_invalid_content_type(self, workspace_id, mock_jwt, _mock_editor, mock_s3):
         body = {"content_type": "image/png", "filename": "x.png", "sessionId": "s1"}
@@ -1105,7 +1103,6 @@ class TestPublicListsPagination:
         assert "nextCursor" in data
 
     def test_agents_with_valid_cursor(self, mock_jwt, mock_agents_table):
-        import base64
         cursor_token = base64.b64encode(json.dumps({"agentId": "a1"}).encode()).decode()
         mock_agents_table.query.return_value = {
             "Items": [{"agentId": "a2", "name": "A2"}],
@@ -1148,7 +1145,6 @@ class TestPublicListsPagination:
         assert "nextCursor" in data
 
     def test_skills_with_valid_cursor(self, mock_jwt, mock_skills_table):
-        import base64
         cursor_token = base64.b64encode(json.dumps({"skillId": "s1"}).encode()).decode()
         mock_skills_table.scan.return_value = {"Items": [], "LastEvaluatedKey": None}
         resp = _invoke(_apigw(
@@ -1185,7 +1181,6 @@ class TestPublicListsPagination:
         assert "nextCursor" in data
 
     def test_tools_with_valid_cursor(self, mock_jwt, mock_tools_table):
-        import base64
         cursor_token = base64.b64encode(json.dumps({"toolId": "t1"}).encode()).decode()
         mock_tools_table.scan.return_value = {"Items": [], "LastEvaluatedKey": None}
         resp = _invoke(_apigw(

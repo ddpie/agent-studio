@@ -23,7 +23,7 @@ export interface RunArtifact {
 
 export interface RunOutput {
   text: string;
-  toolCalls: Array<{ name: string; input: string; output: string }>;
+  toolCalls: { name: string; input: string; output: string }[];
 }
 
 export interface RunDetail {

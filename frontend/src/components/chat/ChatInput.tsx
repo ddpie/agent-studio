@@ -5,7 +5,7 @@ import { uploadImageToS3, uploadFileToS3, buildAttachmentHint } from "../../lib/
 import { agentConfig } from "../../config";
 
 interface ChatInputProps {
-  onSend: (content: string, images?: string[], modelId?: string, attachments?: Array<{ name: string; size: number; s3Key: string }>) => void;
+  onSend: (content: string, images?: string[], modelId?: string, attachments?: { name: string; size: number; s3Key: string }[]) => void;
   isStreaming: boolean;
   onCancel: () => void;
   imagesAllowed: boolean;
@@ -30,13 +30,13 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput
   // refuse to send until every image has a stable S3 URL. Storing only
   // S3 URLs (never raw data URLs) in the final message keeps localStorage
   // bounded — see chat-store sanitize logic.
-  const [pendingImages, setPendingImages] = useState<Array<{
+  const [pendingImages, setPendingImages] = useState<{
     id: string;
     previewUrl: string;           // local data URL, only for inline preview
     s3Url?: string;               // populated when upload succeeds
     status: "uploading" | "success" | "failed";
-  }>>([]);
-  const [attachedFiles, setAttachedFiles] = useState<Array<{ name: string; size: number; s3Key: string; uploading?: boolean }>>([]);
+  }[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<{ name: string; size: number; s3Key: string; uploading?: boolean }[]>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
   const savedInputRef = useRef("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);

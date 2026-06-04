@@ -10,6 +10,7 @@ import pytest
 def inject_env(monkeypatch):
     monkeypatch.setenv("A2A_KEYS_TABLE", "test-a2a-keys")
     import importlib
+
     import shared.config as _cfg
     importlib.reload(_cfg)
 

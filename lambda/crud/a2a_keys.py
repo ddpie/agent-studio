@@ -21,7 +21,7 @@ from boto3.dynamodb.conditions import Key
 
 from shared.config import A2A_KEYS_TABLE, AGENTS_TABLE, REGION
 from shared.middleware import auth_check
-from shared.response import success, forbidden, bad_request, not_found
+from shared.response import bad_request, forbidden, not_found, success
 from shared.validators import validate_id
 
 router = Router()

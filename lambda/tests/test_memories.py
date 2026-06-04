@@ -1,6 +1,7 @@
 """Tests for lambda/crud/memories.py — GET /my-memories."""
 import json
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 
@@ -645,7 +646,7 @@ def test_forget_all_strategy_loop_break_over_cap(mock_agentcore_data, mock_ws_ta
     yields exactly _FORGET_ALL_HARD_CAP records on first strategy, no
     nextToken; the second strategy iteration's `if deleted >= cap:` fires.
     """
-    from crud.memories import _forget_all_impl, _FORGET_ALL_HARD_CAP
+    from crud.memories import _FORGET_ALL_HARD_CAP, _forget_all_impl
     # Enough records on first strategy to exactly reach cap
     records = [{"memoryRecordId": f"r{i}"} for i in range(_FORGET_ALL_HARD_CAP)]
     pages = [{"memoryRecordSummaries": records, "nextToken": None}]

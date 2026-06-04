@@ -11,10 +11,10 @@ import boto3
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler.api_gateway import Router
 
-from shared.config import REGION, WORKSPACES_TABLE, ACCOUNT_ID, WORKSPACE_BOUNDARY_ARN
+from crud.mcp_iam_registry import _NO_IAM_TARGETS, MCP_IAM_POLICIES
+from shared.config import ACCOUNT_ID, REGION, WORKSPACE_BOUNDARY_ARN, WORKSPACES_TABLE
 from shared.middleware import auth_check, check_platform_admin
-from shared.response import success, bad_request, forbidden, internal_error, not_found
-from crud.mcp_iam_registry import MCP_IAM_POLICIES, _NO_IAM_TARGETS
+from shared.response import bad_request, forbidden, internal_error, not_found, success
 
 router = Router()
 logger = Logger(child=True)
@@ -326,7 +326,7 @@ def create_workspace_role(wsId: str):
             role_arn = resp["Role"]["Arn"]
         except Exception as e:
             logger.exception("Failed to create IAM role", extra={"roleName": role_name})
-            return internal_error(f"Failed to create IAM role: {str(e)}")
+            return internal_error(f"Failed to create IAM role: {e!s}")
 
         # Attach DefaultMinimal inline policy.
         try:
@@ -342,7 +342,7 @@ def create_workspace_role(wsId: str):
                 iam_client.delete_role(RoleName=role_name)
             except Exception:
                 pass
-            return internal_error(f"Failed to attach default policy: {str(e)}")
+            return internal_error(f"Failed to attach default policy: {e!s}")
 
     # Store roleArn + roleName in DDB workspace META.
     now = datetime.utcnow().isoformat() + "Z"
@@ -439,7 +439,7 @@ def grant_mcp(wsId: str):
             )
         except Exception:
             pass
-        return internal_error(f"Failed to update IAM policy: {str(e)}")
+        return internal_error(f"Failed to update IAM policy: {e!s}")
 
     return success({"mcpGrants": updated_grants, "policySize": policy_size})
 
@@ -507,7 +507,7 @@ def revoke_mcp(wsId: str):
             )
         except Exception:
             pass
-        return internal_error(f"Failed to update IAM policy: {str(e)}")
+        return internal_error(f"Failed to update IAM policy: {e!s}")
 
     return success({"mcpGrants": updated_grants})
 
@@ -561,7 +561,7 @@ def get_permissions(wsId: str):
                 })
     except Exception as e:
         logger.exception("SimulatePrincipalPolicy failed", extra={"roleArn": role_arn})
-        return internal_error(f"Permission simulation failed: {str(e)}")
+        return internal_error(f"Permission simulation failed: {e!s}")
 
     return success({
         "hasRole": True,

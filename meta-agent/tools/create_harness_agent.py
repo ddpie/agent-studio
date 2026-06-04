@@ -12,18 +12,19 @@ Either path ends in 401/403 at invoke time. Use create_agent (zip) if
 the user needs MCP tools.
 """
 import json
-from datetime import datetime
-
-import boto3
-from strands import tool
-
-from config import REGION, AGENTS_TABLE, S3_BUCKET
-from tools._scope import current_caller, current_workspace
-from tools._workspace import _get_agent_role_arn
 
 # Workspaces table isn't in meta-agent/config.py (Meta-Agent rarely needs it);
 # hardcode the default here + env override for parity with Lambda naming.
 import os as _os
+from datetime import datetime
+
+import boto3
+from config import AGENTS_TABLE, REGION, S3_BUCKET
+from strands import tool
+
+from tools._scope import current_caller, current_workspace
+from tools._workspace import _get_agent_role_arn
+
 _WORKSPACES_TABLE = _os.getenv("AGENT_STUDIO_WORKSPACES_TABLE", "agent-studio-workspaces")
 
 

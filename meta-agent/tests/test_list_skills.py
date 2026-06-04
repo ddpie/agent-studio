@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ── Module stubs ───────────────────────────────────────────────────────────
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
 if not hasattr(_mock_strands, "tool"):
@@ -91,8 +90,7 @@ def _patch_membership_and_table(monkeypatch, skills_items, role="viewer",
 
 def test_list_skills_denies_non_member(monkeypatch):
     """require_role rejects non-member callers."""
-    from tools import list_skills as mod
-    from tools import _scope
+    from tools import _scope, list_skills as mod
 
     workspaces = MagicMock()
     workspaces.get_item.return_value = {}
@@ -219,8 +217,7 @@ def test_list_skills_clamps_invalid_limit(monkeypatch):
 
 def test_list_skills_paginates_ddb_results(monkeypatch):
     """When DDB returns LastEvaluatedKey, follows pagination cursor."""
-    from tools import list_skills as mod
-    from tools import _scope
+    from tools import _scope, list_skills as mod
 
     workspaces = MagicMock()
     workspaces.get_item.return_value = {"Item": {"role": "viewer"}}
@@ -247,8 +244,7 @@ def test_list_skills_paginates_ddb_results(monkeypatch):
 
 def test_list_skills_handles_ddb_failure(monkeypatch):
     """DDB query exception returns {error: ...}."""
-    from tools import list_skills as mod
-    from tools import _scope
+    from tools import _scope, list_skills as mod
 
     workspaces = MagicMock()
     workspaces.get_item.return_value = {"Item": {"role": "viewer"}}

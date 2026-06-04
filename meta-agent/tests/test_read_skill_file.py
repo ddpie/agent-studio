@@ -9,10 +9,7 @@ Coverage focuses on:
 import json
 import sys
 import types
-from unittest.mock import MagicMock, patch
-
-import pytest
-
+from unittest.mock import MagicMock
 
 # ── Module stubs so `from strands import tool` works in-process ───────────
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
@@ -212,7 +209,7 @@ def test_read_skill_file_returns_content(monkeypatch):
     table = _FakeSkillsTable({
         "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": False},
     })
-    s3 = _FakeS3({"skills/s-1/SKILL.md": "# Hello".encode("utf-8")})
+    s3 = _FakeS3({"skills/s-1/SKILL.md": b"# Hello"})
     _patch_module(monkeypatch, role="viewer", workspace=WS_ID,
                   skills_table=table, s3=s3)
 

@@ -8,11 +8,18 @@ from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler.api_gateway import Router
 from boto3.dynamodb.conditions import Key
 
-from shared.auth import verify_jwt, get_membership, check_permission
-from shared.config import SKILLS_TABLE, REGION, ASSETS_BUCKET
+from shared.config import ASSETS_BUCKET, REGION, SKILLS_TABLE
 from shared.middleware import auth_check
-from shared.response import success, paginated, forbidden, not_found, bad_request, version_conflict, internal_error
-from shared.validators import validate_id, validate_path, parse_pagination
+from shared.response import (
+    bad_request,
+    forbidden,
+    internal_error,
+    not_found,
+    paginated,
+    success,
+    version_conflict,
+)
+from shared.validators import parse_pagination, validate_id, validate_path
 
 router = Router()
 logger = Logger(child=True)
@@ -378,7 +385,7 @@ def import_skill(wsId: str):
     import re as _re
     for script_name in scripts:
         if not _re.match(r"^[a-zA-Z0-9._-]+$", script_name):
-            return bad_request(f"Invalid script name: must match [a-zA-Z0-9._-]+")
+            return bad_request("Invalid script name: must match [a-zA-Z0-9._-]+")
     for file_path in extra_files:
         path_err = validate_path(file_path)
         if path_err:

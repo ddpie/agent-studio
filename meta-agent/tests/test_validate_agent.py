@@ -3,7 +3,8 @@
 import json
 import sys
 import types
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 # Mock strands and config before importing the module under test
@@ -38,13 +39,12 @@ sys.modules.setdefault("tools_library", _mock_tl)
 sys.modules.setdefault("tools_library.registry", _mock_registry)
 
 from tools.validate_agent import (
-    validate_agent,
     _WRITE_RE,
-    _UNAVAILABLE_LIBS,
-    _get_mcp_tool_names,
     _extract_tool_blocks,
     _get_builtin_tool_names,
+    _get_mcp_tool_names,
     _review_prompt_quality,
+    validate_agent,
 )
 
 
@@ -1257,7 +1257,7 @@ class TestMCPIAMCheck:
         }
 
         fake_mod = types.ModuleType("tools.list_mcp_servers")
-        fake_mod._load_registry_iam_policies = lambda: {}  # no policy
+        fake_mod._load_registry_iam_policies = dict  # no policy
         fake_mod._get_workspace_role_arn = lambda ws: None
         fake_mod._check_iam_permissions = lambda *a: {"granted": True}
         sys.modules["tools.list_mcp_servers"] = fake_mod

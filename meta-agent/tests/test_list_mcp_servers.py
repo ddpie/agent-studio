@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-
 # ── Module stubs ───────────────────────────────────────────────────────────
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
 if not hasattr(_mock_strands, "tool"):
@@ -316,7 +315,7 @@ def test_list_mcp_servers_denied_count(monkeypatch):
         }],
         "runtime_targets": [],
     })
-    monkeypatch.setattr(mod, "_list_deployed_runtimes", lambda: {})
+    monkeypatch.setattr(mod, "_list_deployed_runtimes", dict)
     monkeypatch.setattr(mod, "_get_workspace_role_arn", lambda ws: None)
 
     out = json.loads(mod.list_mcp_servers())

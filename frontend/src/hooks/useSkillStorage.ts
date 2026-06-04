@@ -39,39 +39,39 @@ export function useSkillStorage(
   agentSkillId?: string | null,
 ): SkillStorageOps {
   const isAgentMode = !!(agentId && agentSkillId)
-  const storageSkillId = isAgentMode ? agentSkillId! : skillId
+  const storageSkillId = isAgentMode ? agentSkillId : skillId
 
   const getContent = useCallback(async (path?: string) => {
     if (isAgentMode) {
-      return readAgentSkillFile(agentId!, agentSkillId!, path || "SKILL.md")
+      return readAgentSkillFile(agentId, agentSkillId, path || "SKILL.md")
     }
     return path ? getSkillFile(skillId, path) : getSkillContent(skillId)
   }, [skillId, agentId, agentSkillId, isAgentMode])
 
   const getFile = useCallback(async (path: string) => {
     if (isAgentMode) {
-      return readAgentSkillFile(agentId!, agentSkillId!, path)
+      return readAgentSkillFile(agentId, agentSkillId, path)
     }
     return getSkillFile(skillId, path)
   }, [skillId, agentId, agentSkillId, isAgentMode])
 
   const listFiles = useCallback(async () => {
     if (isAgentMode) {
-      return listAgentSkillFiles(agentId!, agentSkillId!)
+      return listAgentSkillFiles(agentId, agentSkillId)
     }
     return listSkillFiles(skillId)
   }, [skillId, agentId, agentSkillId, isAgentMode])
 
   const writeFile = useCallback(async (path: string, content: string) => {
     if (isAgentMode) {
-      return writeAgentSkillFile(agentId!, agentSkillId!, path, content)
+      return writeAgentSkillFile(agentId, agentSkillId, path, content)
     }
     return writeSkillFile(skillId, path, content)
   }, [skillId, agentId, agentSkillId, isAgentMode])
 
   const deleteFile = useCallback(async (path: string) => {
     if (isAgentMode) {
-      return deleteAgentSkillFiles(agentId!, agentSkillId!, path)
+      return deleteAgentSkillFiles(agentId, agentSkillId, path)
     }
     return deleteSkillFile(skillId, path)
   }, [skillId, agentId, agentSkillId, isAgentMode])
@@ -79,11 +79,11 @@ export function useSkillStorage(
   const renameFile = useCallback(async (oldPath: string, newPath: string) => {
     if (isAgentMode) {
       // Read old, write new, delete old — all via Lambda API
-      const content = await readAgentSkillFile(agentId!, agentSkillId!, oldPath)
+      const content = await readAgentSkillFile(agentId, agentSkillId, oldPath)
       if (content === null) return false
-      const written = await writeAgentSkillFile(agentId!, agentSkillId!, newPath, content)
+      const written = await writeAgentSkillFile(agentId, agentSkillId, newPath, content)
       if (!written) return false
-      return deleteAgentSkillFiles(agentId!, agentSkillId!, oldPath)
+      return deleteAgentSkillFiles(agentId, agentSkillId, oldPath)
     }
     return renameSkillFile(skillId, oldPath, newPath)
   }, [skillId, agentId, agentSkillId, isAgentMode])

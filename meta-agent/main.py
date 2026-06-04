@@ -36,10 +36,9 @@ a fresh regression without redeploying debug builds.
 
 # OTEL bootstrap MUST run before strands / boto3 / bedrock_agentcore are
 # imported so that auto-instrumentation can monkey-patch them.
-import os as _os
-import sys as _sys
-import time as _time
 import logging as _boot_logging
+import os as _os
+import time as _time
 
 _t_boot_start = _time.monotonic()
 _boot_log = _boot_logging.getLogger("meta_agent.boot")
@@ -61,9 +60,11 @@ _log_phase("boot start")
 
 if _os.environ.get("AGENT_OBSERVABILITY_ENABLED", "").lower() == "true":
     try:
-        from opentelemetry.instrumentation.auto_instrumentation import initialize as _otel_init  # type: ignore
+        from opentelemetry.instrumentation.auto_instrumentation import (
+            initialize as _otel_init,  # type: ignore
+        )
         _otel_init()
-    except Exception as _e:  # noqa: BLE001
+    except Exception as _e:
         _boot_log.warning(f"OTEL auto-instrumentation disabled: {_e}")
 _log_phase("OTEL bootstrap done")
 
@@ -71,10 +72,10 @@ import asyncio
 import json
 import logging
 import os
-import time
 from pathlib import Path
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
+
 _log_phase("bedrock_agentcore imported")
 
 # Tool imports: every @tool function the Meta-Agent exposes. The Kiro
@@ -83,6 +84,7 @@ _log_phase("bedrock_agentcore imported")
 # import them here so ALL_TOOLS is the single source of truth; the stdio
 # server re-imports `main` and reads ALL_TOOLS from it.
 from tools.create_agent import create_agent
+
 # list_prompt_templates is deliberately NOT imported — the function
 # still exists as a deprecated no-op shim in create_agent.py for any
 # external caller linking to it, but the Meta-Agent's tool surface no
@@ -102,42 +104,42 @@ except Exception as _e:
     _boot_log.warning(f"Failed to publish tool catalog: {_e}")
 _log_phase("tool catalog published")
 
-from tools.list_agents import list_agents
-from tools.delete_agent import delete_agent, restore_agent, purge_agent
-from tools.invoke_agent import invoke_agent
-from tools.get_agent_detail import get_agent_detail
-from tools.update_agent import update_agent
-from tools.create_harness_agent import create_harness_agent
-from tools.update_harness_agent import update_harness_agent
-from tools.delete_harness_agent import delete_harness_agent
-from tools.check_agent_logs import check_agent_logs
-from tools.create_skill import create_skill
-from tools.list_skills import list_skills
-from tools.update_skill import update_skill
-from tools.delete_skill import delete_skill
-from tools.import_skill import import_skill
-from tools.read_skill_file import list_skill_files, read_skill_file
-from tools.write_skill_file import write_skill_file, delete_skill_file as delete_skill_file_in_skill
-from tools.sync_agent_skill import sync_agent_skill
-from tools.attach_agent_skill import attach_agent_skill
-from tools.list_mcp_servers import list_mcp_servers
-from tools.list_mcp_target_tools import list_mcp_target_tools
-from tools.manage_secrets import set_agent_secrets, list_agent_secrets, delete_agent_secret
-from tools_library.registry import list_tool_library, get_tool_library_code
 from tools.analyze_trace import analyze_trace
-from tools.create_schedule import create_schedule
-from tools.validate_agent import validate_agent
-from tools.preview_code import preview_assembled_code
-from tools.link_agent import link_agent, unlink_agent
+from tools.attach_agent_skill import attach_agent_skill
+from tools.check_agent_logs import check_agent_logs
 from tools.check_workspace_permissions import check_workspace_permissions
-from tools.kb_create import kb_create
-from tools.kb_upload_document import kb_upload_document
-from tools.kb_list import kb_list
-from tools.kb_get import kb_get
+from tools.create_harness_agent import create_harness_agent
+from tools.create_schedule import create_schedule
+from tools.create_skill import create_skill
+from tools.delete_agent import delete_agent, purge_agent, restore_agent
+from tools.delete_harness_agent import delete_harness_agent
+from tools.delete_skill import delete_skill
+from tools.get_agent_detail import get_agent_detail
+from tools.import_skill import import_skill
+from tools.invoke_agent import invoke_agent
+from tools.kb_attach import kb_attach_to_agent, kb_detach_from_agent
 from tools.kb_check_ingestion import kb_check_ingestion
+from tools.kb_create import kb_create
 from tools.kb_delete import kb_delete
 from tools.kb_delete_document import kb_delete_document
-from tools.kb_attach import kb_attach_to_agent, kb_detach_from_agent
+from tools.kb_get import kb_get
+from tools.kb_list import kb_list
+from tools.kb_upload_document import kb_upload_document
+from tools.link_agent import link_agent, unlink_agent
+from tools.list_agents import list_agents
+from tools.list_mcp_servers import list_mcp_servers
+from tools.list_mcp_target_tools import list_mcp_target_tools
+from tools.list_skills import list_skills
+from tools.manage_secrets import delete_agent_secret, list_agent_secrets, set_agent_secrets
+from tools.preview_code import preview_assembled_code
+from tools.read_skill_file import list_skill_files, read_skill_file
+from tools.sync_agent_skill import sync_agent_skill
+from tools.update_agent import update_agent
+from tools.update_harness_agent import update_harness_agent
+from tools.update_skill import update_skill
+from tools.validate_agent import validate_agent
+from tools.write_skill_file import delete_skill_file as delete_skill_file_in_skill, write_skill_file
+from tools_library.registry import get_tool_library_code, list_tool_library
 
 _log_phase("all tools imported")
 
@@ -159,6 +161,7 @@ from kiro_adapter.kiro_home import (
 )
 from kiro_adapter.mcp_server import apply_scope
 from kiro_adapter.sse_mapper import ACPToSSEMapper, keepalive
+
 _log_phase("kiro_adapter imported")
 
 # One-time OS fingerprint. Helps future-us diagnose binary-compat issues
@@ -450,7 +453,6 @@ async def _get_usage(api_key: str, region: str):
     The whole thing is one SSE frame — caller awaits `async for` and
     gets exactly one yield.
     """
-    import re
 
     if not api_key:
         yield json.dumps({"__error": "kiro_not_configured"})
@@ -484,7 +486,7 @@ async def _get_usage(api_key: str, region: str):
         log.warning("kiro-cli /usage timed out")
         yield json.dumps({"__error": "usage_cli_failed", "detail": "timeout"})
         return
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         log.exception("kiro-cli /usage spawn failed")
         yield json.dumps({"__error": "usage_cli_failed", "detail": repr(e)[:120]})
         return
@@ -624,7 +626,7 @@ async def _list_models(api_key: str):
                         proc.returncode, cli_stderr[:400])
     except asyncio.TimeoutError:
         log.warning("kiro-cli --list-models timed out; falling back to ACP")
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("kiro-cli --list-models spawn failed; falling back to ACP")
 
     # --- ACP fallback -----------------------------------------------------
@@ -656,7 +658,7 @@ async def _list_models(api_key: str):
                         models.append({"id": m, "name": m})
             finally:
                 await client.close()
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception("ACP list_models fallback failed")
 
     if not models:
@@ -876,7 +878,7 @@ async def invoke(payload, context):
         # or model IDs. Surface the code + message only; operator digs into
         # CloudWatch for the data blob.
         yield json.dumps({"__error": f"kiro_acp_error: {e.message} (code {e.code})"})
-    except Exception:  # noqa: BLE001
+    except Exception:
         # See the list_models branch — repr(e) leaks subprocess argv,
         # filesystem paths, and env fragments to the browser. Surface a
         # stable code only; the full traceback goes to CloudWatch.
@@ -937,8 +939,12 @@ class _TurnStreamState:
     cheaply without triggering frozen-dataclass surprises.
     """
 
-    __slots__ = ("marker_seen", "tool_events_seen", "frames_out",
-                 "fake_tool_seen")
+    __slots__ = (
+        "fake_tool_seen",
+        "frames_out",
+        "marker_seen",
+        "tool_events_seen",
+    )
 
     def __init__(self) -> None:
         self.marker_seen = False
@@ -1014,14 +1020,14 @@ async def _stream_with_keepalive(
             try:
                 queue.put_nowait(_EOF)
                 eof_sent = True
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
             raise
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             try:
                 queue.put_nowait(("__pump_error__", e))
                 eof_sent = True
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
             return
         finally:
@@ -1031,7 +1037,7 @@ async def _stream_with_keepalive(
                 # enqueue something.
                 try:
                     queue.put_nowait(_EOF)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     pass
 
     pump_task = asyncio.create_task(_pump(), name="acp-pump")
@@ -1189,7 +1195,7 @@ async def _stream_with_keepalive(
         pump_task.cancel()
         try:
             await pump_task
-        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+        except (asyncio.CancelledError, Exception):
             pass
 
 

@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-
 # ---------------------------------------------------------------------------
 # Pure helper tests
 # ---------------------------------------------------------------------------
@@ -63,7 +62,7 @@ def test_validate_suffix_rejects_empty():
 
 
 def test_validate_suffix_rejects_too_long():
-    from crud.schedules import _validate_suffix, _MAX_SUFFIX_LEN
+    from crud.schedules import _MAX_SUFFIX_LEN, _validate_suffix
     assert _validate_suffix("a" * (_MAX_SUFFIX_LEN + 1)) is not None
 
 
@@ -75,7 +74,7 @@ def test_validate_suffix_rejects_special_chars():
 
 
 def test_name_prefix_format():
-    from crud.schedules import _name_prefix, _build_full_name
+    from crud.schedules import _build_full_name, _name_prefix
     assert _name_prefix("agent1") == "agent-studio-agent1-"
     assert _build_full_name("agent1", "daily") == "agent-studio-agent1-daily"
 
@@ -241,7 +240,7 @@ def configure_scheduler_env(monkeypatch):
     import crud.schedules as s
     monkeypatch.setattr(s, "_SCHEDULER_TARGET_ROLE_ARN", "arn:aws:iam::123:role/scheduler")
     monkeypatch.setattr(s, "_SCHEDULE_RUNNER_LAMBDA_ARN", "arn:aws:lambda:us-east-1:123:function:runner")
-    yield
+    return
 
 
 @pytest.fixture

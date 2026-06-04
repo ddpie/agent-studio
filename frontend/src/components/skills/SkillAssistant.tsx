@@ -40,7 +40,7 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
         ) : msg.content ? (
           <div className="prose prose-sm max-w-none dark:prose-invert [&_p]:my-1 [&_pre]:my-1 [&_pre]:text-[11px] [&_code]:text-[11px] [&_h1]:text-sm [&_h2]:text-[13px] [&_h3]:text-xs [&_li]:my-0.5 [&_ul]:my-1 [&_ol]:my-1">
             {msg.content.split(/(\n\n---file-updated:[^-]+---\n\n)/).map((part, i) => {
-              const updatedMatch = part.match(/---file-updated:(.+)---/);
+              const updatedMatch = /---file-updated:(.+)---/.exec(part);
               if (updatedMatch) {
                 return (
                   <div key={i} className="flex items-center gap-2 my-2 px-2 py-1.5 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-600 dark:text-green-400 text-[11px]">

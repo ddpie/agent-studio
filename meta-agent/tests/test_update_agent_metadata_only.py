@@ -8,9 +8,7 @@ full redeploy path, not a metadata-only fallback).
 import json
 import sys
 import types
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
-
 
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
 if not hasattr(_mock_strands, "tool"):
@@ -47,8 +45,7 @@ for _k, _v in {
 sys.modules["config"] = _mock_config
 
 
-from tools import update_agent as _ua_mod  # noqa: E402
-
+from tools import update_agent as _ua_mod
 
 AGENT_ID = "DataAnalyst-bCBR743Mvj"
 WS_ID = "ws-1"

@@ -21,12 +21,11 @@ from datetime import datetime, timezone
 
 import boto3
 from boto3.dynamodb.conditions import Key
+from config import REGION, S3_BUCKET
 from strands import tool
 
-from config import REGION, S3_BUCKET
-from tools._scope import ensure_agent_in_workspace, current_workspace, ROLE_EDITOR
+from tools._scope import ROLE_EDITOR, current_workspace, ensure_agent_in_workspace
 from tools.update_agent import update_agent as _update_agent
-
 
 _SKILLS_TABLE = "agent-studio-skills"
 

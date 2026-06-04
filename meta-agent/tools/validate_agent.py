@@ -1,13 +1,12 @@
 """validate_agent — Pre-deploy validation of agent configuration."""
 
+import ast
 import json
 import re
-import ast
-
-from strands import tool, Agent
-from strands.models import BedrockModel
 
 from config import MODEL_ID
+from strands import Agent, tool
+from strands.models import BedrockModel
 
 
 def _extract_tool_blocks(source: str) -> str:
@@ -33,7 +32,7 @@ def _extract_tool_blocks(source: str) -> str:
             current = [line]
             continue
         if in_tool:
-            if trimmed and not line[0:1] in (" ", "\t") and not trimmed.startswith("def ") and not trimmed.startswith("#"):
+            if trimmed and line[0:1] not in (" ", "\t") and not trimmed.startswith("def ") and not trimmed.startswith("#"):
                 blocks.append("\n".join(current))
                 in_tool = False
                 current = []
@@ -430,12 +429,12 @@ def validate_agent(
     # the required IAM permissions declared in mcp-registry.yaml.
     if mcp_target_names:
         try:
-            from tools.list_mcp_servers import (
-                _load_registry_iam_policies,
-                _get_workspace_role_arn,
-                _check_iam_permissions,
-            )
             from tools._scope import current_workspace
+            from tools.list_mcp_servers import (
+                _check_iam_permissions,
+                _get_workspace_role_arn,
+                _load_registry_iam_policies,
+            )
 
             iam_policies = _load_registry_iam_policies()
             ws_id = current_workspace()

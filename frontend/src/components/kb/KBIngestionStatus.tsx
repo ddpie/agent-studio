@@ -22,7 +22,7 @@ export default function KBIngestionStatus({ ingestion, onRefresh }: Props) {
   const startRef = useRef<number>(Date.now());
 
   useEffect(() => {
-    if (!ingestion || ingestion.status !== "IN_PROGRESS") {
+    if (ingestion?.status !== "IN_PROGRESS") {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;

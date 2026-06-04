@@ -17,11 +17,9 @@ import re
 import sys
 import types
 import zipfile
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ── Module stubs ───────────────────────────────────────────────────────────────
 
@@ -228,8 +226,7 @@ class TestStagingWorkspaceOverride:
     )
     def test_staging_workspace_id_cross_workspace_rejected(self, monkeypatch):
         """Should reject if staging workspace_id differs from caller's workspace."""
-        from tools import create_agent as mod
-        from tools import _scope
+        from tools import _scope, create_agent as mod
 
         # Caller's actual workspace
         monkeypatch.setattr(_scope, "_workspace_id", "ws-mine", raising=False)
@@ -997,7 +994,7 @@ class TestResolveMcpEndpoints:
             endpoints = mod._resolve_mcp_endpoints(["aws-knowledge"])
 
         assert endpoints[0]["type"] == "remote"
-        assert "aws-knowledge" == endpoints[0]["name"]
+        assert endpoints[0]["name"] == "aws-knowledge"
 
     def test_runtime_target_resolves_to_runtime_endpoint(self, monkeypatch):
         """A target not in remote_map becomes a runtime endpoint."""
@@ -1061,10 +1058,9 @@ class TestResolveMcpEndpoints:
 class TestSkillNamesPath:
     def test_skill_names_resolution_failure_aborts(self, monkeypatch):
         """If skill_names contains an unresolvable name, return error."""
-        from tools import create_agent as mod
-
         # Stub the resolver imports inside the function so we can drive results.
         import tools.sync_agent_skill as sas
+        from tools import create_agent as mod
 
         def _fake_resolve(name, explicit):
             return None, "not_found"
@@ -1089,8 +1085,8 @@ class TestSkillNamesPath:
 
     def test_skill_names_no_skill_md_aborts(self, monkeypatch):
         """If a library skill resolves but has no SKILL.md, fail with hint."""
-        from tools import create_agent as mod
         import tools.sync_agent_skill as sas
+        from tools import create_agent as mod
 
         monkeypatch.setattr(sas, "_resolve_library_skill",
                             lambda name, expl: ({"skillId": "s-1", "name": name, "description": "d"}, None))
@@ -1115,8 +1111,8 @@ class TestSkillNamesPath:
 
     def test_skill_names_happy_path_copies_library_files(self, monkeypatch):
         """skill_names path resolves, deploys, and copies library files post-create."""
-        from tools import create_agent as mod
         import tools.sync_agent_skill as sas
+        from tools import create_agent as mod
 
         monkeypatch.setattr(sas, "_resolve_library_skill",
                             lambda name, expl: ({"skillId": "lib-skill-1",
@@ -1166,8 +1162,8 @@ class TestSkillNamesPath:
 
     def test_skill_names_copy_failure_logs_warning(self, monkeypatch, capsys):
         """If _copy_prefix raises, the create still succeeds but a warning is logged."""
-        from tools import create_agent as mod
         import tools.sync_agent_skill as sas
+        from tools import create_agent as mod
 
         monkeypatch.setattr(sas, "_resolve_library_skill",
                             lambda name, expl: ({"skillId": "lib-1",
@@ -1250,9 +1246,9 @@ class TestStagingSkillFlow:
                     s3_calls["list"].append(kw)
                     return iter([{
                         "Contents": [
-                            {"Key": f"agents/draft-id-xyz/skills/skill-abc/SKILL.md"},
-                            {"Key": f"agents/draft-id-xyz/skills/skill-abc/scripts/foo.py"},
-                            {"Key": f"agents/draft-id-xyz/skills/skill-abc/"},  # empty rel
+                            {"Key": "agents/draft-id-xyz/skills/skill-abc/SKILL.md"},
+                            {"Key": "agents/draft-id-xyz/skills/skill-abc/scripts/foo.py"},
+                            {"Key": "agents/draft-id-xyz/skills/skill-abc/"},  # empty rel
                         ]
                     }])
             return Paginator()
@@ -1384,8 +1380,7 @@ class TestStagingSkillFlow:
 
     def test_default_welcome_chinese_when_zh_locale(self, monkeypatch):
         """Empty welcome with zh creator language gets the Chinese fallback."""
-        from tools import create_agent as mod
-        from tools import _scope
+        from tools import _scope, create_agent as mod
 
         monkeypatch.setattr(_scope, "_creator_language", "zh-CN", raising=False)
 

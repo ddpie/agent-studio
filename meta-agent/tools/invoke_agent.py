@@ -2,10 +2,10 @@
 
 import json
 
+from deploy import invoke_runtime
 from strands import tool
 
-from deploy import invoke_runtime
-from tools._scope import ensure_agent_in_workspace, ROLE_EDITOR
+from tools._scope import ROLE_EDITOR, ensure_agent_in_workspace
 
 
 @tool

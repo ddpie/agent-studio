@@ -8,9 +8,8 @@ import json
 from datetime import datetime
 
 import boto3
+from config import AGENTS_TABLE, REGION
 from strands import tool
-
-from config import REGION, AGENTS_TABLE
 
 
 def _get_control_client():

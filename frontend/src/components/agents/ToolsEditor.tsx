@@ -9,13 +9,13 @@ import ToolPicker from "./ToolPicker";
 
 /** Extract function name from a @tool code block */
 export function extractFuncName(code: string): string {
-  const m = code.match(/def\s+(\w+)\s*\(/);
+  const m = /def\s+(\w+)\s*\(/.exec(code);
   return m ? m[1] : "unnamed";
 }
 
 /** Extract first line of docstring as description */
 export function extractDocstring(code: string): string {
-  const m = code.match(/"""(.+?)"""|'''(.+?)'''/s);
+  const m = /"""(.+?)"""|'''(.+?)'''/s.exec(code);
   if (!m) return "";
   const raw = (m[1] || m[2]).trim();
   // Take first line only

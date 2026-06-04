@@ -9,14 +9,12 @@ These tests inject a pre-cached fake Page into _browser_state to skip the
 BrowserClient + Playwright setup entirely. We test the action dispatch and
 response shaping, not the AWS plumbing.
 """
-import asyncio
 import json
 import sys
 import types
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 
 # Stubs for the template import chain — mirrors test_run_command_native.py.
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")

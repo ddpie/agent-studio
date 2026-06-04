@@ -94,11 +94,12 @@ def main() -> None:
     # Import inside main so a misconfigured env doesn't explode at module
     # import time (and also so the file-based log captures import errors).
     try:
-        from kiro_adapter.mcp_server import apply_scope, build_mcp_server
         # main module holds the ALL_TOOLS list. Using import-of-main is
         # awkward but matches what the legacy Strands path did — the list
         # is the authoritative tool registry.
         import main as _meta_main  # type: ignore
+
+        from kiro_adapter.mcp_server import apply_scope, build_mcp_server
     except Exception:
         log.exception("import failed; exiting")
         raise

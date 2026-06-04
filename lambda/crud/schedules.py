@@ -21,9 +21,9 @@ The scheduler target role is reused from the agent readonly tier
 (mirrors meta-agent/tools/create_schedule.py); redeploying a dedicated
 scheduler role is deferred to infra.
 """
+import json
 import os
 import re
-import json
 import time
 
 import boto3
@@ -33,7 +33,7 @@ from botocore.exceptions import ClientError
 
 from shared.config import AGENTS_TABLE, REGION, SPANS_LOG_GROUP
 from shared.middleware import auth_check
-from shared.response import success, forbidden, not_found, bad_request, internal_error
+from shared.response import bad_request, forbidden, internal_error, not_found, success
 from shared.validators import validate_id
 
 router = Router()

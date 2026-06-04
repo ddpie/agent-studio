@@ -31,7 +31,7 @@ function SecretsSection({ agentId }: { agentId: string }) {
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [drafts, setDrafts] = useState<Array<{ key: string; value: string }>>([]);
+  const [drafts, setDrafts] = useState<{ key: string; value: string }[]>([]);
   const [showValues, setShowValues] = useState(false);
   const [saving, setSaving] = useState(false);
   // Per-row save flag so concurrent adds render their own spinner; batch
@@ -212,7 +212,7 @@ function SecretsSection({ agentId }: { agentId: string }) {
         </div>
       )}
 
-      {existing && existing.length === 0 && !loading && drafts.length === 0 && (
+      {existing?.length === 0 && !loading && drafts.length === 0 && (
         <div className="text-xs text-gray-400 dark:text-gray-500">
           {t("secrets.empty")}
         </div>
@@ -333,7 +333,7 @@ function SecretsSection({ agentId }: { agentId: string }) {
         </div>
       )}
 
-      {!canManage && existing && existing.length === 0 && (
+      {!canManage && existing?.length === 0 && (
         <div className="text-[11px] text-gray-400 dark:text-gray-500">
           {t("secrets.readOnlyHint")}
         </div>

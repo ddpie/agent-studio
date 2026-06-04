@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -38,7 +37,7 @@ def reset_caches():
     mcp_mod._registry_cache["expires"] = 0
     mcp_mod._tool_manifests.clear()
     mcp_mod._tool_manifests_ttl.clear()
-    yield
+    return
 
 
 @pytest.fixture

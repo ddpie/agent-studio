@@ -14,16 +14,15 @@ import zipfile
 from datetime import datetime, timezone
 
 import boto3
+from config import REGION, S3_BUCKET
 from strands import tool
 
-from config import REGION, S3_BUCKET
 from tools._scope import (
     ROLE_EDITOR,
     current_caller,
     current_workspace,
     require_role,
 )
-
 
 _SKILLS_TABLE = "agent-studio-skills"
 
@@ -125,6 +124,7 @@ user-invocable: true
 def _http_get(url: str, accept: str = "*/*", binary: bool = False):
     """Simple HTTP GET with User-Agent header. Rejects private/metadata IPs (incl. redirects)."""
     import urllib.request
+
     from url_validation import safe_urlopen
     req = urllib.request.Request(url, headers={
         "User-Agent": "AgentStudio/1.0",

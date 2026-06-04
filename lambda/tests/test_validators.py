@@ -1,15 +1,13 @@
 """Tests for shared.validators module."""
-import pytest
 
 from shared.validators import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
+    parse_pagination,
     validate_id,
     validate_path,
     validate_secret_key,
-    parse_pagination,
 )
-
 
 # ── validate_id ──
 

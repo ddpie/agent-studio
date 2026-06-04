@@ -21,7 +21,6 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
-
 # ── Module stubs so `from strands import tool` etc. work in-process ──────
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
 if not hasattr(_mock_strands, "tool"):
@@ -64,11 +63,12 @@ def _install_config_stub():
 _install_config_stub()
 
 
-from tools import create_skill as _create_mod  # noqa: E402
-from tools import update_skill as _update_mod  # noqa: E402
-from tools import delete_skill as _delete_mod  # noqa: E402
-from tools import import_skill as _import_mod  # noqa: E402
-
+from tools import (
+    create_skill as _create_mod,
+    delete_skill as _delete_mod,
+    import_skill as _import_mod,
+    update_skill as _update_mod,
+)
 
 WS_ID = "ws-alpha"
 OTHER_WS = "ws-beta"

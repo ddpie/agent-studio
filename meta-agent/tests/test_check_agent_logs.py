@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ── Module stubs ───────────────────────────────────────────────────────────
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
 if not hasattr(_mock_strands, "tool"):
@@ -101,7 +100,7 @@ def test_resolve_agent_id_returns_id_directly_when_long(monkeypatch):
     """If the input looks like a runtime ID (has '-' and len>20), use as-is."""
     from tools import check_agent_logs as mod
     # Don't even need workspace agents listed here
-    monkeypatch.setattr(mod, "list_workspace_agents", lambda: [])
+    monkeypatch.setattr(mod, "list_workspace_agents", list)
     out = mod._resolve_agent_id("myAgent-abc1234567890XYZ")
     assert out == "myAgent-abc1234567890XYZ"
 
@@ -128,7 +127,7 @@ def test_resolve_agent_id_returns_none_when_no_match(monkeypatch):
 
 def test_check_agent_logs_unknown_agent_returns_error(monkeypatch):
     from tools import check_agent_logs as mod
-    monkeypatch.setattr(mod, "list_workspace_agents", lambda: [])
+    monkeypatch.setattr(mod, "list_workspace_agents", list)
 
     out = json.loads(mod.check_agent_logs("ghost"))
     assert "error" in out

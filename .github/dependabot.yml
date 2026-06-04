@@ -1,0 +1,98 @@
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+updates:
+  # Frontend
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: '03:00'
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    labels: [dependencies, frontend]
+    groups:
+      # Group minor + patch into a single PR per ecosystem to keep noise down.
+      # Major bumps still come as individual PRs.
+      frontend-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+    ignore:
+      # Pin React major — bumps need manual coordination.
+      - dependency-name: 'react'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'react-dom'
+        update-types: [version-update:semver-major]
+
+  # Infrastructure (CDK)
+  - package-ecosystem: npm
+    directory: /infra
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: [dependencies, infra]
+    groups:
+      infra-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  # Lambda invoke-node
+  - package-ecosystem: npm
+    directory: /lambda/invoke-node
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    labels: [dependencies, lambda]
+
+  - package-ecosystem: npm
+    directory: /lambda/a2a-proxy
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    labels: [dependencies, lambda]
+
+  - package-ecosystem: npm
+    directory: /lambda/channels/worker
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    labels: [dependencies, lambda]
+
+  # Python — base layer
+  - package-ecosystem: pip
+    directory: /base
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels: [dependencies, python]
+    groups:
+      python-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+    ignore:
+      # Pin Python major-deps that we explicitly version-locked for AgentCore
+      # runtime compatibility — bumps need a coordinated test pass.
+      - dependency-name: 'bedrock-agentcore'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'strands-agents'
+        update-types: [version-update:semver-major]
+      - dependency-name: 'boto3'
+        update-types: [version-update:semver-major]
+
+  # GitHub Actions themselves
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    labels: [dependencies, ci]
+    groups:
+      actions:
+        applies-to: version-updates
+        update-types: [minor, patch]

@@ -1,7 +1,6 @@
 """Runs — scheduled/manual execution history endpoints."""
 import os
 import re
-import time
 from datetime import datetime, timezone
 
 import boto3
@@ -11,7 +10,7 @@ from botocore.exceptions import ClientError
 
 from shared.config import AGENTS_TABLE, REGION
 from shared.middleware import auth_check
-from shared.response import success, forbidden, not_found, bad_request, internal_error
+from shared.response import bad_request, forbidden, internal_error, not_found, success
 from shared.validators import validate_id
 
 router = Router()
@@ -141,7 +140,7 @@ def list_runs(wsId: str, agentId: str):
 
     try:
         resp = _get_runs_table().query(**kwargs)
-    except ClientError as e:
+    except ClientError:
         logger.exception("runs query failed")
         return internal_error()
 

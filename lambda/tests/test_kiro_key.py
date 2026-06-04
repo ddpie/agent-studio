@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-
 # ---------------------------------------------------------------------------
 # Env / fixtures
 # ---------------------------------------------------------------------------
@@ -20,6 +19,7 @@ def stub_env(monkeypatch):
         "arn:aws:bedrock-agentcore:us-east-1:123456789012:agent-runtime/meta-X",
     )
     import importlib
+
     import shared.config as _cfg
     importlib.reload(_cfg)
     import crud.kiro_key as _mod
@@ -655,8 +655,9 @@ class TestGetKiroUsage:
     def test_serves_from_cache_when_fresh(
         self, workspace_id, mock_jwt, _mock_viewer, mock_sm
     ):
-        import crud.kiro_key as mod
         import time as _t
+
+        import crud.kiro_key as mod
         mod._usage_cache[workspace_id] = (_t.time(), {"configured": True, "tier": "CACHED"})
         resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/kiro-key/usage"))
         assert resp["statusCode"] == 200

@@ -1,0 +1,23 @@
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Defaults — every file requires a review from the listed owners. Tighten by
+# path as the team grows.
+
+* @ddpie/agent-studio-maintainers
+
+# Infra changes need extra scrutiny — the IAM ceiling, public-access aspect,
+# and Lambda Function URL config all live here.
+/infra/                            @ddpie/agent-studio-maintainers
+/infra/lib/aspects/                @ddpie/agent-studio-maintainers
+/infra/lib/constructs/cdn.ts       @ddpie/agent-studio-maintainers
+/infra/lib/constructs/invoke.ts    @ddpie/agent-studio-maintainers
+/infra/lib/constructs/a2a-proxy.ts @ddpie/agent-studio-maintainers
+/infra/lib/constructs/workspace-boundary.ts @ddpie/agent-studio-maintainers
+
+# Auth + middleware — single point of failure for all API endpoints.
+/lambda/shared/auth.py        @ddpie/agent-studio-maintainers
+/lambda/shared/middleware.py  @ddpie/agent-studio-maintainers
+/lambda/shared/permissions.py @ddpie/agent-studio-maintainers
+
+# CLAUDE.md drives onboarding + AI agent behavior — review carefully.
+/CLAUDE.md @ddpie/agent-studio-maintainers

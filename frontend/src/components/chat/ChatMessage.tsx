@@ -158,8 +158,8 @@ const ChatMessage = memo(function ChatMessage({ message, isLastAssistant, isStre
         )}
         {(() => {
           const hasContent = !!message.content;
-          const hasTools = !!(message.toolCalls && message.toolCalls.length);
-          const hasDownloads = !!(message.s3Downloads && message.s3Downloads.length);
+          const hasTools = !!(message.toolCalls?.length);
+          const hasDownloads = !!(message.s3Downloads?.length);
           if (!hasContent && !hasTools && !hasDownloads) {
             return (
               <span className="inline-flex items-center gap-1 text-gray-400 dark:text-gray-500 text-sm">

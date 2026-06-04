@@ -15,7 +15,6 @@ runtime parses the TUI output and returns structured JSON. Cached
 in-process for 60s to avoid hammering Kiro on every page visit.
 """
 import json
-import os
 import time
 from datetime import datetime, timezone
 
@@ -24,9 +23,9 @@ from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler.api_gateway import Router
 from botocore.exceptions import ClientError
 
-from shared.config import REGION, COGNITO_USER_POOL_ID, META_AGENT_ARN
+from shared.config import COGNITO_USER_POOL_ID, META_AGENT_ARN, REGION
 from shared.middleware import auth_check
-from shared.response import success, bad_request, forbidden, not_found, internal_error
+from shared.response import bad_request, internal_error, success
 
 router = Router()
 logger = Logger(child=True)
@@ -98,7 +97,7 @@ def _resolve_user_label(user_id: str) -> str:
             label = f"{name} ({email})"
         else:
             label = name or email or user_id
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning("cognito admin_get_user failed",
                        extra={"userId": user_id, "error": str(e)})
         label = user_id
@@ -275,7 +274,7 @@ def _fetch_key_and_region(ws_id: str) -> tuple[str, str] | None:
     try:
         info = sm.describe_secret(SecretId=name)
         region = _region_from_describe(info)
-    except Exception:  # noqa: BLE001
+    except Exception:
         region = _DEFAULT_REGION
     return api_key, region
 
@@ -402,7 +401,7 @@ def get_kiro_usage(wsId: str):
 
     try:
         frame = _invoke_runtime_for_usage(api_key, region)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.exception("invoke_runtime for usage failed")
         # Soft-error: return 200 so the UI shows a warning banner
         # instead of a crash screen. Admin can retry, or refresh the

@@ -3,11 +3,10 @@
 import json
 
 import boto3
+from config import ACCOUNT_ID, REGION, SCHEDULER_TARGET_ROLE_ARN
 from strands import tool
 
-from config import REGION, ACCOUNT_ID, SCHEDULER_TARGET_ROLE_ARN
-from tools._scope import ensure_agent_in_workspace, ROLE_EDITOR
-
+from tools._scope import ROLE_EDITOR, ensure_agent_in_workspace
 
 # The scheduler target has to go through a Lambda middleman because
 # EventBridge Scheduler's target service list doesn't include

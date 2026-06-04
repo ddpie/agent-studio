@@ -131,7 +131,7 @@ vi.mock("../../../stores/workspace-store", () => ({
 
 import AgentDetailPage from "../AgentDetailPage";
 
-function renderPage(initialPath: string = "/agents/agt-1") {
+function renderPage(initialPath = "/agents/agt-1") {
   return render(
     <I18nextProvider i18n={i18n}>
       <MemoryRouter initialEntries={[initialPath]}>

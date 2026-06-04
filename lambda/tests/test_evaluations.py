@@ -10,6 +10,7 @@ def inject_env(monkeypatch):
     monkeypatch.setenv("EVALUATOR_ROLE_ARN", "arn:aws:iam::000000000000:role/test-evaluator")
     monkeypatch.setenv("SPANS_LOG_GROUP", "aws/spans")
     import importlib
+
     import shared.config as _cfg
     importlib.reload(_cfg)
     # Also reload crud.evaluations so its module-level EVALUATOR_ROLE_ARN
@@ -57,11 +58,13 @@ def _make_fake_ws_table():
 def test_create_eval_config_idempotent():
     """ConflictException on create is handled gracefully; backfill runs."""
     import importlib
+
     import shared.config as _cfg
     importlib.reload(_cfg)
     import crud.evaluations as _ev
     importlib.reload(_ev)
     from botocore.exceptions import ClientError
+
     from crud.evaluations import create_eval_config_for_agent
 
     with patch("crud.evaluations._get_control") as mock_c, \
@@ -82,6 +85,7 @@ def test_create_eval_config_no_role_returns_empty(monkeypatch):
     """If EVALUATOR_ROLE_ARN is empty, skip creation and return ''."""
     monkeypatch.setenv("EVALUATOR_ROLE_ARN", "")
     import importlib
+
     import shared.config as _cfg
     importlib.reload(_cfg)
     # Also reload evaluations to pick up the empty value
@@ -218,6 +222,7 @@ def test_get_agent_evaluations_forbidden_when_agent_not_in_workspace(mock_jwt, u
 
 def test_eval_config_name_is_deterministic_and_capped():
     import importlib
+
     import shared.config as _cfg
     importlib.reload(_cfg)
     import crud.evaluations as _ev
@@ -344,6 +349,7 @@ def test_create_eval_config_no_role_returns_empty_string(monkeypatch):
     """If EVALUATOR_ROLE_ARN is empty, returns ''."""
     monkeypatch.setenv("EVALUATOR_ROLE_ARN", "")
     import importlib
+
     import shared.config as _cfg
     importlib.reload(_cfg)
     import crud.evaluations as _ev
@@ -364,8 +370,9 @@ def test_create_eval_config_succeeds_path():
 
 
 def test_create_eval_config_unknown_error_reraises():
-    import crud.evaluations as _ev
     from botocore.exceptions import ClientError
+
+    import crud.evaluations as _ev
     with patch("crud.evaluations._get_control") as mock_c:
         client = MagicMock()
         client.create_online_evaluation_config.side_effect = ClientError(
@@ -391,8 +398,9 @@ def test_ensure_runtime_log_group_no_match_noops():
 
 
 def test_ensure_runtime_log_group_find_clienterror_swallowed():
-    import crud.evaluations as _ev
     from botocore.exceptions import ClientError
+
+    import crud.evaluations as _ev
     with patch("crud.evaluations._find_config_by_name") as mock_find, \
          patch("crud.evaluations._get_control") as mock_c:
         mock_find.side_effect = ClientError({"Error": {"Code": "Throttling"}}, "List")
@@ -410,8 +418,9 @@ def test_ensure_runtime_log_group_no_cfg_id_noops():
 
 
 def test_ensure_runtime_log_group_get_clienterror_swallowed():
-    import crud.evaluations as _ev
     from botocore.exceptions import ClientError
+
+    import crud.evaluations as _ev
     client = MagicMock()
     client.get_online_evaluation_config.side_effect = ClientError(
         {"Error": {"Code": "AccessDenied"}}, "GetOnlineEvaluationConfig"
@@ -452,8 +461,9 @@ def test_ensure_runtime_log_group_backfill_path():
 
 
 def test_ensure_runtime_log_group_update_clienterror_logged():
-    import crud.evaluations as _ev
     from botocore.exceptions import ClientError
+
+    import crud.evaluations as _ev
     client = MagicMock()
     client.get_online_evaluation_config.return_value = {
         "dataSourceConfig": {"cloudWatchLogs": {"logGroupNames": []}}
@@ -475,6 +485,7 @@ def test_ensure_runtime_log_group_update_clienterror_logged():
 def test_delete_eval_config_no_role_short_circuits(monkeypatch):
     monkeypatch.setenv("EVALUATOR_ROLE_ARN", "")
     import importlib
+
     import shared.config as _cfg
     importlib.reload(_cfg)
     import crud.evaluations as _ev
@@ -502,8 +513,9 @@ def test_delete_eval_config_calls_delete():
 
 
 def test_delete_eval_config_clienterror_swallowed():
-    import crud.evaluations as _ev
     from botocore.exceptions import ClientError
+
+    import crud.evaluations as _ev
     client = MagicMock()
     client.delete_online_evaluation_config.side_effect = ClientError(
         {"Error": {"Code": "Throttling"}}, "DeleteOnlineEvaluationConfig"
@@ -545,8 +557,9 @@ def test_create_eval_config_for_workspace_fans_out():
 
 
 def test_create_eval_config_for_workspace_clienterror_returns_empty():
-    import crud.evaluations as _ev
     from botocore.exceptions import ClientError
+
+    import crud.evaluations as _ev
     fake_table = MagicMock()
     fake_table.query.side_effect = ClientError(
         {"Error": {"Code": "ResourceNotFoundException"}}, "Query"
@@ -614,8 +627,9 @@ def test_run_logs_query_timeout_attempts_stop_query():
 
 
 def test_run_logs_query_timeout_stop_query_clienterror_swallowed():
-    import crud.evaluations as _ev
     from botocore.exceptions import ClientError
+
+    import crud.evaluations as _ev
     fake = MagicMock()
     fake.start_query.return_value = {"queryId": "q-1"}
     fake.get_query_results.return_value = {"status": "Running"}
@@ -680,8 +694,9 @@ def test_get_agent_evaluations_no_cfg_id_returns_empty(mock_jwt, user_id, worksp
 
 def test_get_agent_evaluations_describe_log_groups_clienterror_continues(mock_jwt, user_id, workspace_id):
     """describe_log_groups failure is logged but query still runs."""
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     fake_logs = MagicMock()
     fake_logs.describe_log_groups.side_effect = ClientError(
         {"Error": {"Code": "AccessDenied"}}, "DescribeLogGroups"
@@ -700,8 +715,9 @@ def test_get_agent_evaluations_describe_log_groups_clienterror_continues(mock_jw
 
 def test_get_agent_evaluations_query_clienterror_500(mock_jwt, user_id, workspace_id):
     """ClientError from start_query bubbles to internal_error path."""
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     fake_logs = MagicMock()
     fake_logs.describe_log_groups.return_value = {"logGroups": []}
     fake_logs.start_query.side_effect = ClientError(
@@ -841,6 +857,7 @@ def test_enable_agent_evaluations_agent_not_in_ws(mock_jwt, user_id, workspace_i
 def test_enable_agent_evaluations_no_role_arn_500(mock_jwt, user_id, workspace_id, monkeypatch):
     monkeypatch.setenv("EVALUATOR_ROLE_ARN", "")
     import importlib
+
     import shared.config as _cfg
     importlib.reload(_cfg)
     import crud.evaluations as _ev
@@ -883,8 +900,9 @@ def test_enable_agent_evaluations_creates_when_missing(mock_jwt, user_id, worksp
 
 
 def test_enable_agent_evaluations_clienterror_500(mock_jwt, user_id, workspace_id):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.evaluations.auth_check") as auth, \
          patch("crud.evaluations._get_agent_item") as ga, \
          patch("crud.evaluations._find_config_by_name") as f:
@@ -975,8 +993,9 @@ def test_status_returns_active(mock_jwt, user_id, workspace_id):
 
 
 def test_status_clienterror_500(mock_jwt, user_id, workspace_id):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     with patch("crud.evaluations.auth_check") as auth, \
          patch("crud.evaluations._get_agent_item") as ga, \
          patch("crud.evaluations._find_config_by_name") as f:
@@ -1032,6 +1051,7 @@ def test_ws_enable_auth_err(mock_jwt, workspace_id):
 def test_ws_enable_no_role_500(mock_jwt, user_id, workspace_id, monkeypatch):
     monkeypatch.setenv("EVALUATOR_ROLE_ARN", "")
     import importlib
+
     import shared.config as _cfg
     importlib.reload(_cfg)
     import crud.evaluations as _ev
@@ -1073,8 +1093,9 @@ def test_ws_status_auth_err(mock_jwt, workspace_id):
 
 
 def test_ws_status_query_clienterror_returns_empty(mock_jwt, user_id, workspace_id):
-    from crud.handler import app
     from botocore.exceptions import ClientError
+
+    from crud.handler import app
     fake_table = MagicMock()
     fake_table.query.side_effect = ClientError(
         {"Error": {"Code": "Throttling"}}, "Query"

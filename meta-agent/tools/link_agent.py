@@ -35,17 +35,17 @@ import uuid
 from datetime import datetime, timezone
 
 import boto3
-from strands import tool
-
-from config import MODEL_ID, REGION, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE, SUB_AGENT_ROLE_ARN
+from config import AGENTS_TABLE, MODEL_ID, REGION, S3_BUCKET, SUB_AGENT_ROLE_ARN
 from deploy import (
+    _shared_env_vars,
     build_deployment_package_v2,
     upload_deployment,
-    wait_for_ready,
     validate_agent_files,
-    _shared_env_vars,
+    wait_for_ready,
 )
-from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
+from strands import tool
+
+from templates.agent_template_v2 import MAIN_PY_MCP_TEMPLATE, MAIN_PY_TEMPLATE, TOOLS_PY_HEADER
 from tools_library.registry import get_tool_code_by_func_name as _get_builtin_code
 
 # Mirrors lambda/crud/a2a_keys.py
@@ -61,7 +61,7 @@ _LINK_MARKER_END = "<!-- linked-agents:end -->"
 # happen in practice but protects test isolation.
 _WORKSPACES_TABLE = os.getenv("AGENT_STUDIO_WORKSPACES_TABLE", "agent-studio-workspaces")
 try:
-    from tools._scope import ROLE_VIEWER, ROLE_EDITOR, ROLE_ADMIN, ROLE_OWNER
+    from tools._scope import ROLE_ADMIN, ROLE_EDITOR, ROLE_OWNER, ROLE_VIEWER
     _ROLE_LEVEL = {ROLE_VIEWER: 0, ROLE_EDITOR: 1, ROLE_ADMIN: 2, ROLE_OWNER: 3}
 except ImportError:  # pragma: no cover
     ROLE_VIEWER, ROLE_EDITOR, ROLE_ADMIN, ROLE_OWNER = "viewer", "editor", "admin", "owner"

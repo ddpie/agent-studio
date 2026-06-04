@@ -139,7 +139,7 @@ class TestTruncate:
         assert _truncate(None) == ""
 
     def test_long_truncated(self):
-        from crud.logs import _truncate, MAX_MESSAGE_CHARS
+        from crud.logs import MAX_MESSAGE_CHARS, _truncate
         msg = "x" * (MAX_MESSAGE_CHARS + 100)
         result = _truncate(msg)
         assert len(result) == MAX_MESSAGE_CHARS + len("\n…[truncated]")

@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ── Module stubs so `from strands import tool` works in-process ───────────
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
 if not hasattr(_mock_strands, "tool"):
@@ -199,8 +198,7 @@ def test_create_harness_agent_missing_model_id(monkeypatch):
 
 def test_create_harness_agent_missing_workspace_id(monkeypatch):
     """Direct params + no workspace context → workspace_id required."""
-    from tools import create_harness_agent as mod
-    from tools import _scope
+    from tools import _scope, create_harness_agent as mod
     monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
     fake_cp = MagicMock()
     monkeypatch.setattr(mod, "_get_control_client", lambda: fake_cp)

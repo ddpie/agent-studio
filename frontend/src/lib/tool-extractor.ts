@@ -13,7 +13,7 @@ export function parseToolDefinitions(source: string): string {
   const toolBlocks: string[] = [];
   let inTool = false;
   let currentBlock: string[] = [];
-  let preambleImports: string[] = [];
+  const preambleImports: string[] = [];
   let foundFirstTool = false;
 
   for (let i = 0; i < lines.length; i++) {
@@ -90,11 +90,11 @@ export async function extractToolsFromDeployment(
 ): Promise<{ tool_definitions: string; tool_names: string } | null> {
   try {
     const source = await fetchAgentFile(agentId, "tool_definitions.py");
-    if (!source || !source.includes("@tool")) return null;
+    if (!source?.includes("@tool")) return null;
 
     // Strip the "from strands import tool" header, keep only @tool blocks
     const stripped = source.replace(/^from strands import tool\s*\n*/m, "").trim();
-    if (!stripped || !stripped.includes("@tool")) return null;
+    if (!stripped?.includes("@tool")) return null;
 
     const tool_definitions = parseToolDefinitions(stripped) || stripped;
     const tool_names = extractToolNames(tool_definitions);

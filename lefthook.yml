@@ -11,9 +11,22 @@ pre-commit:
       glob: "frontend/src/**/*.{ts,tsx}"
       run: cd frontend && npx eslint {staged_files} --max-warnings 0
 
+    - name: ruff
+      glob: "{lambda,meta-agent,scripts}/**/*.py"
+      run: ruff check {staged_files}
+
+    - name: ruff-format
+      glob: "{lambda,meta-agent}/**/*.py"
+      run: ruff format --check {staged_files}
+
     - name: bash-syntax
       glob: "scripts/*.sh"
       run: bash -n {staged_files}
+
+    - name: gitleaks
+      run: gitleaks protect --staged --redact -v
+      skip:
+        - run: "! command -v gitleaks"
 
 pre-push:
   jobs:

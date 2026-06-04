@@ -202,10 +202,10 @@ export default function AgentFormSections({
                 for (const [key, value] of Object.entries(updates)) {
                   if (key === "tool_definitions" && typeof value === "string" && formData.tool_definitions) {
                     const existingBlocks = (formData.tool_definitions).split(/\n(?=@tool\b)/).map(s => s.trim()).filter(Boolean);
-                    const newBlocks = (value as string).split(/\n(?=@tool\b)/).map(s => s.trim()).filter(Boolean);
+                    const newBlocks = (value).split(/\n(?=@tool\b)/).map(s => s.trim()).filter(Boolean);
                     const merged = new Map<string, string>();
-                    for (const b of existingBlocks) { const n = b.match(/def\s+(\w+)\s*\(/)?.[1] || b.slice(0, 30); merged.set(n, b); }
-                    for (const b of newBlocks) { const n = b.match(/def\s+(\w+)\s*\(/)?.[1] || b.slice(0, 30); merged.set(n, b); }
+                    for (const b of existingBlocks) { const n = (/def\s+(\w+)\s*\(/.exec(b))?.[1] || b.slice(0, 30); merged.set(n, b); }
+                    for (const b of newBlocks) { const n = (/def\s+(\w+)\s*\(/.exec(b))?.[1] || b.slice(0, 30); merged.set(n, b); }
                     updateField("tool_definitions" as keyof typeof formData, Array.from(merged.values()).join("\n\n\n") as never);
                   } else {
                     updateField(key as keyof typeof formData, value as never);

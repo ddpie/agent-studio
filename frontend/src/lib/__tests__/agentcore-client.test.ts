@@ -753,7 +753,7 @@ describe("agentcore-client", () => {
       const [, init] = mockFetch.mock.calls[0];
       expect(init.headers["X-Auth-Token"]).toBe("mock-token");
       expect(init.headers["Content-Type"]).toBe("application/json");
-      expect(init.headers["Accept"]).toBe("text/event-stream");
+      expect(init.headers.Accept).toBe("text/event-stream");
       expect(init.headers["x-amz-content-sha256"]).toBeDefined();
     });
   });

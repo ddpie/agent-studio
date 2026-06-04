@@ -69,7 +69,7 @@ export default function KnowledgeBaseSection({ agentId, knowledgeBases, onChange
       await attachKnowledgeBase(agentId, selected);
       onChange([...knowledgeBases, selected]);
       setSelected("");
-    } catch (e) {
+    } catch {
       setError(t("knowledgeBases.attachFailed"));
     } finally {
       setBusy(null);
@@ -83,7 +83,7 @@ export default function KnowledgeBaseSection({ agentId, knowledgeBases, onChange
     try {
       await detachKnowledgeBase(agentId, kbId);
       onChange(knowledgeBases.filter((id) => id !== kbId));
-    } catch (e) {
+    } catch {
       setError(t("knowledgeBases.detachFailed"));
     } finally {
       setBusy(null);

@@ -1,11 +1,12 @@
 """kb_delete_document — Delete a single document from a Knowledge Base."""
 
 import json
-import boto3
-from strands import tool
 from datetime import datetime, timezone
 
-from config import REGION, S3_BUCKET, KB_TABLE
+import boto3
+from config import KB_TABLE, REGION, S3_BUCKET
+from strands import tool
+
 from tools._scope import current_workspace
 
 

@@ -1,9 +1,7 @@
 """Tests for the Meta-Agent workspace + RBAC scoping helpers."""
-import json
 import sys
 import types
 from unittest.mock import MagicMock, patch
-
 
 # Minimal config stub so tools._scope can import
 _mock_config = sys.modules.get("config") or types.ModuleType("config")

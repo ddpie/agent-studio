@@ -12,8 +12,8 @@ os.environ.setdefault("COGNITO_USER_POOL_ID", "us-east-1_TestPool")
 os.environ.setdefault("COGNITO_CLIENT_ID", "test-client-id")
 os.environ.setdefault("WORKSPACES_TABLE", "test-workspaces")
 
+import shared.auth as auth_module
 from shared.auth import (
-    PLATFORM_ADMIN_GROUP,
     ROLE_LEVEL,
     _fetch_jwks,
     _get_signing_key,
@@ -23,8 +23,6 @@ from shared.auth import (
     is_platform_admin,
     verify_jwt,
 )
-import shared.auth as auth_module
-
 
 # ---------------------------------------------------------------------------
 # Helpers

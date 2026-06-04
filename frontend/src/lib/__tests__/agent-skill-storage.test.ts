@@ -136,7 +136,7 @@ describe("copySkillToAgent", () => {
     listSkillFiles.mockResolvedValue(["scripts/run.py", "data.json"]);
     putAgentSkillFile.mockResolvedValue(true);
 
-    const progressEvents: Array<[number, number, string]> = [];
+    const progressEvents: [number, number, string][] = [];
     const entry = await copySkillToAgent("agt", sampleEntry, (d, t, phase) =>
       progressEvents.push([d, t, phase]),
     );
@@ -200,7 +200,7 @@ describe("readGlobalSkillFiles", () => {
       p === "SKILL.md" ? "MD" : "FILE",
     );
     listSkillFiles.mockResolvedValue(["a.txt", "b.txt"]);
-    const progress: Array<[number, number]> = [];
+    const progress: [number, number][] = [];
     const { entry, files } = await readGlobalSkillFiles(sampleEntry, (d, t) => progress.push([d, t]));
     expect(files).toEqual({ "SKILL.md": "MD", "a.txt": "FILE", "b.txt": "FILE" });
     expect(entry.sourceSkillId).toBe("src-1");

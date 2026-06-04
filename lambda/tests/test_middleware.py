@@ -1,8 +1,6 @@
 """Tests for shared.middleware — auth_check + check_platform_admin."""
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 def _event_with_auth(token: str | None = "Bearer test-token") -> MagicMock:
     """Build a minimal ApiGatewayEvent-like object with header lookups."""

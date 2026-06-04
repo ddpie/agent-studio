@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ── Module stubs so `from strands import tool` works in-process ───────────
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
 if not hasattr(_mock_strands, "tool"):

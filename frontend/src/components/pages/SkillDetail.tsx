@@ -147,7 +147,7 @@ export default function SkillDetail() {
           const cleaned = chunk.replace(/\{"__tool"[^}]*\}/g, "");
           if (cleaned) result += cleaned;
         }
-        const jsonMatch = result.match(/\{[\s\S]*"valid"[\s\S]*\}/);
+        const jsonMatch = /\{[\s\S]*"valid"[\s\S]*\}/.exec(result);
         if (jsonMatch) {
           try {
             const parsed = JSON.parse(jsonMatch[0]);

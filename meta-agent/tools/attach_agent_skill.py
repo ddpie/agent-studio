@@ -15,15 +15,15 @@ import uuid
 from datetime import datetime, timezone
 
 import boto3
+from config import REGION, S3_BUCKET
 from strands import tool
 
-from config import REGION, S3_BUCKET
-from tools._scope import ensure_agent_in_workspace, ROLE_EDITOR
+from tools._scope import ROLE_EDITOR, ensure_agent_in_workspace
 from tools.sync_agent_skill import (
-    _resolve_library_skill,
-    _read_library_skill_files,
-    _copy_prefix,
     _compute_content_hash,
+    _copy_prefix,
+    _read_library_skill_files,
+    _resolve_library_skill,
 )
 from tools.update_agent import update_agent as _update_agent
 

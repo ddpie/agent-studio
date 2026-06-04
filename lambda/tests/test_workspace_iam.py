@@ -2,7 +2,7 @@
 and workspace deletion IAM cleanup (in crud/workspaces.py).
 """
 import json
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -21,6 +21,7 @@ def inject_env(monkeypatch):
     monkeypatch.setenv("WORKSPACE_BOUNDARY_ARN",
                        "arn:aws:iam::123456789012:policy/AgentStudioWorkspaceCeiling")
     import importlib
+
     import shared.config as _cfg
     importlib.reload(_cfg)
     # Force the module-level constants in workspace_iam to pick up reloaded config.

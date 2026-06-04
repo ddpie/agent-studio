@@ -19,7 +19,8 @@ against mcp==1.27.0.
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
@@ -80,9 +81,9 @@ def apply_scope(caller_id: str, workspace_id: str, language: str = "") -> None:
     # pytest without the full tools/ dependency tree).
     import tools._scope as _scope
     import tools.create_agent as _ca
-    import tools.update_agent as _ua
     import tools.delete_agent as _da
     import tools.manage_secrets as _ms
+    import tools.update_agent as _ua
 
     _scope._caller_id = caller_id
     _scope._workspace_id = workspace_id

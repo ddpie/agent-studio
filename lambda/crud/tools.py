@@ -8,11 +8,10 @@ from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler.api_gateway import Router
 from boto3.dynamodb.conditions import Key
 
-from shared.auth import verify_jwt, get_membership, check_permission
-from shared.config import TOOLS_TABLE, REGION
+from shared.config import REGION, TOOLS_TABLE
 from shared.middleware import auth_check
-from shared.response import success, paginated, forbidden, not_found, bad_request, version_conflict
-from shared.validators import validate_id, parse_pagination
+from shared.response import bad_request, forbidden, not_found, paginated, success, version_conflict
+from shared.validators import parse_pagination, validate_id
 
 router = Router()
 logger = Logger(child=True)

@@ -65,8 +65,8 @@ def test_get_meta_agent_card_returns_synthetic_card(mock_jwt, user_id, workspace
 
 def test_get_meta_agent_card_400_when_arn_missing(mock_jwt, user_id, workspace_id, monkeypatch):
     """Empty META_AGENT_ARN → 400 with actionable message."""
-    import crud.meta_agent as _m
     import crud.handler as _h
+    import crud.meta_agent as _m
     # Override the module-level constant for just this test (autouse fixture
     # already set a non-empty value; we override here without reload).
     monkeypatch.setattr(_m, "META_AGENT_ARN", "")
@@ -112,6 +112,7 @@ def _status_event(workspace_id: str):
 
 def test_get_status_returns_runtime_status(mock_jwt, user_id, workspace_id):
     from datetime import datetime, timezone
+
     import crud.handler as _h
     fake_control = MagicMock()
     fake_control.get_agent_runtime.return_value = {
@@ -131,6 +132,7 @@ def test_get_status_returns_runtime_status(mock_jwt, user_id, workspace_id):
 
 def test_get_status_falls_back_to_created_at(mock_jwt, user_id, workspace_id):
     from datetime import datetime, timezone
+
     import crud.handler as _h
     fake_control = MagicMock()
     fake_control.get_agent_runtime.return_value = {
@@ -165,6 +167,7 @@ def test_get_status_unknown_status_when_missing_keys(mock_jwt, user_id, workspac
 def test_get_status_resource_not_found(mock_jwt, user_id, workspace_id):
     """ResourceNotFoundException → 200 with status NOT_FOUND."""
     from botocore.exceptions import ClientError
+
     import crud.handler as _h
     fake_control = MagicMock()
     fake_control.get_agent_runtime.side_effect = ClientError(
@@ -184,6 +187,7 @@ def test_get_status_resource_not_found(mock_jwt, user_id, workspace_id):
 def test_get_status_other_clienterror_returns_500(mock_jwt, user_id, workspace_id):
     """Generic ClientError → 500."""
     from botocore.exceptions import ClientError
+
     import crud.handler as _h
     fake_control = MagicMock()
     fake_control.get_agent_runtime.side_effect = ClientError(
@@ -200,6 +204,7 @@ def test_get_status_other_clienterror_returns_500(mock_jwt, user_id, workspace_i
 def test_get_status_when_arn_not_configured(mock_jwt, user_id, workspace_id, monkeypatch):
     monkeypatch.setenv("META_AGENT_ARN", "")
     import importlib
+
     import shared.config as _cfg
     importlib.reload(_cfg)
     import crud.meta_agent as _m
@@ -231,6 +236,7 @@ def test_get_status_requires_auth():
 
 def test_get_card_clienterror_returns_500(mock_jwt, user_id, workspace_id):
     from botocore.exceptions import ClientError
+
     import crud.handler as _h
     fake_control = MagicMock()
     fake_control.get_agent_runtime.side_effect = ClientError(

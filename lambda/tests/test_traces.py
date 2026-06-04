@@ -10,6 +10,7 @@ from botocore.exceptions import ClientError
 def inject_env(monkeypatch):
     monkeypatch.setenv("SPANS_LOG_GROUP", "aws/spans")
     import importlib
+
     import shared.config as _cfg
     importlib.reload(_cfg)
 

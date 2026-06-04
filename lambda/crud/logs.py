@@ -27,7 +27,7 @@ from botocore.exceptions import ClientError
 
 from shared.config import AGENTS_TABLE, REGION
 from shared.middleware import auth_check
-from shared.response import success, forbidden, bad_request, internal_error
+from shared.response import bad_request, forbidden, internal_error, success
 from shared.validators import validate_id
 
 router = Router()

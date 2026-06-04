@@ -1,19 +1,26 @@
 """create_agent — Generate code, package, and deploy a new Agent to AgentCore Runtime."""
 
 import json
-import os
 import re
 import uuid
 from datetime import datetime, timezone
 
 import boto3
+from config import AGENTS_TABLE, DEFAULT_PERMISSION_TIER, MODEL_ID, REGION, S3_BUCKET
+from deploy import (
+    _shared_env_vars,
+    build_deployment_package_v2,
+    build_skill_prompt_section,
+    create_runtime,
+    upload_deployment,
+    validate_agent_files,
+    wait_for_ready,
+)
 from strands import tool
 
-from config import MODEL_ID, REGION, S3_BUCKET, AGENTS_TABLE, PERMISSION_TIER_ROLES, DEFAULT_PERMISSION_TIER
-from tools._workspace import _get_agent_role_arn
-from deploy import build_deployment_package_v2, upload_deployment, create_runtime, wait_for_ready, validate_agent_files, build_skill_prompt_section, _shared_env_vars
-from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
+from templates.agent_template_v2 import MAIN_PY_MCP_TEMPLATE, MAIN_PY_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_base_guidelines
+from tools._workspace import _get_agent_role_arn
 
 
 def _default_welcome(agent_name: str, description: str) -> str:
@@ -239,9 +246,9 @@ def create_agent(
     library_skill_resolutions: list[dict] = []  # [{name, library_id, new_local_id, library_files_hash}]
     if requested_skill_names:
         from tools.sync_agent_skill import (
-            _resolve_library_skill as _resolve_lib,
-            _read_library_skill_files as _read_lib_files,
             _compute_content_hash as _lib_content_hash,
+            _read_library_skill_files as _read_lib_files,
+            _resolve_library_skill as _resolve_lib,
         )
         unresolved: list[str] = []
         _lib_s3 = boto3.client("s3", region_name=REGION)

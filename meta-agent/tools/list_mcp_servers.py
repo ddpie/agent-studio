@@ -10,9 +10,9 @@ the Gateway is no longer on any hot path.
 import json
 
 import boto3
+from config import REGION, S3_BUCKET
 from strands import tool
 
-from config import REGION, S3_BUCKET
 from tools._scope import current_workspace
 
 

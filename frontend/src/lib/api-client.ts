@@ -172,7 +172,7 @@ async function request<T = unknown>(method: string, path: string, body?: unknown
   let resp: Response;
   try {
     resp = await fetch(url, init);
-  } catch (err) {
+  } catch {
     throw new ApiError(0, { error: "Network error" });
   }
 
@@ -182,7 +182,7 @@ async function request<T = unknown>(method: string, path: string, body?: unknown
     headers.Authorization = `Bearer ${freshToken}`;
     try {
       resp = await fetch(url, { ...init, headers });
-    } catch (err) {
+    } catch {
       throw new ApiError(0, { error: "Network error" });
     }
   }
@@ -215,7 +215,7 @@ async function requestRaw<T = unknown>(
   let resp: Response;
   try {
     resp = await fetch(`${API_BASE}${fullPath}`, init);
-  } catch (err) {
+  } catch {
     throw new ApiError(0, { error: "Network error" });
   }
   if (!resp.ok) {

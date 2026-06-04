@@ -3,9 +3,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from botocore.exceptions import ClientError
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -62,7 +60,7 @@ def reset_caches():
     costs_mod._GLOBAL_AGENTS_CACHE["expires"] = 0
     costs_mod._GLOBAL_WORKSPACES_CACHE["data"] = None
     costs_mod._GLOBAL_WORKSPACES_CACHE["expires"] = 0
-    yield
+    return
 
 
 def _apigw(method, path, query_params=None, headers=None):
@@ -177,7 +175,7 @@ class TestFieldHelpers:
         assert _field([], "a") is None
 
     def test_to_int_to_float(self):
-        from crud.costs import _to_int, _to_float
+        from crud.costs import _to_float, _to_int
         assert _to_int("42") == 42
         assert _to_int("3.14") == 3
         assert _to_int(None) == 0

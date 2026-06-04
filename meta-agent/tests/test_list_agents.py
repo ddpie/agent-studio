@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ── Module stubs ───────────────────────────────────────────────────────────
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
 if not hasattr(_mock_strands, "tool"):
@@ -40,8 +39,7 @@ def _scope(monkeypatch):
 
 def test_list_agents_returns_empty_when_not_workspace_member(monkeypatch):
     """require_role should reject the caller when no workspace context."""
-    from tools import list_agents as mod
-    from tools import _scope
+    from tools import _scope, list_agents as mod
 
     # No workspace context
     monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
@@ -52,8 +50,7 @@ def test_list_agents_returns_empty_when_not_workspace_member(monkeypatch):
 
 def test_list_agents_returns_empty_when_not_member(monkeypatch):
     """require_role rejects when caller has no membership record."""
-    from tools import list_agents as mod
-    from tools import _scope
+    from tools import _scope, list_agents as mod
 
     workspaces = MagicMock()
     workspaces.get_item.return_value = {}  # no Item → not a member
@@ -65,8 +62,7 @@ def test_list_agents_returns_empty_when_not_member(monkeypatch):
 
 def test_list_agents_happy_path(monkeypatch):
     """Returns workspace agents enriched with live AgentCore status."""
-    from tools import list_agents as mod
-    from tools import _scope
+    from tools import _scope, list_agents as mod
 
     # Caller has viewer role
     workspaces = MagicMock()
@@ -110,8 +106,7 @@ def test_list_agents_happy_path(monkeypatch):
 
 def test_list_agents_with_no_records(monkeypatch):
     """Empty workspace returns []."""
-    from tools import list_agents as mod
-    from tools import _scope
+    from tools import _scope, list_agents as mod
 
     workspaces = MagicMock()
     workspaces.get_item.return_value = {"Item": {"role": "editor"}}
@@ -127,8 +122,7 @@ def test_list_agents_with_no_records(monkeypatch):
 
 def test_list_agents_filters_archived_by_default(monkeypatch):
     """Archived agents (status='archived') are filtered out."""
-    from tools import list_agents as mod
-    from tools import _scope
+    from tools import _scope, list_agents as mod
 
     workspaces = MagicMock()
     workspaces.get_item.return_value = {"Item": {"role": "admin"}}

@@ -2,7 +2,6 @@
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
 from botocore.exceptions import ClientError
 
 
@@ -48,8 +47,9 @@ class TestIsStaleRunning:
         assert _is_stale_running({"status": "running", "startedAt": ""}) is True
 
     def test_running_recent_not_stale(self):
-        from crud.runs import _is_stale_running
         from datetime import datetime, timezone
+
+        from crud.runs import _is_stale_running
         now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         assert _is_stale_running({"status": "running", "startedAt": now_iso}) is False
 

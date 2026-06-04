@@ -37,7 +37,7 @@ def my_tool(query: str) -> str:
 `;
 
 function extractFuncName(code: string): string | null {
-  const match = code.match(/@tool\s*\ndef\s+(\w+)\s*\(/);
+  const match = /@tool\s*\ndef\s+(\w+)\s*\(/.exec(code);
   return match ? match[1] : null;
 }
 
@@ -227,7 +227,7 @@ export default function ToolDetail() {
     const funcName = extractFuncName(code);
     if (!funcName) errors.push(t("tools.missingDecorator"));
     if (funcName && !code.includes('"""')) warnings.push(t("tools.missingDocstring"));
-    if (funcName && !code.match(/def\s+\w+\([^)]*\)\s*->\s*str/)) warnings.push(t("tools.missingReturnType"));
+    if (funcName && !(/def\s+\w+\([^)]*\)\s*->\s*str/.exec(code))) warnings.push(t("tools.missingReturnType"));
 
     if (errors.length === 0) {
       try {
@@ -239,7 +239,7 @@ export default function ToolDetail() {
           const cleaned = chunk.replace(/\{"__tool"[^}]*\}/g, "");
           if (cleaned) result += cleaned;
         }
-        const jsonMatch = result.match(/\{[\s\S]*"valid"[\s\S]*\}/);
+        const jsonMatch = /\{[\s\S]*"valid"[\s\S]*\}/.exec(result);
         if (jsonMatch) {
           try { const parsed = JSON.parse(jsonMatch[0]); if (Array.isArray(parsed.errors)) errors.push(...parsed.errors); if (Array.isArray(parsed.warnings)) warnings.push(...parsed.warnings); } catch { /* skip */ }
         }

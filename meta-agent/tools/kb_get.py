@@ -1,10 +1,11 @@
 """kb_get — Get detailed information about a Knowledge Base."""
 
 import json
+
 import boto3
+from config import KB_TABLE, REGION, S3_BUCKET
 from strands import tool
 
-from config import REGION, S3_BUCKET, KB_TABLE
 from tools._scope import current_workspace
 
 

@@ -5,8 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from crud.agents import _build_agent_item, _agent_response
-
+from crud.agents import _agent_response, _build_agent_item
 
 # ---------------------------------------------------------------------------
 # Pure helper tests (no fixtures needed)

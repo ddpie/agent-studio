@@ -5,11 +5,9 @@ path is exercised by the Sprint 3 E2E suite.
 """
 import ast
 import json
-import os
 import sys
 import types
 from unittest.mock import MagicMock
-
 
 # ── Module stubs so `from strands import tool` works in-process ───────────
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
@@ -75,10 +73,10 @@ def test_agent_caller_registered_in_registry():
 
 def test_link_section_roundtrip():
     from tools.link_agent import (
+        _LINK_MARKER_END,
+        _LINK_MARKER_START,
         _build_link_section,
         _strip_link_section,
-        _LINK_MARKER_START,
-        _LINK_MARKER_END,
     )
 
     base = "## Role\nYou are a helpful agent.\n\n## Tools\n- use `foo`.\n"
@@ -875,13 +873,13 @@ def test_save_metadata_mirrors_to_standalone_files(monkeypatch):
 
 
 def test_linked_keys_secret_path_format():
-    from tools.link_agent import _linked_keys_secret_path, _A2A_KEYS_ENV_KEY
+    from tools.link_agent import _A2A_KEYS_ENV_KEY, _linked_keys_secret_path
     assert _linked_keys_secret_path("ws-1", "src-1") == f"agent-studio/ws-1/src-1/{_A2A_KEYS_ENV_KEY}"
 
 
 def test_caller_from_module_reads_create_agent_module(monkeypatch):
-    from tools import link_agent as mod
     import tools.create_agent as ca
+    from tools import link_agent as mod
 
     monkeypatch.setattr(ca, "_caller_id", "user-zzz", raising=False)
     assert mod._caller_from_module() == "user-zzz"

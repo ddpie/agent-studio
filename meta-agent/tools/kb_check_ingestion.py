@@ -1,10 +1,11 @@
 """kb_check_ingestion — Check the status of a Knowledge Base ingestion job."""
 
 import json
+
 import boto3
+from config import KB_TABLE, REGION
 from strands import tool
 
-from config import REGION, KB_TABLE
 from tools._scope import current_workspace
 
 

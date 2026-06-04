@@ -14,7 +14,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ── Module stubs ───────────────────────────────────────────────────────────
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
 if not hasattr(_mock_strands, "tool"):
@@ -88,8 +87,7 @@ def _kb_item(**overrides):
 
 class TestKbCreate:
     def test_no_workspace(self, monkeypatch):
-        from tools import kb_create as mod
-        from tools import _scope
+        from tools import _scope, kb_create as mod
         monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
 
         out = json.loads(mod.kb_create("My KB"))
@@ -214,8 +212,7 @@ class TestKbCreate:
 
 class TestKbDelete:
     def test_no_workspace(self, monkeypatch):
-        from tools import kb_delete as mod
-        from tools import _scope
+        from tools import _scope, kb_delete as mod
         monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
 
         out = json.loads(mod.kb_delete("kb-x"))
@@ -412,8 +409,7 @@ def test_safe_filename():
 
 class TestKbAttach:
     def test_no_workspace(self, monkeypatch):
-        from tools import kb_attach as mod
-        from tools import _scope
+        from tools import _scope, kb_attach as mod
         monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
         out = json.loads(mod.kb_attach_to_agent("kb-1", "a-1"))
         assert out["error"] == "no_workspace"
@@ -430,8 +426,7 @@ class TestKbAttach:
         assert out["error"] == "kb_not_found"
 
     def test_attach_blocks_when_agent_not_in_workspace(self, monkeypatch):
-        from tools import kb_attach as mod
-        from tools import _scope
+        from tools import _scope, kb_attach as mod
 
         # Workspace member but agent in another ws
         workspaces = MagicMock()
@@ -495,8 +490,7 @@ class TestKbAttach:
 
 class TestKbGet:
     def test_no_workspace(self, monkeypatch):
-        from tools import kb_get as mod
-        from tools import _scope
+        from tools import _scope, kb_get as mod
         monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
         out = json.loads(mod.kb_get("kb-x"))
         assert out["error"] == "no_workspace"
@@ -512,8 +506,9 @@ class TestKbGet:
         assert out["error"] == "kb_not_found"
 
     def test_happy_path_with_documents(self, monkeypatch):
-        from tools import kb_get as mod
         from datetime import datetime, timezone
+
+        from tools import kb_get as mod
 
         fake_ddb = MagicMock()
         fake_ddb.get_item.return_value = {
@@ -556,8 +551,7 @@ class TestKbGet:
 
 class TestKbList:
     def test_no_workspace(self, monkeypatch):
-        from tools import kb_list as mod
-        from tools import _scope
+        from tools import _scope, kb_list as mod
         monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
         out = json.loads(mod.kb_list())
         assert out["error"] == "no_workspace"
@@ -598,8 +592,7 @@ class TestKbList:
 
 class TestKbCheckIngestion:
     def test_no_workspace(self, monkeypatch):
-        from tools import kb_check_ingestion as mod
-        from tools import _scope
+        from tools import _scope, kb_check_ingestion as mod
         monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
         out = json.loads(mod.kb_check_ingestion("kb-x"))
         assert out["error"] == "no_workspace"
@@ -741,8 +734,7 @@ class TestKbInject:
 
 class TestKbDeleteDocument:
     def test_no_workspace(self, monkeypatch):
-        from tools import kb_delete_document as mod
-        from tools import _scope
+        from tools import _scope, kb_delete_document as mod
         monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
         out = json.loads(mod.kb_delete_document("kb-x", "k/foo.pdf"))
         assert out["error"] == "no_workspace"
