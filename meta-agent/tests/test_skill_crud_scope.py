@@ -759,3 +759,465 @@ def test_write_skill_files_strips_unsafe_paths():
     assert "SKILL.md" not in written
     # No traversal slipped through to S3
     assert all(".." not in k for k in s3.store.keys())
+
+
+# ── Additional update_skill / delete_skill / import_skill branch coverage ──
+
+
+def test_update_skill_refuses_viewer_role():
+    s3 = FakeS3()
+    table = FakeSkillsTable()
+    patches = _patches("update_skill", s3, table, role="viewer")
+    _, patches = _start(patches)
+    try:
+        out = json.loads(_update_mod.update_skill("nope", skill_name="x"))
+    finally:
+        _stop(patches)
+    assert "error" in out
+    assert "Permission denied" in out["error"]
+
+
+def test_update_skill_returns_error_when_get_skill_raises():
+    """_get_skill swallows DDB errors → returns None → update_skill returns 'not found'."""
+    s3 = FakeS3()
+
+    class _BadTable(FakeSkillsTable):
+        def get_item(self, Key):
+            raise RuntimeError("ddb dropped the call")
+
+    table = _BadTable()
+    patches = _patches("update_skill", s3, table, role="editor", workspace=WS_ID)
+    _, patches = _start(patches)
+    try:
+        out = json.loads(_update_mod.update_skill("ghost"))
+    finally:
+        _stop(patches)
+    # _get_skill catches the exception and returns None, so the tool says not found
+    assert "error" in out
+    assert "not found" in out["error"]
+
+
+def test_update_skill_errors_when_skill_md_missing():
+    """update_skill should return an error if S3 has no SKILL.md."""
+    s3 = FakeS3()  # no SKILL.md seeded
+    table = FakeSkillsTable([{
+        "skillId": "ownmissing",
+        "workspace_id": WS_ID,
+        "name": "missing",
+        "description": "d",
+        "type": "prompt",
+        "source": "natural-language",
+        "deleted": False,
+    }])
+    patches = _patches("update_skill", s3, table, role="editor", workspace=WS_ID)
+    _, patches = _start(patches)
+    try:
+        out = json.loads(_update_mod.update_skill("ownmissing", description="x"))
+    finally:
+        _stop(patches)
+    assert "error" in out
+    assert "Skill file not found" in out["error"]
+
+
+def test_update_skill_instructions_only_replaces_body_only():
+    """instructions= should rewrite the body but not change name/description."""
+    s3 = FakeS3({
+        "skills/own1234/SKILL.md": (
+            b'---\nname: "own"\ndescription: "d"\ntype: "prompt"\n'
+            b'source: "natural-language"\n---\n# old body'
+        ),
+    })
+    table = FakeSkillsTable([{
+        "skillId": "own1234",
+        "workspace_id": WS_ID,
+        "name": "own",
+        "description": "d",
+        "type": "prompt",
+        "source": "natural-language",
+        "deleted": False,
+    }])
+    patches = _patches("update_skill", s3, table, role="editor", workspace=WS_ID)
+    _, patches = _start(patches)
+    try:
+        out = json.loads(_update_mod.update_skill(
+            "own1234", instructions="# brand new body",
+        ))
+    finally:
+        _stop(patches)
+    assert out["status"] == "updated"
+    assert out["updated_fields"] == ["instructions"]
+    new_md = s3.store["skills/own1234/SKILL.md"].decode("utf-8")
+    assert "# brand new body" in new_md
+    assert "# old body" not in new_md
+
+
+def test_update_skill_ddb_failure_returns_error():
+    """If DDB update fails, update_skill returns the error JSON."""
+    s3 = FakeS3({
+        "skills/own1234/SKILL.md": (
+            b'---\nname: "own"\ndescription: "d"\ntype: "prompt"\n---\n# body'
+        ),
+    })
+
+    class _BadTable(FakeSkillsTable):
+        def update_item(self, **kwargs):
+            raise RuntimeError("ddb update boom")
+
+    table = _BadTable([{
+        "skillId": "own1234",
+        "workspace_id": WS_ID,
+        "name": "own",
+        "description": "d",
+        "type": "prompt",
+        "source": "natural-language",
+        "deleted": False,
+    }])
+    patches = _patches("update_skill", s3, table, role="editor", workspace=WS_ID)
+    _, patches = _start(patches)
+    try:
+        out = json.loads(_update_mod.update_skill("own1234", skill_name="renamed"))
+    finally:
+        _stop(patches)
+    assert "error" in out
+    assert "Skill metadata update failed" in out["error"]
+
+
+# ── delete_skill additional branches ──────────────────────────────────────
+
+
+def test_delete_skill_refuses_viewer_role():
+    s3 = FakeS3()
+    table = FakeSkillsTable()
+    patches = _patches("delete_skill", s3, table, role="viewer")
+    _, patches = _start(patches)
+    try:
+        out = json.loads(_delete_mod.delete_skill("any"))
+    finally:
+        _stop(patches)
+    assert "error" in out
+    assert "Permission denied" in out["error"]
+
+
+def test_delete_skill_handles_get_item_failure():
+    """If DDB get_item raises, delete_skill returns Skill lookup failed."""
+    s3 = FakeS3()
+
+    class _BadTable(FakeSkillsTable):
+        def get_item(self, Key):
+            raise RuntimeError("ddb is down")
+
+    table = _BadTable()
+    patches = _patches("delete_skill", s3, table, role="editor", workspace=WS_ID)
+    _, patches = _start(patches)
+    try:
+        out = json.loads(_delete_mod.delete_skill("any"))
+    finally:
+        _stop(patches)
+    assert "error" in out
+    assert "Skill lookup failed" in out["error"]
+
+
+def test_delete_skill_handles_s3_failure():
+    """S3 delete failure surfaces an error (DDB row stays intact)."""
+    class _BadS3(FakeS3):
+        def delete_objects(self, Bucket, Delete):
+            raise RuntimeError("s3 blew up")
+
+    s3 = _BadS3({"skills/own1234/SKILL.md": b"body"})
+    table = FakeSkillsTable([{
+        "skillId": "own1234",
+        "workspace_id": WS_ID,
+        "name": "own",
+        "type": "prompt",
+        "deleted": False,
+    }])
+    patches = _patches("delete_skill", s3, table, role="editor", workspace=WS_ID)
+    _, patches = _start(patches)
+    try:
+        out = json.loads(_delete_mod.delete_skill("own1234"))
+    finally:
+        _stop(patches)
+    assert "error" in out
+    assert "Failed to delete skill files" in out["error"]
+    # DDB row not deleted
+    assert "own1234" in table.items
+
+
+def test_delete_skill_handles_ddb_delete_unexpected_failure():
+    """When DDB delete_item raises a non-conditional error."""
+    class _AngryTable(FakeSkillsTable):
+        def delete_item(self, **kwargs):
+            raise RuntimeError("kaboom")
+
+    s3 = FakeS3({"skills/own1234/SKILL.md": b"body"})
+    table = _AngryTable([{
+        "skillId": "own1234",
+        "workspace_id": WS_ID,
+        "name": "own",
+        "type": "prompt",
+        "deleted": False,
+    }])
+    patches = _patches("delete_skill", s3, table, role="editor", workspace=WS_ID)
+    _, patches = _start(patches)
+    try:
+        out = json.loads(_delete_mod.delete_skill("own1234"))
+    finally:
+        _stop(patches)
+    assert "error" in out
+    assert "Skill metadata delete failed" in out["error"]
+
+
+# ── import_skill: additional helpers + branches ────────────────────────────
+
+
+def test_import_skill_no_workspace_returns_error():
+    s3 = FakeS3()
+    table = FakeSkillsTable()
+    patches = _patches("import_skill", s3, table, role="editor", workspace="")
+    _, patches = _start(patches)
+    try:
+        out = json.loads(_import_mod.import_skill(content="# x", name="y", description="d"))
+    finally:
+        _stop(patches)
+    assert "error" in out
+    assert "No workspace context" in out["error"]
+
+
+def test_import_skill_clawhub_non_text_files_skipped(monkeypatch):
+    """Binary entries in the zip must be skipped (UnicodeDecodeError path)."""
+    import io as _io
+    import zipfile
+
+    s3 = FakeS3()
+    table = FakeSkillsTable()
+    patches = _patches("import_skill", s3, table, role="editor", workspace=WS_ID)
+    _, patches = _start(patches)
+
+    buf = _io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(
+            "skill/SKILL.md",
+            '---\nname: "binclaw"\ndescription: "d"\n---\n# body',
+        )
+        # A binary blob — utf-8 decode raises
+        zf.writestr("skill/asset.bin", b"\xff\xfe\x00\x01")
+    zip_bytes = buf.getvalue()
+
+    monkeypatch.setattr(
+        _import_mod, "_http_get",
+        lambda *a, **kw: zip_bytes if kw.get("binary") else "",
+    )
+
+    try:
+        out = json.loads(_import_mod.import_skill(url="https://clawhub.ai/auth/skill"))
+    finally:
+        _stop(patches)
+    assert out["status"] == "imported"
+    # Binary file is not present in the file list
+    assert "asset.bin" not in out["files"]
+
+
+def test_import_skill_clawhub_empty_zip_raises_clean_error(monkeypatch):
+    """Zip with only directories or only filtered noise → ValueError → error JSON."""
+    import io as _io
+    import zipfile
+
+    s3 = FakeS3()
+    table = FakeSkillsTable()
+    patches = _patches("import_skill", s3, table, role="editor", workspace=WS_ID)
+    _, patches = _start(patches)
+
+    buf = _io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        # Directory entry only — info.is_dir() True
+        zf.writestr("skill/", "")
+    zip_bytes = buf.getvalue()
+
+    monkeypatch.setattr(
+        _import_mod, "_http_get",
+        lambda *a, **kw: zip_bytes if kw.get("binary") else "",
+    )
+    try:
+        out = json.loads(_import_mod.import_skill(url="https://clawhub.ai/a/b"))
+    finally:
+        _stop(patches)
+    assert "error" in out
+    # _fetch_clawhub raises "ClawHub zip is empty or contains no readable files"
+    assert "Failed to fetch" in out["error"]
+
+
+def test_import_skill_metadata_write_failure_surfaces(monkeypatch):
+    """If DDB put_item fails after S3 was written, return clear error."""
+    s3 = FakeS3()
+    class _AngryTable(FakeSkillsTable):
+        def put_item(self, Item):
+            raise RuntimeError("ddb 5xx")
+    table = _AngryTable()
+    patches = _patches("import_skill", s3, table, role="editor", workspace=WS_ID)
+    _, patches = _start(patches)
+    try:
+        out = json.loads(_import_mod.import_skill(
+            content='---\nname: "imp"\ndescription: "d"\n---\n# body',
+        ))
+    finally:
+        _stop(patches)
+    assert "error" in out
+    assert "Skill metadata write failed" in out["error"]
+
+
+def test_import_skill_reads_skill_md_from_subdirectory(monkeypatch):
+    """Multi-file import where SKILL.md lives in a subdir (not top-level)."""
+    import io as _io
+    import zipfile
+
+    s3 = FakeS3()
+    table = FakeSkillsTable()
+    patches = _patches("import_skill", s3, table, role="editor", workspace=WS_ID)
+    _, patches = _start(patches)
+
+    buf = _io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        # Make sure no plain "SKILL.md" exists at the top, but it's in a
+        # nested directory after the leading-dir-strip — force the zip to
+        # have multiple top-level dirs so the strip doesn't remove the prefix.
+        zf.writestr(
+            "skill/extra/SKILL.md",
+            '---\nname: "nested-skill"\ndescription: "d"\n---\n# body',
+        )
+        zf.writestr("other/asset.txt", "hi")
+    zip_bytes = buf.getvalue()
+
+    monkeypatch.setattr(
+        _import_mod, "_http_get",
+        lambda *a, **kw: zip_bytes if kw.get("binary") else "",
+    )
+
+    try:
+        out = json.loads(_import_mod.import_skill(url="https://clawhub.ai/x/y"))
+    finally:
+        _stop(patches)
+    # Either it found SKILL.md in the strip or in nested location — both
+    # branches mean "imported".
+    assert out["status"] == "imported"
+
+
+def test_import_skill_github_dir_recurses_into_subdirs(monkeypatch):
+    """GitHub dir with subdir → recursion path covered."""
+    s3 = FakeS3()
+    table = FakeSkillsTable()
+    patches = _patches("import_skill", s3, table, role="editor", workspace=WS_ID)
+    _, patches = _start(patches)
+
+    skill_md = '---\nname: "gh-deep"\ndescription: "d"\n---\n# body'
+    api_calls = {"top": 0, "sub": 0}
+
+    def fake_http_get(url, accept="*/*", binary=False):
+        if "api.github.com" in url and "subdir" in url:
+            api_calls["sub"] += 1
+            return json.dumps([
+                {
+                    "type": "file",
+                    "path": "skills/myskill/subdir/SKILL.md",
+                    "download_url": "https://raw/SKILL.md",
+                }
+            ])
+        if "api.github.com" in url:
+            api_calls["top"] += 1
+            return json.dumps([
+                {
+                    "type": "dir",
+                    "path": "skills/myskill/subdir",
+                    "download_url": None,
+                }
+            ])
+        return skill_md
+
+    monkeypatch.setattr(_import_mod, "_http_get", fake_http_get)
+
+    try:
+        out = json.loads(_import_mod.import_skill(
+            url="https://github.com/o/r/tree/main/skills/myskill",
+        ))
+    finally:
+        _stop(patches)
+    assert out["status"] == "imported"
+    assert api_calls["sub"] >= 1
+
+
+def test_import_skill_github_file_url_invalid(monkeypatch):
+    """A 'github.com/.../blob/' URL with bad shape → _fetch_github_file raises."""
+    s3 = FakeS3()
+    table = FakeSkillsTable()
+    patches = _patches("import_skill", s3, table, role="editor", workspace=WS_ID)
+    _, patches = _start(patches)
+
+    monkeypatch.setattr(
+        _import_mod, "_http_get",
+        lambda *a, **kw: (_ for _ in ()).throw(Exception("network")),
+    )
+
+    try:
+        # /blob/ but malformed — _fetch_github_file's regex needs branch + path
+        out = json.loads(_import_mod.import_skill(
+            url="https://github.com/owner/repo/blob/missing",
+        ))
+    finally:
+        _stop(patches)
+    assert "error" in out
+    assert "Failed to fetch" in out["error"]
+
+
+def test_import_skill_raw_url_fetches_text(monkeypatch):
+    """Plain https URL → source_type='url'; happy path with frontmatter."""
+    s3 = FakeS3()
+    table = FakeSkillsTable()
+    patches = _patches("import_skill", s3, table, role="editor", workspace=WS_ID)
+    _, patches = _start(patches)
+
+    body = '---\nname: "rawurl-skill"\ndescription: "d"\n---\n# raw'
+    monkeypatch.setattr(_import_mod, "_http_get", lambda *a, **kw: body)
+    try:
+        out = json.loads(_import_mod.import_skill(url="https://example.org/some.md"))
+    finally:
+        _stop(patches)
+    assert out["status"] == "imported"
+    assert out["source"] == "url"
+
+
+def test_import_skill_clawhub_zip_with_only_subdir_strip(monkeypatch):
+    """Zip with one shared parent dir gets stripped."""
+    import io as _io
+    import zipfile
+
+    s3 = FakeS3()
+    table = FakeSkillsTable()
+    patches = _patches("import_skill", s3, table, role="editor", workspace=WS_ID)
+    _, patches = _start(patches)
+
+    buf = _io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(
+            "skill_pkg/SKILL.md",
+            '---\nname: "wrap"\ndescription: "d"\n---\n# body',
+        )
+    zip_bytes = buf.getvalue()
+    monkeypatch.setattr(
+        _import_mod, "_http_get",
+        lambda *a, **kw: zip_bytes if kw.get("binary") else "",
+    )
+    try:
+        out = json.loads(_import_mod.import_skill(url="https://clawhub.ai/a/b"))
+    finally:
+        _stop(patches)
+    assert out["status"] == "imported"
+    assert "SKILL.md" in out["files"]
+
+
+def test_should_skip_path_explicit_branches():
+    skip = _import_mod._should_skip_path
+    # branch: __MACOSX
+    assert skip("project/__MACOSX/foo")
+    # branch: leaf .pyc handled even when nested in valid path
+    assert skip("legit/dir/junk.pyc")
+    # blank should skip
+    assert skip("")

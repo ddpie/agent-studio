@@ -520,10 +520,9 @@ def delete_document(wsId: str, kbId: str):
 
     body = router.current_event.json_body or {}
     doc_key = (body.get("documentKey") or "").strip()
-    if not doc_key:
-        file_name = (body.get("fileName") or body.get("filename") or "").strip()
-        if not file_name:
-            return bad_request("documentKey or fileName is required")
+    file_name = (body.get("fileName") or body.get("filename") or "").strip()
+    if not doc_key and not file_name:
+        return bad_request("documentKey or fileName is required")
 
     # Verify KB
     table = _get_table()
@@ -537,6 +536,9 @@ def delete_document(wsId: str, kbId: str):
         doc_key = f"{s3_prefix}{file_name}"
     elif not doc_key.startswith(s3_prefix):
         return bad_request("Document key does not belong to this knowledge base")
+    # If only documentKey was given, derive file_name from it for the response.
+    if not file_name:
+        file_name = doc_key[len(s3_prefix):] if doc_key.startswith(s3_prefix) else doc_key
 
     # Delete from S3
     s3 = _get_s3()

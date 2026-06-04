@@ -87,3 +87,51 @@ def test_delete_harness_agent_continues_on_already_deleted_harness(monkeypatch):
     out = json.loads(mod.delete_harness_agent(agent_id="myBot-abc"))
     assert out["ok"] is True
     fake_ddb.update_item.assert_called_once()
+
+
+def test_delete_harness_agent_returns_error_when_agent_not_found(monkeypatch):
+    """get_item returns no Item → "agent not found"."""
+    from tools import delete_harness_agent as mod
+    fake_ddb = MagicMock()
+    fake_ddb.get_item.return_value = {}
+    monkeypatch.setattr(mod, "_get_agents_table", lambda: fake_ddb)
+
+    out = json.loads(mod.delete_harness_agent(agent_id="ghost"))
+    assert "error" in out
+    assert "not found" in out["error"]
+
+
+def test_delete_harness_agent_wraps_unexpected_errors(monkeypatch):
+    """Outer try/except converts unexpected errors into JSON."""
+    from tools import delete_harness_agent as mod
+    fake_ddb = MagicMock()
+    fake_ddb.get_item.side_effect = Exception("ddb 5xx")
+    monkeypatch.setattr(mod, "_get_agents_table", lambda: fake_ddb)
+
+    out = json.loads(mod.delete_harness_agent(agent_id="anything"))
+    assert "error" in out
+    assert "ddb 5xx" in out["error"]
+
+
+def test_delete_harness_agent_factories_use_boto3(monkeypatch):
+    """Cover _get_control_client / _get_agents_table thin wrappers."""
+    from tools import delete_harness_agent as mod
+    captured = {"clients": [], "resources": []}
+
+    def fake_client(svc, region_name=None):
+        captured["clients"].append(svc)
+        return MagicMock()
+
+    def fake_resource(svc, region_name=None):
+        captured["resources"].append(svc)
+        m = MagicMock()
+        m.Table.return_value = MagicMock()
+        return m
+
+    monkeypatch.setattr(mod.boto3, "client", fake_client)
+    monkeypatch.setattr(mod.boto3, "resource", fake_resource)
+
+    assert mod._get_control_client() is not None
+    assert mod._get_agents_table() is not None
+    assert "bedrock-agentcore-control" in captured["clients"]
+    assert "dynamodb" in captured["resources"]

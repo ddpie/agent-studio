@@ -869,3 +869,549 @@ class TestKbResponse:
         assert resp["workspaceId"] == "ws-1"
         assert resp["docCount"] == 7
         assert resp["attachedAgentIds"] == ["agt-1"]
+
+    def test_count_docs_uses_s3(self):
+        from crud.kb import _kb_response
+        with patch("crud.kb._count_s3_documents", return_value=12):
+            resp = _kb_response({"kb_id": "x", "s3_prefix": "kb/x/"}, count_docs=True)
+        assert resp["docCount"] == 12
+
+
+# ---------------------------------------------------------------------------
+# Lazy-init helpers + _count_s3_documents
+# ---------------------------------------------------------------------------
+
+
+class TestLazyInit:
+    def test_get_table_caches(self):
+        import crud.kb as k
+        k._table = None
+        with patch("crud.kb.boto3.resource") as mk:
+            tbl = MagicMock()
+            mk.return_value.Table.return_value = tbl
+            t1 = k._get_table()
+            t2 = k._get_table()
+            assert t1 is t2
+        k._table = None
+
+    def test_get_agents_table_caches(self):
+        import crud.kb as k
+        k._agents_table = None
+        with patch("crud.kb.boto3.resource") as mk:
+            tbl = MagicMock()
+            mk.return_value.Table.return_value = tbl
+            t1 = k._get_agents_table()
+            t2 = k._get_agents_table()
+            assert t1 is t2
+        k._agents_table = None
+
+    def test_get_s3_caches(self):
+        import crud.kb as k
+        k._s3 = None
+        with patch("crud.kb.boto3.client") as mk:
+            mk.return_value = MagicMock()
+            c1 = k._get_s3()
+            c2 = k._get_s3()
+            assert c1 is c2
+        k._s3 = None
+
+    def test_get_bedrock_caches(self):
+        import crud.kb as k
+        k._bedrock = None
+        with patch("crud.kb.boto3.client") as mk:
+            mk.return_value = MagicMock()
+            c1 = k._get_bedrock()
+            c2 = k._get_bedrock()
+            assert c1 is c2
+        k._bedrock = None
+
+    def test_get_s3vectors_caches(self):
+        import crud.kb as k
+        k._s3vectors = None
+        with patch("crud.kb.boto3.client") as mk:
+            mk.return_value = MagicMock()
+            c1 = k._get_s3vectors()
+            c2 = k._get_s3vectors()
+            assert c1 is c2
+        k._s3vectors = None
+
+    def test_get_ddb_client_caches(self):
+        import crud.kb as k
+        k._ddb_client = None
+        with patch("crud.kb.boto3.client") as mk:
+            mk.return_value = MagicMock()
+            c1 = k._get_ddb_client()
+            c2 = k._get_ddb_client()
+            assert c1 is c2
+        k._ddb_client = None
+
+
+class TestCountS3Documents:
+    def test_empty_prefix_returns_zero(self):
+        from crud.kb import _count_s3_documents
+        assert _count_s3_documents("") == 0
+
+    def test_returns_keycount(self):
+        from crud.kb import _count_s3_documents
+        fake_s3 = MagicMock()
+        fake_s3.list_objects_v2.return_value = {"KeyCount": 7}
+        with patch("crud.kb._get_s3", return_value=fake_s3):
+            assert _count_s3_documents("kb/x/") == 7
+
+    def test_exception_returns_zero(self):
+        from crud.kb import _count_s3_documents
+        fake_s3 = MagicMock()
+        fake_s3.list_objects_v2.side_effect = Exception("boom")
+        with patch("crud.kb._get_s3", return_value=fake_s3):
+            assert _count_s3_documents("kb/x/") == 0
+
+
+# ---------------------------------------------------------------------------
+# Auth failures (Bearer token missing / verify_jwt raises)
+# ---------------------------------------------------------------------------
+
+
+class TestAuthFailures:
+    """All KB endpoints share auth_check at the top — verify the missing
+    Authorization → forbidden() path is wired up."""
+
+    def test_list_no_jwt(self, workspace_id, mock_kb_table):
+        resp = _invoke({
+            "httpMethod": "GET",
+            "path": f"/api/workspaces/{workspace_id}/knowledge-bases",
+            "resource": f"/api/workspaces/{workspace_id}/knowledge-bases",
+            "pathParameters": {},
+            "headers": {"Authorization": ""},
+            "body": None,
+            "queryStringParameters": {},
+            "requestContext": {"identity": {"sourceIp": "127.0.0.1"}},
+            "isBase64Encoded": False,
+        })
+        assert resp["statusCode"] == 403
+
+
+# ---------------------------------------------------------------------------
+# get_knowledge_base — list_objects exception + ingestion error swallowed
+# ---------------------------------------------------------------------------
+
+
+class TestGetKbErrorPaths:
+    def test_list_objects_exception_swallowed(
+        self, workspace_id, mock_jwt, _mock_viewer, mock_kb_table, mock_kb_s3
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_kb_s3.list_objects_v2.side_effect = Exception("s3 down")
+        resp = _invoke(_apigw(
+            "GET",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456",
+        ))
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        assert data["documents"] == []
+
+    def test_ingestion_get_job_exception_swallowed(
+        self, workspace_id, mock_jwt, _mock_viewer, mock_kb_table, mock_kb_s3, mock_bedrock
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(
+            workspace_id, last_ingestion_job_id="job-1"
+        )}
+        mock_bedrock.get_ingestion_job.side_effect = Exception("api boom")
+        resp = _invoke(_apigw(
+            "GET",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456",
+        ))
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        # ingestion key absent because get_ingestion_job failed
+        assert "ingestion" not in data
+
+
+# ---------------------------------------------------------------------------
+# _cleanup_kb_infra: each step's exception is swallowed
+# ---------------------------------------------------------------------------
+
+
+class TestCleanupKbInfra:
+    def test_all_steps_run_with_exceptions(self, mock_bedrock, mock_s3vectors):
+        from crud.kb import _cleanup_kb_infra
+        mock_bedrock.delete_data_source.side_effect = Exception("x")
+        mock_bedrock.delete_knowledge_base.side_effect = Exception("y")
+        mock_s3vectors.delete_index.side_effect = Exception("z")
+        # Should not raise
+        _cleanup_kb_infra("kb-1", "ds-1", "idx-1")
+
+    def test_no_args_skips_steps(self, mock_bedrock, mock_s3vectors):
+        from crud.kb import _cleanup_kb_infra
+        _cleanup_kb_infra(None, None, None)
+        mock_bedrock.delete_data_source.assert_not_called()
+        mock_bedrock.delete_knowledge_base.assert_not_called()
+        mock_s3vectors.delete_index.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Delete KB additional paths
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteKbExtra:
+    def test_confirm_via_body(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_kb_s3, mock_bedrock, mock_s3vectors
+    ):
+        """Confirmation can also come via JSON body (POST /delete)."""
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        resp = _invoke(_apigw(
+            "POST",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456/delete",
+            body={"confirm": True},
+        ))
+        assert resp["statusCode"] == 200
+
+    def test_s3_truncated_continues(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_kb_s3, mock_bedrock, mock_s3vectors
+    ):
+        """S3 list returns IsTruncated=True → loop continues until empty."""
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_kb_s3.list_objects_v2.side_effect = [
+            {"Contents": [{"Key": "kb/x/doc1.pdf"}], "IsTruncated": True},
+            {"Contents": [{"Key": "kb/x/doc2.pdf"}], "IsTruncated": False},
+            {"Contents": [], "IsTruncated": False},
+        ]
+        resp = _invoke(_apigw(
+            "DELETE",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456",
+            query_params={"confirm": "true"},
+        ))
+        assert resp["statusCode"] == 200
+        # delete_objects called twice (one per non-empty page)
+        assert mock_kb_s3.delete_objects.call_count == 2
+
+    def test_s3_loop_exception_swallowed(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_kb_s3, mock_bedrock, mock_s3vectors
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_kb_s3.list_objects_v2.side_effect = Exception("s3 boom")
+        resp = _invoke(_apigw(
+            "DELETE",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456",
+            query_params={"confirm": "true"},
+        ))
+        assert resp["statusCode"] == 200
+
+    def test_vector_index_exception_swallowed(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_kb_s3, mock_bedrock, mock_s3vectors
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_kb_s3.list_objects_v2.return_value = {"Contents": [], "IsTruncated": False}
+        mock_s3vectors.delete_index.side_effect = Exception("x")
+        resp = _invoke(_apigw(
+            "DELETE",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456",
+            query_params={"confirm": "true"},
+        ))
+        assert resp["statusCode"] == 200
+
+    def test_agent_unlink_exception_swallowed(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_kb_s3, mock_bedrock, mock_s3vectors, mock_agents_table
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(
+            workspace_id, attached_agent_ids={"agt-1"}
+        )}
+        mock_kb_s3.list_objects_v2.return_value = {"Contents": [], "IsTruncated": False}
+        mock_agents_table.update_item.side_effect = Exception("ddb boom")
+        resp = _invoke(_apigw(
+            "DELETE",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456",
+            query_params={"confirm": "true"},
+        ))
+        assert resp["statusCode"] == 200
+
+
+# ---------------------------------------------------------------------------
+# Upload Document additional paths
+# ---------------------------------------------------------------------------
+
+
+class TestUploadDocExtra:
+    def test_copy_object_failure_returns_500(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_kb_s3, mock_bedrock
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_kb_s3.copy_object.side_effect = Exception("copy fail")
+        body = {"stagingKey": "uploads/staging/u1/file.pdf", "fileName": "file.pdf"}
+        resp = _invoke(_apigw(
+            "POST",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456/documents",
+            body=body,
+        ))
+        assert resp["statusCode"] == 500
+
+    def test_ingestion_failure_swallowed(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_kb_s3, mock_bedrock
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_bedrock.start_ingestion_job.side_effect = Exception("ingestion down")
+        body = {"stagingKey": "uploads/staging/u1/file.pdf", "fileName": "file.pdf"}
+        resp = _invoke(_apigw(
+            "POST",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456/documents",
+            body=body,
+        ))
+        assert resp["statusCode"] == 201
+        data = json.loads(resp["body"])
+        assert data["ingestionJobId"] is None
+
+    def test_ddb_update_failure_swallowed(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_kb_s3, mock_bedrock
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_kb_table.update_item.side_effect = Exception("ddb boom")
+        body = {"stagingKey": "uploads/staging/u1/file.pdf", "fileName": "file.pdf"}
+        resp = _invoke(_apigw(
+            "POST",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456/documents",
+            body=body,
+        ))
+        # Update failure swallowed → still 201
+        assert resp["statusCode"] == 201
+
+    def test_filename_alias(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_kb_s3, mock_bedrock
+    ):
+        """Body field 'filename' (lowercase) is accepted as alias."""
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        body = {"stagingKey": "uploads/staging/u1/x.pdf", "filename": "x.pdf"}
+        resp = _invoke(_apigw(
+            "POST",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456/documents",
+            body=body,
+        ))
+        assert resp["statusCode"] == 201
+
+
+# ---------------------------------------------------------------------------
+# Delete Document extra paths
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteDocExtra:
+    def test_delete_object_failure_returns_500(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_kb_s3, mock_bedrock
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_kb_s3.delete_object.side_effect = Exception("s3 boom")
+        body = {"fileName": "file.pdf"}
+        resp = _invoke(_apigw(
+            "POST",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456/documents/delete",
+            body=body,
+        ))
+        assert resp["statusCode"] == 500
+
+    def test_update_item_failure_swallowed(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_kb_s3, mock_bedrock
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_kb_table.update_item.side_effect = Exception("ddb boom")
+        body = {"fileName": "file.pdf"}
+        resp = _invoke(_apigw(
+            "POST",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456/documents/delete",
+            body=body,
+        ))
+        assert resp["statusCode"] == 200
+
+    def test_reingestion_failure_swallowed(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_kb_s3, mock_bedrock
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_bedrock.start_ingestion_job.side_effect = Exception("re-ingest fail")
+        body = {"fileName": "file.pdf"}
+        resp = _invoke(_apigw(
+            "POST",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456/documents/delete",
+            body=body,
+        ))
+        assert resp["statusCode"] == 200
+
+    def test_doc_key_inside_prefix_calls_delete(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_kb_s3, mock_bedrock
+    ):
+        """documentKey starting with the KB's s3_prefix is used directly.
+
+        The fileName in the success response is derived from doc_key when
+        only documentKey is supplied (the previous unbound-local-name bug
+        was fixed in this branch).
+        """
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        doc_key = f"kb/{workspace_id}/kb_abc123def456/documents/file.pdf"
+        body = {"documentKey": doc_key}
+        resp = _invoke(_apigw(
+            "POST",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456/documents/delete",
+            body=body,
+        ))
+        assert resp["statusCode"] == 200
+        called = mock_kb_s3.delete_object.call_args.kwargs
+        assert called["Key"] == doc_key
+        body_resp = json.loads(resp["body"])
+        assert body_resp["fileName"] == "file.pdf"
+
+
+# ---------------------------------------------------------------------------
+# Attach/Detach extra paths
+# ---------------------------------------------------------------------------
+
+
+class TestAttachDetachExtra:
+    def test_attach_kb_marked_deleted(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table, mock_agents_table
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(
+            workspace_id, status="DELETED"
+        )}
+        resp = _invoke(_apigw(
+            "POST",
+            f"/api/workspaces/{workspace_id}/agents/agt-1/knowledge-bases/kb_abc",
+        ))
+        assert resp["statusCode"] == 400
+
+    def test_attach_knowledge_bases_field_as_list(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_agents_table, mock_ddb_client
+    ):
+        """When agent's knowledge_bases is stored as a list, the code coerces to set."""
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_agents_table.get_item.return_value = {
+            "Item": {
+                "agentId": "agt-1",
+                "workspace_id": workspace_id,
+                "knowledge_bases": ["kb_other"],
+            }
+        }
+        resp = _invoke(_apigw(
+            "POST",
+            f"/api/workspaces/{workspace_id}/agents/agt-1/knowledge-bases/kb_abc123def456",
+        ))
+        assert resp["statusCode"] == 200
+        mock_ddb_client.transact_write_items.assert_called_once()
+
+    def test_detach_kb_not_found(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table, mock_agents_table
+    ):
+        resp = _invoke(_apigw(
+            "DELETE",
+            f"/api/workspaces/{workspace_id}/agents/agt-1/knowledge-bases/kb_x",
+        ))
+        assert resp["statusCode"] == 404
+
+    def test_detach_knowledge_bases_as_list(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_agents_table, mock_ddb_client
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_agents_table.get_item.return_value = {
+            "Item": {
+                "agentId": "agt-1",
+                "workspace_id": workspace_id,
+                "knowledge_bases": ["kb_abc123def456"],
+            }
+        }
+        resp = _invoke(_apigw(
+            "DELETE",
+            f"/api/workspaces/{workspace_id}/agents/agt-1/knowledge-bases/kb_abc123def456",
+        ))
+        assert resp["statusCode"] == 200
+        mock_ddb_client.transact_write_items.assert_called_once()
+
+    def test_detach_transact_failure_returns_500(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_agents_table, mock_ddb_client
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_agents_table.get_item.return_value = {
+            "Item": {
+                "agentId": "agt-1",
+                "workspace_id": workspace_id,
+                "knowledge_bases": {"kb_abc123def456"},
+            }
+        }
+        mock_ddb_client.transact_write_items.side_effect = Exception("boom")
+        resp = _invoke(_apigw(
+            "DELETE",
+            f"/api/workspaces/{workspace_id}/agents/agt-1/knowledge-bases/kb_abc123def456",
+        ))
+        assert resp["statusCode"] == 500
+
+    def test_detach_agent_other_workspace(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table, mock_agents_table
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_agents_table.get_item.return_value = {
+            "Item": {"agentId": "agt-1", "workspace_id": "other-ws"}
+        }
+        resp = _invoke(_apigw(
+            "DELETE",
+            f"/api/workspaces/{workspace_id}/agents/agt-1/knowledge-bases/kb_abc",
+        ))
+        assert resp["statusCode"] == 404
+
+    def test_detach_via_post_alias(
+        self, workspace_id, mock_jwt, _mock_editor, mock_kb_table,
+        mock_agents_table, mock_ddb_client
+    ):
+        """POST /detach is a registered alias for DELETE."""
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_agents_table.get_item.return_value = {
+            "Item": {
+                "agentId": "agt-1",
+                "workspace_id": workspace_id,
+                "knowledge_bases": {"kb_abc123def456"},
+            }
+        }
+        resp = _invoke(_apigw(
+            "POST",
+            f"/api/workspaces/{workspace_id}/agents/agt-1/knowledge-bases/kb_abc123def456/detach",
+        ))
+        assert resp["statusCode"] == 200
+
+
+# ---------------------------------------------------------------------------
+# Ingestion status — list_ingestion_jobs returns multiple jobs missing fields
+# ---------------------------------------------------------------------------
+
+
+class TestIngestionStatusExtra:
+    def test_jobs_with_missing_dates(
+        self, workspace_id, mock_jwt, _mock_viewer, mock_kb_table, mock_bedrock
+    ):
+        mock_kb_table.get_item.return_value = {"Item": _kb_item(workspace_id)}
+        mock_bedrock.list_ingestion_jobs.return_value = {
+            "ingestionJobSummaries": [
+                {
+                    "ingestionJobId": "j1",
+                    "status": "FAILED",
+                    # no startedAt / updatedAt
+                },
+            ]
+        }
+        resp = _invoke(_apigw(
+            "GET",
+            f"/api/workspaces/{workspace_id}/knowledge-bases/kb_abc123def456/ingestion",
+        ))
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        assert data["jobs"][0]["startedAt"] == ""
+        assert data["jobs"][0]["updatedAt"] == ""

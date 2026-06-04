@@ -602,3 +602,420 @@ class TestAgentScanners:
         result = _all_agents_by_runtime_id()
         assert "a1" in result
         assert len(result) == 1
+
+    def test_all_agents_clienterror_swallowed(self, mock_agents_table):
+        from crud.costs import _all_agents_by_runtime_id
+        mock_agents_table.scan.side_effect = ClientError(
+            {"Error": {"Code": "X", "Message": "boom"}}, "Scan"
+        )
+        # Returns whatever was accumulated (empty dict), no raise.
+        result = _all_agents_by_runtime_id()
+        assert result == {}
+
+    def test_all_agents_cache_hit(self, mock_agents_table):
+        """Subsequent call within TTL returns cached value without scanning."""
+        import crud.costs as cm
+        cm._GLOBAL_AGENTS_CACHE["data"] = {"a": {"agentId": "a"}}
+        cm._GLOBAL_AGENTS_CACHE["expires"] = float("inf")
+        from crud.costs import _all_agents_by_runtime_id
+        result = _all_agents_by_runtime_id()
+        assert "a" in result
+        mock_agents_table.scan.assert_not_called()
+
+    def test_all_workspaces_paginates(self):
+        from crud.costs import _all_workspaces_by_id
+        fake_table = MagicMock()
+        fake_table.scan.side_effect = [
+            {
+                "Items": [{"workspaceId": "ws-1", "name": "W1"}],
+                "LastEvaluatedKey": {"workspaceId": "ws-1"},
+            },
+            {
+                "Items": [{"workspaceId": "ws-2", "display_name": "W2"}],
+                "LastEvaluatedKey": None,
+            },
+        ]
+        fake_resource = MagicMock()
+        fake_resource.Table.return_value = fake_table
+        with patch("crud.costs.boto3.resource", return_value=fake_resource):
+            result = _all_workspaces_by_id()
+        assert result["ws-1"]["name"] == "W1"
+        assert result["ws-2"]["name"] == "W2"
+
+    def test_all_workspaces_cache_hit(self):
+        import crud.costs as cm
+        cm._GLOBAL_WORKSPACES_CACHE["data"] = {"ws-x": {"workspaceId": "ws-x"}}
+        cm._GLOBAL_WORKSPACES_CACHE["expires"] = float("inf")
+        from crud.costs import _all_workspaces_by_id
+        with patch("crud.costs.boto3.resource") as mk:
+            r = _all_workspaces_by_id()
+            mk.assert_not_called()
+        assert "ws-x" in r
+
+    def test_all_workspaces_skips_items_without_id(self):
+        from crud.costs import _all_workspaces_by_id
+        fake_table = MagicMock()
+        fake_table.scan.return_value = {
+            "Items": [{"name": "no-id"}, {"workspaceId": "ws-1", "name": "W"}],
+            "LastEvaluatedKey": None,
+        }
+        fake_resource = MagicMock()
+        fake_resource.Table.return_value = fake_table
+        with patch("crud.costs.boto3.resource", return_value=fake_resource):
+            r = _all_workspaces_by_id()
+        assert "ws-1" in r
+        assert len(r) == 1
+
+    def test_all_workspaces_clienterror_swallowed(self):
+        from crud.costs import _all_workspaces_by_id
+        fake_table = MagicMock()
+        fake_table.scan.side_effect = ClientError(
+            {"Error": {"Code": "X", "Message": "boom"}}, "Scan"
+        )
+        fake_resource = MagicMock()
+        fake_resource.Table.return_value = fake_table
+        with patch("crud.costs.boto3.resource", return_value=fake_resource):
+            r = _all_workspaces_by_id()
+        assert r == {}
+
+
+# ---------------------------------------------------------------------------
+# Lazy-init helpers
+# ---------------------------------------------------------------------------
+
+
+class TestLazyInit:
+    def test_get_logs_caches(self):
+        import crud.costs as c
+        c._logs = None
+        with patch("crud.costs.boto3.client") as mk:
+            mk.return_value = MagicMock()
+            l1 = c._get_logs()
+            l2 = c._get_logs()
+            assert l1 is l2
+            mk.assert_called_once()
+        c._logs = None
+
+    def test_get_agents_table_caches(self):
+        import crud.costs as c
+        c._agents_table = None
+        with patch("crud.costs.boto3.resource") as mk:
+            tbl = MagicMock()
+            mk.return_value.Table.return_value = tbl
+            t1 = c._get_agents_table()
+            t2 = c._get_agents_table()
+            assert t1 is t2
+        c._agents_table = None
+
+
+# ---------------------------------------------------------------------------
+# _agent_ids_for_workspace fallback edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestAgentIdsForWorkspace:
+    def test_non_validation_clienterror_raises(self, mock_agents_table):
+        """A non-ValidationException ClientError must propagate."""
+        from crud.costs import _agent_ids_for_workspace
+        mock_agents_table.query.side_effect = ClientError(
+            {"Error": {"Code": "ResourceNotFoundException", "Message": "x"}}, "Query"
+        )
+        with pytest.raises(ClientError):
+            _agent_ids_for_workspace("ws-x")
+
+
+# ---------------------------------------------------------------------------
+# _run_query: timeout path (currently uncovered)
+# ---------------------------------------------------------------------------
+
+
+class TestRunQueryTimeout:
+    def test_timeout_returns_partial(self, mock_logs):
+        """Use timeout_s=-1 so the deadline is in the past on entry; the
+        while loop never iterates, stop_query is called, and the function
+        returns the (empty) last_results."""
+        from crud.costs import _run_query
+        mock_logs.get_query_results.return_value = {"status": "Running", "results": []}
+        rows = _run_query("query", 0, 100, timeout_s=-1)
+        assert rows == []
+        mock_logs.stop_query.assert_called_once()
+
+    def test_timeout_stop_query_clienterror_swallowed(self, mock_logs):
+        from crud.costs import _run_query
+        mock_logs.get_query_results.return_value = {"status": "Running", "results": []}
+        mock_logs.stop_query.side_effect = ClientError(
+            {"Error": {"Code": "X", "Message": "x"}}, "StopQuery"
+        )
+        rows = _run_query("query", 0, 100, timeout_s=-1)
+        assert rows == []
+
+
+# ---------------------------------------------------------------------------
+# workspace_costs: timeseries query ClientError paths
+# ---------------------------------------------------------------------------
+
+
+class TestWorkspaceCostsTimeseriesErrors:
+    def test_token_query_clienterror_swallowed(
+        self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_logs
+    ):
+        """Token query raising ClientError → rows=[]; endpoint still returns."""
+        mock_agents_table.query.return_value = {
+            "Items": [{"agentId": "agt-1", "name": "A", "model_id": "m"}],
+            "LastEvaluatedKey": None,
+        }
+        # 1st _run_query (per_agent_totals) raises; 2nd (calls), 3rd, 4th return empty
+        call_count = {"n": 0}
+
+        def fake_run(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise ClientError({"Error": {"Code": "X", "Message": "x"}}, "StartQuery")
+            return []
+
+        with patch("crud.costs._run_query", side_effect=fake_run):
+            resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/costs"))
+        assert resp["statusCode"] == 200
+
+    def test_calls_query_clienterror_swallowed(
+        self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_logs
+    ):
+        mock_agents_table.query.return_value = {
+            "Items": [{"agentId": "agt-1", "name": "A", "model_id": "m"}],
+            "LastEvaluatedKey": None,
+        }
+        call_count = {"n": 0}
+
+        def fake_run(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 2:  # per_agent_calls
+                raise ClientError({"Error": {"Code": "X", "Message": "x"}}, "StartQuery")
+            return []
+
+        with patch("crud.costs._run_query", side_effect=fake_run):
+            resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/costs"))
+        assert resp["statusCode"] == 200
+
+    def test_timeseries_query_clienterror_swallowed(
+        self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_logs
+    ):
+        mock_agents_table.query.return_value = {
+            "Items": [{"agentId": "agt-1", "name": "A", "model_id": "m"}],
+            "LastEvaluatedKey": None,
+        }
+        call_count = {"n": 0}
+
+        def fake_run(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] in (3, 4):  # ts and ts_calls
+                raise ClientError({"Error": {"Code": "X", "Message": "x"}}, "StartQuery")
+            return []
+
+        with patch("crud.costs._run_query", side_effect=fake_run):
+            resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/costs"))
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        assert data["workspace"]["timeseries"] == []
+
+    def test_workspace_agent_query_clienterror_returns_500(
+        self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_logs
+    ):
+        """A non-ValidationException ClientError on the agents query
+        cascades up and returns 500."""
+        mock_agents_table.query.side_effect = ClientError(
+            {"Error": {"Code": "ResourceNotFoundException", "Message": "x"}},
+            "Query",
+        )
+        resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/costs"))
+        assert resp["statusCode"] == 500
+
+    def test_workspace_costs_with_call_rows_no_token_rows(
+        self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_logs
+    ):
+        """Call rows / ts_call_rows path covered when no token rows are emitted.
+        totalCalls remains 0 because aggregation only runs over agents present
+        in the per-agent token accumulator, but the call_rows + ts_call_rows
+        loops still execute and increment buckets[bkt]['calls']."""
+        mock_agents_table.query.return_value = {
+            "Items": [{"agentId": "agt-1", "name": "A", "model_id": "m"}],
+            "LastEvaluatedKey": None,
+        }
+        token_results = []  # empty
+        call_results = [_row(agentRuntimeId="agt-1", calls="42")]
+        ts_results = []
+        ts_call_results = [
+            _row(agentRuntimeId="agt-1", bucket="2026-04-19 00:00", calls="42")
+        ]
+        mock_logs.get_query_results.side_effect = [
+            {"status": "Complete", "results": token_results},
+            {"status": "Complete", "results": call_results},
+            {"status": "Complete", "results": ts_results},
+            {"status": "Complete", "results": ts_call_results},
+        ]
+        resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/costs"))
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        # Timeseries entry created from ts_call_rows
+        assert len(data["workspace"]["timeseries"]) == 1
+        assert data["workspace"]["timeseries"][0]["calls"] == 42
+
+    def test_workspace_costs_skips_unknown_runtime_in_ts_rows(
+        self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_logs
+    ):
+        """ts rows referencing agents not in the workspace are skipped."""
+        mock_agents_table.query.return_value = {
+            "Items": [{"agentId": "agt-1", "name": "A", "model_id": "m"}],
+            "LastEvaluatedKey": None,
+        }
+        ts_results = [
+            _row(agentRuntimeId="ghost", model="x", bucket="b1",
+                 inputTokens="1", outputTokens="0",
+                 cacheReadTokens="0", cacheWriteTokens="0"),
+            _row(agentRuntimeId="agt-1", model="m", bucket="",  # empty bucket, skipped
+                 inputTokens="1", outputTokens="0",
+                 cacheReadTokens="0", cacheWriteTokens="0"),
+        ]
+        ts_call_results = [
+            _row(agentRuntimeId="ghost", bucket="b1", calls="10"),
+            _row(agentRuntimeId="agt-1", bucket="", calls="5"),  # empty bucket, skipped
+        ]
+        mock_logs.get_query_results.side_effect = [
+            {"status": "Complete", "results": []},
+            {"status": "Complete", "results": []},
+            {"status": "Complete", "results": ts_results},
+            {"status": "Complete", "results": ts_call_results},
+        ]
+        resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/costs"))
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        # ghost rows ignored, empty bucket rows ignored → no timeseries entries
+        assert data["workspace"]["timeseries"] == []
+
+
+# ---------------------------------------------------------------------------
+# Admin costs: error/edge paths
+# ---------------------------------------------------------------------------
+
+
+class TestAdminCostsExtra:
+    def test_admin_token_query_clienterror_swallowed(self, mock_jwt, mock_logs):
+        """Even when the token query raises, the endpoint still answers 200."""
+        with patch("crud.costs.check_platform_admin", return_value=("u", True, None)), \
+             patch("crud.costs._all_agents_by_runtime_id", return_value={}), \
+             patch("crud.costs._all_workspaces_by_id", return_value={}):
+            call_count = {"n": 0}
+
+            def fake_run(*args, **kwargs):
+                call_count["n"] += 1
+                raise ClientError({"Error": {"Code": "X", "Message": "x"}}, "StartQuery")
+
+            with patch("crud.costs._run_query", side_effect=fake_run):
+                resp = _invoke(_apigw("GET", "/api/admin/costs"))
+        assert resp["statusCode"] == 200
+
+    def test_admin_calls_query_clienterror_swallowed(self, mock_jwt, mock_logs):
+        agents = {"agt-1": {"agentId": "agt-1", "name": "n", "model_id": "m",
+                              "workspace_id": "w", "status": "active"}}
+        with patch("crud.costs.check_platform_admin", return_value=("u", True, None)), \
+             patch("crud.costs._all_agents_by_runtime_id", return_value=agents), \
+             patch("crud.costs._all_workspaces_by_id", return_value={}):
+            call_count = {"n": 0}
+
+            def fake_run(*args, **kwargs):
+                call_count["n"] += 1
+                if call_count["n"] == 2:
+                    raise ClientError({"Error": {"Code": "X", "Message": "x"}}, "StartQuery")
+                return []
+
+            with patch("crud.costs._run_query", side_effect=fake_run):
+                resp = _invoke(_apigw("GET", "/api/admin/costs"))
+        assert resp["statusCode"] == 200
+
+    def test_admin_check_platform_admin_returns_error(self, mock_jwt):
+        """When check_platform_admin returns an error response (e.g. JWT
+        invalid), the route returns it directly."""
+        from shared.response import forbidden
+        with patch("crud.costs.check_platform_admin", return_value=(None, False, forbidden())):
+            resp = _invoke(_apigw("GET", "/api/admin/costs"))
+        assert resp["statusCode"] == 403
+
+    def test_admin_skips_token_rows_without_runtime_id(self, mock_jwt, mock_logs):
+        """Empty agentRuntimeId in token rows is skipped."""
+        agents = {"agt-1": {"agentId": "agt-1", "name": "n", "model_id": "m",
+                              "workspace_id": "w", "status": "active"}}
+        ws_data = {"w": {"workspaceId": "w", "name": "W"}}
+        with patch("crud.costs.check_platform_admin", return_value=("u", True, None)), \
+             patch("crud.costs._all_agents_by_runtime_id", return_value=agents), \
+             patch("crud.costs._all_workspaces_by_id", return_value=ws_data):
+            mock_logs.get_query_results.side_effect = [
+                {"status": "Complete", "results": [
+                    _row(agentRuntimeId="", model="m", inputTokens="1", outputTokens="0",
+                         cacheReadTokens="0", cacheWriteTokens="0"),
+                ]},
+                {"status": "Complete", "results": []},
+            ]
+            resp = _invoke(_apigw("GET", "/api/admin/costs"))
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        assert data["totals"]["calls"] == 0
+
+
+# ---------------------------------------------------------------------------
+# agent_costs: error paths
+# ---------------------------------------------------------------------------
+
+
+class TestAgentCostsExtra:
+    def test_token_query_clienterror_swallowed(
+        self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_logs
+    ):
+        """ClientError on _single_agent_query → rows=[]; still 200."""
+        mock_agents_table.get_item.return_value = {
+            "Item": {"agentId": "agt-1", "workspace_id": workspace_id,
+                     "model_id": "claude-sonnet-4-6"}
+        }
+        call_count = {"n": 0}
+
+        def fake_run(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise ClientError({"Error": {"Code": "X", "Message": "x"}}, "StartQuery")
+            return []
+
+        with patch("crud.costs._run_query", side_effect=fake_run):
+            resp = _invoke(_apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/agents/agt-1/costs",
+            ))
+        assert resp["statusCode"] == 200
+
+    def test_calls_query_clienterror_swallowed(
+        self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_logs
+    ):
+        mock_agents_table.get_item.return_value = {
+            "Item": {"agentId": "agt-1", "workspace_id": workspace_id,
+                     "model_id": "claude-sonnet-4-6"}
+        }
+        call_count = {"n": 0}
+
+        def fake_run(*args, **kwargs):
+            call_count["n"] += 1
+            if call_count["n"] == 2:
+                raise ClientError({"Error": {"Code": "X", "Message": "x"}}, "StartQuery")
+            return []
+
+        with patch("crud.costs._run_query", side_effect=fake_run):
+            resp = _invoke(_apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/agents/agt-1/costs",
+            ))
+        assert resp["statusCode"] == 200
+
+    def test_no_membership(
+        self, workspace_id, mock_jwt, _mock_no_membership, mock_agents_table
+    ):
+        resp = _invoke(_apigw(
+            "GET",
+            f"/api/workspaces/{workspace_id}/agents/agt-1/costs",
+        ))
+        assert resp["statusCode"] == 403

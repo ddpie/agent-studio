@@ -818,3 +818,566 @@ class TestCloneTool:
             headers={"x-workspace-id": workspace_id},
         ))
         assert resp["statusCode"] == 404
+
+    def test_deleted_tool_returns_404(
+        self, workspace_id, mock_jwt, _mock_editor, mock_tools_table
+    ):
+        mock_tools_table.get_item.return_value = {
+            "Item": {"toolId": "t1", "visibility": "public", "deleted": True}
+        }
+        resp = _invoke(_apigw(
+            "POST",
+            "/api/public/tools/t1/clone",
+            headers={"x-workspace-id": workspace_id},
+        ))
+        assert resp["statusCode"] == 404
+
+    def test_tool_no_workspace_header(
+        self, mock_jwt, _mock_editor, mock_tools_table
+    ):
+        resp = _invoke(_apigw("POST", "/api/public/tools/t1/clone"))
+        assert resp["statusCode"] == 400
+
+    def test_tool_unauthorized(self, workspace_id, mock_tools_table):
+        resp = _invoke(_apigw(
+            "POST",
+            "/api/public/tools/t1/clone",
+            headers={"Authorization": "", "x-workspace-id": workspace_id},
+        ))
+        assert resp["statusCode"] == 403
+
+
+# ---------------------------------------------------------------------------
+# Lazy-init helpers + JWT verification edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestLazyInitHelpers:
+    def test_get_s3_caches(self):
+        import crud.uploads as u
+        u._s3 = None
+        with patch("crud.uploads.boto3.client") as mk:
+            mk.return_value = MagicMock()
+            c1 = u._get_s3()
+            c2 = u._get_s3()
+            assert c1 is c2
+            mk.assert_called_once()
+        u._s3 = None
+
+    def test_get_agents_table_caches(self):
+        import crud.uploads as u
+        u._agents_table = None
+        with patch("crud.uploads.boto3.resource") as mk:
+            tbl = MagicMock()
+            mk.return_value.Table.return_value = tbl
+            t1 = u._get_agents_table()
+            t2 = u._get_agents_table()
+            assert t1 is t2
+        u._agents_table = None
+
+    def test_get_skills_table_caches(self):
+        import crud.uploads as u
+        u._skills_table = None
+        with patch("crud.uploads.boto3.resource") as mk:
+            tbl = MagicMock()
+            mk.return_value.Table.return_value = tbl
+            t1 = u._get_skills_table()
+            t2 = u._get_skills_table()
+            assert t1 is t2
+        u._skills_table = None
+
+    def test_get_tools_table_caches(self):
+        import crud.uploads as u
+        u._tools_table = None
+        with patch("crud.uploads.boto3.resource") as mk:
+            tbl = MagicMock()
+            mk.return_value.Table.return_value = tbl
+            t1 = u._get_tools_table()
+            t2 = u._get_tools_table()
+            assert t1 is t2
+        u._tools_table = None
+
+
+class TestVerifyBearerJwt:
+    """_verify_bearer_jwt is called for public endpoints. Cover its
+    error paths directly (missing Bearer / verify_jwt raises)."""
+
+    def test_invalid_token_returns_forbidden(self, mock_agents_table):
+        # Override mock_jwt with one that raises
+        with patch("crud.uploads.verify_jwt", side_effect=Exception("invalid")):
+            resp = _invoke(_apigw(
+                "GET", "/api/public/agents",
+                headers={"Authorization": "Bearer bad-token"},
+            ))
+        assert resp["statusCode"] == 403
+
+
+# ---------------------------------------------------------------------------
+# Storage exception paths
+# ---------------------------------------------------------------------------
+
+
+class TestStorageExceptions:
+    def test_get_storage_invalid_path(self, workspace_id, mock_jwt, _mock_editor, mock_s3):
+        resp = _invoke(_apigw(
+            "GET",
+            f"/api/workspaces/{workspace_id}/storage",
+            query_params={"key": "tool-history/../escape.json"},
+        ))
+        assert resp["statusCode"] == 400
+
+    def test_get_storage_non_json_value(self, workspace_id, mock_jwt, _mock_editor, mock_s3):
+        body_obj = MagicMock()
+        body_obj.read.return_value = b"not-json{"
+        mock_s3.get_object.return_value = {"Body": body_obj}
+        resp = _invoke(_apigw(
+            "GET",
+            f"/api/workspaces/{workspace_id}/storage",
+            query_params={"key": "tool-history/x.json"},
+        ))
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        assert data["data"] is None
+
+    def test_get_storage_other_exception(self, workspace_id, mock_jwt, _mock_editor, mock_s3):
+        # Non-NoSuchKey exception → returns null with no error
+        mock_s3.get_object.side_effect = RuntimeError("network down")
+        resp = _invoke(_apigw(
+            "GET",
+            f"/api/workspaces/{workspace_id}/storage",
+            query_params={"key": "tool-history/x.json"},
+        ))
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        assert data["data"] is None
+
+    def test_get_storage_drafts_injects_user_id(
+        self, workspace_id, user_id, mock_jwt, _mock_editor, mock_s3
+    ):
+        body_obj = MagicMock()
+        body_obj.read.return_value = b"null"
+        mock_s3.get_object.return_value = {"Body": body_obj}
+        _invoke(_apigw(
+            "GET",
+            f"/api/workspaces/{workspace_id}/storage",
+            query_params={"key": "drafts/x.json"},
+        ))
+        called_key = mock_s3.get_object.call_args.kwargs["Key"]
+        assert user_id in called_key
+
+    def test_put_storage_invalid_path(self, workspace_id, mock_jwt, _mock_editor, mock_s3):
+        body = {"key": "tool-history/../bad.json", "data": {}}
+        resp = _invoke(_apigw(
+            "PUT",
+            f"/api/workspaces/{workspace_id}/storage",
+            body=body,
+        ))
+        assert resp["statusCode"] == 400
+
+    def test_put_storage_drafts_injects_user_id(
+        self, workspace_id, user_id, mock_jwt, _mock_editor, mock_s3
+    ):
+        body = {"key": "drafts/x.json", "data": {"k": 1}}
+        _invoke(_apigw(
+            "PUT",
+            f"/api/workspaces/{workspace_id}/storage",
+            body=body,
+        ))
+        # Key should be wrapped with userId
+        called_key = mock_s3.put_object.call_args.kwargs["Key"]
+        assert user_id in called_key
+
+    def test_put_storage_s3_exception_returns_500(
+        self, workspace_id, mock_jwt, _mock_editor, mock_s3
+    ):
+        mock_s3.put_object.side_effect = RuntimeError("boom")
+        body = {"key": "tool-history/x.json", "data": {}}
+        resp = _invoke(_apigw(
+            "PUT",
+            f"/api/workspaces/{workspace_id}/storage",
+            body=body,
+        ))
+        assert resp["statusCode"] == 500
+
+    def test_delete_storage_invalid_path(self, workspace_id, mock_jwt, _mock_editor, mock_s3):
+        resp = _invoke(_apigw(
+            "DELETE",
+            f"/api/workspaces/{workspace_id}/storage",
+            query_params={"key": "tool-history/../bad.json"},
+        ))
+        assert resp["statusCode"] == 400
+
+    def test_delete_storage_drafts_injects_user_id(
+        self, workspace_id, user_id, mock_jwt, _mock_editor, mock_s3
+    ):
+        _invoke(_apigw(
+            "DELETE",
+            f"/api/workspaces/{workspace_id}/storage",
+            query_params={"key": "drafts/x.json"},
+        ))
+        called_key = mock_s3.delete_object.call_args.kwargs["Key"]
+        assert user_id in called_key
+
+    def test_delete_storage_s3_exception_returns_500(
+        self, workspace_id, mock_jwt, _mock_editor, mock_s3
+    ):
+        mock_s3.delete_object.side_effect = RuntimeError("boom")
+        resp = _invoke(_apigw(
+            "DELETE",
+            f"/api/workspaces/{workspace_id}/storage",
+            query_params={"key": "tool-history/x.json"},
+        ))
+        assert resp["statusCode"] == 500
+
+
+# ---------------------------------------------------------------------------
+# Download exception paths
+# ---------------------------------------------------------------------------
+
+
+class TestDownloadExceptions:
+    def test_download_invalid_path_value(self, workspace_id, mock_jwt, _mock_editor, mock_s3):
+        # Empty key triggers validate_path err
+        resp = _invoke(_apigw(
+            "GET",
+            f"/api/workspaces/{workspace_id}/downloads",
+            query_params={"key": ""},
+        ))
+        assert resp["statusCode"] == 400
+
+    def test_download_ownership_check_exception_forbidden(
+        self, workspace_id, mock_jwt, _mock_editor, mock_s3, mock_agents_table
+    ):
+        mock_agents_table.get_item.side_effect = RuntimeError("ddb down")
+        resp = _invoke(_apigw(
+            "GET",
+            f"/api/workspaces/{workspace_id}/downloads",
+            query_params={"key": "agents/agt-1/deployment.zip"},
+        ))
+        assert resp["statusCode"] == 403
+
+    def test_download_presign_exception_returns_400(
+        self, workspace_id, mock_jwt, _mock_editor, mock_s3
+    ):
+        mock_s3.generate_presigned_url.side_effect = RuntimeError("boom")
+        resp = _invoke(_apigw(
+            "GET",
+            f"/api/workspaces/{workspace_id}/downloads",
+            query_params={"key": "uploads/x.png"},
+        ))
+        assert resp["statusCode"] == 400
+
+
+# ---------------------------------------------------------------------------
+# Public agents pagination loop (under-fill triggers second query)
+# ---------------------------------------------------------------------------
+
+
+class TestPublicListsPagination:
+    def test_agents_pagination_concatenates(self, mock_jwt, mock_agents_table):
+        """First query returns 1 item with LastEvaluatedKey; loop fetches more."""
+        page1 = {
+            "Items": [{"agentId": "a1", "name": "A1"}],
+            "LastEvaluatedKey": {"agentId": "a1"},
+        }
+        page2 = {
+            "Items": [{"agentId": "a2", "name": "A2"}],
+            "LastEvaluatedKey": None,
+        }
+        mock_agents_table.query.side_effect = [page1, page2]
+        # default limit=20, both pages combined fit
+        resp = _invoke(_apigw("GET", "/api/public/agents"))
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        ids = [a["agentId"] for a in data["items"]]
+        assert ids == ["a1", "a2"]
+
+    def test_agents_returns_next_cursor(self, mock_jwt, mock_agents_table):
+        """If after fill we still have a LastEvaluatedKey, return nextCursor."""
+        # Limit=1 so loop exits after first page; LastEvaluatedKey present.
+        mock_agents_table.query.return_value = {
+            "Items": [{"agentId": "a1", "name": "A1"}],
+            "LastEvaluatedKey": {"agentId": "a1"},
+        }
+        resp = _invoke(_apigw("GET", "/api/public/agents", query_params={"limit": "1"}))
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        assert "nextCursor" in data
+
+    def test_agents_with_valid_cursor(self, mock_jwt, mock_agents_table):
+        import base64
+        cursor_token = base64.b64encode(json.dumps({"agentId": "a1"}).encode()).decode()
+        mock_agents_table.query.return_value = {
+            "Items": [{"agentId": "a2", "name": "A2"}],
+            "LastEvaluatedKey": None,
+        }
+        resp = _invoke(_apigw(
+            "GET",
+            "/api/public/agents",
+            query_params={"cursor": cursor_token},
+        ))
+        assert resp["statusCode"] == 200
+        # ExclusiveStartKey passed to query
+        kwargs = mock_agents_table.query.call_args.kwargs
+        assert kwargs["ExclusiveStartKey"] == {"agentId": "a1"}
+
+    def test_skills_pagination_concatenates(self, mock_jwt, mock_skills_table):
+        page1 = {
+            "Items": [{"skillId": "s1", "name": "S1"}],
+            "LastEvaluatedKey": {"skillId": "s1"},
+        }
+        page2 = {
+            "Items": [{"skillId": "s2", "name": "S2"}],
+            "LastEvaluatedKey": None,
+        }
+        mock_skills_table.scan.side_effect = [page1, page2]
+        resp = _invoke(_apigw("GET", "/api/public/skills"))
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        ids = [s["skillId"] for s in data["items"]]
+        assert ids == ["s1", "s2"]
+
+    def test_skills_returns_next_cursor(self, mock_jwt, mock_skills_table):
+        mock_skills_table.scan.return_value = {
+            "Items": [{"skillId": "s1", "name": "S1"}],
+            "LastEvaluatedKey": {"skillId": "s1"},
+        }
+        resp = _invoke(_apigw("GET", "/api/public/skills", query_params={"limit": "1"}))
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        assert "nextCursor" in data
+
+    def test_skills_with_valid_cursor(self, mock_jwt, mock_skills_table):
+        import base64
+        cursor_token = base64.b64encode(json.dumps({"skillId": "s1"}).encode()).decode()
+        mock_skills_table.scan.return_value = {"Items": [], "LastEvaluatedKey": None}
+        resp = _invoke(_apigw(
+            "GET",
+            "/api/public/skills",
+            query_params={"cursor": cursor_token},
+        ))
+        assert resp["statusCode"] == 200
+
+    def test_tools_pagination_concatenates(self, mock_jwt, mock_tools_table):
+        page1 = {
+            "Items": [{"toolId": "t1", "name": "T1"}],
+            "LastEvaluatedKey": {"toolId": "t1"},
+        }
+        page2 = {
+            "Items": [{"toolId": "t2", "name": "T2"}],
+            "LastEvaluatedKey": None,
+        }
+        mock_tools_table.scan.side_effect = [page1, page2]
+        resp = _invoke(_apigw("GET", "/api/public/tools"))
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        ids = [t["toolId"] for t in data["items"]]
+        assert ids == ["t1", "t2"]
+
+    def test_tools_returns_next_cursor(self, mock_jwt, mock_tools_table):
+        mock_tools_table.scan.return_value = {
+            "Items": [{"toolId": "t1", "name": "T1"}],
+            "LastEvaluatedKey": {"toolId": "t1"},
+        }
+        resp = _invoke(_apigw("GET", "/api/public/tools", query_params={"limit": "1"}))
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        assert "nextCursor" in data
+
+    def test_tools_with_valid_cursor(self, mock_jwt, mock_tools_table):
+        import base64
+        cursor_token = base64.b64encode(json.dumps({"toolId": "t1"}).encode()).decode()
+        mock_tools_table.scan.return_value = {"Items": [], "LastEvaluatedKey": None}
+        resp = _invoke(_apigw(
+            "GET",
+            "/api/public/tools",
+            query_params={"cursor": cursor_token},
+        ))
+        assert resp["statusCode"] == 200
+
+
+# ---------------------------------------------------------------------------
+# Clone S3 paginator paths + clone validation errors
+# ---------------------------------------------------------------------------
+
+
+class TestCloneS3Copy:
+    def test_clone_agent_copies_s3_artifacts(
+        self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_s3
+    ):
+        mock_agents_table.get_item.return_value = {
+            "Item": {
+                "agentId": "agt-pub",
+                "name": "Pub",
+                "visibility": "public",
+                "skills": [{"id": "sk1"}],
+            }
+        }
+        # paginator yields one page with three keys (one is deployment.zip
+        # and skipped, one is assistant-history and skipped, one is copied)
+        page = {
+            "Contents": [
+                {"Key": "agents/agt-pub/deployment.zip"},
+                {"Key": "agents/agt-pub/assistant-history/x.jsonl"},
+                {"Key": "agents/agt-pub/staging/draft.json"},
+                {"Key": "agents/agt-pub/metadata.json"},
+                {"Key": "agents/agt-pub/prompt.txt"},
+            ]
+        }
+        paginator = MagicMock()
+        paginator.paginate.return_value = [page]
+        mock_s3.get_paginator.return_value = paginator
+        resp = _invoke(_apigw(
+            "POST",
+            "/api/public/agents/agt-pub/clone",
+            headers={"x-workspace-id": workspace_id},
+        ))
+        assert resp["statusCode"] == 201
+        # 2 copies (metadata + prompt). Three are skipped.
+        assert mock_s3.copy_object.call_count == 2
+
+    def test_clone_agent_s3_paginator_exception_swallowed(
+        self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_s3
+    ):
+        mock_agents_table.get_item.return_value = {
+            "Item": {"agentId": "agt-pub", "name": "Pub", "visibility": "public"}
+        }
+        mock_s3.get_paginator.side_effect = RuntimeError("s3 down")
+        # DDB record still written → 201
+        resp = _invoke(_apigw(
+            "POST",
+            "/api/public/agents/agt-pub/clone",
+            headers={"x-workspace-id": workspace_id},
+        ))
+        assert resp["statusCode"] == 201
+
+    def test_clone_skill_invalid_id(
+        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table, mock_s3
+    ):
+        # Path with invalid id triggers validate_id
+        resp = _invoke(_apigw(
+            "POST",
+            "/api/public/skills/has spaces!/clone",
+            headers={"x-workspace-id": workspace_id},
+        ))
+        assert resp["statusCode"] in (400, 404)
+
+    def test_clone_skill_no_workspace_header(
+        self, mock_jwt, _mock_editor, mock_skills_table
+    ):
+        resp = _invoke(_apigw("POST", "/api/public/skills/sk1/clone"))
+        assert resp["statusCode"] == 400
+
+    def test_clone_skill_unauthorized(self, workspace_id, mock_skills_table):
+        resp = _invoke(_apigw(
+            "POST",
+            "/api/public/skills/sk1/clone",
+            headers={"Authorization": "", "x-workspace-id": workspace_id},
+        ))
+        assert resp["statusCode"] == 403
+
+    def test_clone_skill_copies_s3_files(
+        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table, mock_s3
+    ):
+        mock_skills_table.get_item.return_value = {
+            "Item": {
+                "skillId": "sk1",
+                "name": "skill1",
+                "visibility": "public",
+                "type": "prompt",
+                "deleted": False,
+            }
+        }
+        page = {
+            "Contents": [
+                {"Key": "skills/sk1/SKILL.md"},
+                {"Key": "skills/sk1/scripts/run.sh"},
+                {"Key": "skills/sk1/"},  # empty-rel path skipped
+            ]
+        }
+        paginator = MagicMock()
+        paginator.paginate.return_value = [page]
+        mock_s3.get_paginator.return_value = paginator
+        resp = _invoke(_apigw(
+            "POST",
+            "/api/public/skills/sk1/clone",
+            headers={"x-workspace-id": workspace_id},
+        ))
+        assert resp["statusCode"] == 201
+        # Two non-empty rel keys → two copy_object calls
+        assert mock_s3.copy_object.call_count == 2
+
+    def test_clone_skill_s3_failure_swallowed(
+        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table, mock_s3
+    ):
+        mock_skills_table.get_item.return_value = {
+            "Item": {
+                "skillId": "sk1",
+                "name": "x",
+                "visibility": "public",
+                "type": "prompt",
+                "deleted": False,
+            }
+        }
+        mock_s3.get_paginator.side_effect = RuntimeError("boom")
+        # Returns 201 — DDB write succeeded; S3 copy failure is logged
+        resp = _invoke(_apigw(
+            "POST",
+            "/api/public/skills/sk1/clone",
+            headers={"x-workspace-id": workspace_id},
+        ))
+        assert resp["statusCode"] == 201
+
+    def test_clone_tool_invalid_id(
+        self, workspace_id, mock_jwt, _mock_editor, mock_tools_table
+    ):
+        resp = _invoke(_apigw(
+            "POST",
+            "/api/public/tools/has spaces!/clone",
+            headers={"x-workspace-id": workspace_id},
+        ))
+        assert resp["statusCode"] in (400, 404)
+
+
+# ---------------------------------------------------------------------------
+# Image upload — auth_check failure paths
+# ---------------------------------------------------------------------------
+
+
+class TestUploadImageAuthFailures:
+    def test_no_jwt_returns_403(self, workspace_id, mock_s3):
+        body = {"content_type": "image/png", "filename": "x.png"}
+        resp = _invoke(_apigw(
+            "POST",
+            f"/api/workspaces/{workspace_id}/uploads/images",
+            body=body,
+            headers={"Authorization": ""},
+        ))
+        assert resp["statusCode"] == 403
+
+
+class TestUploadAttachmentAuthFailures:
+    def test_no_jwt_returns_403(self, workspace_id, mock_s3):
+        body = {
+            "content_type": "application/pdf",
+            "filename": "x.pdf",
+            "sessionId": "s1",
+        }
+        resp = _invoke(_apigw(
+            "POST",
+            f"/api/workspaces/{workspace_id}/uploads/attachments",
+            body=body,
+            headers={"Authorization": ""},
+        ))
+        assert resp["statusCode"] == 403
+
+
+class TestDownloadAuthFailures:
+    def test_no_jwt_returns_403(self, workspace_id, mock_s3):
+        resp = _invoke(_apigw(
+            "GET",
+            f"/api/workspaces/{workspace_id}/downloads",
+            query_params={"key": "uploads/x.png"},
+            headers={"Authorization": ""},
+        ))
+        assert resp["statusCode"] == 403

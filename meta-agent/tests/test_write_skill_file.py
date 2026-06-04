@@ -275,3 +275,169 @@ def test_delete_refuses_cross_workspace():
         _stop(ps)
     assert "error" in out
     assert s3.deletes == []
+
+
+# ── Path validation branches ──
+
+
+def test_validate_path_helper_rejects_empty():
+    assert _wsf._validate_path("") == "path is required"
+
+
+def test_validate_path_helper_rejects_control_chars():
+    assert _wsf._validate_path("foo\x00bar") is not None
+
+
+def test_validate_path_helper_rejects_double_slash():
+    err = _wsf._validate_path("a//b")
+    assert err is not None
+    assert "double-slash" in err
+
+
+def test_validate_path_helper_rejects_too_long():
+    err = _wsf._validate_path("a" * 513)
+    assert err is not None
+    assert "too long" in err
+
+
+# ── _skill_in_workspace branches ──
+
+
+def test_skill_in_workspace_rejects_empty_id():
+    item, err = _wsf._skill_in_workspace("")
+    assert item is None
+    assert err == "skill_id is required"
+
+
+def test_skill_in_workspace_rejects_no_workspace_context(monkeypatch):
+    monkeypatch.setattr(_wsf, "current_workspace", lambda: "")
+    item, err = _wsf._skill_in_workspace("anything")
+    assert item is None
+    assert "No workspace context" in err
+
+
+def test_skill_in_workspace_handles_ddb_failure(monkeypatch):
+    """If boto3.resource(...).Table(...).get_item raises, return clean error."""
+    fake_resource = MagicMock()
+    fake_resource.Table.side_effect = RuntimeError("ddb dropped")
+    monkeypatch.setattr(_wsf.boto3, "resource", lambda *a, **kw: fake_resource)
+    monkeypatch.setattr(_wsf, "current_workspace", lambda: WS)
+    item, err = _wsf._skill_in_workspace("skid-1")
+    assert item is None
+    assert "Skill lookup failed" in err
+
+
+# ── Write-side error branches ──
+
+
+def test_write_no_workspace_context():
+    s3 = FakeS3()
+    tbl = FakeSkillsTable(_skill())
+    ps = _start(_patches(s3, tbl, workspace=""))
+    try:
+        out = json.loads(_wsf.write_skill_file("skid-1", "x.py", "data"))
+    finally:
+        _stop(ps)
+    assert "error" in out
+    assert "No workspace context" in out["error"]
+
+
+def test_write_rejects_non_string_content():
+    s3 = FakeS3()
+    tbl = FakeSkillsTable(_skill())
+    ps = _start(_patches(s3, tbl))
+    try:
+        # type: ignore[arg-type] — feeding non-str on purpose
+        out = json.loads(_wsf.write_skill_file("skid-1", "a.py", 12345))  # type: ignore
+    finally:
+        _stop(ps)
+    assert "error" in out
+    assert "string" in out["error"]
+
+
+def test_write_handles_s3_failure():
+    """When put_object raises, the tool returns 'S3 write failed: ...'."""
+    class _BadS3(FakeS3):
+        def put_object(self, Bucket, Key, Body, ContentType):
+            raise RuntimeError("s3 boom")
+
+    s3 = _BadS3()
+    tbl = FakeSkillsTable(_skill())
+    ps = _start(_patches(s3, tbl))
+    try:
+        out = json.loads(_wsf.write_skill_file("skid-1", "x.py", "ok"))
+    finally:
+        _stop(ps)
+    assert "error" in out
+    assert "S3 write failed" in out["error"]
+
+
+def test_write_touch_updated_at_swallows_exceptions(monkeypatch):
+    """A DDB update failure during _touch_updated_at must NOT surface — best effort."""
+    s3 = FakeS3()
+
+    class _BadTbl(FakeSkillsTable):
+        def update_item(self, **kwargs):
+            raise RuntimeError("ddb update fail")
+
+    tbl = _BadTbl(_skill())
+    ps = _start(_patches(s3, tbl))
+    try:
+        # Tool should still return success since S3 write succeeded
+        out = json.loads(_wsf.write_skill_file("skid-1", "x.py", "ok"))
+    finally:
+        _stop(ps)
+    assert out["status"] == "written"
+
+
+def test_delete_no_workspace_context():
+    s3 = FakeS3()
+    tbl = FakeSkillsTable(_skill())
+    ps = _start(_patches(s3, tbl, workspace=""))
+    try:
+        out = json.loads(_wsf.delete_skill_file("skid-1", "x.py"))
+    finally:
+        _stop(ps)
+    assert "error" in out
+    assert "No workspace context" in out["error"]
+
+
+def test_delete_rejects_invalid_path():
+    s3 = FakeS3()
+    tbl = FakeSkillsTable(_skill())
+    ps = _start(_patches(s3, tbl))
+    try:
+        out = json.loads(_wsf.delete_skill_file("skid-1", "../escape.txt"))
+    finally:
+        _stop(ps)
+    assert "error" in out
+    assert "traversal" in out["error"].lower()
+
+
+def test_delete_rejects_viewer_role():
+    s3 = FakeS3()
+    tbl = FakeSkillsTable(_skill())
+    ps = _start(_patches(s3, tbl, role="viewer"))
+    try:
+        out = json.loads(_wsf.delete_skill_file("skid-1", "scripts/x.py"))
+    finally:
+        _stop(ps)
+    assert "error" in out
+    assert "Permission denied" in out["error"]
+
+
+def test_delete_handles_s3_failure():
+    """When delete_object raises, the tool returns clean error JSON."""
+    class _BadS3(FakeS3):
+        def delete_object(self, Bucket, Key):
+            raise RuntimeError("s3 boom")
+
+    s3 = _BadS3()
+    tbl = FakeSkillsTable(_skill())
+    ps = _start(_patches(s3, tbl))
+    try:
+        out = json.loads(_wsf.delete_skill_file("skid-1", "scripts/x.py"))
+    finally:
+        _stop(ps)
+    assert "error" in out
+    assert "S3 delete failed" in out["error"]

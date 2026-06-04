@@ -1095,3 +1095,498 @@ class TestAuthEdgeCases:
         resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{bad_id}", body=body))
         assert resp["statusCode"] == 400
         assert "Invalid" in json.loads(resp["body"])["error"]
+
+
+# ---------------------------------------------------------------------------
+# LAZY INITIALIZER COVERAGE
+# ---------------------------------------------------------------------------
+
+
+class TestLazyGetters:
+    """Cover the `if x is None: x = boto3...; return x` paths."""
+
+    def _reset_globals(self):
+        import crud.channels as ch
+        ch._channels_table = None
+        ch._history_table = None
+        ch._agents_table = None
+        ch._secrets = None
+
+    def test_get_channels_table(self, monkeypatch):
+        self._reset_globals()
+        from crud import channels as ch
+        sentinel = object()
+
+        class FakeRes:
+            def Table(self, _name):
+                return sentinel
+
+        monkeypatch.setattr(ch.boto3, "resource", lambda *a, **kw: FakeRes())
+        result = ch._get_channels_table()
+        assert result is sentinel
+        # Cached on second call
+        assert ch._get_channels_table() is sentinel
+
+    def test_get_history_table(self, monkeypatch):
+        self._reset_globals()
+        from crud import channels as ch
+        sentinel = object()
+
+        class FakeRes:
+            def Table(self, _name):
+                return sentinel
+
+        monkeypatch.setattr(ch.boto3, "resource", lambda *a, **kw: FakeRes())
+        assert ch._get_history_table() is sentinel
+
+    def test_get_agents_table(self, monkeypatch):
+        self._reset_globals()
+        from crud import channels as ch
+        sentinel = object()
+
+        class FakeRes:
+            def Table(self, _name):
+                return sentinel
+
+        monkeypatch.setattr(ch.boto3, "resource", lambda *a, **kw: FakeRes())
+        assert ch._get_agents_table() is sentinel
+
+    def test_get_secrets(self, monkeypatch):
+        self._reset_globals()
+        from crud import channels as ch
+        sentinel = object()
+        monkeypatch.setattr(ch.boto3, "client", lambda *a, **kw: sentinel)
+        assert ch._get_secrets() is sentinel
+
+
+# ---------------------------------------------------------------------------
+# ERROR PATH COVERAGE
+# ---------------------------------------------------------------------------
+
+
+class TestCreateChannelErrorPaths:
+    def test_validate_agent_clienterror_returns_false(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_agents_table, mock_secrets
+    ):
+        """When the agents-table get_item raises ClientError, treat as not-in-workspace."""
+        from botocore.exceptions import ClientError
+        mock_agents_table.get_item.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "boom"}},
+            "GetItem",
+        )
+        body = _valid_create_body("agent123")
+        resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/channels", body=body))
+        assert resp["statusCode"] == 400
+        assert "does not exist" in json.loads(resp["body"])["error"]
+
+    def test_invalid_default_agent_id_format(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_agents_table, mock_secrets
+    ):
+        body = _valid_create_body("bad agent id!")
+        resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/channels", body=body))
+        assert resp["statusCode"] == 400
+        assert "Invalid" in json.loads(resp["body"])["error"] \
+            or "defaultAgentId" in json.loads(resp["body"])["error"]
+
+    def test_ddb_failure_secret_cleanup_swallows_clienterror(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_agents_table, mock_secrets
+    ):
+        """When DDB fails and the secret-cleanup *also* fails, still 500."""
+        from botocore.exceptions import ClientError
+
+        mock_agents_table.get_item.return_value = {
+            "Item": {"agentId": "agent123", "workspace_id": workspace_id}
+        }
+        mock_channels_table.put_item.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "boom"}}, "PutItem",
+        )
+        mock_secrets.delete_secret.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "cleanup boom"}}, "DeleteSecret",
+        )
+        body = _valid_create_body("agent123")
+        resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/channels", body=body))
+        assert resp["statusCode"] == 500
+
+
+class TestListChannelsClientError:
+    def test_list_channels_clienterror(
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table
+    ):
+        from botocore.exceptions import ClientError
+        mock_channels_table.query.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "boom"}},
+            "Query",
+        )
+        resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/channels"))
+        assert resp["statusCode"] == 500
+
+
+class TestUpdateChannelMoreCoverage:
+    def _existing_item(self, workspace_id, channel_id="ch_abc12345678901234"):
+        return {
+            "workspaceId": workspace_id,
+            "sk": channel_id,
+            "channelType": "feishu",
+            "channelName": "Old Name",
+            "defaultAgentId": "agent123",
+            "platformConfig": {"appId": "cli_old"},
+            "triggerMode": "mention",
+            "maxHistoryTurns": 10,
+            "language": "zh",
+            "status": "active",
+            "configVersion": 1,
+            "createdAt": 1700000000,
+            "updatedAt": 1700000000,
+            "createdBy": "user1",
+        }
+
+    def test_update_get_item_clienterror(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        from botocore.exceptions import ClientError
+        mock_channels_table.get_item.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "x"}},
+            "GetItem",
+        )
+        ch_id = "ch_abc12345678901234"
+        body = {"channelName": "X"}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 500
+
+    def test_update_default_agent_invalid_id(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        ch_id = "ch_abc12345678901234"
+        existing = self._existing_item(workspace_id, ch_id)
+        mock_channels_table.get_item.return_value = {"Item": existing}
+
+        body = {"defaultAgentId": "bad agent!"}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 400
+
+    def test_update_default_agent_empty(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        ch_id = "ch_abc12345678901234"
+        existing = self._existing_item(workspace_id, ch_id)
+        mock_channels_table.get_item.return_value = {"Item": existing}
+
+        body = {"defaultAgentId": ""}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 400
+        assert "defaultAgentId" in json.loads(resp["body"])["error"]
+
+    def test_update_default_agent_succeeds(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_agents_table, mock_secrets
+    ):
+        ch_id = "ch_abc12345678901234"
+        existing = self._existing_item(workspace_id, ch_id)
+        mock_channels_table.get_item.return_value = {"Item": existing}
+        mock_agents_table.get_item.return_value = {
+            "Item": {"agentId": "newagent", "workspace_id": workspace_id}
+        }
+        mock_channels_table.update_item.return_value = {"Attributes": existing}
+
+        body = {"defaultAgentId": "newagent"}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 200
+
+    def test_update_platform_config_not_dict(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        ch_id = "ch_abc12345678901234"
+        existing = self._existing_item(workspace_id, ch_id)
+        mock_channels_table.get_item.return_value = {"Item": existing}
+
+        body = {"platformConfig": "not-a-dict"}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 400
+        assert "platformConfig" in json.loads(resp["body"])["error"]
+
+    def test_update_platform_config_succeeds(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        ch_id = "ch_abc12345678901234"
+        existing = self._existing_item(workspace_id, ch_id)
+        mock_channels_table.get_item.return_value = {"Item": existing}
+        mock_channels_table.update_item.return_value = {"Attributes": existing}
+
+        body = {"platformConfig": {"appId": "newapp"}}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 200
+
+    def test_update_routing_rules_not_list(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        ch_id = "ch_abc12345678901234"
+        existing = self._existing_item(workspace_id, ch_id)
+        mock_channels_table.get_item.return_value = {"Item": existing}
+
+        body = {"routingRules": "not-a-list"}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 400
+        assert "routingRules" in json.loads(resp["body"])["error"]
+
+    def test_update_routing_rules_succeeds(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        ch_id = "ch_abc12345678901234"
+        existing = self._existing_item(workspace_id, ch_id)
+        mock_channels_table.get_item.return_value = {"Item": existing}
+        mock_channels_table.update_item.return_value = {"Attributes": existing}
+
+        body = {"routingRules": [{"if": "x", "then": "y"}]}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 200
+
+    def test_update_language_succeeds(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        ch_id = "ch_abc12345678901234"
+        existing = self._existing_item(workspace_id, ch_id)
+        mock_channels_table.get_item.return_value = {"Item": existing}
+        mock_channels_table.update_item.return_value = {"Attributes": existing}
+
+        body = {"language": "en"}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 200
+
+    def test_update_language_invalid(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        ch_id = "ch_abc12345678901234"
+        existing = self._existing_item(workspace_id, ch_id)
+        mock_channels_table.get_item.return_value = {"Item": existing}
+
+        body = {"language": "fr"}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 400
+
+    def test_update_app_secret_empty(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        ch_id = "ch_abc12345678901234"
+        existing = self._existing_item(workspace_id, ch_id)
+        mock_channels_table.get_item.return_value = {"Item": existing}
+
+        body = {"appSecret": ""}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 400
+        assert "appSecret" in json.loads(resp["body"])["error"]
+
+    def test_update_app_secret_recreate_also_fails(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        """Secret was deleted; recreate also fails → 500."""
+        from botocore.exceptions import ClientError
+
+        ch_id = "ch_abc12345678901234"
+        existing = self._existing_item(workspace_id, ch_id)
+        mock_channels_table.get_item.return_value = {"Item": existing}
+        mock_secrets.put_secret_value.side_effect = ClientError(
+            {"Error": {"Code": "ResourceNotFoundException", "Message": "not found"}},
+            "PutSecretValue",
+        )
+        mock_secrets.create_secret.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "boom"}},
+            "CreateSecret",
+        )
+        body = {"appSecret": "new"}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 500
+
+    def test_update_app_secret_other_error(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        """Non-NotFound ClientError on put_secret_value → 500."""
+        from botocore.exceptions import ClientError
+
+        ch_id = "ch_abc12345678901234"
+        existing = self._existing_item(workspace_id, ch_id)
+        mock_channels_table.get_item.return_value = {"Item": existing}
+        mock_secrets.put_secret_value.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "boom"}},
+            "PutSecretValue",
+        )
+        body = {"appSecret": "new"}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 500
+
+    def test_update_channel_name_too_long(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        ch_id = "ch_abc12345678901234"
+        existing = self._existing_item(workspace_id, ch_id)
+        mock_channels_table.get_item.return_value = {"Item": existing}
+
+        body = {"channelName": "A" * 65}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 400
+
+    def test_update_max_history_turns_succeeds(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        ch_id = "ch_abc12345678901234"
+        existing = self._existing_item(workspace_id, ch_id)
+        mock_channels_table.get_item.return_value = {"Item": existing}
+        mock_channels_table.update_item.return_value = {"Attributes": existing}
+
+        body = {"maxHistoryTurns": 25}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 200
+
+    def test_update_ddb_clienterror(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        from botocore.exceptions import ClientError
+        ch_id = "ch_abc12345678901234"
+        existing = self._existing_item(workspace_id, ch_id)
+        mock_channels_table.get_item.return_value = {"Item": existing}
+        mock_channels_table.update_item.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "boom"}},
+            "UpdateItem",
+        )
+        body = {"channelName": "New"}
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
+        assert resp["statusCode"] == 500
+
+    def test_update_invalid_channel_id(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        body = {"channelName": "x"}
+        resp = _invoke(_apigw(
+            "PUT",
+            f"/api/workspaces/{workspace_id}/channels/bad id with spaces",
+            body=body,
+        ))
+        assert resp["statusCode"] == 400
+
+    def test_update_empty_request_body(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_secrets
+    ):
+        """Body is None / no JSON."""
+        ch_id = "ch_abc12345678901234"
+        # request body field set to None
+        event = _apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}")
+        # Build body=None manually because helper rejects body=None as no body
+        resp = _invoke(event)
+        assert resp["statusCode"] == 400
+
+
+class TestDeleteChannelMoreCoverage:
+    def test_delete_invalid_id(
+        self, workspace_id, mock_jwt, _mock_owner, mock_channels_table, mock_secrets
+    ):
+        resp = _invoke(_apigw(
+            "DELETE",
+            f"/api/workspaces/{workspace_id}/channels/has space!",
+        ))
+        assert resp["statusCode"] == 400
+
+    def test_delete_get_item_clienterror(
+        self, workspace_id, mock_jwt, _mock_owner,
+        mock_channels_table, mock_secrets
+    ):
+        from botocore.exceptions import ClientError
+        ch_id = "ch_abc12345678901234"
+        mock_channels_table.get_item.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "x"}},
+            "GetItem",
+        )
+        resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/channels/{ch_id}"))
+        assert resp["statusCode"] == 500
+
+    def test_delete_ddb_delete_clienterror(
+        self, workspace_id, mock_jwt, _mock_owner,
+        mock_channels_table, mock_secrets
+    ):
+        from botocore.exceptions import ClientError
+        ch_id = "ch_abc12345678901234"
+        mock_channels_table.get_item.return_value = {
+            "Item": {"workspaceId": workspace_id, "sk": ch_id}
+        }
+        mock_channels_table.delete_item.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "x"}},
+            "DeleteItem",
+        )
+        resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/channels/{ch_id}"))
+        assert resp["statusCode"] == 500
+
+
+class TestTestChannelMoreCoverage:
+    def test_invalid_channel_id(
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table
+    ):
+        resp = _invoke(_apigw(
+            "POST",
+            f"/api/workspaces/{workspace_id}/channels/bad id!/test",
+        ))
+        assert resp["statusCode"] == 400
+
+
+class TestListChannelMessagesMoreCoverage:
+    def test_invalid_channel_id(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_history_table
+    ):
+        resp = _invoke(_apigw(
+            "GET",
+            f"/api/workspaces/{workspace_id}/channels/bad id!/messages",
+        ))
+        assert resp["statusCode"] == 400
+
+    def test_get_item_clienterror(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_history_table
+    ):
+        from botocore.exceptions import ClientError
+        ch_id = "ch_abc12345678901234"
+        mock_channels_table.get_item.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "x"}},
+            "GetItem",
+        )
+        resp = _invoke(_apigw(
+            "GET",
+            f"/api/workspaces/{workspace_id}/channels/{ch_id}/messages",
+        ))
+        assert resp["statusCode"] == 500
+
+    def test_history_scan_clienterror(
+        self, workspace_id, mock_jwt, _mock_editor,
+        mock_channels_table, mock_history_table
+    ):
+        from botocore.exceptions import ClientError
+        ch_id = "ch_abc12345678901234"
+        mock_channels_table.get_item.return_value = {
+            "Item": {"workspaceId": workspace_id, "sk": ch_id, "channelId": ch_id}
+        }
+        mock_history_table.scan.side_effect = ClientError(
+            {"Error": {"Code": "InternalError", "Message": "x"}},
+            "Scan",
+        )
+        resp = _invoke(_apigw(
+            "GET",
+            f"/api/workspaces/{workspace_id}/channels/{ch_id}/messages",
+        ))
+        assert resp["statusCode"] == 500
