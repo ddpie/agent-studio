@@ -17,9 +17,17 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 export default defineConfig([
   globalIgnores([
     'dist', 'coverage', 'node_modules', '.vite', 'e2e',
-    'playwright.config.ts',  // not part of app's tsconfig
+    'playwright.config.ts',
     'vite.config.ts',
+    'vite.config.analyze.ts',
     'vitest.config.ts',
+    'knip.config.ts',
+    '.storybook',
+    'src/**/__tests__',
+    'src/__tests__',
+    'src/**/__stories__',
+    'scripts',
+    'src/mocks',
   ]),
   {
     files: ['**/*.{ts,tsx}'],
