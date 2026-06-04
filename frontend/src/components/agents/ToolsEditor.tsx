@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import MonacoEditor from "@monaco-editor/react";
+import { LazyMonacoEditor as MonacoEditor } from "../ui/LazyMonaco";
 import type * as MonacoNS from "monaco-editor";
 import { Plus, Trash2, Sparkles, Maximize2, Minimize2 } from "lucide-react";
 import useIsDark from "../../hooks/useIsDark";

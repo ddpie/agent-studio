@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { DiffEditor } from "@monaco-editor/react";
+import { LazyDiffEditor as DiffEditor } from "../ui/LazyMonaco";
 import { GitCompare } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import useIsDark from "../../hooks/useIsDark";

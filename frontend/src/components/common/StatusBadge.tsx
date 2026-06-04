@@ -52,6 +52,7 @@ export default function StatusBadge({ status, onClick, compact, ...rest }: Statu
     return (
       <Tag
         type={interactive ? "button" : undefined}
+        role="status"
         onClick={onClick}
         title={label}
         aria-label={label}

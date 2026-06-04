@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, Play } from "lucide-react";
-import Editor from "@monaco-editor/react";
+import { LazyMonacoEditor as Editor } from "../ui/LazyMonaco";
 import type * as MonacoNS from "monaco-editor";
 import { getMonacoLanguage } from "../../lib/monaco-helpers";
 import { applyLintMarkers } from "../../lib/monaco-lint";

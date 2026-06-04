@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { X, RefreshCw, ExternalLink } from "lucide-react";
 import { useRuntimeStatus } from "../../hooks/useRuntimeStatus";
@@ -18,6 +19,7 @@ function cloudWatchLogsUrl(region: string, agentId: string): string {
 
 export default function AgentRuntimeDrawer({ agentId, onClose }: AgentRuntimeDrawerProps) {
   const { t } = useTranslation();
+  const titleId = useId();
   const { data, error, loading, refresh } = useRuntimeStatus(agentId);
 
   if (!agentId) return null;
@@ -26,11 +28,12 @@ export default function AgentRuntimeDrawer({ agentId, onClose }: AgentRuntimeDra
     <div
       role="dialog"
       aria-modal="true"
+      aria-labelledby={titleId}
       data-testid="runtime-drawer"
       className="fixed inset-y-0 right-0 z-40 w-[380px] max-w-full shadow-2xl bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800 flex flex-col"
     >
       <div className="flex items-center justify-between p-4 border-b dark:border-gray-800">
-        <h3 className="text-sm font-semibold">{t("runtime.drawer.title")}</h3>
+        <h3 id={titleId} className="text-sm font-semibold">{t("runtime.drawer.title")}</h3>
         <button
           type="button"
           onClick={onClose}

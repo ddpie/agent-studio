@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useId } from "react";
 import { useTranslation } from "react-i18next";
 
 export interface EndpointDialogProps {
@@ -15,13 +15,14 @@ export default function EndpointDialog({ mode, fixedName, versions, onCancel, on
   const [version, setVersion] = useState(versions[0] ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const titleId = useId();
 
   const canSubmit = !!name.trim() && !!version.trim() && !submitting;
 
   return (
-    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-sm bg-white dark:bg-gray-900 rounded-lg shadow-xl p-5">
-        <h3 className="text-base font-semibold mb-4">
+        <h3 id={titleId} className="text-base font-semibold mb-4">
           {mode === "create" ? t("endpoints.create") : t("endpoints.switch")}
         </h3>
         <div className="space-y-3 text-sm">

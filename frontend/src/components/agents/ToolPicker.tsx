@@ -1,7 +1,7 @@
 /**
  * ToolPicker — Modal to browse and select tools from the tool library.
  */
-import { useState, useEffect } from "react"
+import { useState, useEffect, useId } from "react"
 import { useTranslation } from "react-i18next"
 import { X, Search, Code2, Loader2 } from "lucide-react"
 import { useToolLibraryStore } from "../../stores/tool-library-store"
@@ -17,6 +17,7 @@ export default function ToolPicker({ open, onClose, onSelect, existingToolNames 
   const { t } = useTranslation()
   const { tools, loading, fetchTools } = useToolLibraryStore()
   const [search, setSearch] = useState("")
+  const titleId = useId()
 
   useEffect(() => {
     if (open) fetchTools()
@@ -41,15 +42,15 @@ export default function ToolPicker({ open, onClose, onSelect, existingToolNames 
   })
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center animate-[fadeSlideIn_0.15s_ease-out]" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center animate-[fadeSlideIn_0.15s_ease-out]" onClick={onClose}>
       <div className="bg-white dark:bg-gray-900 rounded-xl w-[600px] max-h-[70vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-2">
             <Code2 className="w-4 h-4 text-blue-500" />
-            <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{t("agentEditor.addTool")}</span>
+            <span id={titleId} className="text-sm font-semibold text-gray-800 dark:text-gray-200">{t("agentEditor.addTool")}</span>
           </div>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>

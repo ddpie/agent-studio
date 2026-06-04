@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { ArrowLeft, Loader2, FolderPlus, Trash2, Plus } from "lucide-react"
-import MonacoEditor, { type OnMount } from "@monaco-editor/react"
+import { LazyMonacoEditor as MonacoEditor, type OnMount } from "../ui/LazyMonaco"
 import { Tree, type NodeRendererProps } from "react-arborist"
 import useIsDark from "../../hooks/useIsDark"
 import { useSkillStorage } from "../../hooks/useSkillStorage"

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -16,6 +16,7 @@ export default function ConfirmDialog({
   danger = false, onConfirm, onCancel,
 }: ConfirmDialogProps) {
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     if (open) confirmRef.current?.focus();
@@ -33,10 +34,10 @@ export default function ConfirmDialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onCancel} />
       <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-xl w-[380px] p-5 animate-in fade-in zoom-in-95">
-        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+        <h3 id={titleId} className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed">{message}</p>
         <div className="flex justify-end gap-2 mt-4">
           <button

@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams, useBlocker } from "react-router";
 import { useTranslation } from "react-i18next";
 import { Loader2, Code2, GitCompare, X, Sparkles } from "lucide-react";
-import { DiffEditor } from "@monaco-editor/react";
+import { LazyDiffEditor as DiffEditor } from "../ui/LazyMonaco";
 import type * as MonacoNS from "monaco-editor";
 import { useToolLibraryStore, type ToolTemplate } from "../../stores/tool-library-store";
 import { useToolAssistantStore } from "../../stores/tool-assistant-store";

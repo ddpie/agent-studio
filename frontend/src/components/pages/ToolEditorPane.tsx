@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import Editor from "@monaco-editor/react";
+import { LazyMonacoEditor as Editor } from "../ui/LazyMonaco";
 import type * as MonacoNS from "monaco-editor";
 import { isPyodideReady, checkPythonSyntax } from "../../lib/pyodide-checker";
 import { validatePython } from "../../lib/validators/python-validator";

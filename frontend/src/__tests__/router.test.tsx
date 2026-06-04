@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { RouterProvider, createMemoryRouter, useParams, Outlet } from "react-router";
 
 // Stub the heavy layout/shell components so the test only asserts routing shape.
@@ -48,19 +48,23 @@ vi.mock("../components/common/PageErrorBoundary", () => ({
 import { createRoutes } from "../router";
 
 describe("router: agent detail deep-links", () => {
-  it("resolves /agents/:agentId to AgentDetailPage with agentId param", () => {
+  it("resolves /agents/:agentId to AgentDetailPage with agentId param", async () => {
     const router = createMemoryRouter(createRoutes(), { initialEntries: ["/agents/agt-1"] });
     render(<RouterProvider router={router} />);
-    expect(screen.getByTestId("detail-marker")).toHaveTextContent("agt-1|-");
+    await waitFor(() => {
+      expect(screen.getByTestId("detail-marker")).toHaveTextContent("agt-1|-");
+    });
   });
 
-  it("resolves /agents/:agentId/runs/:runId to AgentDetailPage with both params", () => {
+  it("resolves /agents/:agentId/runs/:runId to AgentDetailPage with both params", async () => {
     const router = createMemoryRouter(createRoutes(), {
       initialEntries: ["/agents/agt-1/runs/sched-daily-2026-04-20T08%3A00%3A00Z"],
     });
     render(<RouterProvider router={router} />);
-    expect(screen.getByTestId("detail-marker")).toHaveTextContent(
-      "agt-1|sched-daily-2026-04-20T08:00:00Z",
-    );
+    await waitFor(() => {
+      expect(screen.getByTestId("detail-marker")).toHaveTextContent(
+        "agt-1|sched-daily-2026-04-20T08:00:00Z",
+      );
+    });
   });
 });
