@@ -188,7 +188,12 @@ def test_get_agent_evaluations_empty_when_no_results(mock_jwt, user_id, workspac
     fake_logs.start_query.return_value = {"queryId": "q-2"}
     fake_logs.get_query_results.return_value = {"status": "Complete", "results": []}
 
-    fake_cfg = {"onlineEvaluationConfigId": "cfg-1", "outputConfig": [{"logGroupName": "/aws/bedrock-agentcore/evaluations/results/agentstudio_ws_xyz-ABC"}]}
+    fake_cfg = {
+        "onlineEvaluationConfigId": "cfg-1",
+        "outputConfig": [
+            {"logGroupName": "/aws/bedrock-agentcore/evaluations/results/agentstudio_ws_xyz-ABC"}
+        ],
+    }
 
     with (
         patch("crud.evaluations.auth_check") as auth,
