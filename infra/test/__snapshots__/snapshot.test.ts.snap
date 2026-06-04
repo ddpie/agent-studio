@@ -1006,7 +1006,7 @@ exports[`Snapshot CloudFormation template matches snapshot 1`] = `
       "Properties": {
         "Code": {
           "S3Bucket": "cdk-hnb659fds-assets-123456789012-us-east-1",
-          "S3Key": "2dacaf6869ccc89958e1c4bf22ef1117aec1a19c22146460bdf61b95eb13ad6c.zip",
+          "S3Key": "a6bc6352d211581e0c54756b6003451947f67432010574deadc1046b4111d74f.zip",
         },
         "Environment": {
           "Variables": {
