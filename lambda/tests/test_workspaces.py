@@ -13,6 +13,10 @@ def mock_ws_table():
         t.put_item.return_value = {}
         t.update_item.return_value = {}
         t.meta.client.transact_write_items.return_value = {}
+        # _workspace_name_exists scans with `while True` until LastEvaluatedKey
+        # is missing. A bare MagicMock would loop forever (its .get() returns
+        # a truthy MagicMock). Force a real dict so the loop exits.
+        t.scan.return_value = {"Items": [], "LastEvaluatedKey": None}
         g.return_value = t
         yield t
 

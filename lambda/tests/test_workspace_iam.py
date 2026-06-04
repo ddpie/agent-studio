@@ -113,11 +113,12 @@ class TestCreateWorkspaceRole:
         assert data["roleArn"] == existing_arn
 
     def test_rejects_non_admin(self, mock_jwt, user_id, workspace_id):
+        """POST /role is gated on check_platform_admin (Cognito group), not auth_check."""
         from crud.handler import app
         from shared.response import forbidden
 
-        with patch("crud.workspace_iam.auth_check") as auth:
-            auth.return_value = (None, None, None, forbidden())
+        with patch("crud.workspace_iam.check_platform_admin") as ck:
+            ck.return_value = (user_id, False, forbidden())
             ev = _event("POST", f"/api/workspaces/{workspace_id}/role",
                         path_params={"wsId": workspace_id})
             resp = app.resolve(ev, MagicMock())
@@ -163,14 +164,16 @@ class TestGrantMcp:
         assert "cloudwatch" in data["mcpGrants"]
         assert "policySize" in data
 
-        # Verify IAM put_role_policy was called with MCP-Access.
+        # Verify IAM put_role_policy was called with WorkspaceGrants.
         put_call = fake_iam.put_role_policy.call_args
-        assert put_call.kwargs["PolicyName"] == "MCP-Access"
+        assert put_call.kwargs["PolicyName"] == "WorkspaceGrants"
         policy_doc = json.loads(put_call.kwargs["PolicyDocument"])
         actions = []
         for stmt in policy_doc["Statement"]:
             actions.extend(stmt["Action"])
-        assert "cloudwatch:DescribeAlarms" in actions
+        # Registry uses wildcards (cloudwatch:Describe*) instead of explicit
+        # actions; check for the expected service prefixes.
+        assert any(a.startswith("cloudwatch:") for a in actions)
         assert "cloudtrail:LookupEvents" in actions
 
     def test_rejects_unknown_targets(self, mock_jwt, user_id, workspace_id):
@@ -300,7 +303,7 @@ class TestRevokeMcp:
 
         # When all grants removed, policy should be deleted (not put).
         fake_iam.delete_role_policy.assert_called_once_with(
-            RoleName=role_name, PolicyName="MCP-Access"
+            RoleName=role_name, PolicyName="WorkspaceGrants"
         )
 
 
@@ -366,7 +369,8 @@ class TestGetPermissions:
         data = json.loads(resp["body"])
         assert data["hasRole"] is False
 
-    def test_rejects_missing_actions_param(self, mock_jwt, user_id, workspace_id):
+    def test_missing_actions_param_returns_role_probe(self, mock_jwt, user_id, workspace_id):
+        """Empty actions=just probe role existence (200, hasRole=True, results=[])."""
         from crud.handler import app
 
         fake_table = MagicMock()
@@ -384,7 +388,10 @@ class TestGetPermissions:
                         path_params={"wsId": workspace_id})
             resp = app.resolve(ev, MagicMock())
 
-        assert resp["statusCode"] == 400
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        assert data["hasRole"] is True
+        assert data["results"] == []
 
     def test_batches_large_action_lists(self, mock_jwt, user_id, workspace_id):
         """SimulatePrincipalPolicy allows max 25 actions per call — verify batching."""
@@ -437,8 +444,9 @@ class TestBuildMcpPolicy:
         assert policy is not None
         assert policy["Version"] == "2012-10-17"
         sids = {s["Sid"] for s in policy["Statement"]}
-        assert "McpCloudWatch" in sids
-        assert "McpCloudTrail" in sids
+        # SIDs come from mcp_iam_registry.yaml — capitalized target names without prefix
+        assert "Cloudwatch" in sids
+        assert "Cloudtrail" in sids
 
     def test_returns_none_for_no_iam_targets(self):
         from crud.workspace_iam import _build_mcp_policy
@@ -456,7 +464,7 @@ class TestBuildMcpPolicy:
         policy = _build_mcp_policy(["cloudwatch", "cloudwatch"])
         assert policy is not None
         sids = [s["Sid"] for s in policy["Statement"]]
-        assert sids.count("McpCloudWatch") == 1
+        assert sids.count("Cloudwatch") == 1
 
 
 # ──────────────────────────────────────────────────────────

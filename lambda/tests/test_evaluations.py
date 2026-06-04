@@ -29,39 +29,24 @@ def ws_event():
     }
 
 
-def test_create_workspace_fires_eval_config(mock_jwt, user_id, ws_event):
-    """POST /workspaces triggers create_eval_config_for_workspace."""
-    from crud.handler import app
+def _make_fake_ws_table():
+    """Build a fake workspaces DynamoDB table that won't hang the
+    name-duplicate scan loop in crud.workspaces._workspace_name_exists."""
     fake_table = MagicMock()
     fake_table.name = "test-workspaces"
     fake_table.meta.client.transact_write_items.return_value = {}
-    with patch("crud.workspaces._get_table", return_value=fake_table), \
-         patch("crud.evaluations.create_eval_config_for_workspace") as mock_fire:
-        mock_fire.return_value = "agentstudio_ws_abc"
-        resp = app.resolve(ws_event, MagicMock())
-
-    assert resp["statusCode"] in (200, 201)
-    mock_fire.assert_called_once()
-    # Accept either positional or keyword; assert the ws id was passed
-    body = json.loads(resp["body"])
-    expected_ws_id = body["workspaceId"]
-    args = mock_fire.call_args.args
-    kwargs = mock_fire.call_args.kwargs
-    passed = kwargs.get("workspace_id") or (args[0] if args else None)
-    assert passed == expected_ws_id
+    # _workspace_name_exists scans with `while True` until LastEvaluatedKey is
+    # missing. A bare MagicMock().scan() returns a MagicMock whose .get() is
+    # also MagicMock (truthy), so the loop never exits. Force a real dict.
+    fake_table.scan.return_value = {"Items": [], "LastEvaluatedKey": None}
+    return fake_table
 
 
-def test_eval_config_failure_does_not_block_workspace_create(mock_jwt, user_id, ws_event):
-    """If eval config provisioning raises, workspace create still returns 201."""
-    from crud.handler import app
-    fake_table = MagicMock()
-    fake_table.name = "test-workspaces"
-    fake_table.meta.client.transact_write_items.return_value = {}
-    with patch("crud.workspaces._get_table", return_value=fake_table), \
-         patch("crud.evaluations.create_eval_config_for_workspace",
-               side_effect=RuntimeError("boom")):
-        resp = app.resolve(ws_event, MagicMock())
-    assert resp["statusCode"] in (200, 201)
+# NOTE: tests for "POST /workspaces auto-fires create_eval_config_for_workspace"
+# were removed. crud/workspaces.py:create_workspace no longer wires this in
+# automatically — eval config creation is now explicit via
+# POST /api/workspaces/<wsId>/evaluations/enable. The old behavior was a
+# silent fan-out that ran on every workspace create.
 
 
 def test_create_eval_config_idempotent():

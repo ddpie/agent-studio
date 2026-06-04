@@ -7,8 +7,9 @@ def test_has_three_strategies():
 
 
 def test_strategy_names_match_spec():
+    # 4 strategies per .claude/specs/2026-04-26-agentcore-memory-design.md §3.3
     assert sorted(STRATEGY_NAMES) == sorted([
-        "userPreference", "semantic", "summary"
+        "userPreference", "semantic", "summary", "episodic"
     ])
 
 

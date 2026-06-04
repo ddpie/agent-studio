@@ -15,13 +15,18 @@ beforeEach(() => {
   listAgentEvaluations.mockClear();
 });
 
+// API contract: listAgentEvaluations returns
+//   { evaluations: AgentEvaluation[], diagnostics?: EvaluationDiagnostics }
+// not a bare array. Tests must wrap their data accordingly.
 describe("useAgentEvaluations", () => {
   it("groups scores by evaluator + computes mean", async () => {
-    listAgentEvaluations.mockResolvedValue([
-      { timestamp: "t1", evaluator: "Builtin.Correctness", score: 0.8, sessionId: "s1" },
-      { timestamp: "t2", evaluator: "Builtin.Correctness", score: 1.0, sessionId: "s2" },
-      { timestamp: "t3", evaluator: "Builtin.Helpfulness", score: 0.6, sessionId: "s1" },
-    ]);
+    listAgentEvaluations.mockResolvedValue({
+      evaluations: [
+        { timestamp: "t1", evaluator: "Builtin.Correctness", score: 0.8, sessionId: "s1" },
+        { timestamp: "t2", evaluator: "Builtin.Correctness", score: 1.0, sessionId: "s2" },
+        { timestamp: "t3", evaluator: "Builtin.Helpfulness", score: 0.6, sessionId: "s1" },
+      ],
+    });
     const { result } = renderHook(() => useAgentEvaluations("agt-1"));
     await waitFor(() => expect(result.current.grouped).toBeTruthy());
 
@@ -33,7 +38,7 @@ describe("useAgentEvaluations", () => {
   });
 
   it("surfaces empty when no rows", async () => {
-    listAgentEvaluations.mockResolvedValue([]);
+    listAgentEvaluations.mockResolvedValue({ evaluations: [] });
     const { result } = renderHook(() => useAgentEvaluations("agt-2"));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.grouped).toEqual({});

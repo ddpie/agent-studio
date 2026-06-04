@@ -263,13 +263,11 @@ describe("extractToolNames", () => {
     expect(extractToolNames("# just a comment")).toBe("");
   });
 
-  it("handles async def (should not match — tools are sync)", () => {
-    // extractToolNames uses /def\s+(\w+)\s*\(/ which won't match "async def" directly
-    // but the regex matches "def" inside "async def" — verify actual behavior
+  it("does not match async def (no @tool decorator)", () => {
+    // extractToolNames only matches @tool-decorated functions; bare
+    // async helpers are correctly ignored.
     const defs = `async def helper():\n    pass`;
-    const names = extractToolNames(defs);
-    // "def" appears in "async def" so regex will match — this documents current behavior
-    expect(names).toBe("helper");
+    expect(extractToolNames(defs)).toBe("");
   });
 
   it("handles def with extra spaces before parens", () => {
@@ -283,9 +281,10 @@ describe("extractToolNames", () => {
   });
 
   it("ignores class definitions", () => {
+    // extractToolNames only matches @tool-decorated functions, so plain
+    // class methods (no decorator) are skipped.
     const defs = `class Foo:\n    def method(self):\n        pass`;
-    // extractToolNames finds all "def X(" — including methods
-    expect(extractToolNames(defs)).toBe("method");
+    expect(extractToolNames(defs)).toBe("");
   });
 
   it("handles underscored function names", () => {
@@ -293,9 +292,13 @@ describe("extractToolNames", () => {
     expect(extractToolNames(defs)).toBe("my_long_tool_name");
   });
 
-  it("handles multiple defs on same line (edge case)", () => {
-    // Unlikely but tests regex global matching
-    const defs = `def a(): pass\ndef b(): pass`;
+  it("handles multiple @tool defs", () => {
+    const defs = `@tool\ndef a(): pass\n@tool\ndef b(): pass`;
     expect(extractToolNames(defs)).toBe("a,b");
+  });
+
+  it("ignores plain defs without @tool decorator", () => {
+    const defs = `def a(): pass\ndef b(): pass`;
+    expect(extractToolNames(defs)).toBe("");
   });
 });

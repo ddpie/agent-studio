@@ -101,12 +101,12 @@ def test_list_unknown_strategy_raises(mock_agentcore_data, mock_ws_table):
 
 
 def test_delete_record_success(mock_agentcore_data, mock_ws_table):
+    """Caller-owned record found via list_memory_records → delete fires."""
     from crud.memories import _delete_record_impl
-    mock_agentcore_data.get_memory_record.return_value = {
-        "memoryRecord": {
-            "memoryRecordId": "mem-123",
-            "namespace": "/users/agent-X_user-Y/facts/",
-        }
+    # First strategy queried returns the record; outer loop exits after found.
+    mock_agentcore_data.list_memory_records.return_value = {
+        "memoryRecordSummaries": [{"memoryRecordId": "mem-123"}],
+        "nextToken": None,
     }
     mock_agentcore_data.delete_memory_record.return_value = {"memoryRecordId": "mem-123"}
     _delete_record_impl(
@@ -116,47 +116,56 @@ def test_delete_record_success(mock_agentcore_data, mock_ws_table):
         memoryId="mem-abc", memoryRecordId="mem-123")
 
 
-def test_delete_record_cross_user_denied(mock_agentcore_data, mock_ws_table):
-    from crud.memories import _delete_record_impl, MemoryForbidden
-    mock_agentcore_data.get_memory_record.return_value = {
-        "memoryRecord": {
-            "memoryRecordId": "mem-OTHER",
-            "namespace": "/users/agent-X_user-OTHER/facts/",
-        }
+def test_delete_record_cross_user_silent_noop(mock_agentcore_data, mock_ws_table):
+    """Record not in caller's namespace → silent success (idempotent design).
+
+    The implementation deliberately doesn't raise on cross-user attempts;
+    list_memory_records scoped to the caller's namespace simply doesn't
+    return the foreign record, so 'found' stays False and we no-op. The
+    caller can't tell whether the record never existed or belonged to
+    someone else — by design.
+    """
+    from crud.memories import _delete_record_impl
+    mock_agentcore_data.list_memory_records.return_value = {
+        "memoryRecordSummaries": [],
+        "nextToken": None,
     }
-    with pytest.raises(MemoryForbidden):
-        _delete_record_impl(
-            workspace_id="ws1", agent_id="agent-X", caller_id="user-Y",
-            record_id="mem-OTHER")
+    _delete_record_impl(
+        workspace_id="ws1", agent_id="agent-X", caller_id="user-Y",
+        record_id="mem-OTHER")
     mock_agentcore_data.delete_memory_record.assert_not_called()
 
 
-def test_delete_record_cross_agent_denied(mock_agentcore_data, mock_ws_table):
-    from crud.memories import _delete_record_impl, MemoryForbidden
-    mock_agentcore_data.get_memory_record.return_value = {
-        "memoryRecord": {
-            "memoryRecordId": "mem-1",
-            "namespace": "/users/agent-OTHER_user-Y/facts/",
-        }
-    }
-    with pytest.raises(MemoryForbidden):
-        _delete_record_impl(
-            workspace_id="ws1", agent_id="agent-X", caller_id="user-Y",
-            record_id="mem-1")
-
-
-def test_delete_record_unparseable_namespace(mock_agentcore_data, mock_ws_table):
+def test_delete_record_cross_agent_silent_noop(mock_agentcore_data, mock_ws_table):
+    """Record under a different agent's namespace → silent no-op (same as cross-user)."""
     from crud.memories import _delete_record_impl
-    mock_agentcore_data.get_memory_record.return_value = {
-        "memoryRecord": {
-            "memoryRecordId": "mem-bad",
-            "namespace": "/weird/path/",
-        }
+    mock_agentcore_data.list_memory_records.return_value = {
+        "memoryRecordSummaries": [],
+        "nextToken": None,
     }
-    with pytest.raises(ValueError, match="unparseable"):
-        _delete_record_impl(
-            workspace_id="ws1", agent_id="agent-X", caller_id="user-Y",
-            record_id="mem-bad")
+    _delete_record_impl(
+        workspace_id="ws1", agent_id="agent-X", caller_id="user-Y",
+        record_id="mem-1")
+    mock_agentcore_data.delete_memory_record.assert_not_called()
+
+
+def test_delete_record_already_deleted_idempotent(mock_agentcore_data, mock_ws_table):
+    """ResourceNotFoundException from delete_memory_record is swallowed (idempotent)."""
+    from crud.memories import _delete_record_impl
+    mock_agentcore_data.list_memory_records.return_value = {
+        "memoryRecordSummaries": [{"memoryRecordId": "mem-x"}],
+        "nextToken": None,
+    }
+
+    class _RNF(Exception):
+        pass
+
+    mock_agentcore_data.exceptions.ResourceNotFoundException = _RNF
+    mock_agentcore_data.delete_memory_record.side_effect = _RNF()
+    # Must not raise.
+    _delete_record_impl(
+        workspace_id="ws1", agent_id="agent-X", caller_id="user-Y",
+        record_id="mem-x")
 
 
 # ---------------------------------------------------------------------------
