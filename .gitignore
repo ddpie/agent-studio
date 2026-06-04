@@ -17,12 +17,15 @@ credentials.json
 dist/
 build/
 *.zip
+storybook-static/
 
 # Test coverage
 coverage/
 .coverage
 htmlcov/
 .pytest_cache/
+.mutmut-cache/
+mutants/
 
 # Playwright
 frontend/.auth/
