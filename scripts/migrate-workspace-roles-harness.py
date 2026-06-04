@@ -39,10 +39,10 @@ _stub.MCP_IAM_POLICIES = {}
 _stub._NO_IAM_TARGETS = set()
 sys.modules.setdefault("crud.mcp_iam_registry", _stub)
 
-import boto3  # noqa: E402
-from botocore.exceptions import ClientError  # noqa: E402
+import boto3
+from botocore.exceptions import ClientError
 
-from crud.workspace_iam import (  # noqa: E402
+from crud.workspace_iam import (
     _build_default_minimal_policy,
     _build_trust_policy,
 )

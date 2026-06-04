@@ -168,7 +168,8 @@ def test_subagent_fetch_webpage_routes_through_browser(agentcore):
     current deployment has a custom version — we detect by sniffing the
     deployed tools.py for the Browser call pattern.
     """
-    import io, zipfile
+    import io
+    import zipfile
     s3 = boto3.client("s3", region_name=REGION)
     bucket = os.environ["AGENT_STUDIO_S3_BUCKET"]
     zip_bytes = s3.get_object(Bucket=bucket, Key=f"agents/{SUBAGENT_ID}/deployment.zip")["Body"].read()

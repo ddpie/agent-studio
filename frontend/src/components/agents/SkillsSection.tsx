@@ -130,7 +130,7 @@ export default function SkillsSection({ skills, agentId, deployedHashes, onEditS
         ) : (
           skills.map(skill => {
             const globalSkill = globalSkills.find(g => g.id === skill.sourceSkillId)
-            const hasTemplateUpdate = globalSkill && globalSkill.contentHash
+            const hasTemplateUpdate = globalSkill?.contentHash
               ? globalSkill.contentHash !== skill.sourceContentHash
               : false
             const hasLocalChanges = deployedHashes

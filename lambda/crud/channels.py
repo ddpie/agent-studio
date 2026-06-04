@@ -13,9 +13,9 @@ from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler.api_gateway import Router
 from botocore.exceptions import ClientError
 
-from shared.config import REGION, AGENTS_TABLE, CHANNELS_TABLE, CHANNEL_HISTORY_TABLE
+from shared.config import AGENTS_TABLE, CHANNEL_HISTORY_TABLE, CHANNELS_TABLE, REGION
 from shared.middleware import auth_check
-from shared.response import success, forbidden, not_found, bad_request, internal_error
+from shared.response import bad_request, internal_error, not_found, success
 from shared.validators import validate_id
 
 router = Router()
@@ -396,7 +396,7 @@ def update_channel(wsId: str, chId: str):
                         SecretString=json.dumps({"appSecret": app_secret}),
                         Description=f"Channel credentials for {chId} in workspace {ws_id}",
                     )
-                except ClientError as e2:
+                except ClientError:
                     logger.exception("recreate channel secret failed", extra={"channelId": chId})
                     return internal_error("Failed to update channel credentials")
             else:

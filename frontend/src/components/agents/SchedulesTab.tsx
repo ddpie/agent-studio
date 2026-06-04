@@ -151,7 +151,7 @@ export default function SchedulesTab({ agentId, initialRunId }: Props) {
         </div>
       )}
 
-      {schedules && schedules.length === 0 && !loading && (
+      {schedules?.length === 0 && !loading && (
         <div className="text-sm text-gray-500 dark:text-gray-400" data-testid="schedules-empty">
           {t("schedules.empty")}
         </div>
@@ -390,7 +390,7 @@ function RecentRuns({
         </div>
       )}
 
-      {runs && runs.length === 0 && !loading && !error && (
+      {runs?.length === 0 && !loading && !error && (
         <div className="text-xs text-gray-500 dark:text-gray-400" data-testid={`runs-empty-${scheduleName}`}>
           {t("schedules.runs.empty")}
         </div>
@@ -674,7 +674,7 @@ function ScheduleBuilder({
   const humanReadable = useMemo(() => {
     if (!cron || cronErr) return "";
     // rate() is trivial — describe it ourselves.
-    const rate = cron.match(/^rate\(\s*(\d+)\s+(minute|minutes|hour|hours|day|days)\s*\)$/i);
+    const rate = /^rate\(\s*(\d+)\s+(minute|minutes|hour|hours|day|days)\s*\)$/i.exec(cron);
     if (rate) {
       const n = rate[1];
       const u = rate[2].toLowerCase();

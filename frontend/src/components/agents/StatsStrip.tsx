@@ -31,7 +31,7 @@ function StatCard({
 }) {
   return (
     <div className="flex-1 min-w-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 px-4 py-3">
-      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{label}</p>
+      <p className="text-xs text-gray-600 dark:text-gray-300 truncate">{label}</p>
       <p
         className={`text-xl font-semibold mt-0.5 ${
           alert ? "text-red-600 dark:text-red-400" : "text-gray-900 dark:text-gray-100"

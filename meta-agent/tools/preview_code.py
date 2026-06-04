@@ -2,12 +2,12 @@
 
 import json
 
+from config import MODEL_ID, REGION, S3_BUCKET
+from deploy import validate_agent_files
 from strands import tool
 
-from config import MODEL_ID, REGION, S3_BUCKET
-from templates.agent_template_v2 import MAIN_PY_TEMPLATE, MAIN_PY_MCP_TEMPLATE, TOOLS_PY_HEADER
+from templates.agent_template_v2 import MAIN_PY_MCP_TEMPLATE, MAIN_PY_TEMPLATE, TOOLS_PY_HEADER
 from templates.prompt_templates import get_base_guidelines
-from deploy import validate_agent_files
 
 
 @tool
@@ -72,8 +72,9 @@ def preview_assembled_code(
     validation = validate_agent_files(main_py, tools_py, prompt_txt, config_json)
 
     # Write all files to S3 for frontend preview
-    import boto3
     import time
+
+    import boto3
     s3 = boto3.client("s3", region_name=REGION)
     base_key = staging_key.split("/")[-1].replace(".json", "") if staging_key else f"preview-{int(time.time() * 1000)}"
     preview_prefix = f"agents/_preview/{base_key}"

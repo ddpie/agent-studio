@@ -8,12 +8,19 @@ from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler.api_gateway import Router
 from boto3.dynamodb.conditions import Key
 
-from shared.auth import verify_jwt, get_membership, check_permission, ROLE_LEVEL
-from shared.config import WORKSPACES_TABLE, REGION, COGNITO_USER_POOL_ID
+from shared.config import COGNITO_USER_POOL_ID, REGION, WORKSPACES_TABLE
 from shared.memory_strategies import DEFAULT_MEMORY_STRATEGIES
 from shared.middleware import auth_check, check_platform_admin
-from shared.response import success, paginated, forbidden, not_found, bad_request, version_conflict, internal_error, error
-from shared.validators import validate_id, parse_pagination
+from shared.response import (
+    bad_request,
+    error,
+    forbidden,
+    internal_error,
+    not_found,
+    success,
+    version_conflict,
+)
+from shared.validators import validate_id
 
 _iam_client = None
 

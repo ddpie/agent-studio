@@ -1,11 +1,12 @@
 """kb_delete — Delete a Knowledge Base (with confirmation gate)."""
 
 import json
-import boto3
-from strands import tool
 from datetime import datetime, timezone
 
-from config import REGION, S3_BUCKET, KB_TABLE, VECTORS_BUCKET, AGENTS_TABLE
+import boto3
+from config import AGENTS_TABLE, KB_TABLE, REGION, S3_BUCKET, VECTORS_BUCKET
+from strands import tool
+
 from tools._scope import current_workspace
 
 

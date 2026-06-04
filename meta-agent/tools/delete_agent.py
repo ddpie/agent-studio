@@ -3,11 +3,11 @@
 import json
 
 import boto3
+from config import AGENTS_TABLE, REGION, S3_BUCKET
+from deploy import create_runtime, delete_runtime, wait_for_ready
 from strands import tool
 
-from config import REGION, S3_BUCKET, AGENTS_TABLE, AGENT_ROLE_ARN
-from deploy import delete_runtime, create_runtime, wait_for_ready
-from tools._scope import ensure_agent_in_workspace, ROLE_ADMIN, ROLE_OWNER
+from tools._scope import ROLE_ADMIN, ROLE_OWNER, ensure_agent_in_workspace
 
 
 @tool

@@ -16,14 +16,14 @@ export interface RunSummary {
   completedAt: string | null;
 }
 
-export interface RunArtifact {
+interface RunArtifact {
   key: string;
   filename: string;
 }
 
 export interface RunOutput {
   text: string;
-  toolCalls: Array<{ name: string; input: string; output: string }>;
+  toolCalls: { name: string; input: string; output: string }[];
 }
 
 export interface RunDetail {

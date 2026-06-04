@@ -1,5 +1,4 @@
 """Knowledge Base CRUD endpoints."""
-import json
 import uuid
 from datetime import datetime
 
@@ -7,9 +6,17 @@ import boto3
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler.api_gateway import Router
 
-from shared.config import KB_TABLE, KB_SERVICE_ROLE_ARN, VECTORS_BUCKET, REGION, ACCOUNT_ID, S3_BUCKET, AGENTS_TABLE
+from shared.config import (
+    ACCOUNT_ID,
+    AGENTS_TABLE,
+    KB_SERVICE_ROLE_ARN,
+    KB_TABLE,
+    REGION,
+    S3_BUCKET,
+    VECTORS_BUCKET,
+)
 from shared.middleware import auth_check
-from shared.response import success, not_found, bad_request, internal_error
+from shared.response import bad_request, internal_error, not_found, success
 
 router = Router()
 logger = Logger(child=True)
@@ -262,7 +269,7 @@ def create_knowledge_base(wsId: str):
         logger.exception("Failed to create KB infrastructure for %s", kb_id)
         # Best-effort cleanup
         _cleanup_kb_infra(bedrock_kb_id, data_source_id, index_name)
-        return internal_error(f"Failed to create knowledge base: {str(e)}")
+        return internal_error(f"Failed to create knowledge base: {e!s}")
 
     # 4. Write DDB item
     item = {
@@ -520,10 +527,9 @@ def delete_document(wsId: str, kbId: str):
 
     body = router.current_event.json_body or {}
     doc_key = (body.get("documentKey") or "").strip()
-    if not doc_key:
-        file_name = (body.get("fileName") or body.get("filename") or "").strip()
-        if not file_name:
-            return bad_request("documentKey or fileName is required")
+    file_name = (body.get("fileName") or body.get("filename") or "").strip()
+    if not doc_key and not file_name:
+        return bad_request("documentKey or fileName is required")
 
     # Verify KB
     table = _get_table()
@@ -537,6 +543,9 @@ def delete_document(wsId: str, kbId: str):
         doc_key = f"{s3_prefix}{file_name}"
     elif not doc_key.startswith(s3_prefix):
         return bad_request("Document key does not belong to this knowledge base")
+    # If only documentKey was given, derive file_name from it for the response.
+    if not file_name:
+        file_name = doc_key[len(s3_prefix):] if doc_key.startswith(s3_prefix) else doc_key
 
     # Delete from S3
     s3 = _get_s3()
@@ -692,7 +701,7 @@ def attach_knowledge_base(wsId: str, agentId: str, kbId: str):
         )
     except Exception as e:
         logger.exception("Failed to attach KB %s to agent %s", kbId, agentId)
-        return internal_error(f"Failed to attach knowledge base: {str(e)}")
+        return internal_error(f"Failed to attach knowledge base: {e!s}")
 
     return success({"status": "attached", "agentId": agentId, "kbId": kbId})
 
@@ -760,6 +769,6 @@ def detach_knowledge_base(wsId: str, agentId: str, kbId: str):
         )
     except Exception as e:
         logger.exception("Failed to detach KB %s from agent %s", kbId, agentId)
-        return internal_error(f"Failed to detach knowledge base: {str(e)}")
+        return internal_error(f"Failed to detach knowledge base: {e!s}")
 
     return success({"status": "detached", "agentId": agentId, "kbId": kbId})

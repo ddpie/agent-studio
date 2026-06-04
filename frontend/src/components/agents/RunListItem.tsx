@@ -63,11 +63,11 @@ export default function RunListItem({
           <span className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">
             {truncate(run.input || run.runId, 60)}
           </span>
-          <span className="text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+          <span className="text-[10px] text-gray-600 dark:text-gray-300 whitespace-nowrap">
             {formatRelativeTime(run.startedAt)}
           </span>
         </div>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[10px] text-gray-500 dark:text-gray-400">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[10px] text-gray-600 dark:text-gray-300">
           <span className={`inline-flex items-center gap-1 ${isError ? "text-red-600 dark:text-red-400" : ""}`}>
             <span className={`inline-block w-1.5 h-1.5 rounded-full ${isError ? "bg-red-500" : run.status === "running" ? "bg-amber-500" : "bg-emerald-500"}`} />
             {t(`runs.statusLabel.${run.status}`, run.status)}
@@ -77,7 +77,7 @@ export default function RunListItem({
           {run.artifactCount > 0 && <span>📎 {run.artifactCount}</span>}
         </div>
         {!hideSource && (
-          <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400">
+          <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-gray-600 dark:text-gray-300">
             {run.trigger === "schedule" ? (
               <>
                 <Calendar className="w-3 h-3" />

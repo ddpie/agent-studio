@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import { Save, Loader2 } from "lucide-react"
-import { DiffEditor } from "@monaco-editor/react"
+import { LazyDiffEditor as DiffEditor } from "../ui/LazyMonaco"
 import { useUISettings } from "../../stores/ui-settings-store"
 import { useAgentEditStore } from "../../stores/agent-edit-store"
 import { getSkillFile, listSkillFiles as listGlobalSkillFiles } from "../../lib/skill-storage"

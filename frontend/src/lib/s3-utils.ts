@@ -2,7 +2,7 @@ import { agentConfig } from "../config";
 import { getImageUploadUrl, getAttachmentUploadUrl, uploadWithPresignedPost } from "./api-client";
 
 export async function uploadImageToS3(dataUrl: string): Promise<string> {
-  const match = dataUrl.match(/^data:image\/(\w+);base64,(.+)$/);
+  const match = /^data:image\/(\w+);base64,(.+)$/.exec(dataUrl);
   if (!match) throw new Error("Invalid image data URL");
 
   const [, ext, base64Data] = match;
@@ -41,7 +41,7 @@ const EXT_TO_MIME: Record<string, string> = {
 };
 
 function canonicalContentType(file: File): string {
-  const ext = (file.name.toLowerCase().match(/\.([a-z0-9]+)$/) || [])[1] || "";
+  const ext = ((/\.([a-z0-9]+)$/.exec(file.name.toLowerCase())) || [])[1] || "";
   if (ext && EXT_TO_MIME[ext]) return EXT_TO_MIME[ext];
   return file.type || "application/octet-stream";
 }

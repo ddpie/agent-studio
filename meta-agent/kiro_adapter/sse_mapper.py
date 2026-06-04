@@ -47,7 +47,8 @@ from __future__ import annotations
 
 import base64
 import json
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 # Matches the caps main.py:621-625 enforces on the legacy path. `load_skill`
 # is a special case there; we don't have that here since the tool is run by

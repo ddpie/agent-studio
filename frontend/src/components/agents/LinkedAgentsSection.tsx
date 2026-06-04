@@ -61,7 +61,7 @@ function interpretToolStream(
     } catch {
       continue;
     }
-    if (!parsed || parsed.name !== toolName) continue;
+    if (parsed?.name !== toolName) continue;
     sawMatching = true;
     let decoded = "";
     try {

@@ -6,11 +6,11 @@ import boto3
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler.api_gateway import Router
 
-from shared.config import WORKSPACES_TABLE, REGION
+from shared.config import REGION, WORKSPACES_TABLE
 from shared.memory_actor import build_actor_id
 from shared.memory_strategies import STRATEGY_NAMESPACE_PREFIX
 from shared.middleware import auth_check
-from shared.response import success, bad_request, not_found, forbidden, internal_error
+from shared.response import bad_request, forbidden, internal_error, not_found, success
 
 router = Router()
 logger = Logger(child=True)

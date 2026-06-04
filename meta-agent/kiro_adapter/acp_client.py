@@ -42,7 +42,8 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -250,7 +251,7 @@ class KiroACPClient:
                         if line.strip():
                             log.warning("kiro-cli stderr: %s", line[:500])
                 _os_mod.unlink(sf.name)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 log.warning("failed to flush kiro stderr file: %s", e)
             self._stderr_file = None
 
@@ -270,7 +271,7 @@ class KiroACPClient:
                         if line.strip():
                             log.warning("mcp-stdio[%s]: %s", path, line[:500])
                     _os_mod.unlink(path)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     log.warning("failed to tail %s: %s", path, e)
         except Exception:
             pass

@@ -40,7 +40,7 @@ export interface StatusBadgeProps {
 
 export default function StatusBadge({ status, onClick, compact, ...rest }: StatusBadgeProps) {
   const { t } = useTranslation();
-  const normalized = ((status as string) || "UNKNOWN").toUpperCase() as Status;
+  const normalized = ((status!) || "UNKNOWN").toUpperCase() as Status;
   const labelKey = `runtime.status.${normalized.toLowerCase()}`;
   const label = t(labelKey, { defaultValue: normalized });
   const interactive = Boolean(onClick);
@@ -52,6 +52,7 @@ export default function StatusBadge({ status, onClick, compact, ...rest }: Statu
     return (
       <Tag
         type={interactive ? "button" : undefined}
+        role="status"
         onClick={onClick}
         title={label}
         aria-label={label}

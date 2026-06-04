@@ -111,7 +111,7 @@ export default function IamPermissionsTab({ readOnly = false, workspaceId, onRol
         }
         setTargetStatuses(statuses);
       }
-    } catch (err) {
+    } catch {
       // If permissions API fails, still set hasRole = false
       setHasRole(false);
       setRoleArn(null);

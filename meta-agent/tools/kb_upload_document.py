@@ -6,9 +6,9 @@ import uuid
 from datetime import datetime, timezone
 
 import boto3
+from config import KB_TABLE, REGION, S3_BUCKET
 from strands import tool
 
-from config import REGION, S3_BUCKET, KB_TABLE
 from tools._scope import current_workspace
 
 ALLOWED_EXTENSIONS = {"pdf", "md", "txt", "html", "csv", "docx", "xlsx", "pptx"}

@@ -37,15 +37,6 @@ function groupKey(memoryKey: string, groupId: string): string {
   return `${GROUP_PREFIX}${memoryKey}:${groupId}`;
 }
 
-/** Read the section id last saved for this memory key, or null. */
-export function readSavedSection(key: string): string | null {
-  if (typeof window === "undefined" || !key) return null;
-  try {
-    return window.sessionStorage.getItem(sectionKey(key));
-  } catch {
-    return null;
-  }
-}
 
 function saveSection(key: string, id: string): void {
   if (typeof window === "undefined" || !key) return;
@@ -192,7 +183,7 @@ function GroupBlock({
         onClick={toggle}
         aria-expanded={open}
         data-testid={`nav-group-toggle-${group.id}`}
-        className="w-full flex items-center gap-1 px-2.5 py-1 text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+        className="w-full flex items-center gap-1 px-2.5 py-1 text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
       >
         <span className="inline-block w-2">{open ? "▾" : "▸"}</span>
         <span className="truncate">{group.label}</span>

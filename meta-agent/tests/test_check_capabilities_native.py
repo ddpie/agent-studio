@@ -4,7 +4,6 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
-
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
 if not hasattr(_mock_strands, "tool"):
     _mock_strands.tool = lambda f: f

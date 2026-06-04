@@ -24,7 +24,7 @@ export function validateSkill(
   const fm = parts[1].trim();
   const fields: Record<string, string> = {};
   for (const line of fm.split("\n")) {
-    const match = line.match(/^(\w[\w-]*):\s*(.*)/);
+    const match = /^(\w[\w-]*):\s*(.*)/.exec(line);
     if (match) fields[match[1]] = match[2].trim().replace(/^["']|["']$/g, "");
   }
 

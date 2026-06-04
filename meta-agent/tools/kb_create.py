@@ -5,10 +5,10 @@ import uuid
 from datetime import datetime, timezone
 
 import boto3
+from config import ACCOUNT_ID, KB_SERVICE_ROLE_ARN, KB_TABLE, REGION, S3_BUCKET, VECTORS_BUCKET
 from strands import tool
 
-from config import REGION, ACCOUNT_ID, S3_BUCKET, KB_TABLE, KB_SERVICE_ROLE_ARN, VECTORS_BUCKET
-from tools._scope import current_workspace, current_caller
+from tools._scope import current_caller, current_workspace
 
 
 @tool

@@ -1,0 +1,37 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: security-patterns
+      run: ./scripts/pre-commit-security.sh
+
+    - name: check-invariants
+      run: ./scripts/check-invariants.sh
+
+    - name: eslint
+      glob: "frontend/src/**/*.{ts,tsx}"
+      run: cd frontend && npx eslint {staged_files} --max-warnings 0
+
+    - name: ruff
+      glob: "{lambda,meta-agent,scripts}/**/*.py"
+      run: ruff check {staged_files}
+
+    - name: ruff-format
+      glob: "{lambda,meta-agent}/**/*.py"
+      run: ruff format --check {staged_files}
+
+    - name: bash-syntax
+      glob: "scripts/*.sh"
+      run: bash -n {staged_files}
+
+    - name: gitleaks
+      run: gitleaks protect --staged --redact -v
+      skip:
+        - run: "! command -v gitleaks"
+
+pre-push:
+  jobs:
+    - name: test
+      run: ./scripts/test.sh
+
+    - name: docs-consistency
+      run: ./scripts/check-docs-agent.sh

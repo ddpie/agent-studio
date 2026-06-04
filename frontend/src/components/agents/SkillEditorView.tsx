@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { ArrowLeft, Loader2, FolderPlus, Trash2, Plus } from "lucide-react"
-import MonacoEditor, { type OnMount } from "@monaco-editor/react"
+import { LazyMonacoEditor as MonacoEditor, type OnMount } from "../ui/LazyMonaco"
 import { Tree, type NodeRendererProps } from "react-arborist"
 import useIsDark from "../../hooks/useIsDark"
 import { useSkillStorage } from "../../hooks/useSkillStorage"
@@ -290,7 +290,7 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
               <button
                 onClick={() => {
                   const name = prompt(t("skillEditor.newFileName", "New file name (e.g. scripts/run.py):"))
-                  if (!name || !name.trim()) return
+                  if (!name?.trim()) return
                   const path = name.trim()
                   if (!editor.stageNewFile(path)) {
                     setError(t("skillEditor.fileExists", "File already exists"))
@@ -307,7 +307,7 @@ export default function SkillEditorView({ agentId, skill, onBack }: SkillEditorV
               <button
                 onClick={() => {
                   const name = prompt(t("skillEditor.newFolderTitle", "New folder name:"))
-                  if (!name || !name.trim()) return
+                  if (!name?.trim()) return
                   const path = `${name.trim()}/untitled`
                   if (!editor.stageNewFile(path, "")) return
                   editor.setCurrentFile(path)

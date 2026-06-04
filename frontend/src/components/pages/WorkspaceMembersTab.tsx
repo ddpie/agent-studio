@@ -258,7 +258,7 @@ export default function WorkspaceMembersTab() {
                     (isOwner || targetRole !== "admin");
                   const canRemove =
                     isAdmin && targetRole !== "owner" && !isSelf && (isOwner || targetRole !== "admin");
-                  const roleOptions: Array<"viewer" | "editor" | "admin"> = isOwner
+                  const roleOptions: ("viewer" | "editor" | "admin")[] = isOwner
                     ? ["viewer", "editor", "admin"]
                     : ["viewer", "editor"];
                   return (

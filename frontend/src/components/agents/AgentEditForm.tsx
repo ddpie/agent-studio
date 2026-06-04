@@ -96,8 +96,8 @@ export default function AgentEditForm() {
   // Open skill editor when URL has skillId
   useEffect(() => {
     if (routeSkillId && formData?.skills) {
-      const skill = (formData.skills as AgentSkillEntry[]).find(s => s.id === routeSkillId);
-      if (skill && (!editingSkill || editingSkill.id !== routeSkillId)) {
+      const skill = (formData.skills).find(s => s.id === routeSkillId);
+      if (skill && (editingSkill?.id !== routeSkillId)) {
         setEditingSkill(skill);
         setEditingSkillId(skill.id);
       }
@@ -126,7 +126,7 @@ export default function AgentEditForm() {
     <div className="flex flex-col flex-1 min-w-0 bg-gray-50/50 dark:bg-gray-800/50">
       {editingSkill ? (
         <SkillEditorView
-          agentId={agentId!}
+          agentId={agentId}
           skill={editingSkill}
           onBack={() => {
             navigate(`/agents/edit/${agentId}`)
@@ -150,7 +150,7 @@ export default function AgentEditForm() {
         </div>
         <div className="flex items-center gap-1.5">
           <button
-            onClick={() => openPanel(agentId!)}
+            onClick={() => openPanel(agentId)}
             className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] rounded-lg transition-colors ${panelOpen ? "bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400" : "text-gray-500 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30"}`}
             title={t("assistant.title")}
           >

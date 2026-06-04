@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Loader2, RefreshCw } from "lucide-react";
 import { useRunDetail } from "../../hooks/useRuns";
@@ -18,6 +18,7 @@ export default function RunDetailModal({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const titleId = useId();
   const { detail, output, loading, error, refresh } = useRunDetail(agentId, runId);
 
   useEffect(() => {
@@ -30,6 +31,9 @@ export default function RunDetailModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
       className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
       onClick={onClose}
       data-testid="run-detail-modal"
@@ -39,7 +43,7 @@ export default function RunDetailModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+          <h3 id={titleId} className="text-sm font-semibold text-gray-800 dark:text-gray-200">
             {t("runs.detailTitle", "Run detail")}
           </h3>
           <div className="flex items-center gap-1">

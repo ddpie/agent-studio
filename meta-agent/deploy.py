@@ -1,14 +1,22 @@
 """Deployment utilities for packaging and deploying agents to AgentCore Runtime."""
 
 import ast
-import boto3
 import io
 import json
 import os
 import time
 import zipfile
 
-from config import REGION, ACCOUNT_ID, S3_BUCKET, AGENT_ROLE_ARN, AGENTS_TABLE, BASE_DEPLOYMENT_KEY, SUB_AGENT_BASE_DEPLOYMENT_KEY
+import boto3
+from config import (
+    ACCOUNT_ID,
+    AGENT_ROLE_ARN,
+    AGENTS_TABLE,
+    BASE_DEPLOYMENT_KEY,
+    REGION,
+    S3_BUCKET,
+    SUB_AGENT_BASE_DEPLOYMENT_KEY,
+)
 
 
 def _agent_workspace_id(agent_id: str) -> str:

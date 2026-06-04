@@ -8,12 +8,10 @@ import json
 from typing import Any
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from config import REGION, S3_BUCKET
 from strands import tool
 
-from config import REGION, S3_BUCKET
-from tools._scope import current_workspace, require_role, ROLE_VIEWER
-
+from tools._scope import ROLE_VIEWER, current_workspace, require_role
 
 _SKILLS_TABLE = "agent-studio-skills"
 # Cap per read to keep a single file from blowing the Meta-Agent prompt.

@@ -1,9 +1,7 @@
 """Test run_skill_script — skill staging + execution flow."""
-import json
 import sys
 import types
 from unittest.mock import MagicMock, patch
-
 
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
 if not hasattr(_mock_strands, "tool"):

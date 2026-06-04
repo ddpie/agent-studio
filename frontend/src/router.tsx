@@ -1,27 +1,36 @@
-import { lazy, type ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { createHashRouter, Navigate } from "react-router";
 import AppShell from "./components/layout/AppShell";
 import AgentsLayout from "./components/layout/AgentsLayout";
 import ChatPanel from "./components/chat/ChatPanel";
-import AgentEditForm from "./components/agents/AgentEditForm";
-import AgentDetailPage from "./components/pages/AgentDetailPage";
-import SkillsPage from "./components/pages/SkillsPage";
-import SkillDetail from "./components/pages/SkillDetail";
-import ToolLibraryPage from "./components/pages/ToolLibraryPage";
-import ToolDetail from "./components/pages/ToolDetail";
-import KBList from "./components/kb/KBList";
-import KBDetail from "./components/kb/KBDetail";
-import McpPage from "./components/pages/McpPage";
-import McpPolicyPage from "./components/pages/McpPolicyPage";
-import MarketplacePage from "./components/pages/MarketplacePage";
-import CostsPage from "./components/pages/CostsPage";
-import SettingsPage from "./components/pages/SettingsPage";
 import PageErrorBoundary from "./components/common/PageErrorBoundary";
 
+// Route-level code splitting — heavy pages loaded on demand
+const AgentEditForm = lazy(() => import("./components/agents/AgentEditForm"));
+const AgentDetailPage = lazy(() => import("./components/pages/AgentDetailPage"));
+const SkillsPage = lazy(() => import("./components/pages/SkillsPage"));
+const SkillDetail = lazy(() => import("./components/pages/SkillDetail"));
+const ToolLibraryPage = lazy(() => import("./components/pages/ToolLibraryPage"));
+const ToolDetail = lazy(() => import("./components/pages/ToolDetail"));
+const KBList = lazy(() => import("./components/kb/KBList"));
+const KBDetail = lazy(() => import("./components/kb/KBDetail"));
+const McpPage = lazy(() => import("./components/pages/McpPage"));
+const McpPolicyPage = lazy(() => import("./components/pages/McpPolicyPage"));
+const MarketplacePage = lazy(() => import("./components/pages/MarketplacePage"));
+const CostsPage = lazy(() => import("./components/pages/CostsPage"));
+const SettingsPage = lazy(() => import("./components/pages/SettingsPage"));
 const AdminConsolePage = lazy(() => import("./components/pages/AdminConsolePage"));
 
+function LazyFallback() {
+  return (
+    <div className="flex items-center justify-center h-full">
+      <div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-600 border-t-blue-500 rounded-full animate-spin" />
+    </div>
+  );
+}
+
 function withBoundary(element: ReactNode) {
-  return <PageErrorBoundary>{element}</PageErrorBoundary>;
+  return <PageErrorBoundary><Suspense fallback={<LazyFallback />}>{element}</Suspense></PageErrorBoundary>;
 }
 
 export function createRoutes(

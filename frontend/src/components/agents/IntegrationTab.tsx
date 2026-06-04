@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useId } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, Check, Plus, Trash2, AlertTriangle } from "lucide-react";
 import { useA2aKeys, type A2aKeyKind } from "../../hooks/useA2aKeys";
@@ -19,6 +19,7 @@ interface Props {
 
 export default function IntegrationTab({ agentId, kind = "agent" }: Props) {
   const { t } = useTranslation();
+  const newKeyTitleId = useId();
   const { keys, loading, error, generate, revoke } = useA2aKeys(agentId, kind);
   const [justCreated, setJustCreated] = useState<A2aKeyCreated | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -130,6 +131,9 @@ export default function IntegrationTab({ agentId, kind = "agent" }: Props) {
 
       {justCreated && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={newKeyTitleId}
           className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
           onClick={() => setJustCreated(null)}
           data-testid="new-key-modal"
@@ -138,7 +142,7 @@ export default function IntegrationTab({ agentId, kind = "agent" }: Props) {
             className="bg-white dark:bg-gray-900 rounded-lg p-5 w-[540px] max-w-full"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-sm font-semibold mb-2">{t("integration.newKeyTitle")}</h3>
+            <h3 id={newKeyTitleId} className="text-sm font-semibold mb-2">{t("integration.newKeyTitle")}</h3>
             <div className="flex items-start gap-2 p-3 mb-3 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900">
               <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
               <div className="text-xs text-amber-800 dark:text-amber-200">{t("integration.newKeyWarning")}</div>
@@ -202,6 +206,7 @@ function UrlBox({
           type="button"
           onClick={() => onCopy(id, value)}
           data-testid={`${id}-copy`}
+          aria-label="Copy"
           className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
         >
           {copied === id ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}

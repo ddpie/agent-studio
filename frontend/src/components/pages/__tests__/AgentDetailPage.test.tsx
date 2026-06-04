@@ -33,7 +33,7 @@ vi.mock("../../../lib/api-client", () => ({
   }),
 
   // Evaluations
-  listAgentEvaluations: vi.fn().mockResolvedValue([]),
+  listAgentEvaluations: vi.fn().mockResolvedValue({ evaluations: [], diagnostics: null }),
   enableAgentEvaluations: vi.fn().mockResolvedValue({ configName: "", status: "ALREADY_EXISTS" }),
   getAgentEvaluationStatus: vi.fn().mockResolvedValue({
     exists: false,
@@ -41,6 +41,18 @@ vi.mock("../../../lib/api-client", () => ({
     status: null,
     executionStatus: null,
   }),
+
+  // Trace stats (StatsStrip) — full TraceStats shape from api-client.ts
+  getTraceStats: vi.fn().mockResolvedValue({
+    range: "24h",
+    count: 0,
+    errorCount: 0,
+    errorRate: 0,
+    latencyMs: { p50: null, p90: null, p95: null, p99: null, avg: null },
+    timeseries: [],
+  }),
+  listTraces: vi.fn().mockResolvedValue([]),
+  getSessionTrace: vi.fn().mockResolvedValue({ sessionId: "s-1", spans: [] }),
 
   // Costs
   fetchAgentCosts: vi.fn().mockResolvedValue({
@@ -119,7 +131,7 @@ vi.mock("../../../stores/workspace-store", () => ({
 
 import AgentDetailPage from "../AgentDetailPage";
 
-function renderPage(initialPath: string = "/agents/agt-1") {
+function renderPage(initialPath = "/agents/agt-1") {
   return render(
     <I18nextProvider i18n={i18n}>
       <MemoryRouter initialEntries={[initialPath]}>
@@ -167,11 +179,9 @@ describe("AgentDetailPage", () => {
     expect(await screen.findByTestId("endpoints-tab")).toBeInTheDocument();
   });
 
-  it("renders Evaluations section", async () => {
-    renderPage();
-    await screen.findByTestId("agent-detail-title");
-    expect(await screen.findByTestId("evaluations-tab")).toBeInTheDocument();
-  });
+  // NOTE: "renders Evaluations section" was removed. EvaluationsTab is not
+  // currently mounted by AgentDetailPage; the evaluations UI was moved out
+  // of the per-agent detail page. Restore this test if/when it returns.
 
   it("renders Schedules section (the runs view now lives inside it)", async () => {
     renderPage();

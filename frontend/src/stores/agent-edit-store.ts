@@ -86,7 +86,7 @@ interface AgentEditState {
  * look it up in the catalog and append its code.
  */
 async function injectBuiltinToolCode(data: Partial<AgentMetadata>): Promise<void> {
-  const toolNames = (data.tool_names as string || "").split(",").map(t => t.trim()).filter(Boolean);
+  const toolNames = (data.tool_names! || "").split(",").map(t => t.trim()).filter(Boolean);
   if (!toolNames.length) return;
 
   const defs = data.tool_definitions || "";
@@ -145,7 +145,7 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     set({ agentId: agentId, agentName: agentName, loading: true, formData: null, pendingSkillFiles: {}, originalSkillFiles: {}, editingSkillId: null, restoredDraft: null });
 
     // API 已经整合了 DDB + S3 数据，不需要 fallback
-    let metadata = await fetchAgentMetadata(agentId);
+    const metadata = await fetchAgentMetadata(agentId);
     if (!metadata) {
       console.warn(`No metadata for ${agentId}`);
     }
@@ -228,7 +228,7 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
     // Inject built-in tool code async, update formData when done
     set({
       agentId: draftId,
-      agentName: (data.display_name || data.name || "New Agent") as string,
+      agentName: (data.display_name || data.name || "New Agent"),
       formData: data,
       originalData: JSON.parse(JSON.stringify(data)),
       loading: false,
@@ -286,8 +286,8 @@ export const useAgentEditStore = create<AgentEditState>((set, get) => ({
       if (key === "skills") {
         // Per-file diff for each skill's changed files
         const { pendingSkillFiles: pending, originalSkillFiles: original } = get();
-        const newSkills = ((formData as Record<string, unknown>).skills as Array<{ id: string; name: string; files: string[] }>) || [];
-        const oldSkills = ((originalData as Record<string, unknown>).skills as Array<{ id: string; name: string; files: string[] }>) || [];
+        const newSkills = ((formData as Record<string, unknown>).skills as { id: string; name: string; files: string[] }[]) || [];
+        const oldSkills = ((originalData as Record<string, unknown>).skills as { id: string; name: string; files: string[] }[]) || [];
         const oldIds = new Set(oldSkills.map(s => s.id));
 
         for (const skill of newSkills) {
@@ -417,8 +417,7 @@ useAgentEditStore.subscribe((state, prev) => {
   if (!agentId || !formData || !originalData || loading) return;
   // Skip spurious no-op updates (the loading=false tail of loadAgent, etc.)
   if (
-    prev &&
-    prev.formData === formData &&
+    prev?.formData === formData &&
     prev.pendingSkillFiles === pendingSkillFiles &&
     prev.originalData === originalData &&
     prev.originalSkillFiles === originalSkillFiles

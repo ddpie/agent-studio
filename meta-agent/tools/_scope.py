@@ -26,9 +26,7 @@ import os
 
 import boto3
 from boto3.dynamodb.conditions import Key
-
-from config import REGION, AGENTS_TABLE
-
+from config import AGENTS_TABLE, REGION
 
 # Role constants — kept here as the single source of truth so tools
 # don't accidentally pass typo'd strings. Matches lambda/shared/auth.py's

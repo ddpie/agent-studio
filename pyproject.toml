@@ -1,0 +1,123 @@
+# Workspace-level Python tooling config (ruff, mypy).
+# Per-package configs live in lambda/pyproject.toml + meta-agent/pyproject.toml
+# but since both consume the same lint rules, we centralise here.
+
+[tool.ruff]
+target-version = "py310"
+line-length = 110
+extend-exclude = [
+    "base/staged-*",
+    "base/.kiro-cache",
+    ".bedrock_agentcore",
+    ".pytest_cache",
+    ".worktrees",
+    "infra/cdk.out",
+    "**/__pycache__",
+    "**/node_modules",
+]
+
+[tool.ruff.lint]
+# Curated subset that catches real bugs without the noise of "E501 line too long
+# in a docstring" style nits. Add categories incrementally.
+select = [
+    "E",      # pycodestyle errors
+    "F",      # pyflakes (unused imports, undefined names)
+    "B",      # flake8-bugbear (likely bugs)
+    "I",      # isort (import sorting)
+    "UP",     # pyupgrade (modern syntax)
+    "C4",     # flake8-comprehensions
+    "PIE",    # flake8-pie (misc lints)
+    "PT",     # flake8-pytest-style
+    "RUF",    # ruff-specific rules
+    "SIM",    # simplify
+    "S",      # bandit (security)
+    "A",      # flake8-builtins (shadowing builtins)
+    "TID",    # flake8-tidy-imports
+    "T20",    # no print statements (use logger)
+]
+ignore = [
+    "E501",   # line-length — handled by formatter, don't lint
+    "S101",   # assert in tests is fine
+    "S311",   # random — we use it for non-crypto IDs
+    "S603",   # subprocess.run with check=False is intentional
+    "S607",   # subprocess with partial path — fine inside controlled env
+    "B008",   # do not perform function call in default arg — fastapi/typer pattern
+    "SIM108", # ternary instead of if-else — readability call
+    # Project-specific: noisy but low-signal in this codebase.
+    "S110",   # try/except: pass — best-effort cleanup is intentional in many places
+    "S112",   # try/except: continue — same
+    "RUF001", "RUF002", "RUF003",  # ambiguous unicode in CN docstrings/comments — by design
+    "E402",   # module-import-not-at-top — sys.modules stub setup pattern in tests
+    "SIM105", # contextlib.suppress vs try/except: pass — readability call
+    "RUF059", # unused unpacked vars — common destructure pattern
+    "T201",   # print — scripts and meta-agent main.py legitimately print
+    "PT018",  # pytest composite assertion — let test authors decide
+    "PT019",  # pytest fixture param without value — false-positive on autouse fixtures
+    "S108",   # /tmp paths — used in build/zip helpers, not user-facing
+    "S102",   # exec — used by template runner; sandbox-controlled
+    "PT022",  # pytest fixture yield style — both forms fine
+    "PT017",  # pytest assert in except — for "must raise" tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = [
+    "S105", "S106", "S107",   # hardcoded passwords in tests are fine
+    "S108",                    # /tmp paths in tests
+    "PT004", "PT011",          # pytest fixture / raises strictness — too noisy
+    "B017",                    # raises-Exception — common in tests
+    "ARG",                     # unused fixture args
+    "T20",                     # print() for debug
+]
+"**/conftest.py" = ["S105", "S106", "S107", "ARG"]
+"meta-agent/templates/agent_template_v2.py" = [
+    # This file is a Python source TEMPLATE for generated agent code; ruff
+    # rules don't apply to template content the way they apply to runtime code.
+    "ALL",
+]
+"scripts/**" = ["T20"]   # scripts may print
+
+[tool.ruff.lint.isort]
+known-first-party = ["shared", "crud", "tools", "templates", "tools_library"]
+combine-as-imports = true
+
+[tool.ruff.format]
+# Default formatter (Black-compatible). No options needed.
+quote-style = "double"
+indent-style = "space"
+
+# ─────────────────────────────────────────────────────────
+# mypy — start strict on shared/ + tools/, expand later
+# ─────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_untyped_defs = false   # enable per-module below
+ignore_missing_imports = true
+exclude = [
+    "base/staged-",
+    "base/.kiro-cache",
+    "infra/cdk.out",
+    "tests/",
+    "__pycache__",
+]
+
+[[tool.mypy.overrides]]
+module = ["shared.*", "shared"]
+disallow_untyped_defs = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = ["crud.*"]
+# Lambda handlers are router-decorated; full strict is noisy. Start with
+# untyped-call detection.
+disallow_untyped_calls = true
+
+[[tool.mypy.overrides]]
+module = ["tools._scope", "tools._workspace"]
+disallow_untyped_defs = true
+

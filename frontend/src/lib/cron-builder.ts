@@ -85,7 +85,7 @@ const RATE_RE = /^rate\(\s*(\d+)\s+(minute|minutes|hour|hours|day|days)\s*\)$/i;
 export function parseExpression(expr: string): ScheduleSpec {
   const trimmed = (expr || "").trim();
 
-  const rate = trimmed.match(RATE_RE);
+  const rate = RATE_RE.exec(trimmed);
   if (rate) {
     const n = parseInt(rate[1], 10);
     const u = rate[2].toLowerCase();
@@ -97,7 +97,7 @@ export function parseExpression(expr: string): ScheduleSpec {
     return { mode: "minutes", rateValue: n, rateUnit: unit };
   }
 
-  const cron = trimmed.match(CRON_SIX);
+  const cron = CRON_SIX.exec(trimmed);
   if (!cron) return { mode: "advanced", raw: trimmed };
   const parts = cron[1].split(/\s+/);
   if (parts.length !== 6) return { mode: "advanced", raw: trimmed };
@@ -215,7 +215,7 @@ function matches(spec: ScheduleSpec, d: Date): boolean {
       return m === (spec.minute ?? 0) && h === (spec.hour ?? 0);
     case "weekly": {
       if (m !== (spec.minute ?? 0) || h !== (spec.hour ?? 0)) return false;
-      const days = spec.weekdays && spec.weekdays.length ? spec.weekdays : [1];
+      const days = spec.weekdays?.length ? spec.weekdays : [1];
       return days.includes(dow);
     }
     case "monthly":
@@ -249,19 +249,6 @@ function advance(spec: ScheduleSpec, d: Date): Date {
   return new Date(d.getTime() + 60_000);
 }
 
-// ─── Formatters ───────────────────────────────────────────────────────
-
-export function formatUtcShort(d: Date, locale = "en"): string {
-  // 2026-04-21 14:05 UTC
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const y = d.getUTCFullYear();
-  const mo = pad(d.getUTCMonth() + 1);
-  const da = pad(d.getUTCDate());
-  const hh = pad(d.getUTCHours());
-  const mm = pad(d.getUTCMinutes());
-  const suffix = locale === "zh" ? "UTC" : "UTC";
-  return `${y}-${mo}-${da} ${hh}:${mm} ${suffix}`;
-}
 
 export function formatLocalShort(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");

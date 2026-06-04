@@ -3,9 +3,8 @@
 import json
 
 import boto3
-from strands import tool
-
 from config import REGION, S3_BUCKET
+from strands import tool
 
 
 def _list_all_manifests() -> dict[str, str]:

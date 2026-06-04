@@ -70,9 +70,11 @@ export default function AgentList({ collapsed = false }: { collapsed?: boolean }
           ? " __UI_BUTTON_PURGE_CONFIRMED__"
           : " __UI_BUTTON_ARCHIVE_RESTORE__";
       const prompt = `Execute ${cmdMap[type]} with agent_id: ${agentId}. Do NOT ask for confirmation.${bypassMarker}`;
-      let result = "";
       const stream = invokeMetaAgent(prompt, [], undefined, undefined, undefined, undefined);
-      for await (const chunk of stream) result += chunk;
+      // Drain the stream — content is shown elsewhere; we only await completion.
+      for await (const _chunk of stream) {
+        void _chunk;
+      }
       await fetchAgents();
     } catch (err) {
       console.error(`${type} failed:`, err);

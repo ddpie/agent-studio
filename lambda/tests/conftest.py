@@ -3,7 +3,7 @@ import json
 import os
 import uuid
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -17,6 +17,23 @@ os.environ["TOOLS_TABLE"] = "test-tools"
 os.environ["S3_BUCKET"] = "test-assets"
 os.environ["POWERTOOLS_SERVICE_NAME"] = "crud-test"
 os.environ["POWERTOOLS_TRACE_DISABLED"] = "1"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_origin_verify(monkeypatch):
+    """Ensure each test starts with a clean ORIGIN_VERIFY_VALUE (empty = check
+    disabled). Tests that need to enable origin-verify checking must set it
+    explicitly via monkeypatch.setattr(crud.handler, "ORIGIN_VERIFY_VALUE", ...).
+
+    Without this, test_handler.py's autouse fixture would set the value to
+    "test-origin", and pytest's monkeypatch teardown order can leak that
+    state into other test files run in the same session.
+    """
+    try:
+        import crud.handler as _h
+        monkeypatch.setattr(_h, "ORIGIN_VERIFY_VALUE", "")
+    except ImportError:
+        pass
 
 
 @pytest.fixture
@@ -36,13 +53,30 @@ def mock_jwt(user_id):
         "email": "test@example.com",
         "token_use": "id",
     }
-    # Patch at BOTH the definition site (shared.auth) AND the call site
-    # (shared.middleware) because middleware does `from shared.auth import
-    # verify_jwt` at import time — the already-bound reference won't see
-    # a patch on the definition module alone.
-    with patch("shared.auth.verify_jwt", return_value=claims) as mock, \
-         patch("shared.middleware.verify_jwt", return_value=claims):
-        yield mock
+    # Patch at BOTH the definition site (shared.auth) AND every call site
+    # that did `from shared.auth import verify_jwt` at import time — the
+    # already-bound reference won't see a patch on the definition module
+    # alone. New CRUD modules with public/JWT endpoints (uploads.py at the
+    # very least) need the same treatment.
+    patches = [
+        patch("shared.auth.verify_jwt", return_value=claims),
+        patch("shared.middleware.verify_jwt", return_value=claims),
+    ]
+    # Optional call sites — patch only if the module imports verify_jwt.
+    for mod_name in ("crud.uploads",):
+        try:
+            import importlib
+            mod = importlib.import_module(mod_name)
+            if hasattr(mod, "verify_jwt"):
+                patches.append(patch(f"{mod_name}.verify_jwt", return_value=claims))
+        except ImportError:
+            pass
+    started = [p.start() for p in patches]
+    try:
+        yield started[0]
+    finally:
+        for p in patches:
+            p.stop()
 
 
 @pytest.fixture

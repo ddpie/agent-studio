@@ -82,7 +82,7 @@ export const useKBStore = create<KBState>((set, get) => ({
   checkIngestion: async (kbId: string) => {
     const resp = await fetchKBIngestion(kbId);
     const detail = get().currentDetail;
-    if (detail && detail.kbId === kbId) {
+    if (detail?.kbId === kbId) {
       set({ currentDetail: { ...detail, ingestion: { ...resp, jobId: "" } } });
     }
     return resp;

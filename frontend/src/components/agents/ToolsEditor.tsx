@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import MonacoEditor from "@monaco-editor/react";
+import { LazyMonacoEditor as MonacoEditor } from "../ui/LazyMonaco";
 import type * as MonacoNS from "monaco-editor";
 import { Plus, Trash2, Sparkles, Maximize2, Minimize2 } from "lucide-react";
 import useIsDark from "../../hooks/useIsDark";
@@ -8,14 +8,14 @@ import { preloadPyodide, checkPythonSyntax, isPyodideReady } from "../../lib/pyo
 import ToolPicker from "./ToolPicker";
 
 /** Extract function name from a @tool code block */
-export function extractFuncName(code: string): string {
-  const m = code.match(/def\s+(\w+)\s*\(/);
+function extractFuncName(code: string): string {
+  const m = /def\s+(\w+)\s*\(/.exec(code);
   return m ? m[1] : "unnamed";
 }
 
 /** Extract first line of docstring as description */
-export function extractDocstring(code: string): string {
-  const m = code.match(/"""(.+?)"""|'''(.+?)'''/s);
+function extractDocstring(code: string): string {
+  const m = /"""(.+?)"""|'''(.+?)'''/s.exec(code);
   if (!m) return "";
   const raw = (m[1] || m[2]).trim();
   // Take first line only
@@ -24,7 +24,7 @@ export function extractDocstring(code: string): string {
 }
 
 /** Split combined tool_definitions into individual tool blocks */
-export function splitTools(defs: string): string[] {
+function splitTools(defs: string): string[] {
   if (!defs.trim()) return [];
   const parts = defs.split(/\n(?=@tool\b)/);
   const result: string[] = [];
@@ -45,7 +45,7 @@ export function splitTools(defs: string): string[] {
 }
 
 /** Combine individual tool blocks into one string */
-export function joinTools(blocks: string[]): { defs: string; names: string } {
+function joinTools(blocks: string[]): { defs: string; names: string } {
   const defs = blocks.filter(Boolean).join("\n\n\n");
   const names = blocks.filter(Boolean).map(extractFuncName).filter(n => n !== "unnamed").join(",");
   return { defs, names };

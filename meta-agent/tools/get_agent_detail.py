@@ -32,11 +32,10 @@ import json
 from datetime import datetime, timezone
 
 import boto3
+from config import AGENTS_TABLE, REGION, S3_BUCKET
 from strands import tool
 
-from config import REGION, S3_BUCKET, AGENTS_TABLE
-from tools._scope import ensure_agent_in_workspace, ROLE_VIEWER
-
+from tools._scope import ROLE_VIEWER, ensure_agent_in_workspace
 
 _FILES_PREVIEW_COUNT = 3
 _TOOL_DEFS_TRUNCATE_BYTES = 2000

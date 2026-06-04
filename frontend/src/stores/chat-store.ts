@@ -58,7 +58,7 @@ export interface Message {
    */
   content: string;
   images?: string[];
-  attachments?: Array<{ name: string; size: number; s3Key: string }>;
+  attachments?: { name: string; size: number; s3Key: string }[];
   /** Tool invocations captured during the turn (streaming order). */
   toolCalls?: ToolCallRecord[];
   /**
@@ -112,7 +112,7 @@ interface ChatState {
 
   switchAgent: (agentId: string | null, agentName: string | null) => void;
   setSelectedModel: (modelId: string) => void;
-  sendMessage: (content: string, images?: string[], modelId?: string, attachments?: Array<{ name: string; size: number; s3Key: string }>) => Promise<void>;
+  sendMessage: (content: string, images?: string[], modelId?: string, attachments?: { name: string; size: number; s3Key: string }[]) => Promise<void>;
   regenerateLastMessage: () => Promise<void>;
   editAndResend: (messageId: string, newContent: string) => Promise<void>;
   cancelStreaming: () => void;
@@ -128,7 +128,7 @@ interface ChatState {
  * streaming concurrently without one cancelling the other. Held at module
  * scope because AbortController is not serializable by zustand persist.
  */
-const _abortControllersByAgent: Map<string, AbortController> = new Map();
+const _abortControllersByAgent = new Map<string, AbortController>();
 
 export function agentKey(agentId: string | null): string {
   return agentId || "meta";
@@ -261,9 +261,9 @@ export function _migrateToV3(persisted: LegacyPersistedState): Partial<ChatState
   // silently fail. Scrub any such legacy value so the store falls back
   // to the Kiro default on next read.
   const BEDROCK_ID_RE = /^(us|global|apac|eu)\./;
-  const metaId = selectedModelByAgent["meta"];
+  const metaId = selectedModelByAgent.meta;
   if (typeof metaId === "string" && BEDROCK_ID_RE.test(metaId)) {
-    selectedModelByAgent["meta"] = null;
+    selectedModelByAgent.meta = null;
   }
 
   return {
@@ -472,7 +472,7 @@ export const useChatStore = create<ChatState>()(
         set((s) => setFlagFor(s, "selectedModelByAgent", key, modelId));
       },
 
-      sendMessage: async (content: string, images?: string[], modelId?: string, attachments?: Array<{ name: string; size: number; s3Key: string }>) => {
+      sendMessage: async (content: string, images?: string[], modelId?: string, attachments?: { name: string; size: number; s3Key: string }[]) => {
         // Snapshot the agent at send time. All subsequent writes target
         // this key — user may navigate away and the live
         // `currentAgentId` may drift, but chunks must still land in the
@@ -562,7 +562,7 @@ export const useChatStore = create<ChatState>()(
                 if (m.id !== assistantMsg.id) return m;
                 const blocks = [...(m.blocks || [])];
                 const last = blocks[blocks.length - 1];
-                if (last && last.kind === "text") {
+                if (last?.kind === "text") {
                   // Mutate a shallow copy so React sees the reference change.
                   blocks[blocks.length - 1] = { kind: "text", text: last.text + text };
                 } else {

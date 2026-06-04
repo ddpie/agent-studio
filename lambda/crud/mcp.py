@@ -13,13 +13,14 @@ the Agent runtime path either.
 """
 import json
 import time
+
 import boto3
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler.api_gateway import Router
 
 from shared.config import REGION, S3_BUCKET, WORKSPACES_TABLE
 from shared.middleware import auth_check
-from shared.response import success, internal_error, bad_request
+from shared.response import bad_request, internal_error, success
 
 router = Router()
 logger = Logger(child=True)

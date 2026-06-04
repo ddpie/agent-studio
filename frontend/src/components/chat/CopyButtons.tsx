@@ -57,7 +57,7 @@ export default function CopyButtons({ content, contentRef }: { content: string; 
       clone.querySelectorAll("details.tool-call").forEach(el => el.remove());
       const svgs = clone.querySelectorAll("svg");
       for (const svg of svgs) {
-        const png = await svgToPng(svg as SVGSVGElement);
+        const png = await svgToPng(svg);
         if (png) {
           const img = document.createElement("img");
           img.src = png;
@@ -84,13 +84,13 @@ export default function CopyButtons({ content, contentRef }: { content: string; 
 
   return (
     <div className="absolute -top-1 right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-gray-800 rounded-md shadow-sm border border-gray-200 dark:border-gray-700 p-0.5">
-      <button onClick={() => copyAs("text")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("chat.copyPlain")}>
+      <button onClick={() => copyAs("text")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("chat.copyPlain")} aria-label={t("chat.copyPlain")}>
         {copied === "text" ? <Check className="w-3 h-3 text-green-500 dark:text-green-400" /> : <Copy className="w-3 h-3 text-gray-400 dark:text-gray-500" />}
       </button>
-      <button onClick={() => copyAs("md")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("chat.copyMarkdown")}>
+      <button onClick={() => copyAs("md")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("chat.copyMarkdown")} aria-label={t("chat.copyMarkdown")}>
         {copied === "md" ? <Check className="w-3 h-3 text-green-500 dark:text-green-400" /> : <FileText className="w-3 h-3 text-gray-400 dark:text-gray-500" />}
       </button>
-      <button onClick={() => copyAs("rich")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("chat.copyRich")}>
+      <button onClick={() => copyAs("rich")} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded" title={t("chat.copyRich")} aria-label={t("chat.copyRich")}>
         {copied === "rich" ? <Check className="w-3 h-3 text-green-500 dark:text-green-400" /> : <ImageIcon className="w-3 h-3 text-gray-400 dark:text-gray-500" />}
       </button>
     </div>

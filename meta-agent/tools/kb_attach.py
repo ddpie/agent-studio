@@ -2,12 +2,13 @@
 
 import json
 import logging
-import boto3
-from strands import tool
 from datetime import datetime, timezone
 
-from config import REGION, KB_TABLE, AGENTS_TABLE
-from tools._scope import current_workspace, ensure_agent_in_workspace, ROLE_EDITOR
+import boto3
+from config import AGENTS_TABLE, KB_TABLE, REGION
+from strands import tool
+
+from tools._scope import ROLE_EDITOR, current_workspace, ensure_agent_in_workspace
 
 log = logging.getLogger("meta_agent.kb_attach")
 

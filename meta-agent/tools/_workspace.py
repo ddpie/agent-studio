@@ -13,8 +13,8 @@ tool invocations and tolerate one-off latency.
 """
 
 import boto3
-
 from config import REGION, SUB_AGENT_ROLE_ARN
+
 from tools._scope import _WORKSPACES_TABLE
 
 

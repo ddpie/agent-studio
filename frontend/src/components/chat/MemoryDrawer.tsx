@@ -26,7 +26,7 @@ function extractText(content: MemoryRecord["content"]): { main: string; context?
   // Preference records: { preference, context, categories }
   if (obj.preference && typeof obj.preference === "string") {
     return {
-      main: obj.preference as string,
+      main: obj.preference,
       context: (obj.context as string) || undefined,
       tags: Array.isArray(obj.categories) ? (obj.categories as string[]) : undefined,
     };
@@ -34,7 +34,7 @@ function extractText(content: MemoryRecord["content"]): { main: string; context?
 
   // Plain text records (facts, summaries)
   if (obj.text && typeof obj.text === "string") {
-    let text = obj.text as string;
+    let text = obj.text;
     // Summaries may contain XML <topic> tags — strip them for cleaner display
     text = text.replace(/<\/?topic[^>]*>/g, "").trim();
     return { main: text };

@@ -5,10 +5,10 @@ import time
 from datetime import datetime, timezone
 
 import boto3
+from config import REGION
 from strands import tool
 
-from config import REGION
-from tools._scope import ensure_agent_in_workspace, list_workspace_agents, ROLE_VIEWER
+from tools._scope import ROLE_VIEWER, ensure_agent_in_workspace, list_workspace_agents
 
 try:
     # Python 3.9+ stdlib. Available on the AgentCore runtime image.

@@ -1,9 +1,10 @@
 """kb_inject — Deploy-time injection of KB retrieve tool into agent zip."""
 
 import json
-import boto3
 
-from config import REGION, KB_TABLE
+import boto3
+from config import KB_TABLE, REGION
+
 from tools_library.kb_retrieve import TOOL_CODE as KB_RETRIEVE_TOOL_CODE
 
 

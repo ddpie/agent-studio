@@ -49,7 +49,7 @@ export function useRunList(agentId: string | null, options: UseRunListOptions = 
         if (!cancelled && mountedRef.current) setLoading(false);
       });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [agentId, scheduleId, limit, tick]);
 
   const loadMore = useCallback(async () => {

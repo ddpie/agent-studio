@@ -204,7 +204,7 @@ def my_tool(query: str, max_results: int = 5) -> str:
     const history = get()
       .messages.filter((m) => m.id !== assistantMsg.id && m.content)
       .map(({ role, content: c }) => ({
-        role: role as "user" | "assistant",
+        role: role,
         content: c.length > 2000 ? c.slice(0, 2000) + "..." : c,
       }));
 
@@ -258,10 +258,10 @@ def my_tool(query: str, max_results: int = 5) -> str:
         const lines = fullText.split("\n");
         let i = 0;
         while (i < lines.length) {
-          if (lines[i].match(/^````__tool_code/)) {
+          if (/^````__tool_code/.exec(lines[i])) {
             const startLine = i;
             i++;
-            while (i < lines.length && !lines[i].match(/^````\s*$/)) {
+            while (i < lines.length && !(/^````\s*$/.exec(lines[i]))) {
               i++;
             }
             if (i < lines.length) {

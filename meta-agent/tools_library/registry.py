@@ -1,9 +1,19 @@
 """Tool library registry — list all available pre-built tools."""
 
 import json
+
 from strands import tool
 
-from tools_library import web_search, fetch_webpage, s3_read, sql_readonly, translate, chart_generator, agent_caller, kb_retrieve
+from tools_library import (
+    agent_caller,
+    chart_generator,
+    fetch_webpage,
+    kb_retrieve,
+    s3_read,
+    sql_readonly,
+    translate,
+    web_search,
+)
 
 _ALL_TOOLS = [
     web_search,

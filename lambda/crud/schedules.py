@@ -21,9 +21,9 @@ The scheduler target role is reused from the agent readonly tier
 (mirrors meta-agent/tools/create_schedule.py); redeploying a dedicated
 scheduler role is deferred to infra.
 """
+import json
 import os
 import re
-import json
 import time
 
 import boto3
@@ -33,7 +33,7 @@ from botocore.exceptions import ClientError
 
 from shared.config import AGENTS_TABLE, REGION, SPANS_LOG_GROUP
 from shared.middleware import auth_check
-from shared.response import success, forbidden, not_found, bad_request, internal_error
+from shared.response import bad_request, forbidden, internal_error, not_found, success
 from shared.validators import validate_id
 
 router = Router()
@@ -315,7 +315,7 @@ def create_schedule(wsId: str, agentId: str):
         if code in ("ValidationException",):
             return bad_request(message)
         logger.exception(
-            "create_schedule failed", extra={"agentId": agentId, "name": full_name, "code": code}
+            "create_schedule failed", extra={"agentId": agentId, "schedule_name": full_name, "code": code}
         )
         return internal_error()
 
@@ -390,7 +390,7 @@ def update_schedule(wsId: str, agentId: str, name: str):
             return not_found()
         logger.exception(
             "update_schedule get failed",
-            extra={"agentId": agentId, "name": name, "code": code},
+            extra={"agentId": agentId, "schedule_name": name, "code": code},
         )
         return internal_error()
 
@@ -457,7 +457,7 @@ def update_schedule(wsId: str, agentId: str, name: str):
             return bad_request(message)
         logger.exception(
             "update_schedule failed",
-            extra={"agentId": agentId, "name": name, "code": code},
+            extra={"agentId": agentId, "schedule_name": name, "code": code},
         )
         return internal_error()
 
@@ -498,7 +498,7 @@ def delete_schedule(wsId: str, agentId: str, name: str):
         if code == "ResourceNotFoundException":
             return not_found()
         logger.exception(
-            "delete_schedule failed", extra={"agentId": agentId, "name": name, "code": code}
+            "delete_schedule failed", extra={"agentId": agentId, "schedule_name": name, "code": code}
         )
         return internal_error()
 
@@ -544,7 +544,7 @@ def run_schedule_now(wsId: str, agentId: str, name: str):
         if code == "ResourceNotFoundException":
             return not_found()
         logger.exception("get_schedule before run-now failed",
-                         extra={"agentId": agentId, "name": name, "code": code})
+                         extra={"agentId": agentId, "schedule_name": name, "code": code})
         return internal_error()
 
     target = existing.get("Target", {}) or {}
@@ -596,7 +596,7 @@ def run_schedule_now(wsId: str, agentId: str, name: str):
         code = e.response.get("Error", {}).get("Code", "")
         message = e.response.get("Error", {}).get("Message", code)
         logger.exception("run-now create_schedule failed",
-                         extra={"agentId": agentId, "name": name, "code": code})
+                         extra={"agentId": agentId, "schedule_name": name, "code": code})
         if code == "ConflictException":
             return bad_request("another manual run is already queued")
         return internal_error(message or "run-now failed")
@@ -682,7 +682,7 @@ def list_schedule_executions(wsId: str, agentId: str, name: str):
         except ClientError as e:
             logger.exception(
                 "schedule executions start_query failed",
-                extra={"agentId": agentId, "name": name,
+                extra={"agentId": agentId, "schedule_name": name,
                        "error_code": e.response.get("Error", {}).get("Code")},
             )
             return []
@@ -693,7 +693,7 @@ def list_schedule_executions(wsId: str, agentId: str, name: str):
             except ClientError as e:
                 logger.exception(
                     "schedule executions get_query_results failed",
-                    extra={"agentId": agentId, "name": name,
+                    extra={"agentId": agentId, "schedule_name": name,
                            "error_code": e.response.get("Error", {}).get("Code")},
                 )
                 return []
@@ -703,7 +703,7 @@ def list_schedule_executions(wsId: str, agentId: str, name: str):
             if status in ("Failed", "Cancelled"):
                 logger.warning(
                     "schedule executions query non-complete",
-                    extra={"query_status": status, "name": name},
+                    extra={"query_status": status, "schedule_name": name},
                 )
                 return []
             time.sleep(0.3)

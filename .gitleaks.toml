@@ -1,0 +1,47 @@
+title = "agent-studio gitleaks config"
+
+# Inherit the default rule set; we only add allowlists below for false
+# positives that are committed by design (test fixtures, CI placeholders).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Project-wide false-positive allowlist"
+
+paths = [
+    # Test fixtures — these are NOT real secrets, they're shapes used to
+    # exercise auth code paths.
+    '''(?i)/tests?/''',
+    '''__tests__''',
+    '''\.test\.(ts|tsx|js|mjs|py)$''',
+    '''\.spec\.(ts|tsx|js|mjs|py)$''',
+    # E2E auth — real secrets live in frontend/e2e/.env.e2e (gitignored).
+    # Only the example template is committed.
+    '''frontend/e2e/\.env\.e2e\.example$''',
+    # Pre-commit security scanner script — its error messages reference the
+    # forbidden patterns it detects, which would otherwise trigger gitleaks.
+    '''scripts/pre-commit-security\.sh$''',
+    # Documentation that explains secret patterns (incident write-ups, ADRs).
+    '''docs/.*\.md$''',
+    # CDK snapshot JSON — generated, contains test placeholders like
+    # "123456789012" that some rules flag as account-ID-like.
+    '''infra/test/__snapshots__/''',
+    # Memory / spec docs.
+    '''\.claude/specs/''',
+    '''\.claude/memory/''',
+]
+
+regexes = [
+    # AWS sample/dummy account ids (12-digit) that appear in test mocks.
+    '''123456789012''',
+    '''000000000000''',
+    # JWT placeholder used in tests.
+    '''Bearer (test-token|tok|X|t)\b''',
+    # Cognito test pool prefix.
+    '''us-east-1_TestPool''',
+    # mock kid / fake JWKs in auth tests.
+    '''mock-key-id''',
+    # base64-padding-style strings that get flagged but are deterministic
+    # placeholders in our test fixtures.
+    '''iVBORw0KGgo=''',
+]

@@ -543,8 +543,8 @@ def main():
         if fe_hash != sync_hash:
             stale.append(f"  frontend: expected {sync_hash}, got {fe_hash or 'missing'}")
         if stale:
-            print(f"ERROR: MCP IAM policy registries are stale!\n" + "\n".join(stale))
-            print(f"\nRun: python scripts/sync-mcp-iam-policies.py")
+            print("ERROR: MCP IAM policy registries are stale!\n" + "\n".join(stale))
+            print("\nRun: python scripts/sync-mcp-iam-policies.py")
             sys.exit(1)
         print(f"OK: registries are up to date (hash: {sync_hash})")
         sys.exit(0)

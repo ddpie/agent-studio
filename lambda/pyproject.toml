@@ -1,0 +1,19 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Default `pytest tests/` skips the integration/ directory because moto
+# is an extra dep. CI runs integration in a dedicated job that targets
+# `tests/integration/` explicitly.
+norecursedirs = ["integration"]
+markers = [
+    "integration: requires moto / aws_credentials fixture",
+]
+
+[tool.mutmut]
+paths_to_mutate = [
+    "shared/auth.py",
+    "shared/permissions.py",
+    "shared/middleware.py",
+]
+tests_dir = ["tests/"]
+also_copy = ["shared/", "crud/", "invoke-node/", "conftest.py"]
+pytest_add_cli_args = ["-x", "-q", "--tb=no"]

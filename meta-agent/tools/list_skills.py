@@ -25,11 +25,10 @@ import json
 
 import boto3
 from boto3.dynamodb.conditions import Key
+from config import REGION
 from strands import tool
 
-from config import REGION
-from tools._scope import current_workspace, require_role, ROLE_VIEWER
-
+from tools._scope import ROLE_VIEWER, current_workspace, require_role
 
 _SKILLS_TABLE = "agent-studio-skills"
 

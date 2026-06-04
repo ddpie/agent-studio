@@ -11,7 +11,8 @@ Usage in route files:
         ...
 """
 from aws_lambda_powertools import Logger
-from shared.auth import verify_jwt, get_membership, check_permission, is_platform_admin
+
+from shared.auth import check_permission, get_membership, is_platform_admin, verify_jwt
 from shared.response import forbidden
 from shared.validators import validate_id
 

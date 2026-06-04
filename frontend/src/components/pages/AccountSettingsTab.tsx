@@ -77,7 +77,7 @@ function MfaSection() {
       setSetupMode(false);
       setCode("");
       toast.success(t("settings.account.mfa.enabled"));
-    } catch (err) {
+    } catch {
       toast.error(t("settings.account.mfa.invalidCode"));
     } finally {
       setVerifying(false);
@@ -207,7 +207,7 @@ export default function AccountSettingsTab() {
       setInitialName(attrs.name || "");
       setName(attrs.name || "");
     } catch (err) {
-      toast.error(err instanceof Error ? err : t("settings.account.loadFailed"));
+      toast.error(err instanceof Error ? err.message : t("settings.account.loadFailed"));
     } finally {
       setLoadingProfile(false);
     }
@@ -227,7 +227,7 @@ export default function AccountSettingsTab() {
       setInitialName(name.trim());
       toast.success(t("settings.account.profileSaved"));
     } catch (err) {
-      toast.error(err instanceof Error ? err : t("settings.account.profileSaveFailed"));
+      toast.error(err instanceof Error ? err.message : t("settings.account.profileSaveFailed"));
     } finally {
       setSavingProfile(false);
     }
@@ -259,9 +259,7 @@ export default function AccountSettingsTab() {
       clearPasswordFields();
       toast.success(t("settings.account.passwordChanged"));
     } catch (err) {
-      // Never log password values. Only the (non-sensitive) error message is surfaced.
-      toast.error(err instanceof Error ? err : t("settings.account.passwordChangeFailed"));
-      // Clear the old password field so a retry requires re-typing.
+      toast.error(err instanceof Error ? err.message : t("settings.account.passwordChangeFailed"));
       setOldPassword("");
     } finally {
       setChangingPassword(false);
@@ -283,7 +281,7 @@ export default function AccountSettingsTab() {
       toast.success(t("settings.account.signedOutAll"));
       // The Authenticator wrapper in App.tsx will re-render back to sign-in automatically.
     } catch (err) {
-      toast.error(err instanceof Error ? err : t("settings.account.signOutAllFailed"));
+      toast.error(err instanceof Error ? err.message : t("settings.account.signOutAllFailed"));
     } finally {
       setSigningOutAll(false);
     }

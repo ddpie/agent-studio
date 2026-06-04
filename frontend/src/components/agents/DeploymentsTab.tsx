@@ -39,7 +39,7 @@ export default function DeploymentsTab({ agentId }: DeploymentsTabProps) {
           {t("deployments.loadError")}: {error.message}
         </div>
       )}
-      {data && data.length === 0 && (
+      {data?.length === 0 && (
         <div className="text-sm text-gray-500 dark:text-gray-400">{t("deployments.empty")}</div>
       )}
       {data && data.length > 0 && (

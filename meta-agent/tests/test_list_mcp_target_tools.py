@@ -13,7 +13,6 @@ import sys
 import types
 from unittest.mock import MagicMock
 
-
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")
 if not hasattr(_mock_strands, "tool"):
     _mock_strands.tool = lambda f: f
@@ -42,6 +41,7 @@ def _make_s3_mock(manifest_names: list[str], tools_by_manifest: dict):
 def test_cloudwatch_prefers_short_match_not_applicationsignals(monkeypatch):
     """Regression guard for the AWSCloudOpsAssistant root cause."""
     import boto3
+
     from tools import list_mcp_target_tools as mod
     s3 = _make_s3_mock(
         ["mcp-cloudwatch-applicationsignals", "mcp-cloudwatch", "mcp-cloudtrail"],
@@ -61,6 +61,7 @@ def test_cloudwatch_prefers_short_match_not_applicationsignals(monkeypatch):
 def test_applicationsignals_exact_name_still_works(monkeypatch):
     """Users asking specifically for the applicationsignals manifest get it."""
     import boto3
+
     from tools import list_mcp_target_tools as mod
     s3 = _make_s3_mock(
         ["mcp-cloudwatch-applicationsignals", "mcp-cloudwatch"],
@@ -78,6 +79,7 @@ def test_applicationsignals_exact_name_still_works(monkeypatch):
 def test_hyphen_normalization_still_works(monkeypatch):
     """'cloudtrail' should still match 'mcp-cloudtrail.json'."""
     import boto3
+
     from tools import list_mcp_target_tools as mod
     s3 = _make_s3_mock(
         ["mcp-cloudtrail"],
@@ -91,6 +93,7 @@ def test_hyphen_normalization_still_works(monkeypatch):
 def test_unknown_target_returns_empty_with_hint(monkeypatch):
     """When no match, return an empty tools list + available_targets for recovery."""
     import boto3
+
     from tools import list_mcp_target_tools as mod
     s3 = _make_s3_mock(["mcp-iam"], {"mcp-iam": []})
     monkeypatch.setattr(boto3, "client", lambda *a, **kw: s3)

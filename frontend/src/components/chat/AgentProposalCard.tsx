@@ -69,12 +69,12 @@ export default function AgentProposalCard({ json }: { json: string }) {
   const mcpTargets = Array.isArray(proposal.mcp_targets)
     ? proposal.mcp_targets as string[]
     : typeof proposal.mcp_targets === "string" && proposal.mcp_targets
-      ? (proposal.mcp_targets as string).split(",").map(s => s.trim()).filter(Boolean)
+      ? (proposal.mcp_targets).split(",").map(s => s.trim()).filter(Boolean)
       : [];
   const skillNames = Array.isArray(proposal.skills)
     ? (proposal.skills as unknown[]).map(s => String(s).trim()).filter(Boolean)
     : typeof proposal.skills === "string" && proposal.skills
-      ? (proposal.skills as string).split(",").map(s => s.trim()).filter(Boolean)
+      ? (proposal.skills).split(",").map(s => s.trim()).filter(Boolean)
       : [];
 
   const handleEditAndCreate = async () => {

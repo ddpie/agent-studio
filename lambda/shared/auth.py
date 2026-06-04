@@ -1,9 +1,11 @@
 """JWT verification + workspace membership check."""
 import json
 import urllib.request
+
 import boto3
-from jose import jwt, JWTError
-from shared.config import COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID, REGION, WORKSPACES_TABLE
+from jose import JWTError, jwt
+
+from shared.config import COGNITO_CLIENT_ID, COGNITO_USER_POOL_ID, REGION, WORKSPACES_TABLE
 
 ROLE_LEVEL = {"viewer": 0, "editor": 1, "admin": 2, "owner": 3}
 

@@ -1,0 +1,164 @@
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Daily at 02:00 UTC — re-scan main for new CVEs / secrets in history.
+    - cron: '0 2 * * *'
+
+permissions:
+  contents: read
+  security-events: write   # for SARIF upload
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────────────────
+  # Project-specific red-line scan (CloudFront/Lambda public-access)
+  # ─────────────────────────────────────────────────────────
+  red-lines:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: pre-commit-security.sh against full tree
+        run: |
+          # The hook scans staged diff; for CI run it against every TS / mjs
+          # under infra/ and lambda/ to catch anything that might have slipped
+          # through a local install.
+          pattern_authtype='FunctionUrlAuthType\.NONE|authType:[[:space:]]*["'\'']NONE["'\'']'
+          pattern_principal='principal:[[:space:]]*new[[:space:]]+[A-Za-z_.]*AnyPrincipal|Principal:[[:space:]]*["'\'']\*["'\'']'
+
+          fail=0
+          while IFS= read -r f; do
+            if grep -nE "$pattern_authtype" "$f" \
+               | grep -vE ':[[:space:]]*(//|\*|#|\bauthtype\b)' \
+               | grep -vE '__tests__|public-access-guard\.ts'; then
+              echo "::error file=$f::FunctionUrlAuthType.NONE detected"; fail=1
+            fi
+            if grep -nE "$pattern_principal" "$f" \
+               | grep -vE ':[[:space:]]*(//|\*|#)' \
+               | grep -vE '__tests__|public-access-guard\.ts'; then
+              echo "::error file=$f::Principal:'*' detected"; fail=1
+            fi
+          done < <(find infra lambda -type f \( -name '*.ts' -o -name '*.mjs' \) -not -path '*/node_modules/*')
+
+          exit $fail
+
+  # ─────────────────────────────────────────────────────────
+  # Secret scan (full git history)
+  # ─────────────────────────────────────────────────────────
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history for diff-aware scan
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Don't fail the build on existing secrets in history (would block
+          # all PRs). Only fail on NEW secrets introduced by the diff.
+          # Configurable per-repo in .gitleaks.toml if more strictness needed.
+          config-path: .gitleaks.toml
+
+  # ─────────────────────────────────────────────────────────
+  # SAST — Python (bandit) + multi-language (semgrep)
+  # ─────────────────────────────────────────────────────────
+  bandit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install bandit[toml]
+      - name: bandit
+        run: |
+          bandit -r lambda/ meta-agent/ \
+                 -x '*/tests/*,*/__pycache__/*' \
+                 --severity-level medium \
+                 --confidence-level medium \
+                 -f txt || exit_code=$?
+          # Don't hard-fail yet — emit findings as warnings until baseline is clean.
+          # Flip to `exit ${exit_code:-0}` once the baseline is suppressed.
+          exit 0
+
+  semgrep:
+    runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: semgrep ci
+        run: |
+          semgrep ci \
+            --config=p/python \
+            --config=p/typescript \
+            --config=p/owasp-top-ten \
+            --config=p/secrets \
+            --error || exit_code=$?
+          # Same "warn-only baseline" pattern as bandit.
+          exit 0
+
+  # ─────────────────────────────────────────────────────────
+  # Dependency vulnerability scan
+  # ─────────────────────────────────────────────────────────
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pip-audit
+      - name: pip-audit on base/requirements.txt
+        run: |
+          pip-audit -r base/requirements.txt --strict || exit_code=$?
+          exit 0   # warn-only baseline
+
+  npm-audit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [frontend, infra]
+    defaults:
+      run:
+        working-directory: ${{ matrix.dir }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: npm audit (high+ severity)
+        run: |
+          npm audit --audit-level=high || exit_code=$?
+          # warn-only baseline; flip to hard-fail once the existing audit
+          # backlog is fixed.
+          exit 0
+
+  # ─────────────────────────────────────────────────────────
+  # CodeQL — GitHub-native SAST
+  # ─────────────────────────────────────────────────────────
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

@@ -7,6 +7,7 @@
 #   --skip-frontend    Skip frontend build + deploy
 #   --only-frontend    Only build + deploy frontend
 #   --only-agent       Only update meta-agent code (≈ deploy-agentcore.sh)
+#   --force-base       Force rebuild + reupload base/deployment.zip even if it exists
 #   --dry-run          Preflight checks + cdk diff only
 set -euo pipefail
 
@@ -25,6 +26,7 @@ SKIP_INFRA=false
 SKIP_FRONTEND=false
 ONLY_FRONTEND=false
 ONLY_AGENT=false
+FORCE_BASE=false
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
@@ -34,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     --skip-frontend) SKIP_FRONTEND=true; shift ;;
     --only-frontend) ONLY_FRONTEND=true; shift ;;
     --only-agent) ONLY_AGENT=true; shift ;;
+    --force-base) FORCE_BASE=true; shift ;;
     --dry-run) DRY_RUN=true; shift ;;
     *) echo "Unknown flag: $1"; exit 1 ;;
   esac
@@ -56,17 +59,17 @@ echo "  Account: $ACCOUNT_ID"
 echo "  Bucket:  $S3_BUCKET"
 
 # Version checks
-check_version() {
-  local cmd="$1" min="$2"
+require_cmd() {
+  local cmd="$1"
   if ! command -v "$cmd" &>/dev/null; then
     echo "ERROR: $cmd not found. Please install it."; exit 1
   fi
 }
-check_version node ""
-check_version python3 ""
-check_version aws ""
-check_version npm ""
-check_version jq ""
+require_cmd node
+require_cmd python3
+require_cmd aws
+require_cmd npm
+require_cmd jq
 
 NODE_VER=$(node --version | sed 's/v//' | cut -d. -f1)
 if [[ "$NODE_VER" -lt 18 ]]; then
@@ -101,9 +104,7 @@ if [[ "$ONLY_FRONTEND" == false ]]; then
 fi
 
 # ORIGIN_VERIFY_SECRET — generate if not set, persist immediately
-if [[ -f "$PROJECT_ROOT/.env" ]]; then
-  set -a; source "$PROJECT_ROOT/.env"; set +a
-fi
+safe_source_env "$PROJECT_ROOT/.env"
 if [[ -z "${ORIGIN_VERIFY_SECRET:-}" ]]; then
   ORIGIN_VERIFY_SECRET=$(openssl rand -hex 32)
   echo "  Generated ORIGIN_VERIFY_SECRET"
@@ -229,30 +230,41 @@ if [[ "$SKIP_INFRA" == false ]]; then
     '[{"IndexName":"workspace-index","KeySchema":[{"AttributeName":"workspace_id","KeyType":"HASH"},{"AttributeName":"created_at","KeyType":"RANGE"}],"Projection":{"ProjectionType":"ALL"}}]' \
     'AttributeName=toolId,AttributeType=S AttributeName=workspace_id,AttributeType=S AttributeName=created_at,AttributeType=S'
 
-  # base/deployment.zip
-  if ! aws s3api head-object --bucket "$S3_BUCKET" --key "base/deployment.zip" --region "$REGION" 2>/dev/null; then
-    echo "  Building base/deployment.zip..."
-    TMPDIR=$(mktemp -d)
-    # AgentCore runtime is x86_64 / Python 3.10. Pin platform + version so
-    # native wheels (pydantic-core, lxml, etc.) are downloaded for the
-    # target, not the dev host's arch. --no-compile skips .pyc generation
-    # which the runtime also rejects as cross-arch.
-    pip install -q --no-compile \
-      --platform manylinux2014_aarch64 --only-binary=:all: \
-      --python-version 3.10 \
-      -t "$TMPDIR" \
-      strands-agents bedrock-agentcore boto3 requests httpx beautifulsoup4 \
-      markdownify pyyaml python-dateutil pydantic tabulate websocket-client \
-      exceptiongroup anyio \
-      "pypdf>=4" "openpyxl>=3.1" \
-      "aws-opentelemetry-distro>=0.10.0"
-    find "$TMPDIR" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-    (cd "$TMPDIR" && zip -qr /tmp/agent-studio-base.zip .)
-    aws s3 cp /tmp/agent-studio-base.zip "s3://$S3_BUCKET/base/deployment.zip" --region "$REGION"
-    rm -rf "$TMPDIR" /tmp/agent-studio-base.zip
+  # base/deployment.zip — build from pinned requirements.txt via build-base-zip.sh
+  # to ensure version consistency across all deploys.
+  # Rebuilds if: S3 object missing, --force-base, or requirements.txt changed since
+  # last upload (tracked via S3 object metadata).
+  _needs_base_rebuild=false
+  if [[ "$FORCE_BASE" == true ]]; then
+    _needs_base_rebuild=true
+    echo "  --force-base: will rebuild base zip."
+  elif ! aws s3api head-object --bucket "$S3_BUCKET" --key "base/deployment.zip" --region "$REGION" 2>/dev/null; then
+    _needs_base_rebuild=true
+    echo "  base/deployment.zip missing in S3."
+  else
+    # Check if requirements.txt changed since last upload (compare md5)
+    _local_reqs_hash=$(md5sum "$PROJECT_ROOT/base/requirements.txt" 2>/dev/null | cut -d' ' -f1 || echo "")
+    _remote_reqs_hash=$(aws s3api head-object --bucket "$S3_BUCKET" --key "base/deployment.zip" \
+      --region "$REGION" --query 'Metadata.requirementsHash' --output text 2>/dev/null || echo "")
+    if [[ -n "$_local_reqs_hash" && "$_local_reqs_hash" != "$_remote_reqs_hash" ]]; then
+      _needs_base_rebuild=true
+      echo "  requirements.txt changed since last upload — rebuilding base zip."
+    fi
+  fi
+
+  if [[ "$_needs_base_rebuild" == true ]]; then
+    echo "  Building base/deployment.zip from requirements.txt..."
+    bash "$SCRIPT_DIR/build-base-zip.sh"
+    _reqs_hash=$(md5sum "$PROJECT_ROOT/base/requirements.txt" | cut -d' ' -f1)
+    aws s3 cp "$PROJECT_ROOT/base/deployment.zip" "s3://$S3_BUCKET/base/deployment.zip" \
+      --region "$REGION" --metadata "requirementsHash=${_reqs_hash}"
+    if [[ -f "$PROJECT_ROOT/base/sub-agent-deployment.zip" ]]; then
+      aws s3 cp "$PROJECT_ROOT/base/sub-agent-deployment.zip" "s3://$S3_BUCKET/base/sub-agent-deployment.zip" \
+        --region "$REGION" --metadata "requirementsHash=${_reqs_hash}"
+    fi
     echo "  base/deployment.zip uploaded."
   else
-    echo "  base/deployment.zip exists, skipping."
+    echo "  base/deployment.zip up-to-date, skipping."
   fi
 
   # skills/index.json
@@ -315,14 +327,6 @@ PYEOF
   echo ""
 fi
 
-# ============================================================
-# Phase 2.5: Build base/deployment.zip (shared sub-agent deps)
-# ============================================================
-if [[ "$SKIP_INFRA" == false && ! -f "$PROJECT_ROOT/base/deployment.zip" ]]; then
-  echo "=== Phase 2.5: Build base/deployment.zip ==="
-  bash "$SCRIPT_DIR/build-base-zip.sh"
-  echo ""
-fi
 
 # ============================================================
 # Phase 3: CDK deploy
@@ -352,10 +356,14 @@ if [[ "$SKIP_INFRA" == false ]]; then
   cd "$INFRA_DIR"
   npm install --silent
 
-  # Bootstrap both regions
-  npx cdk bootstrap "aws://$ACCOUNT_ID/$REGION" 2>&1 | tail -1
+  # Bootstrap both regions (show full output on failure)
+  if ! npx cdk bootstrap "aws://$ACCOUNT_ID/$REGION"; then
+    echo "ERROR: CDK bootstrap failed for $REGION"; exit 1
+  fi
   if [[ "$REGION" != "us-east-1" ]]; then
-    npx cdk bootstrap "aws://$ACCOUNT_ID/us-east-1" 2>&1 | tail -1
+    if ! npx cdk bootstrap "aws://$ACCOUNT_ID/us-east-1"; then
+      echo "ERROR: CDK bootstrap failed for us-east-1"; exit 1
+    fi
   fi
 
   assert_base_zip_healthy "pre-cdk"
@@ -430,7 +438,7 @@ if [[ "$SKIP_FRONTEND" == false ]]; then
   echo "=== Phase 4b: Build + deploy frontend ==="
 
   # Re-source .env to pick up latest values
-  set -a; source "$PROJECT_ROOT/.env"; set +a
+  safe_source_env "$PROJECT_ROOT/.env"
 
   FRONTEND_BUCKET="${AGENT_STUDIO_FRONTEND_BUCKET:-agent-studio-frontend-${ACCOUNT_ID}-${REGION}}"
   CF_ID="${AGENT_STUDIO_CLOUDFRONT_ID:-}"
@@ -456,7 +464,7 @@ echo "=========================================="
 echo "  Agent Studio deployed!"
 echo "=========================================="
 if [[ -f "$PROJECT_ROOT/.env" ]]; then
-  set -a; source "$PROJECT_ROOT/.env"; set +a
+  safe_source_env "$PROJECT_ROOT/.env"
   echo "  URL:         https://${AGENT_STUDIO_CLOUDFRONT_DOMAIN:-<pending>}"
   echo "  Meta-Agent:  ${AGENT_STUDIO_META_AGENT_ID:-<pending>}"
   echo "  Region:      $REGION"

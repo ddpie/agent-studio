@@ -21,7 +21,7 @@ function detectSource(url: string): "clawhub" | "github-dir" | "github-file" | "
   if (/clawhub\.ai\/|claw-hub\.net\//.test(url)) return "clawhub";
   if (/github\.com\/[^/]+\/[^/]+\/tree\//.test(url)) return "github-dir";
   if (/github\.com\/[^/]+\/[^/]+\/blob\//.test(url)) return "github-file";
-  if (/gist\.github\.com\//.test(url)) return "gist";
+  if (url.includes('gist.github.com/')) return "gist";
   return "raw";
 }
 
@@ -54,7 +54,7 @@ function shouldSkipPath(relPath: string): boolean {
 
 /** Fetch ClawHub skill as zip → extract files */
 async function fetchClawHub(url: string, onProgress?: ProgressFn): Promise<Record<string, string>> {
-  const match = url.match(/(?:clawhub\.ai|claw-hub\.net)\/([^/?#]+\/[^/?#]+)/);
+  const match = /(?:clawhub\.ai|claw-hub\.net)\/([^/?#]+\/[^/?#]+)/.exec(url);
   if (!match) throw new Error("Cannot parse ClawHub slug from URL");
   const slug = match[1];
 
@@ -85,7 +85,7 @@ async function fetchClawHub(url: string, onProgress?: ProgressFn): Promise<Recor
  * Fallback: Meta-Agent backend if API rate limited.
  */
 async function fetchGitHubDir(url: string, onProgress?: ProgressFn): Promise<Record<string, string>> {
-  const match = url.match(/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)(?:\/(.*))?/);
+  const match = /github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)(?:\/(.*))?/.exec(url);
   if (!match) throw new Error("Cannot parse GitHub directory URL");
   const [, owner, repo, branch, path] = match;
   const basePath = (path || "").replace(/\/$/, "");
@@ -103,7 +103,7 @@ async function fetchGitHubDir(url: string, onProgress?: ProgressFn): Promise<Rec
     return fetchGitHubDirViaBackend(url, onProgress);
   }
 
-  const treeData: { tree: Array<{ path: string; type: string; size?: number }> } = await treeResp.json();
+  const treeData: { tree: { path: string; type: string; size?: number }[] } = await treeResp.json();
 
   const fileEntries = treeData.tree.filter(item => {
     if (item.type !== "blob") return false;
@@ -148,7 +148,7 @@ async function fetchGitHubDirViaBackend(url: string, onProgress?: ProgressFn): P
     fullText += chunk;
   }
 
-  const idMatch = fullText.match(/"skill_id"\s*:\s*"([^"]+)"/);
+  const idMatch = /"skill_id"\s*:\s*"([^"]+)"/.exec(fullText);
   if (!idMatch) throw new Error("Backend import failed — check Meta-Agent logs");
 
   return { __meta_agent_imported: idMatch[1] };
@@ -156,7 +156,7 @@ async function fetchGitHubDirViaBackend(url: string, onProgress?: ProgressFn): P
 
 /** Fetch a single file from GitHub (blob URL → raw) */
 async function fetchGitHubFile(url: string): Promise<string> {
-  const match = url.match(/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.*)/);
+  const match = /github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.*)/.exec(url);
   if (!match) throw new Error("Cannot parse GitHub file URL");
   const [, owner, repo, branch, path] = match;
   const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
@@ -167,7 +167,7 @@ async function fetchGitHubFile(url: string): Promise<string> {
 
 /** Fetch all files from a GitHub Gist */
 async function fetchGist(url: string): Promise<Record<string, string>> {
-  const match = url.match(/gist\.github\.com\/(?:[^/]+\/)?([a-f0-9]+)/);
+  const match = /gist\.github\.com\/(?:[^/]+\/)?([a-f0-9]+)/.exec(url);
   if (!match) throw new Error("Cannot parse Gist URL");
   const gistId = match[1];
 

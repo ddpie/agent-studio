@@ -19,11 +19,9 @@ layout. Embedding keeps runtime single-file; we parse the same string
 the deploy step writes.
 """
 import ast
-import os
 import sys
 import types
 from unittest.mock import MagicMock
-
 
 # ── Minimal module stubs (same pattern as sibling tests) ──────────────────
 _mock_strands = sys.modules.get("strands") or types.ModuleType("strands")

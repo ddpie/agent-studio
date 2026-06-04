@@ -18,7 +18,7 @@ function splitToolBlocks(defs: string): string[] {
 
 /** Extract function name from a tool block */
 function getFuncName(block: string): string {
-  const m = block.match(/def\s+(\w+)\s*\(/);
+  const m = /def\s+(\w+)\s*\(/.exec(block);
   return m ? m[1] : block.slice(0, 30);
 }
 
@@ -177,7 +177,7 @@ const AssistantMsg = memo(function AssistantMsg({ msg, isLastAssistant, isStream
                   </div>
                 );
               }
-              const updatedMatch = part.match(/---updated:(.+)---/);
+              const updatedMatch = /---updated:(.+)---/.exec(part);
               if (updatedMatch) {
                 const fields = updatedMatch[1].split(",");
                 return (
@@ -301,7 +301,7 @@ export default function EditAssistant() {
       }
       if (key === "tool_definitions" && typeof value === "string" && formData?.tool_definitions) {
         // Sanitize: strip any non-@tool code (template boilerplate like _stream_with_tools, @app.entrypoint)
-        const sanitized = (value as string)
+        const sanitized = (value)
           .replace(/^(async\s+)?def\s+_\w+[\s\S]*?(?=\n@tool\b|\n$)/gm, "") // remove def _private_func blocks
           .replace(/@app\.\w+[\s\S]*$/gm, "") // remove @app.entrypoint and everything after
           .replace(/if\s+__name__\s*==[\s\S]*$/gm, "") // remove if __name__ block

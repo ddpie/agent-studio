@@ -22,11 +22,10 @@ shouldn't).
 import json
 
 import boto3
+from config import REGION
 from strands import tool
 
-from config import REGION
-from tools._scope import ensure_agent_in_workspace, ROLE_ADMIN, ROLE_EDITOR
-
+from tools._scope import ROLE_ADMIN, ROLE_EDITOR, ensure_agent_in_workspace
 
 _SECRET_KEY_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
 

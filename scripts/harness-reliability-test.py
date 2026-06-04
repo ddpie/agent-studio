@@ -19,7 +19,6 @@ import argparse
 import json
 import random
 import string
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone

@@ -3,9 +3,9 @@
 import json
 
 import boto3
+from config import REGION
 from strands import tool
 
-from config import REGION
 from tools._workspace import _get_workspace_role_arn
 
 try:

@@ -6,7 +6,7 @@
 // SYNC_HASH: b94a3684665b
 
 
-export type Sensitivity = "low" | "medium" | "high";
+type Sensitivity = "low" | "medium" | "high";
 
 export interface McpTargetDef {
   name: string;

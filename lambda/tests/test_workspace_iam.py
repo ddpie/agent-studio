@@ -2,7 +2,7 @@
 and workspace deletion IAM cleanup (in crud/workspaces.py).
 """
 import json
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -21,6 +21,7 @@ def inject_env(monkeypatch):
     monkeypatch.setenv("WORKSPACE_BOUNDARY_ARN",
                        "arn:aws:iam::123456789012:policy/AgentStudioWorkspaceCeiling")
     import importlib
+
     import shared.config as _cfg
     importlib.reload(_cfg)
     # Force the module-level constants in workspace_iam to pick up reloaded config.
@@ -113,11 +114,12 @@ class TestCreateWorkspaceRole:
         assert data["roleArn"] == existing_arn
 
     def test_rejects_non_admin(self, mock_jwt, user_id, workspace_id):
+        """POST /role is gated on check_platform_admin (Cognito group), not auth_check."""
         from crud.handler import app
         from shared.response import forbidden
 
-        with patch("crud.workspace_iam.auth_check") as auth:
-            auth.return_value = (None, None, None, forbidden())
+        with patch("crud.workspace_iam.check_platform_admin") as ck:
+            ck.return_value = (user_id, False, forbidden())
             ev = _event("POST", f"/api/workspaces/{workspace_id}/role",
                         path_params={"wsId": workspace_id})
             resp = app.resolve(ev, MagicMock())
@@ -163,14 +165,16 @@ class TestGrantMcp:
         assert "cloudwatch" in data["mcpGrants"]
         assert "policySize" in data
 
-        # Verify IAM put_role_policy was called with MCP-Access.
+        # Verify IAM put_role_policy was called with WorkspaceGrants.
         put_call = fake_iam.put_role_policy.call_args
-        assert put_call.kwargs["PolicyName"] == "MCP-Access"
+        assert put_call.kwargs["PolicyName"] == "WorkspaceGrants"
         policy_doc = json.loads(put_call.kwargs["PolicyDocument"])
         actions = []
         for stmt in policy_doc["Statement"]:
             actions.extend(stmt["Action"])
-        assert "cloudwatch:DescribeAlarms" in actions
+        # Registry uses wildcards (cloudwatch:Describe*) instead of explicit
+        # actions; check for the expected service prefixes.
+        assert any(a.startswith("cloudwatch:") for a in actions)
         assert "cloudtrail:LookupEvents" in actions
 
     def test_rejects_unknown_targets(self, mock_jwt, user_id, workspace_id):
@@ -300,7 +304,7 @@ class TestRevokeMcp:
 
         # When all grants removed, policy should be deleted (not put).
         fake_iam.delete_role_policy.assert_called_once_with(
-            RoleName=role_name, PolicyName="MCP-Access"
+            RoleName=role_name, PolicyName="WorkspaceGrants"
         )
 
 
@@ -366,7 +370,8 @@ class TestGetPermissions:
         data = json.loads(resp["body"])
         assert data["hasRole"] is False
 
-    def test_rejects_missing_actions_param(self, mock_jwt, user_id, workspace_id):
+    def test_missing_actions_param_returns_role_probe(self, mock_jwt, user_id, workspace_id):
+        """Empty actions=just probe role existence (200, hasRole=True, results=[])."""
         from crud.handler import app
 
         fake_table = MagicMock()
@@ -384,7 +389,10 @@ class TestGetPermissions:
                         path_params={"wsId": workspace_id})
             resp = app.resolve(ev, MagicMock())
 
-        assert resp["statusCode"] == 400
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        assert data["hasRole"] is True
+        assert data["results"] == []
 
     def test_batches_large_action_lists(self, mock_jwt, user_id, workspace_id):
         """SimulatePrincipalPolicy allows max 25 actions per call — verify batching."""
@@ -437,8 +445,9 @@ class TestBuildMcpPolicy:
         assert policy is not None
         assert policy["Version"] == "2012-10-17"
         sids = {s["Sid"] for s in policy["Statement"]}
-        assert "McpCloudWatch" in sids
-        assert "McpCloudTrail" in sids
+        # SIDs come from mcp_iam_registry.yaml — capitalized target names without prefix
+        assert "Cloudwatch" in sids
+        assert "Cloudtrail" in sids
 
     def test_returns_none_for_no_iam_targets(self):
         from crud.workspace_iam import _build_mcp_policy
@@ -456,7 +465,7 @@ class TestBuildMcpPolicy:
         policy = _build_mcp_policy(["cloudwatch", "cloudwatch"])
         assert policy is not None
         sids = [s["Sid"] for s in policy["Statement"]]
-        assert sids.count("McpCloudWatch") == 1
+        assert sids.count("Cloudwatch") == 1
 
 
 # ──────────────────────────────────────────────────────────
@@ -542,6 +551,189 @@ class TestDeleteWorkspaceIamRole:
             # Should not raise — best-effort cleanup.
             _delete_workspace_iam_role(workspace_meta)
 
+    def test_role_not_admin_returns_forbidden(self, mock_jwt, user_id, workspace_id):
+        """Authenticated but not in platform-admins → 403."""
+        from crud.handler import app
+
+        with patch("crud.workspace_iam.check_platform_admin") as ck:
+            ck.return_value = (user_id, False, None)
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/role",
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 403
+
+    def test_role_missing_account_id_returns_500(self, mock_jwt, user_id, workspace_id):
+        """ACCOUNT_ID is required to construct trust policy."""
+        from crud.handler import app
+
+        with patch("crud.workspace_iam.ACCOUNT_ID", ""):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/role",
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 500
+        assert "ACCOUNT_ID" in json.loads(resp["body"])["error"]
+
+    def test_role_missing_boundary_arn_returns_500(self, mock_jwt, user_id, workspace_id):
+        from crud.handler import app
+
+        with patch("crud.workspace_iam.WORKSPACE_BOUNDARY_ARN", ""):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/role",
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 500
+        assert "WORKSPACE_BOUNDARY_ARN" in json.loads(resp["body"])["error"]
+
+    def test_role_workspace_not_found(self, mock_jwt, user_id, workspace_id):
+        """No META row for workspace → 404."""
+        from crud.handler import app
+
+        fake_table = MagicMock()
+        fake_table.get_item.return_value = {}
+
+        with patch("crud.workspace_iam._get_table", return_value=fake_table):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/role",
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 404
+
+    def test_role_existing_iam_role_is_bound(self, mock_jwt, user_id, workspace_id):
+        """If create_role would conflict but get_role finds the role, reuse its ARN."""
+        from crud.handler import app
+
+        fake_table = MagicMock()
+        fake_iam = MagicMock()
+        meta_item = {"workspaceId": workspace_id, "sk": "META", "name": "WS"}
+        fake_table.get_item.return_value = {"Item": meta_item}
+        fake_table.update_item.return_value = {}
+        fake_iam.exceptions.NoSuchEntityException = type("NoSuchEntityException", (Exception,), {})
+        # get_role succeeds → reuse the existing role's ARN.
+        existing_arn = f"arn:aws:iam::123456789012:role/AgentStudio-ws-{workspace_id[:20]}-us-east-1"
+        fake_iam.get_role.return_value = {"Role": {"Arn": existing_arn}}
+
+        with patch("crud.workspace_iam._get_table", return_value=fake_table), \
+             patch("crud.workspace_iam._get_iam", return_value=fake_iam):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/role",
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+
+        assert resp["statusCode"] == 201
+        data = json.loads(resp["body"])
+        assert data["roleArn"] == existing_arn
+        # No create_role call when an existing role was bound.
+        fake_iam.create_role.assert_not_called()
+
+    def test_role_create_role_failure_returns_500(self, mock_jwt, user_id, workspace_id):
+        """If create_role itself raises, surface the 500."""
+        from crud.handler import app
+
+        fake_table = MagicMock()
+        fake_iam = MagicMock()
+        meta_item = {"workspaceId": workspace_id, "sk": "META"}
+        fake_table.get_item.return_value = {"Item": meta_item}
+        fake_iam.exceptions.NoSuchEntityException = type("NoSuchEntityException", (Exception,), {})
+        fake_iam.get_role.side_effect = fake_iam.exceptions.NoSuchEntityException()
+        fake_iam.create_role.side_effect = RuntimeError("boundary-attach-denied")
+
+        with patch("crud.workspace_iam._get_table", return_value=fake_table), \
+             patch("crud.workspace_iam._get_iam", return_value=fake_iam):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/role",
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+
+        assert resp["statusCode"] == 500
+
+    def test_role_put_default_minimal_failure_cleans_up(self, mock_jwt, user_id, workspace_id):
+        """If put_role_policy fails after create_role, delete the orphan role."""
+        from crud.handler import app
+
+        fake_table = MagicMock()
+        fake_iam = MagicMock()
+        meta_item = {"workspaceId": workspace_id, "sk": "META"}
+        fake_table.get_item.return_value = {"Item": meta_item}
+        fake_iam.exceptions.NoSuchEntityException = type("NoSuchEntityException", (Exception,), {})
+        fake_iam.get_role.side_effect = fake_iam.exceptions.NoSuchEntityException()
+        fake_iam.create_role.return_value = {
+            "Role": {"Arn": f"arn:aws:iam::123456789012:role/AgentStudio-ws-{workspace_id[:20]}-us-east-1"}
+        }
+        fake_iam.put_role_policy.side_effect = RuntimeError("policy-attach-failed")
+
+        with patch("crud.workspace_iam._get_table", return_value=fake_table), \
+             patch("crud.workspace_iam._get_iam", return_value=fake_iam):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/role",
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+
+        assert resp["statusCode"] == 500
+        # Cleanup attempt: delete_role called for the orphan.
+        fake_iam.delete_role.assert_called_once()
+
+    def test_role_put_default_minimal_failure_swallows_cleanup_error(
+        self, mock_jwt, user_id, workspace_id
+    ):
+        """delete_role can also raise — must not double-explode."""
+        from crud.handler import app
+
+        fake_table = MagicMock()
+        fake_iam = MagicMock()
+        fake_table.get_item.return_value = {"Item": {"workspaceId": workspace_id, "sk": "META"}}
+        fake_iam.exceptions.NoSuchEntityException = type("NoSuchEntityException", (Exception,), {})
+        fake_iam.get_role.side_effect = fake_iam.exceptions.NoSuchEntityException()
+        fake_iam.create_role.return_value = {
+            "Role": {"Arn": f"arn:aws:iam::123456789012:role/X-{workspace_id[:20]}-us-east-1"}
+        }
+        fake_iam.put_role_policy.side_effect = RuntimeError("attach-fail")
+        fake_iam.delete_role.side_effect = RuntimeError("cleanup-also-fails")
+
+        with patch("crud.workspace_iam._get_table", return_value=fake_table), \
+             patch("crud.workspace_iam._get_iam", return_value=fake_iam):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/role",
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+
+        # Still a 500; the inner Exception swallows.
+        assert resp["statusCode"] == 500
+
+    def test_role_ddb_conditional_check_failure_returns_existing(
+        self, mock_jwt, user_id, workspace_id
+    ):
+        """If ConditionalCheckFailedException fires (race), refetch + return existing."""
+        from crud.handler import app
+
+        fake_table = MagicMock()
+        fake_iam = MagicMock()
+        ccf = type("ConditionalCheckFailedException", (Exception,), {})
+        fake_table.meta.client.exceptions.ConditionalCheckFailedException = ccf
+
+        # First get_item: META without role. Second (refetch): META with role.
+        responses = iter([
+            {"Item": {"workspaceId": workspace_id, "sk": "META"}},
+            {"Item": {
+                "workspaceId": workspace_id, "sk": "META",
+                "roleArn": "arn:aws:iam::123456789012:role/X",
+                "roleName": "X",
+            }},
+        ])
+        fake_table.get_item.side_effect = lambda **kw: next(responses)
+        fake_table.update_item.side_effect = ccf()
+
+        fake_iam.exceptions.NoSuchEntityException = type("NoSuchEntityException", (Exception,), {})
+        fake_iam.get_role.side_effect = fake_iam.exceptions.NoSuchEntityException()
+        fake_iam.create_role.return_value = {
+            "Role": {"Arn": f"arn:aws:iam::123456789012:role/AgentStudio-ws-{workspace_id[:20]}-us-east-1"}
+        }
+        fake_iam.put_role_policy.return_value = {}
+
+        with patch("crud.workspace_iam._get_table", return_value=fake_table), \
+             patch("crud.workspace_iam._get_iam", return_value=fake_iam):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/role",
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+
+        assert resp["statusCode"] == 200
+        data = json.loads(resp["body"])
+        assert data["created"] is False
+        assert data["roleArn"] == "arn:aws:iam::123456789012:role/X"
+
     def test_delete_endpoint_calls_cleanup(self, mock_jwt, user_id, workspace_id):
         """DELETE /api/workspaces/{wsId} should call _delete_workspace_iam_role."""
         from crud.handler import app
@@ -571,3 +763,450 @@ class TestDeleteWorkspaceIamRole:
 
         assert resp["statusCode"] == 200
         mock_cleanup.assert_called_once_with(meta_item)
+
+
+# ──────────────────────────────────────────────────────────
+# grant_mcp / revoke_mcp — additional edge cases
+# ──────────────────────────────────────────────────────────
+
+class TestGrantMcpExtra:
+    def test_not_admin_returns_forbidden(self, mock_jwt, user_id, workspace_id):
+        from crud.handler import app
+
+        with patch("crud.workspace_iam.check_platform_admin") as ck:
+            ck.return_value = (user_id, False, None)
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/grant-mcp",
+                        body={"targets": ["cloudwatch"]},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 403
+
+    def test_admin_err_propagates(self, mock_jwt, user_id, workspace_id):
+        from crud.handler import app
+        from shared.response import forbidden
+
+        with patch("crud.workspace_iam.check_platform_admin") as ck:
+            ck.return_value = (user_id, False, forbidden())
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/grant-mcp",
+                        body={"targets": ["cloudwatch"]},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 403
+
+    def test_targets_must_be_list(self, mock_jwt, user_id, workspace_id):
+        """`targets` must be a list, not e.g. a string."""
+        from crud.handler import app
+
+        ev = _event("POST", f"/api/workspaces/{workspace_id}/grant-mcp",
+                    body={"targets": "cloudwatch"},
+                    path_params={"wsId": workspace_id})
+        resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 400
+
+    def test_workspace_not_found(self, mock_jwt, user_id, workspace_id):
+        from crud.handler import app
+
+        fake_table = MagicMock()
+        fake_table.get_item.return_value = {}
+        with patch("crud.workspace_iam._get_table", return_value=fake_table):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/grant-mcp",
+                        body={"targets": ["cloudwatch"]},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 404
+
+    def test_concurrent_modification_returns_400(self, mock_jwt, user_id, workspace_id):
+        """ConditionalCheckFailedException on update → 400."""
+        from crud.handler import app
+
+        fake_table = MagicMock()
+        fake_iam = MagicMock()
+        ccf = type("ConditionalCheckFailedException", (Exception,), {})
+        fake_table.meta.client.exceptions.ConditionalCheckFailedException = ccf
+        fake_table.get_item.return_value = {"Item": {
+            "workspaceId": workspace_id, "sk": "META",
+            "roleArn": "arn:aws:iam::123456789012:role/X",
+            "roleName": "X", "mcpGrants": ["cloudwatch"],
+        }}
+        fake_table.update_item.side_effect = ccf()
+
+        with patch("crud.workspace_iam._get_table", return_value=fake_table), \
+             patch("crud.workspace_iam._get_iam", return_value=fake_iam):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/grant-mcp",
+                        body={"targets": ["cloudtrail"]},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 400
+        assert "Concurrent" in json.loads(resp["body"])["error"]
+
+    def test_iam_write_failure_rolls_back_ddb(self, mock_jwt, user_id, workspace_id):
+        """If put_role_policy fails, roll back the DDB grants change."""
+        from crud.handler import app
+
+        fake_table = MagicMock()
+        fake_iam = MagicMock()
+        ccf = type("ConditionalCheckFailedException", (Exception,), {})
+        fake_table.meta.client.exceptions.ConditionalCheckFailedException = ccf
+        fake_table.get_item.return_value = {"Item": {
+            "workspaceId": workspace_id, "sk": "META",
+            "roleArn": "arn:aws:iam::123456789012:role/X",
+            "roleName": "X", "mcpGrants": [],
+        }}
+        # First update_item: succeed (DDB). Second update_item: rollback.
+        fake_table.update_item.return_value = {}
+        fake_iam.put_role_policy.side_effect = RuntimeError("iam-write-failed")
+
+        with patch("crud.workspace_iam._get_table", return_value=fake_table), \
+             patch("crud.workspace_iam._get_iam", return_value=fake_iam):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/grant-mcp",
+                        body={"targets": ["cloudwatch"]},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+
+        assert resp["statusCode"] == 500
+        # Two update_items: original + rollback.
+        assert fake_table.update_item.call_count == 2
+
+    def test_iam_write_failure_swallows_rollback_error(self, mock_jwt, user_id, workspace_id):
+        """Rollback update can also fail; must not double-explode."""
+        from crud.handler import app
+
+        fake_table = MagicMock()
+        fake_iam = MagicMock()
+        ccf = type("ConditionalCheckFailedException", (Exception,), {})
+        fake_table.meta.client.exceptions.ConditionalCheckFailedException = ccf
+        fake_table.get_item.return_value = {"Item": {
+            "workspaceId": workspace_id, "sk": "META",
+            "roleArn": "arn:aws:iam::123456789012:role/X",
+            "roleName": "X", "mcpGrants": [],
+        }}
+        # First call succeeds (the main update); second call (rollback) raises.
+        update_iter = iter([{}, RuntimeError("rollback-fail")])
+
+        def _update(**kw):
+            v = next(update_iter)
+            if isinstance(v, Exception):
+                raise v
+            return v
+
+        fake_table.update_item.side_effect = _update
+        fake_iam.put_role_policy.side_effect = RuntimeError("iam-write-fail")
+
+        with patch("crud.workspace_iam._get_table", return_value=fake_table), \
+             patch("crud.workspace_iam._get_iam", return_value=fake_iam):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/grant-mcp",
+                        body={"targets": ["cloudwatch"]},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 500
+
+
+class TestRevokeMcpExtra:
+    def test_not_admin_returns_forbidden(self, mock_jwt, user_id, workspace_id):
+        from crud.handler import app
+        with patch("crud.workspace_iam.check_platform_admin") as ck:
+            ck.return_value = (user_id, False, None)
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/revoke-mcp",
+                        body={"targets": ["iam"]},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 403
+
+    def test_admin_err_propagates(self, mock_jwt, user_id, workspace_id):
+        from crud.handler import app
+        from shared.response import forbidden
+        with patch("crud.workspace_iam.check_platform_admin") as ck:
+            ck.return_value = (user_id, False, forbidden())
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/revoke-mcp",
+                        body={"targets": ["iam"]},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 403
+
+    def test_empty_targets(self, mock_jwt, user_id, workspace_id):
+        from crud.handler import app
+        ev = _event("POST", f"/api/workspaces/{workspace_id}/revoke-mcp",
+                    body={"targets": []},
+                    path_params={"wsId": workspace_id})
+        resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 400
+
+    def test_targets_must_be_list(self, mock_jwt, user_id, workspace_id):
+        from crud.handler import app
+        ev = _event("POST", f"/api/workspaces/{workspace_id}/revoke-mcp",
+                    body={"targets": "cloudwatch"},
+                    path_params={"wsId": workspace_id})
+        resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 400
+
+    def test_workspace_not_found(self, mock_jwt, user_id, workspace_id):
+        from crud.handler import app
+        fake_table = MagicMock()
+        fake_table.get_item.return_value = {}
+        with patch("crud.workspace_iam._get_table", return_value=fake_table):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/revoke-mcp",
+                        body={"targets": ["cloudwatch"]},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 404
+
+    def test_no_role_returns_400(self, mock_jwt, user_id, workspace_id):
+        from crud.handler import app
+        fake_table = MagicMock()
+        fake_table.get_item.return_value = {"Item": {
+            "workspaceId": workspace_id, "sk": "META",
+        }}
+        with patch("crud.workspace_iam._get_table", return_value=fake_table):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/revoke-mcp",
+                        body={"targets": ["cloudwatch"]},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 400
+
+    def test_concurrent_modification_returns_400(self, mock_jwt, user_id, workspace_id):
+        from crud.handler import app
+        fake_table = MagicMock()
+        fake_iam = MagicMock()
+        ccf = type("ConditionalCheckFailedException", (Exception,), {})
+        fake_table.meta.client.exceptions.ConditionalCheckFailedException = ccf
+        fake_table.get_item.return_value = {"Item": {
+            "workspaceId": workspace_id, "sk": "META",
+            "roleArn": "arn:aws:iam::123456789012:role/X",
+            "roleName": "X", "mcpGrants": ["cloudwatch"],
+        }}
+        fake_table.update_item.side_effect = ccf()
+
+        with patch("crud.workspace_iam._get_table", return_value=fake_table), \
+             patch("crud.workspace_iam._get_iam", return_value=fake_iam):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/revoke-mcp",
+                        body={"targets": ["cloudwatch"]},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 400
+
+    def test_iam_write_failure_rolls_back_ddb(self, mock_jwt, user_id, workspace_id):
+        """If write fails, attempt DDB rollback (best-effort)."""
+        from crud.handler import app
+        fake_table = MagicMock()
+        fake_iam = MagicMock()
+        ccf = type("ConditionalCheckFailedException", (Exception,), {})
+        fake_table.meta.client.exceptions.ConditionalCheckFailedException = ccf
+        fake_table.get_item.return_value = {"Item": {
+            "workspaceId": workspace_id, "sk": "META",
+            "roleArn": "arn:aws:iam::123456789012:role/X",
+            "roleName": "X", "mcpGrants": ["cloudwatch", "iam"],
+        }}
+        fake_table.update_item.return_value = {}
+        # _write_mcp_policy: if mcpGrants becomes only ["cloudwatch"], it's
+        # still a non-empty IAM-policy target → put_role_policy is called.
+        fake_iam.put_role_policy.side_effect = RuntimeError("iam-fail")
+
+        with patch("crud.workspace_iam._get_table", return_value=fake_table), \
+             patch("crud.workspace_iam._get_iam", return_value=fake_iam):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/revoke-mcp",
+                        body={"targets": ["iam"]},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 500
+        # Two update_items: original + rollback.
+        assert fake_table.update_item.call_count == 2
+
+    def test_iam_write_failure_swallows_rollback_error(self, mock_jwt, user_id, workspace_id):
+        from crud.handler import app
+        fake_table = MagicMock()
+        fake_iam = MagicMock()
+        ccf = type("ConditionalCheckFailedException", (Exception,), {})
+        fake_table.meta.client.exceptions.ConditionalCheckFailedException = ccf
+        fake_table.get_item.return_value = {"Item": {
+            "workspaceId": workspace_id, "sk": "META",
+            "roleArn": "arn:aws:iam::123456789012:role/X",
+            "roleName": "X", "mcpGrants": ["cloudwatch", "iam"],
+        }}
+        update_iter = iter([{}, RuntimeError("rollback-fail")])
+
+        def _update(**kw):
+            v = next(update_iter)
+            if isinstance(v, Exception):
+                raise v
+            return v
+
+        fake_table.update_item.side_effect = _update
+        fake_iam.put_role_policy.side_effect = RuntimeError("iam-fail")
+
+        with patch("crud.workspace_iam._get_table", return_value=fake_table), \
+             patch("crud.workspace_iam._get_iam", return_value=fake_iam):
+            ev = _event("POST", f"/api/workspaces/{workspace_id}/revoke-mcp",
+                        body={"targets": ["iam"]},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 500
+
+
+# ──────────────────────────────────────────────────────────
+# get_permissions — error paths
+# ──────────────────────────────────────────────────────────
+
+class TestGetPermissionsExtra:
+    def test_member_denied_falls_back_to_admin(self, mock_jwt, user_id, workspace_id):
+        """auth_check err but caller is platform admin → still allowed."""
+        from crud.handler import app
+        from shared.response import forbidden as _f
+
+        fake_table = MagicMock()
+        fake_table.get_item.return_value = {"Item": {
+            "workspaceId": workspace_id, "sk": "META",
+            "roleArn": "arn:aws:iam::123456789012:role/X",
+        }}
+
+        with patch("crud.workspace_iam._get_table", return_value=fake_table), \
+             patch("crud.workspace_iam.auth_check") as auth, \
+             patch("crud.workspace_iam.check_platform_admin") as ck:
+            auth.return_value = (None, None, None, _f())
+            # First check_platform_admin (autouse fixture) returns admin=True for create_workspace_role,
+            # but we override here for the inline check.
+            ck.return_value = (user_id, True, None)
+            ev = _event("GET", f"/api/workspaces/{workspace_id}/permissions",
+                        query_params={},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 200
+
+    def test_member_denied_and_not_admin_returns_forbidden(self, mock_jwt, user_id, workspace_id):
+        from crud.handler import app
+        from shared.response import forbidden as _f
+
+        with patch("crud.workspace_iam.auth_check") as auth, \
+             patch("crud.workspace_iam.check_platform_admin") as ck:
+            auth.return_value = (None, None, None, _f())
+            ck.return_value = (user_id, False, None)
+            ev = _event("GET", f"/api/workspaces/{workspace_id}/permissions",
+                        query_params={"actions": "x:Y"},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 403
+
+    def test_workspace_not_found(self, mock_jwt, user_id, workspace_id):
+        from crud.handler import app
+        fake_table = MagicMock()
+        fake_table.get_item.return_value = {}
+        with patch("crud.workspace_iam._get_table", return_value=fake_table), \
+             patch("crud.workspace_iam.auth_check") as auth:
+            auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
+            ev = _event("GET", f"/api/workspaces/{workspace_id}/permissions",
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 404
+
+    def test_simulate_failure_returns_500(self, mock_jwt, user_id, workspace_id):
+        from crud.handler import app
+        fake_table = MagicMock()
+        fake_iam = MagicMock()
+        fake_table.get_item.return_value = {"Item": {
+            "workspaceId": workspace_id, "sk": "META",
+            "roleArn": "arn:aws:iam::123456789012:role/X",
+        }}
+        fake_iam.simulate_principal_policy.side_effect = RuntimeError("boom")
+
+        with patch("crud.workspace_iam._get_table", return_value=fake_table), \
+             patch("crud.workspace_iam._get_iam", return_value=fake_iam), \
+             patch("crud.workspace_iam.auth_check") as auth:
+            auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
+            ev = _event("GET", f"/api/workspaces/{workspace_id}/permissions",
+                        query_params={"actions": "iam:GetRole"},
+                        path_params={"wsId": workspace_id})
+            resp = app.resolve(ev, MagicMock())
+        assert resp["statusCode"] == 500
+
+
+# ──────────────────────────────────────────────────────────
+# _write_mcp_policy direct tests
+# ──────────────────────────────────────────────────────────
+
+class TestWriteMcpPolicy:
+    def test_returns_zero_and_deletes_when_no_iam_targets(self):
+        """When merged is None, we delete the WorkspaceGrants policy."""
+        from crud.workspace_iam import _write_mcp_policy
+        fake_iam = MagicMock()
+        fake_iam.exceptions.NoSuchEntityException = type("NoSuchEntityException", (Exception,), {})
+
+        with patch("crud.workspace_iam._get_iam", return_value=fake_iam):
+            size = _write_mcp_policy("role-A", [])
+        assert size == 0
+        fake_iam.delete_role_policy.assert_called_once_with(
+            RoleName="role-A", PolicyName="WorkspaceGrants",
+        )
+
+    def test_swallows_no_such_entity_when_deleting(self):
+        """If the policy isn't there, NoSuchEntityException is swallowed."""
+        from crud.workspace_iam import _write_mcp_policy
+        fake_iam = MagicMock()
+        nse = type("NoSuchEntityException", (Exception,), {})
+        fake_iam.exceptions.NoSuchEntityException = nse
+        fake_iam.delete_role_policy.side_effect = nse()
+
+        with patch("crud.workspace_iam._get_iam", return_value=fake_iam):
+            size = _write_mcp_policy("role-A", ["aws-knowledge"])  # no-IAM target
+        assert size == 0
+
+    def test_writes_policy_returns_doc_size(self):
+        from crud.workspace_iam import _write_mcp_policy
+        fake_iam = MagicMock()
+        with patch("crud.workspace_iam._get_iam", return_value=fake_iam):
+            size = _write_mcp_policy("role-B", ["cloudwatch"])
+        assert size > 0
+        fake_iam.put_role_policy.assert_called_once()
+        kwargs = fake_iam.put_role_policy.call_args.kwargs
+        assert kwargs["RoleName"] == "role-B"
+        assert kwargs["PolicyName"] == "WorkspaceGrants"
+
+
+# ──────────────────────────────────────────────────────────
+# lazy boto3 init
+# ──────────────────────────────────────────────────────────
+
+
+def test_get_table_initializes_lazily(monkeypatch):
+    monkeypatch.setattr("crud.workspace_iam._table", None)
+    fake_table = MagicMock()
+    fake_resource = MagicMock()
+    fake_resource.Table.return_value = fake_table
+    with patch("crud.workspace_iam.boto3.resource", return_value=fake_resource) as br:
+        from crud.workspace_iam import _get_table
+        out = _get_table()
+        out2 = _get_table()
+    assert out is fake_table and out2 is fake_table
+    assert br.call_count == 1
+
+
+def test_get_iam_initializes_lazily(monkeypatch):
+    monkeypatch.setattr("crud.workspace_iam._iam", None)
+    fake_client = MagicMock()
+    with patch("crud.workspace_iam.boto3.client", return_value=fake_client) as bc:
+        from crud.workspace_iam import _get_iam
+        c = _get_iam()
+        c2 = _get_iam()
+    assert c is fake_client and c2 is fake_client
+    assert bc.call_count == 1
+
+
+# ──────────────────────────────────────────────────────────
+# trust + default-minimal policy builders (smoke)
+# ──────────────────────────────────────────────────────────
+
+
+def test_build_trust_policy_shape():
+    from crud.workspace_iam import _build_trust_policy
+    p = _build_trust_policy()
+    assert p["Version"] == "2012-10-17"
+    assert p["Statement"][0]["Action"] == "sts:AssumeRole"
+    assert "aws:SourceAccount" in p["Statement"][0]["Condition"]["StringEquals"]
+
+
+def test_build_default_minimal_policy_shape():
+    from crud.workspace_iam import _build_default_minimal_policy
+    p = _build_default_minimal_policy()
+    assert p["Version"] == "2012-10-17"
+    sids = {s["Sid"] for s in p["Statement"]}
+    # Some core SIDs we expect.
+    for required in ("Bedrock", "AgentCoreRuntime", "AgentCoreMemory", "Observability"):
+        assert required in sids
