@@ -44,7 +44,7 @@ jobs:
                | grep -vE '__tests__|public-access-guard\.ts'; then
               echo "::error file=$f::Principal:'*' detected"; fail=1
             fi
-          done < <(find infra lambda -type f \( -name '*.ts' -o -name '*.mjs' \) -not -path '*/node_modules/*')
+          done < <(find infra lambda -type f \( -name '*.ts' -o -name '*.mjs' \) -not -path '*/node_modules/*' -not -path '*public-access-guard*' -not -path '*__tests__*')
 
           exit $fail
 
