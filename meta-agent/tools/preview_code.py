@@ -38,6 +38,7 @@ def preview_assembled_code(
     if staging_key:
         try:
             import boto3
+
             s3 = boto3.client("s3", region_name=REGION)
             obj = s3.get_object(Bucket=S3_BUCKET, Key=staging_key)
             staged = json.loads(obj["Body"].read().decode("utf-8"))
@@ -54,6 +55,7 @@ def preview_assembled_code(
     # always gets the user's raw system_prompt + BASE_GUIDELINES in the
     # creator's language.
     from tools._scope import current_creator_language
+
     base = system_prompt or "You are a helpful assistant."
     guidelines = get_base_guidelines(current_creator_language())
     final_prompt = base if guidelines in base else base + "\n" + guidelines
@@ -75,22 +77,34 @@ def preview_assembled_code(
     import time
 
     import boto3
+
     s3 = boto3.client("s3", region_name=REGION)
-    base_key = staging_key.split("/")[-1].replace(".json", "") if staging_key else f"preview-{int(time.time() * 1000)}"
+    base_key = (
+        staging_key.split("/")[-1].replace(".json", "")
+        if staging_key
+        else f"preview-{int(time.time() * 1000)}"
+    )
     preview_prefix = f"agents/_preview/{base_key}"
 
     combined = f"# === main.py ===\n{main_py}\n\n# === tools.py ===\n{tools_py}\n\n# === prompt.txt ===\n# {prompt_txt[:200]}...\n\n# === config.json ===\n# {config_json}"
-    s3.put_object(Bucket=S3_BUCKET, Key=f"{preview_prefix}-main.py", Body=combined.encode("utf-8"), ContentType="text/x-python")
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key=f"{preview_prefix}-main.py",
+        Body=combined.encode("utf-8"),
+        ContentType="text/x-python",
+    )
 
-    return json.dumps({
-        "preview_key": f"{preview_prefix}-main.py",
-        "files": {
-            "main.py": len(main_py),
-            "tools.py": len(tools_py),
-            "prompt.txt": len(prompt_txt),
-            "config.json": len(config_json),
-        },
-        "valid": validation["valid"],
-        "errors": validation["errors"],
-        "warnings": validation["warnings"],
-    })
+    return json.dumps(
+        {
+            "preview_key": f"{preview_prefix}-main.py",
+            "files": {
+                "main.py": len(main_py),
+                "tools.py": len(tools_py),
+                "prompt.txt": len(prompt_txt),
+                "config.json": len(config_json),
+            },
+            "valid": validation["valid"],
+            "errors": validation["errors"],
+            "warnings": validation["warnings"],
+        }
+    )

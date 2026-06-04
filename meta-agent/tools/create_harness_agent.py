@@ -11,6 +11,7 @@ MVP scope: system prompt + model + memory only. MCP is NOT supported:
 Either path ends in 401/403 at invoke time. Use create_agent (zip) if
 the user needs MCP tools.
 """
+
 import json
 
 # Workspaces table isn't in meta-agent/config.py (Meta-Agent rarely needs it);
@@ -147,9 +148,7 @@ def create_harness_agent(
             if ws_memory_id:
                 sts = boto3.client("sts", region_name=REGION)
                 account_id = sts.get_caller_identity()["Account"]
-                mem_arn = (
-                    f"arn:aws:bedrock-agentcore:{REGION}:{account_id}:memory/{ws_memory_id}"
-                )
+                mem_arn = f"arn:aws:bedrock-agentcore:{REGION}:{account_id}:memory/{ws_memory_id}"
                 harness_memory = {
                     "agentCoreMemoryConfiguration": {"arn": mem_arn},
                 }
@@ -203,10 +202,13 @@ def create_harness_agent(
         }
         _get_agents_table().put_item(Item=item)
 
-        return json.dumps({
-            "ok": True,
-            "agentId": harness_id,
-            "harnessArn": harness_arn,
-        }, ensure_ascii=False)
+        return json.dumps(
+            {
+                "ok": True,
+                "agentId": harness_id,
+                "harnessArn": harness_arn,
+            },
+            ensure_ascii=False,
+        )
     except Exception as e:
         return json.dumps({"error": str(e)})

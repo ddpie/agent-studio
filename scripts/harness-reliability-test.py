@@ -15,6 +15,7 @@ Usage:
 Output:
     Markdown table printed to stdout + JSON dumped to /tmp/harness-reliability-<timestamp>.json
 """
+
 import argparse
 import json
 import random
@@ -56,9 +57,22 @@ def create_harness(idx: int, role_arn: str) -> dict:
             systemPrompt=[{"text": "你是一个帮助用户写邮件的助手。"}],
         )
         hid = resp["harness"]["harnessId"]
-        return {"kind": "harness", "name": name, "id": hid, "arn": resp["harness"]["arn"], "create_ms": int((time.monotonic() - t0) * 1000), "create_error": None}
+        return {
+            "kind": "harness",
+            "name": name,
+            "id": hid,
+            "arn": resp["harness"]["arn"],
+            "create_ms": int((time.monotonic() - t0) * 1000),
+            "create_error": None,
+        }
     except Exception as e:
-        return {"kind": "harness", "name": name, "id": None, "create_ms": int((time.monotonic() - t0) * 1000), "create_error": str(e)[:300]}
+        return {
+            "kind": "harness",
+            "name": name,
+            "id": None,
+            "create_ms": int((time.monotonic() - t0) * 1000),
+            "create_error": str(e)[:300],
+        }
 
 
 def poll_harness(hid: str, deadline: float) -> dict:
@@ -68,11 +82,23 @@ def poll_harness(hid: str, deadline: float) -> dict:
             h = cp.get_harness(harnessId=hid)["harness"]
             status = h.get("status")
             if status in ("READY", "CREATE_FAILED", "FAILED"):
-                return {"status": status, "ready_ms": int((time.monotonic() - t0) * 1000), "failure_reason": h.get("failureReason") or ""}
+                return {
+                    "status": status,
+                    "ready_ms": int((time.monotonic() - t0) * 1000),
+                    "failure_reason": h.get("failureReason") or "",
+                }
         except Exception as e:
-            return {"status": "POLL_ERROR", "ready_ms": int((time.monotonic() - t0) * 1000), "failure_reason": str(e)[:200]}
+            return {
+                "status": "POLL_ERROR",
+                "ready_ms": int((time.monotonic() - t0) * 1000),
+                "failure_reason": str(e)[:200],
+            }
         time.sleep(POLL_INTERVAL)
-    return {"status": "TIMEOUT", "ready_ms": TIMEOUT_SECS * 1000, "failure_reason": f"exceeded {TIMEOUT_SECS}s"}
+    return {
+        "status": "TIMEOUT",
+        "ready_ms": TIMEOUT_SECS * 1000,
+        "failure_reason": f"exceeded {TIMEOUT_SECS}s",
+    }
 
 
 def delete_harness(hid: str) -> None:
@@ -121,9 +147,22 @@ def create_zip_runtime(idx: int, role_arn: str) -> dict:
             networkConfiguration={"networkMode": "PUBLIC"},
             protocolConfiguration={"serverProtocol": "HTTP"},
         )
-        return {"kind": "zip", "name": name, "id": resp.get("agentRuntimeId"), "arn": resp.get("agentRuntimeArn"), "create_ms": int((time.monotonic() - t0) * 1000), "create_error": None}
+        return {
+            "kind": "zip",
+            "name": name,
+            "id": resp.get("agentRuntimeId"),
+            "arn": resp.get("agentRuntimeArn"),
+            "create_ms": int((time.monotonic() - t0) * 1000),
+            "create_error": None,
+        }
     except Exception as e:
-        return {"kind": "zip", "name": name, "id": None, "create_ms": int((time.monotonic() - t0) * 1000), "create_error": str(e)[:300]}
+        return {
+            "kind": "zip",
+            "name": name,
+            "id": None,
+            "create_ms": int((time.monotonic() - t0) * 1000),
+            "create_error": str(e)[:300],
+        }
 
 
 def poll_zip_runtime(rid: str, deadline: float) -> dict:
@@ -133,11 +172,23 @@ def poll_zip_runtime(rid: str, deadline: float) -> dict:
             r = cp.get_agent_runtime(agentRuntimeId=rid)
             status = r.get("status")
             if status in ("READY", "CREATE_FAILED", "FAILED"):
-                return {"status": status, "ready_ms": int((time.monotonic() - t0) * 1000), "failure_reason": r.get("failureReason") or ""}
+                return {
+                    "status": status,
+                    "ready_ms": int((time.monotonic() - t0) * 1000),
+                    "failure_reason": r.get("failureReason") or "",
+                }
         except Exception as e:
-            return {"status": "POLL_ERROR", "ready_ms": int((time.monotonic() - t0) * 1000), "failure_reason": str(e)[:200]}
+            return {
+                "status": "POLL_ERROR",
+                "ready_ms": int((time.monotonic() - t0) * 1000),
+                "failure_reason": str(e)[:200],
+            }
         time.sleep(POLL_INTERVAL)
-    return {"status": "TIMEOUT", "ready_ms": TIMEOUT_SECS * 1000, "failure_reason": f"exceeded {TIMEOUT_SECS}s"}
+    return {
+        "status": "TIMEOUT",
+        "ready_ms": TIMEOUT_SECS * 1000,
+        "failure_reason": f"exceeded {TIMEOUT_SECS}s",
+    }
 
 
 def delete_zip_runtime(rid: str) -> None:
@@ -160,7 +211,9 @@ def run_batch(count: int, creator, poller, deleter, role_arn: str) -> list:
             if c.get("id"):
                 futures[pool.submit(poller, c["id"], deadline)] = c
             else:
-                results.append({**c, "status": "CREATE_ERROR", "ready_ms": 0, "failure_reason": c["create_error"]})
+                results.append(
+                    {**c, "status": "CREATE_ERROR", "ready_ms": 0, "failure_reason": c["create_error"]}
+                )
         for f in as_completed(futures):
             c = futures[f]
             results.append({**c, **f.result()})
@@ -202,7 +255,11 @@ def main():
     print(f"Creating {args.count} harnesses + {'0' if args.skip_zip else args.count} zip runtimes...\n")
 
     harness_results = run_batch(args.count, create_harness, poll_harness, delete_harness, role_arn)
-    zip_results = [] if args.skip_zip else run_batch(args.count, create_zip_runtime, poll_zip_runtime, delete_zip_runtime, role_arn)
+    zip_results = (
+        []
+        if args.skip_zip
+        else run_batch(args.count, create_zip_runtime, poll_zip_runtime, delete_zip_runtime, role_arn)
+    )
 
     summaries = [summarize(harness_results, "harness")]
     if zip_results:
@@ -213,16 +270,23 @@ def main():
     print("|---|---|---|---|---|---|---|")
     for s in summaries:
         errs = "; ".join(s["error_samples"]) or "—"
-        print(f"| {s['label']} | {s['total']} | {s['ready']} | {s['errors']} | {s['success_rate_pct']}% | {s['avg_ready_seconds']} | {errs[:80]} |")
+        print(
+            f"| {s['label']} | {s['total']} | {s['ready']} | {s['errors']} | {s['success_rate_pct']}% | {s['avg_ready_seconds']} | {errs[:80]} |"
+        )
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     out_path = f"/tmp/harness-reliability-{ts}.json"
     with open(out_path, "w") as f:
-        json.dump({
-            "summaries": summaries,
-            "harness_runs": harness_results,
-            "zip_runs": zip_results,
-        }, f, indent=2, default=str)
+        json.dump(
+            {
+                "summaries": summaries,
+                "harness_runs": harness_results,
+                "zip_runs": zip_results,
+            },
+            f,
+            indent=2,
+            default=str,
+        )
     print(f"\nRaw data: {out_path}")
 
 

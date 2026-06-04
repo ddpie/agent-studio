@@ -4,6 +4,7 @@ Handles per-workspace IAM role creation, MCP permission grants/revocations,
 and permission simulation. All role mutations are scoped to the
 AgentStudioWorkspaceCeiling permission boundary.
 """
+
 import json
 from datetime import datetime
 
@@ -201,9 +202,7 @@ def _build_default_minimal_policy() -> dict:
                 "Effect": "Allow",
                 "Action": ["cloudwatch:PutMetricData"],
                 "Resource": "*",
-                "Condition": {
-                    "StringEquals": {"cloudwatch:namespace": "bedrock-agentcore"}
-                },
+                "Condition": {"StringEquals": {"cloudwatch:namespace": "bedrock-agentcore"}},
             },
             {
                 "Sid": "ECR",
@@ -223,9 +222,7 @@ def _build_default_minimal_policy() -> dict:
                 "Effect": "Allow",
                 "Action": ["sts:GetServiceBearerToken"],
                 "Resource": "*",
-                "Condition": {
-                    "StringEquals": {"sts:AWSServiceName": "bedrock-agentcore.amazonaws.com"}
-                },
+                "Condition": {"StringEquals": {"sts:AWSServiceName": "bedrock-agentcore.amazonaws.com"}},
             },
         ],
     }
@@ -297,11 +294,13 @@ def create_workspace_role(wsId: str):
     # Idempotent: if role already bound, return it.
     existing_role_arn = meta.get("roleArn")
     if existing_role_arn:
-        return success({
-            "roleArn": existing_role_arn,
-            "roleName": meta.get("roleName", ""),
-            "created": False,
-        })
+        return success(
+            {
+                "roleArn": existing_role_arn,
+                "roleName": meta.get("roleName", ""),
+                "created": False,
+            }
+        )
 
     role_name = _role_name_for_workspace(ws_id)
     iam_client = _get_iam()
@@ -360,11 +359,13 @@ def create_workspace_role(wsId: str):
     except table.meta.client.exceptions.ConditionalCheckFailedException:
         # Another request already bound the role — fetch and return it.
         refreshed = _get_workspace_meta(ws_id)
-        return success({
-            "roleArn": refreshed.get("roleArn", role_arn),
-            "roleName": refreshed.get("roleName", role_name),
-            "created": False,
-        })
+        return success(
+            {
+                "roleArn": refreshed.get("roleArn", role_arn),
+                "roleName": refreshed.get("roleName", role_name),
+                "created": False,
+            }
+        )
 
     return success({"roleArn": role_arn, "roleName": role_name, "created": True}, status_code=201)
 
@@ -555,17 +556,20 @@ def get_permissions(wsId: str):
                 ResourceArns=["*"],
             )
             for r in resp.get("EvaluationResults", []):
-                results.append({
-                    "action": r["EvalActionName"],
-                    "allowed": r["EvalDecision"] == "allowed",
-                })
+                results.append(
+                    {
+                        "action": r["EvalActionName"],
+                        "allowed": r["EvalDecision"] == "allowed",
+                    }
+                )
     except Exception as e:
         logger.exception("SimulatePrincipalPolicy failed", extra={"roleArn": role_arn})
         return internal_error(f"Permission simulation failed: {e!s}")
 
-    return success({
-        "hasRole": True,
-        "roleArn": role_arn,
-        "results": results,
-    })
-
+    return success(
+        {
+            "hasRole": True,
+            "roleArn": role_arn,
+            "results": results,
+        }
+    )

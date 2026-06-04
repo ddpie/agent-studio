@@ -1,4 +1,5 @@
 """Agent CRUD endpoints."""
+
 import json
 import uuid
 from datetime import datetime
@@ -55,8 +56,7 @@ def _validate_memory_enable(*, memory_enabled: bool, workspace_memory_id: str | 
     """Raise ValueError if memory is being enabled on a workspace without a Memory resource."""
     if memory_enabled and not workspace_memory_id:
         raise ValueError(
-            "Cannot enable memory: workspace memory resource missing. "
-            "Workspace owner must run repair."
+            "Cannot enable memory: workspace memory resource missing. Workspace owner must run repair."
         )
 
 
@@ -131,9 +131,20 @@ def _sync_harness_memory(agent_id: str, memory_cfg: dict | None, workspace_memor
 # dropping them (not erroring) keeps the API forgiving for clients that
 # send the full agent body unchanged.
 ALLOWED_AGENT_FIELDS = {
-    "name", "display_name", "description", "model_id", "default_model_id",
-    "template_id", "supports_images", "welcome_message", "suggestions",
-    "tool_names", "skill_ids", "skills", "mcp_targets", "memory",
+    "name",
+    "display_name",
+    "description",
+    "model_id",
+    "default_model_id",
+    "template_id",
+    "supports_images",
+    "welcome_message",
+    "suggestions",
+    "tool_names",
+    "skill_ids",
+    "skills",
+    "mcp_targets",
+    "memory",
 }
 
 
@@ -229,9 +240,7 @@ def list_agents(wsId: str):
     }
     if cursor:
         try:
-            query_kwargs["ExclusiveStartKey"] = json.loads(
-                __import__("base64").b64decode(cursor).decode()
-            )
+            query_kwargs["ExclusiveStartKey"] = json.loads(__import__("base64").b64decode(cursor).decode())
         except Exception:
             return bad_request("Invalid cursor")
 
@@ -249,6 +258,7 @@ def list_agents(wsId: str):
     next_cursor = None
     if last_key:
         import base64
+
         next_cursor = base64.b64encode(json.dumps(last_key).encode()).decode()
 
     return paginated(items, next_cursor)
@@ -291,9 +301,15 @@ def create_agent(wsId: str):
     # Validate memory.enabled against workspace memory resource
     memory_cfg = body.get("memory")
     if isinstance(memory_cfg, dict) and memory_cfg.get("enabled"):
-        ws_item = _get_ws_table().get_item(
-            Key={"workspaceId": ws_id, "sk": "META"}, ConsistentRead=False,
-        ).get("Item") or {}
+        ws_item = (
+            _get_ws_table()
+            .get_item(
+                Key={"workspaceId": ws_id, "sk": "META"},
+                ConsistentRead=False,
+            )
+            .get("Item")
+            or {}
+        )
         try:
             _validate_memory_enable(
                 memory_enabled=True,
@@ -334,9 +350,15 @@ def update_agent(wsId: str, agentId: str):
     # Validate memory.enabled against workspace memory resource
     memory_cfg = body.get("memory")
     if isinstance(memory_cfg, dict) and memory_cfg.get("enabled"):
-        ws_item = _get_ws_table().get_item(
-            Key={"workspaceId": ws_id, "sk": "META"}, ConsistentRead=False,
-        ).get("Item") or {}
+        ws_item = (
+            _get_ws_table()
+            .get_item(
+                Key={"workspaceId": ws_id, "sk": "META"},
+                ConsistentRead=False,
+            )
+            .get("Item")
+            or {}
+        )
         try:
             _validate_memory_enable(
                 memory_enabled=True,
@@ -373,7 +395,7 @@ def update_agent(wsId: str, agentId: str):
         resp = table.update_item(
             Key={"agentId": agentId},
             UpdateExpression=update_expr,
-            **({'ExpressionAttributeNames': expr_names} if expr_names else {}),
+            **({"ExpressionAttributeNames": expr_names} if expr_names else {}),
             ExpressionAttributeValues=expr_values,
             ConditionExpression=condition,
             ReturnValues="ALL_NEW",
@@ -385,13 +407,16 @@ def update_agent(wsId: str, agentId: str):
     # for harness agents. Zip agents pick up memory cfg at invoke time from
     # their generated main.py, so we skip the sync for them.
     updated_item = resp.get("Attributes", {})
-    if (
-        updated_item.get("runtime_type") == "harness"
-        and isinstance(body.get("memory"), dict)
-    ):
-        ws_item = _get_ws_table().get_item(
-            Key={"workspaceId": ws_id, "sk": "META"}, ConsistentRead=False,
-        ).get("Item") or {}
+    if updated_item.get("runtime_type") == "harness" and isinstance(body.get("memory"), dict):
+        ws_item = (
+            _get_ws_table()
+            .get_item(
+                Key={"workspaceId": ws_id, "sk": "META"},
+                ConsistentRead=False,
+            )
+            .get("Item")
+            or {}
+        )
         _sync_harness_memory(
             agent_id=agentId,
             memory_cfg=body["memory"],
@@ -448,6 +473,7 @@ def deploy_agent(wsId: str, agentId: str):
     skill_ids = existing.get("skill_ids", [])
     if skill_ids:
         from shared.config import SKILLS_TABLE
+
         skills_table = boto3.resource("dynamodb", region_name=REGION).Table(SKILLS_TABLE)
         unapproved = []
         for sid in skill_ids:
@@ -533,7 +559,13 @@ def get_agent_file(wsId: str, agentId: str):
         return bad_request(id_err)
 
     path = (router.current_event.query_string_parameters or {}).get("path", "")
-    allowed_paths = {"system_prompt.txt", "tool_definitions.py", "assistant-history.json", "draft.json", "staging.json"}
+    allowed_paths = {
+        "system_prompt.txt",
+        "tool_definitions.py",
+        "assistant-history.json",
+        "draft.json",
+        "staging.json",
+    }
     if path not in allowed_paths:
         return bad_request("Invalid file path")
 
@@ -567,7 +599,13 @@ def put_agent_file(wsId: str, agentId: str):
         return bad_request(id_err)
 
     path = (router.current_event.query_string_parameters or {}).get("path", "")
-    allowed_paths = {"system_prompt.txt", "tool_definitions.py", "assistant-history.json", "draft.json", "staging.json"}
+    allowed_paths = {
+        "system_prompt.txt",
+        "tool_definitions.py",
+        "assistant-history.json",
+        "draft.json",
+        "staging.json",
+    }
     if path not in allowed_paths:
         return bad_request("Invalid file path")
 
@@ -587,7 +625,11 @@ def put_agent_file(wsId: str, agentId: str):
         Bucket=ASSETS_BUCKET,
         Key=s3_key,
         Body=content.encode("utf-8"),
-        ContentType="text/plain" if path.endswith(".txt") else "application/json" if path.endswith(".json") else "text/x-python",
+        ContentType="text/plain"
+        if path.endswith(".txt")
+        else "application/json"
+        if path.endswith(".json")
+        else "text/x-python",
     )
 
     now = datetime.utcnow().isoformat() + "Z"
@@ -642,7 +684,7 @@ def get_agent_skill_file(wsId: str, agentId: str, skillId: str):
             paginator = s3.get_paginator("list_objects_v2")
             for page in paginator.paginate(Bucket=ASSETS_BUCKET, Prefix=prefix, MaxKeys=1000):
                 for obj in page.get("Contents", []):
-                    rel = obj["Key"][len(prefix):]
+                    rel = obj["Key"][len(prefix) :]
                     if rel and not rel.startswith("."):
                         keys.append(rel)
         except Exception:
@@ -713,7 +755,12 @@ def copy_skill_files_from(wsId: str, agentId: str, skillId: str):
     if src_ws_id != ws_id:
         src_member = get_membership(src_ws_id, user_id)
         if not check_permission(src_member, "viewer"):
-            logger.warning("copy_skill denied: user=%s src_ws=%s role=%s", user_id, src_ws_id, src_member.get("role") if src_member else None)
+            logger.warning(
+                "copy_skill denied: user=%s src_ws=%s role=%s",
+                user_id,
+                src_ws_id,
+                src_member.get("role") if src_member else None,
+            )
             return forbidden()
 
     s3 = _get_s3()
@@ -725,7 +772,7 @@ def copy_skill_files_from(wsId: str, agentId: str, skillId: str):
         for page in paginator.paginate(Bucket=ASSETS_BUCKET, Prefix=src_prefix):
             for obj in page.get("Contents", []):
                 src_key = obj["Key"]
-                rel = src_key[len(src_prefix):]
+                rel = src_key[len(src_prefix) :]
                 if not rel:
                     continue
                 s3.copy_object(
@@ -764,7 +811,9 @@ def put_agent_skill_file(wsId: str, agentId: str, skillId: str):
     body = router.current_event.json_body or {}
     content = body.get("content", "")
 
-    ct = "text/markdown" if path.endswith(".md") else "text/x-python" if path.endswith(".py") else "text/plain"
+    ct = (
+        "text/markdown" if path.endswith(".md") else "text/x-python" if path.endswith(".py") else "text/plain"
+    )
     s3 = _get_s3()
     try:
         s3.put_object(

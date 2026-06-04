@@ -1,4 +1,5 @@
 """Test fetch_webpage routes to Browser CDP with session reuse."""
+
 import json
 import sys
 import types
@@ -20,6 +21,7 @@ def _exec_tool_code(monkeypatch, *, set_browser_id: bool = True):
             sys.modules.pop(_mod, None)
 
     from tools_library.fetch_webpage import TOOL_CODE
+
     ns: dict = {"tool": lambda f: f}
     exec(TOOL_CODE, ns)
     return ns["fetch_webpage"]
@@ -34,9 +36,7 @@ def _ws_mock(value: str):
         last_id["n"] = json.loads(payload).get("id", 0)
 
     ws.send.side_effect = _send
-    ws.recv.side_effect = lambda: json.dumps(
-        {"id": last_id["n"], "result": {"result": {"value": value}}}
-    )
+    ws.recv.side_effect = lambda: json.dumps({"id": last_id["n"], "result": {"result": {"value": value}}})
     ws.close.return_value = None
     return ws
 
@@ -57,9 +57,13 @@ def test_fetch_webpage_happy_path(monkeypatch):
     }
     data_mock.stop_browser_session.return_value = None
 
-    with patch("boto3.client", return_value=data_mock), \
-         patch.dict(sys.modules, {"websocket": types.SimpleNamespace(create_connection=lambda *a, **kw: ws_client)}), \
-         patch("time.sleep"):
+    with (
+        patch("boto3.client", return_value=data_mock),
+        patch.dict(
+            sys.modules, {"websocket": types.SimpleNamespace(create_connection=lambda *a, **kw: ws_client)}
+        ),
+        patch("time.sleep"),
+    ):
         out = fn("https://example.com", max_length=100)
     assert "Hello Example Domain" in out
 
@@ -77,9 +81,13 @@ def test_fetch_webpage_reuses_session(monkeypatch):
         "streams": {"automationStream": {"streamEndpoint": "wss://example/automation"}},
     }
 
-    with patch("boto3.client", return_value=data_mock), \
-         patch.dict(sys.modules, {"websocket": types.SimpleNamespace(create_connection=lambda *a, **kw: ws_client)}), \
-         patch("time.sleep"):
+    with (
+        patch("boto3.client", return_value=data_mock),
+        patch.dict(
+            sys.modules, {"websocket": types.SimpleNamespace(create_connection=lambda *a, **kw: ws_client)}
+        ),
+        patch("time.sleep"),
+    ):
         fn("https://example.com/a")
         fn("https://example.com/b")
 
@@ -107,9 +115,13 @@ def test_fetch_webpage_reconnects_on_ws_failure(monkeypatch):
     }
     data_mock.stop_browser_session.return_value = None
 
-    with patch("boto3.client", return_value=data_mock), \
-         patch.dict(sys.modules, {"websocket": types.SimpleNamespace(create_connection=lambda *a, **kw: fresh_ws)}), \
-         patch("time.sleep"):
+    with (
+        patch("boto3.client", return_value=data_mock),
+        patch.dict(
+            sys.modules, {"websocket": types.SimpleNamespace(create_connection=lambda *a, **kw: fresh_ws)}
+        ),
+        patch("time.sleep"),
+    ):
         out = fn("https://example.com")
 
     assert "recovered" in out

@@ -1,4 +1,5 @@
 """Tests for crud/a2a_keys.py — per-user-per-agent API key management."""
+
 import hashlib
 import json
 from unittest.mock import MagicMock, patch
@@ -12,6 +13,7 @@ def inject_env(monkeypatch):
     import importlib
 
     import shared.config as _cfg
+
     importlib.reload(_cfg)
 
 
@@ -42,9 +44,11 @@ def test_create_key_returns_plaintext_once(mock_jwt, user_id, workspace_id):
 
     fake_table = MagicMock()
     fake_table.put_item.return_value = {}
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys._get_agent_item") as ga, \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys._get_agent_item") as ga,
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-1", "workspace_id": workspace_id}
         resp = app.resolve(_event("POST", workspace_id, "agt-1"), MagicMock())
@@ -67,6 +71,7 @@ def test_create_key_returns_plaintext_once(mock_jwt, user_id, workspace_id):
 def test_list_keys_hides_hash_and_raw(mock_jwt, user_id, workspace_id):
     """GET returns metadata only — no apiKey, no apiKeyHash in response."""
     from crud.handler import app
+
     fake_table = MagicMock()
     fake_table.query.return_value = {
         "Items": [
@@ -81,9 +86,11 @@ def test_list_keys_hides_hash_and_raw(mock_jwt, user_id, workspace_id):
             }
         ]
     }
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys._get_agent_item") as ga, \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys._get_agent_item") as ga,
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-1", "workspace_id": workspace_id}
         resp = app.resolve(_event("GET", workspace_id, "agt-1"), MagicMock())
@@ -101,13 +108,18 @@ def test_list_keys_hides_hash_and_raw(mock_jwt, user_id, workspace_id):
 def test_revoke_key_sets_flag(mock_jwt, user_id, workspace_id):
     """DELETE sets revoked=true (keeps row for audit), not hard delete."""
     from crud.handler import app
+
     fake_table = MagicMock()
-    fake_table.query.return_value = {"Items": [{"apiKeyHash": "h1", "keyId": "k1", "userId": user_id, "agentId": "agt-1"}]}
+    fake_table.query.return_value = {
+        "Items": [{"apiKeyHash": "h1", "keyId": "k1", "userId": user_id, "agentId": "agt-1"}]
+    }
     fake_table.update_item.return_value = {}
 
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys._get_agent_item") as ga, \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys._get_agent_item") as ga,
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-1", "workspace_id": workspace_id}
         resp = app.resolve(_event("DELETE", workspace_id, "agt-1", key_id="k1"), MagicMock())
@@ -121,12 +133,15 @@ def test_revoke_key_sets_flag(mock_jwt, user_id, workspace_id):
 def test_user_cannot_revoke_other_users_key(mock_jwt, user_id, workspace_id):
     """DELETE rejects if key belongs to a different user — 403 or 404."""
     from crud.handler import app
+
     fake_table = MagicMock()
     # GSI query scoped to userId#agentId — so other user's key won't show up.
     fake_table.query.return_value = {"Items": []}
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys._get_agent_item") as ga, \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys._get_agent_item") as ga,
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-1", "workspace_id": workspace_id}
         resp = app.resolve(_event("DELETE", workspace_id, "agt-1", key_id="k1"), MagicMock())
@@ -142,6 +157,7 @@ def test_user_cannot_revoke_other_users_key(mock_jwt, user_id, workspace_id):
 
 def test_generate_key_returns_unique_values():
     from crud.a2a_keys import _generate_key
+
     p1, h1, prefix1 = _generate_key()
     p2, h2, prefix2 = _generate_key()
     assert p1.startswith("as_")
@@ -152,12 +168,14 @@ def test_generate_key_returns_unique_values():
     assert hashlib.sha256(p1.encode()).hexdigest() == h1
     # All chars from the allowed charset
     from crud.a2a_keys import _KEY_CHARSET
+
     for c in p1[3:]:
         assert c in _KEY_CHARSET
 
 
 def test_get_table_lazy_init():
     import crud.a2a_keys as mod
+
     mod._table = None
     sentinel_table = MagicMock()
     sentinel_resource = MagicMock()
@@ -172,6 +190,7 @@ def test_get_table_lazy_init():
 
 def test_get_agent_item_lazy_init():
     import crud.a2a_keys as mod
+
     mod._agents_table = None
     fake_table = MagicMock()
     fake_table.get_item.return_value = {"Item": {"agentId": "x"}}
@@ -188,6 +207,7 @@ def test_get_agent_item_lazy_init():
 
 def test_get_agent_item_returns_none_for_missing():
     import crud.a2a_keys as mod
+
     mod._agents_table = None
     fake_table = MagicMock()
     fake_table.get_item.return_value = {}
@@ -205,9 +225,12 @@ def test_get_agent_item_returns_none_for_missing():
 
 def test_create_key_invalid_agent_id(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_table = MagicMock()
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(_event("POST", workspace_id, "bad agt!"), MagicMock())
     assert resp["statusCode"] == 400
@@ -215,10 +238,13 @@ def test_create_key_invalid_agent_id(mock_jwt, user_id, workspace_id):
 
 def test_create_key_agent_not_in_workspace(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_table = MagicMock()
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys._get_agent_item") as ga, \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys._get_agent_item") as ga,
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-1", "workspace_id": "other-ws"}
         resp = app.resolve(_event("POST", workspace_id, "agt-1"), MagicMock())
@@ -227,10 +253,13 @@ def test_create_key_agent_not_in_workspace(mock_jwt, user_id, workspace_id):
 
 def test_create_key_agent_not_found(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_table = MagicMock()
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys._get_agent_item") as ga, \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys._get_agent_item") as ga,
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = None
         resp = app.resolve(_event("POST", workspace_id, "agt-1"), MagicMock())
@@ -240,6 +269,7 @@ def test_create_key_agent_not_found(mock_jwt, user_id, workspace_id):
 def test_create_key_auth_check_fails(mock_jwt, user_id, workspace_id):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.a2a_keys.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         resp = app.resolve(_event("POST", workspace_id, "agt-1"), MagicMock())
@@ -248,9 +278,12 @@ def test_create_key_auth_check_fails(mock_jwt, user_id, workspace_id):
 
 def test_list_keys_invalid_agent_id(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_table = MagicMock()
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(_event("GET", workspace_id, "bad agt!"), MagicMock())
     assert resp["statusCode"] == 400
@@ -258,10 +291,13 @@ def test_list_keys_invalid_agent_id(mock_jwt, user_id, workspace_id):
 
 def test_list_keys_agent_not_in_workspace(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_table = MagicMock()
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys._get_agent_item") as ga, \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys._get_agent_item") as ga,
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-1", "workspace_id": "other-ws"}
         resp = app.resolve(_event("GET", workspace_id, "agt-1"), MagicMock())
@@ -271,6 +307,7 @@ def test_list_keys_agent_not_in_workspace(mock_jwt, user_id, workspace_id):
 def test_list_keys_auth_check_fails(workspace_id):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.a2a_keys.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         resp = app.resolve(_event("GET", workspace_id, "agt-1"), MagicMock())
@@ -279,9 +316,12 @@ def test_list_keys_auth_check_fails(workspace_id):
 
 def test_revoke_key_invalid_agent_id(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_table = MagicMock()
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(_event("DELETE", workspace_id, "bad agt!", key_id="k1"), MagicMock())
     assert resp["statusCode"] == 400
@@ -289,10 +329,13 @@ def test_revoke_key_invalid_agent_id(mock_jwt, user_id, workspace_id):
 
 def test_revoke_key_agent_not_in_workspace(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_table = MagicMock()
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys._get_agent_item") as ga, \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys._get_agent_item") as ga,
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-1", "workspace_id": "other-ws"}
         resp = app.resolve(_event("DELETE", workspace_id, "agt-1", key_id="k1"), MagicMock())
@@ -302,6 +345,7 @@ def test_revoke_key_agent_not_in_workspace(mock_jwt, user_id, workspace_id):
 def test_revoke_key_auth_check_fails(workspace_id):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.a2a_keys.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         resp = app.resolve(_event("DELETE", workspace_id, "agt-1", key_id="k1"), MagicMock())
@@ -313,18 +357,23 @@ def test_revoke_key_user_id_mismatch(mock_jwt, user_id, workspace_id):
     This shouldn't normally happen because GSI query scopes by user, but
     defensive code path handles mismatched DB entries."""
     from crud.handler import app
+
     fake_table = MagicMock()
     fake_table.query.return_value = {
-        "Items": [{
-            "apiKeyHash": "h1",
-            "keyId": "k1",
-            "userId": "different-user",
-            "agentId": "agt-1",
-        }]
+        "Items": [
+            {
+                "apiKeyHash": "h1",
+                "keyId": "k1",
+                "userId": "different-user",
+                "agentId": "agt-1",
+            }
+        ]
     }
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys._get_agent_item") as ga, \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys._get_agent_item") as ga,
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-1", "workspace_id": workspace_id}
         resp = app.resolve(_event("DELETE", workspace_id, "agt-1", key_id="k1"), MagicMock())
@@ -359,10 +408,13 @@ def _meta_event(method, ws_id, key_id=None):
 
 def test_create_meta_key_success(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_table = MagicMock()
     fake_table.put_item.return_value = {}
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(_meta_event("POST", workspace_id), MagicMock())
     assert resp["statusCode"] == 201
@@ -379,6 +431,7 @@ def test_create_meta_key_success(mock_jwt, user_id, workspace_id):
 def test_create_meta_key_auth_fails(workspace_id):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.a2a_keys.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         resp = app.resolve(_meta_event("POST", workspace_id), MagicMock())
@@ -387,6 +440,7 @@ def test_create_meta_key_auth_fails(workspace_id):
 
 def test_list_meta_keys_returns_metadata(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_table = MagicMock()
     fake_table.query.return_value = {
         "Items": [
@@ -410,8 +464,10 @@ def test_list_meta_keys_returns_metadata(mock_jwt, user_id, workspace_id):
             },
         ]
     }
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(_meta_event("GET", workspace_id), MagicMock())
     assert resp["statusCode"] == 200
@@ -425,6 +481,7 @@ def test_list_meta_keys_returns_metadata(mock_jwt, user_id, workspace_id):
 def test_list_meta_keys_auth_fails(workspace_id):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.a2a_keys.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         resp = app.resolve(_meta_event("GET", workspace_id), MagicMock())
@@ -433,13 +490,14 @@ def test_list_meta_keys_auth_fails(workspace_id):
 
 def test_revoke_meta_key_success(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_table = MagicMock()
-    fake_table.query.return_value = {
-        "Items": [{"apiKeyHash": "h1", "keyId": "k1", "userId": user_id}]
-    }
+    fake_table.query.return_value = {"Items": [{"apiKeyHash": "h1", "keyId": "k1", "userId": user_id}]}
     fake_table.update_item.return_value = {}
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(_meta_event("DELETE", workspace_id, key_id="k1"), MagicMock())
     assert resp["statusCode"] == 200
@@ -449,10 +507,13 @@ def test_revoke_meta_key_success(mock_jwt, user_id, workspace_id):
 
 def test_revoke_meta_key_not_found(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_table = MagicMock()
     fake_table.query.return_value = {"Items": []}
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys.auth_check") as auth:
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(_meta_event("DELETE", workspace_id, key_id="k1"), MagicMock())
     assert resp["statusCode"] == 404
@@ -460,12 +521,13 @@ def test_revoke_meta_key_not_found(mock_jwt, user_id, workspace_id):
 
 def test_revoke_meta_key_user_id_mismatch(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_table = MagicMock()
-    fake_table.query.return_value = {
-        "Items": [{"apiKeyHash": "h1", "keyId": "k1", "userId": "other-user"}]
-    }
-    with patch("crud.a2a_keys._get_table", return_value=fake_table), \
-         patch("crud.a2a_keys.auth_check") as auth:
+    fake_table.query.return_value = {"Items": [{"apiKeyHash": "h1", "keyId": "k1", "userId": "other-user"}]}
+    with (
+        patch("crud.a2a_keys._get_table", return_value=fake_table),
+        patch("crud.a2a_keys.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(_meta_event("DELETE", workspace_id, key_id="k1"), MagicMock())
     assert resp["statusCode"] == 403
@@ -474,6 +536,7 @@ def test_revoke_meta_key_user_id_mismatch(mock_jwt, user_id, workspace_id):
 def test_revoke_meta_key_auth_fails(workspace_id):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.a2a_keys.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         resp = app.resolve(_meta_event("DELETE", workspace_id, key_id="k1"), MagicMock())

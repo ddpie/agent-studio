@@ -3,6 +3,7 @@
 Gated by AGENT_STUDIO_E2E=1. Uses real AWS APIs — needs valid credentials
 with bedrock-agentcore permissions.
 """
+
 import os
 import time
 import uuid
@@ -19,10 +20,12 @@ REGION = os.environ.get("AGENT_STUDIO_REGION", "us-east-1")
 
 # Strategy config matching lambda/shared/memory_strategies.py
 _STRATEGIES = [
-    {"userPreferenceMemoryStrategy": {
-        "name": "UserPreferences",
-        "namespaceTemplates": ["/users/{actorId}/preferences/"],
-    }},
+    {
+        "userPreferenceMemoryStrategy": {
+            "name": "UserPreferences",
+            "namespaceTemplates": ["/users/{actorId}/preferences/"],
+        }
+    },
 ]
 
 
@@ -57,12 +60,14 @@ def test_event_write_and_preference_extraction(memory_resource):
         actorId=actor_id,
         sessionId=session_id,
         eventTimestamp=int(time.time()),
-        payload=[{
-            "conversational": {
-                "role": "USER",
-                "content": {"text": "Please always respond in concise Chinese. I prefer that style."},
-            },
-        }],
+        payload=[
+            {
+                "conversational": {
+                    "role": "USER",
+                    "content": {"text": "Please always respond in concise Chinese. I prefer that style."},
+                },
+            }
+        ],
     )
 
     # Extraction is async — poll up to 3 minutes.
@@ -71,7 +76,9 @@ def test_event_write_and_preference_extraction(memory_resource):
     records = []
     while time.time() < deadline:
         resp = data.list_memory_records(
-            memoryId=memory_resource, namespace=ns, maxResults=10,
+            memoryId=memory_resource,
+            namespace=ns,
+            maxResults=10,
         )
         records = resp.get("memoryRecordSummaries", [])
         if records:
@@ -79,9 +86,7 @@ def test_event_write_and_preference_extraction(memory_resource):
         time.sleep(10)
 
     assert records, f"no records extracted after 180s in namespace {ns}"
-    all_text = " ".join(
-        (r.get("content") or {}).get("text", "") for r in records
-    ).lower()
+    all_text = " ".join((r.get("content") or {}).get("text", "") for r in records).lower()
     assert "chinese" in all_text or "concise" in all_text, (
         f"extracted records don't mention expected preference: {all_text[:200]}"
     )
@@ -94,7 +99,9 @@ def test_delete_record_removes_it(memory_resource):
     ns = f"/users/{actor_id}/preferences/"
 
     resp = data.list_memory_records(
-        memoryId=memory_resource, namespace=ns, maxResults=10,
+        memoryId=memory_resource,
+        namespace=ns,
+        maxResults=10,
     )
     records = resp.get("memoryRecordSummaries", [])
     if not records:
@@ -105,7 +112,9 @@ def test_delete_record_removes_it(memory_resource):
 
     # Verify deletion
     resp2 = data.list_memory_records(
-        memoryId=memory_resource, namespace=ns, maxResults=10,
+        memoryId=memory_resource,
+        namespace=ns,
+        maxResults=10,
     )
     remaining_ids = [r["memoryRecordId"] for r in resp2.get("memoryRecordSummaries", [])]
     assert record_id not in remaining_ids, f"record {record_id} still present after delete"

@@ -1,4 +1,5 @@
 """Tests for shared.auth module — JWT verification, membership, permissions."""
+
 import json
 import os
 import time
@@ -58,6 +59,7 @@ def _make_valid_claims(sub="user-123", **overrides):
 # _fetch_jwks
 # ---------------------------------------------------------------------------
 
+
 class TestFetchJwks:
     def test_fetches_from_cognito_endpoint(self):
         fake_response = MagicMock()
@@ -79,6 +81,7 @@ class TestFetchJwks:
 # ---------------------------------------------------------------------------
 # _get_signing_key
 # ---------------------------------------------------------------------------
+
 
 class TestGetSigningKey:
     def setup_method(self):
@@ -104,8 +107,10 @@ class TestGetSigningKey:
         fake_response.__enter__ = lambda s: s
         fake_response.__exit__ = MagicMock(return_value=False)
 
-        with patch("shared.auth.jwt.get_unverified_header", return_value=token_header), \
-             patch("shared.auth.urllib.request.urlopen", return_value=fake_response):
+        with (
+            patch("shared.auth.jwt.get_unverified_header", return_value=token_header),
+            patch("shared.auth.urllib.request.urlopen", return_value=fake_response),
+        ):
             key = _get_signing_key("fake-token")
 
         assert key["kid"] == new_kid
@@ -118,9 +123,12 @@ class TestGetSigningKey:
         fake_response.__enter__ = lambda s: s
         fake_response.__exit__ = MagicMock(return_value=False)
 
-        with patch("shared.auth.jwt.get_unverified_header", return_value=token_header), \
-             patch("shared.auth.urllib.request.urlopen", return_value=fake_response):
+        with (
+            patch("shared.auth.jwt.get_unverified_header", return_value=token_header),
+            patch("shared.auth.urllib.request.urlopen", return_value=fake_response),
+        ):
             from jose import JWTError
+
             with pytest.raises(JWTError, match="Signing key not found"):
                 _get_signing_key("fake-token")
 
@@ -128,6 +136,7 @@ class TestGetSigningKey:
 # ---------------------------------------------------------------------------
 # verify_jwt
 # ---------------------------------------------------------------------------
+
 
 class TestVerifyJwt:
     def setup_method(self):
@@ -138,45 +147,59 @@ class TestVerifyJwt:
 
     def test_valid_token_returns_claims(self):
         claims = _make_valid_claims()
-        with patch("shared.auth._get_signing_key", return_value=FAKE_JWKS["keys"][0]), \
-             patch("shared.auth.jwt.decode", return_value=claims):
+        with (
+            patch("shared.auth._get_signing_key", return_value=FAKE_JWKS["keys"][0]),
+            patch("shared.auth.jwt.decode", return_value=claims),
+        ):
             result = verify_jwt("valid-token")
         assert result["sub"] == "user-123"
         assert result["token_use"] == "id"
 
     def test_expired_token_raises_valueerror(self):
-        with patch("shared.auth._get_signing_key", return_value=FAKE_JWKS["keys"][0]), \
-             patch("shared.auth.jwt.decode", side_effect=jose_jwt.ExpiredSignatureError("expired")):
+        with (
+            patch("shared.auth._get_signing_key", return_value=FAKE_JWKS["keys"][0]),
+            patch("shared.auth.jwt.decode", side_effect=jose_jwt.ExpiredSignatureError("expired")),
+        ):
             # jose raises JWTError subclass for expired tokens
             # but our code patches via jose JWTError catch
             pass
 
         # The actual flow: jwt.decode raises JWTError (parent), verify_jwt catches and raises ValueError
         from jose import JWTError
-        with patch("shared.auth._get_signing_key", return_value=FAKE_JWKS["keys"][0]), \
-             patch("shared.auth.jwt.decode", side_effect=JWTError("Token is expired")):
+
+        with (
+            patch("shared.auth._get_signing_key", return_value=FAKE_JWKS["keys"][0]),
+            patch("shared.auth.jwt.decode", side_effect=JWTError("Token is expired")),
+        ):
             with pytest.raises(ValueError, match="Authentication failed"):
                 verify_jwt("expired-token")
 
     def test_invalid_signature_raises_valueerror(self):
         from jose import JWTError
-        with patch("shared.auth._get_signing_key", return_value=FAKE_JWKS["keys"][0]), \
-             patch("shared.auth.jwt.decode", side_effect=JWTError("Signature verification failed")):
+
+        with (
+            patch("shared.auth._get_signing_key", return_value=FAKE_JWKS["keys"][0]),
+            patch("shared.auth.jwt.decode", side_effect=JWTError("Signature verification failed")),
+        ):
             with pytest.raises(ValueError, match="Authentication failed"):
                 verify_jwt("bad-sig-token")
 
     def test_wrong_token_use_raises_valueerror(self):
         claims = _make_valid_claims(token_use="access")
-        with patch("shared.auth._get_signing_key", return_value=FAKE_JWKS["keys"][0]), \
-             patch("shared.auth.jwt.decode", return_value=claims):
+        with (
+            patch("shared.auth._get_signing_key", return_value=FAKE_JWKS["keys"][0]),
+            patch("shared.auth.jwt.decode", return_value=claims),
+        ):
             with pytest.raises(ValueError, match="Not an id token"):
                 verify_jwt("access-token")
 
     def test_missing_token_use_raises_valueerror(self):
         claims = _make_valid_claims()
         del claims["token_use"]
-        with patch("shared.auth._get_signing_key", return_value=FAKE_JWKS["keys"][0]), \
-             patch("shared.auth.jwt.decode", return_value=claims):
+        with (
+            patch("shared.auth._get_signing_key", return_value=FAKE_JWKS["keys"][0]),
+            patch("shared.auth.jwt.decode", return_value=claims),
+        ):
             with pytest.raises(ValueError, match="Not an id token"):
                 verify_jwt("no-token-use")
 
@@ -185,19 +208,23 @@ class TestVerifyJwt:
         claims = _make_valid_claims()
         del claims["sub"]
         claims["token_use"] = "id"
-        with patch("shared.auth._get_signing_key", return_value=FAKE_JWKS["keys"][0]), \
-             patch("shared.auth.jwt.decode", return_value=claims):
+        with (
+            patch("shared.auth._get_signing_key", return_value=FAKE_JWKS["keys"][0]),
+            patch("shared.auth.jwt.decode", return_value=claims),
+        ):
             result = verify_jwt("no-sub-token")
         assert "sub" not in result
 
     def test_empty_token_raises_valueerror(self):
         from jose import JWTError
+
         with patch("shared.auth._get_signing_key", side_effect=JWTError("Not enough segments")):
             with pytest.raises(ValueError, match="Authentication failed"):
                 verify_jwt("")
 
     def test_malformed_token_raises_valueerror(self):
         from jose import JWTError
+
         with patch("shared.auth._get_signing_key", side_effect=JWTError("Invalid token")):
             with pytest.raises(ValueError, match="Authentication failed"):
                 verify_jwt("not.a.jwt.at.all")
@@ -206,6 +233,7 @@ class TestVerifyJwt:
 # ---------------------------------------------------------------------------
 # get_membership
 # ---------------------------------------------------------------------------
+
 
 class TestGetMembership:
     def test_user_is_member(self):
@@ -285,6 +313,7 @@ class TestGetMembership:
 # check_permission
 # ---------------------------------------------------------------------------
 
+
 class TestCheckPermission:
     def test_owner_has_all_permissions(self):
         member = {"role": "owner"}
@@ -343,6 +372,7 @@ class TestCheckPermission:
 # is_platform_admin
 # ---------------------------------------------------------------------------
 
+
 class TestIsPlatformAdmin:
     def test_user_in_platform_admins_group(self):
         claims = {"cognito:groups": ["platform-admins", "other-group"]}
@@ -373,6 +403,7 @@ class TestIsPlatformAdmin:
 # ROLE_LEVEL ordering
 # ---------------------------------------------------------------------------
 
+
 class TestRoleLevel:
     def test_role_hierarchy(self):
         assert ROLE_LEVEL["viewer"] < ROLE_LEVEL["editor"]
@@ -386,6 +417,7 @@ class TestRoleLevel:
 # ---------------------------------------------------------------------------
 # _get_ws_table (singleton)
 # ---------------------------------------------------------------------------
+
 
 class TestGetWsTable:
     def test_creates_table_resource(self):

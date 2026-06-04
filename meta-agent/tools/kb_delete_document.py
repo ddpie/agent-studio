@@ -39,7 +39,9 @@ def kb_delete_document(kb_id: str, document_key: str) -> str:
 
     s3_prefix = item["s3_prefix"]["S"]
     if not document_key.startswith(s3_prefix):
-        return json.dumps({"error": "invalid_document_key", "message": "Document key does not belong to this KB."})
+        return json.dumps(
+            {"error": "invalid_document_key", "message": "Document key does not belong to this KB."}
+        )
 
     bedrock_kb_id = item["bedrock_kb_id"]["S"]
     data_source_id = item["data_source_id"]["S"]
@@ -57,14 +59,25 @@ def kb_delete_document(kb_id: str, document_key: str) -> str:
             TableName=KB_TABLE,
             Key={"ws_id": {"S": ws_id}, "kb_id": {"S": kb_id}},
             UpdateExpression="SET last_ingestion_job_id = :job, updated_at = :now",
-            ExpressionAttributeValues={":job": {"S": ingestion_job_id}, ":now": {"S": datetime.now(timezone.utc).isoformat()}},
+            ExpressionAttributeValues={
+                ":job": {"S": ingestion_job_id},
+                ":now": {"S": datetime.now(timezone.utc).isoformat()},
+            },
         )
     except Exception as e:
-        return json.dumps({"deleted": True, "ingestion_job_id": None, "warning": f"Document deleted but re-ingestion failed: {e}"})
+        return json.dumps(
+            {
+                "deleted": True,
+                "ingestion_job_id": None,
+                "warning": f"Document deleted but re-ingestion failed: {e}",
+            }
+        )
 
-    return json.dumps({
-        "deleted": True,
-        "document_key": document_key,
-        "ingestion_job_id": ingestion_job_id,
-        "message": "Document deleted. Re-ingestion started to remove vectors.",
-    })
+    return json.dumps(
+        {
+            "deleted": True,
+            "document_key": document_key,
+            "ingestion_job_id": ingestion_job_id,
+            "message": "Document deleted. Re-ingestion started to remove vectors.",
+        }
+    )

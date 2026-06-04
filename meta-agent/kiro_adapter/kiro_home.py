@@ -56,6 +56,7 @@ def _os_env_get(key: str, default: str) -> str:
     """Small helper so the agent config literal stays readable."""
     return os.environ.get(key, default)
 
+
 # Where kiro-cli-chat treats as $HOME. Intentionally NOT the AgentCore
 # sessionStorage mount (/mnt/kiro): Kiro crashes with ConnectionReset /
 # 'Bad file descriptor (os error 9)' when HOME is on NFS-backed storage.
@@ -143,6 +144,7 @@ def _enumerate_mcp_tool_refs() -> list[str]:
     """
     try:
         import main as _meta_main  # type: ignore
+
         names: list[str] = []
         for fn in _meta_main.ALL_TOOLS:
             n = getattr(fn, "__name__", None) or getattr(fn, "name", None)
@@ -212,6 +214,7 @@ def ensure_kiro_home(
         caller should `session/new`).
     """
     import sys as _sys
+
     python_executable = python_executable or _sys.executable
 
     home_path = Path(home_root)
@@ -231,9 +234,7 @@ def ensure_kiro_home(
     shutil.copyfile(system_prompt_src, meta_prompt_dst)
 
     if not skill_edit_prompt_src:
-        skill_edit_prompt_src = str(
-            Path(system_prompt_src).parent / "skill-edit.md"
-        )
+        skill_edit_prompt_src = str(Path(system_prompt_src).parent / "skill-edit.md")
     skill_edit_dst = prompts_dir / "skill-edit.md"
     try:
         shutil.copyfile(skill_edit_prompt_src, skill_edit_dst)
@@ -248,9 +249,7 @@ def ensure_kiro_home(
         )
 
     if not agent_edit_prompt_src:
-        agent_edit_prompt_src = str(
-            Path(system_prompt_src).parent / "agent-edit.md"
-        )
+        agent_edit_prompt_src = str(Path(system_prompt_src).parent / "agent-edit.md")
     agent_edit_dst = prompts_dir / "agent-edit.md"
     try:
         shutil.copyfile(agent_edit_prompt_src, agent_edit_dst)
@@ -269,9 +268,7 @@ def ensure_kiro_home(
     try:
         meta_prompt_inline = meta_prompt_dst.read_text(encoding="utf-8")
     except OSError:
-        meta_prompt_inline = (
-            "You are Agent Studio — a Meta-Agent that orchestrates AI agents."
-        )
+        meta_prompt_inline = "You are Agent Studio — a Meta-Agent that orchestrates AI agents."
     try:
         skill_edit_prompt_inline = skill_edit_dst.read_text(encoding="utf-8")
     except OSError:
@@ -454,9 +451,7 @@ def _uuid_path(persist_root: str, agent_name: str) -> Path:
     Unknown agent names fall back to the meta-agent filename so legacy
     callers still work.
     """
-    filename = _SESSION_UUID_FILENAMES.get(
-        agent_name, _SESSION_UUID_FILENAMES[META_AGENT_NAME]
-    )
+    filename = _SESSION_UUID_FILENAMES.get(agent_name, _SESSION_UUID_FILENAMES[META_AGENT_NAME])
     return Path(persist_root) / filename
 
 

@@ -1,4 +1,5 @@
 """Tests for crud/evaluations.py — create + read."""
+
 import json
 from unittest.mock import MagicMock, patch
 
@@ -12,11 +13,13 @@ def inject_env(monkeypatch):
     import importlib
 
     import shared.config as _cfg
+
     importlib.reload(_cfg)
     # Also reload crud.evaluations so its module-level EVALUATOR_ROLE_ARN
     # reference is fresh — earlier tests may have reloaded with an empty
     # value and left the module in that state.
     import crud.evaluations as _ev
+
     importlib.reload(_ev)
 
 
@@ -60,15 +63,19 @@ def test_create_eval_config_idempotent():
     import importlib
 
     import shared.config as _cfg
+
     importlib.reload(_cfg)
     import crud.evaluations as _ev
+
     importlib.reload(_ev)
     from botocore.exceptions import ClientError
 
     from crud.evaluations import create_eval_config_for_agent
 
-    with patch("crud.evaluations._get_control") as mock_c, \
-         patch("crud.evaluations._ensure_runtime_log_group") as mock_backfill:
+    with (
+        patch("crud.evaluations._get_control") as mock_c,
+        patch("crud.evaluations._ensure_runtime_log_group") as mock_backfill,
+    ):
         client = MagicMock()
         client.create_online_evaluation_config.side_effect = ClientError(
             {"Error": {"Code": "ConflictException", "Message": "already exists"}},
@@ -87,9 +94,11 @@ def test_create_eval_config_no_role_returns_empty(monkeypatch):
     import importlib
 
     import shared.config as _cfg
+
     importlib.reload(_cfg)
     # Also reload evaluations to pick up the empty value
     import crud.evaluations as _ev
+
     importlib.reload(_ev)
     name = _ev.create_eval_config_for_workspace(workspace_id="abc-123")
     assert name == ""
@@ -117,6 +126,7 @@ def _agent_eval_event(workspace_id: str, agent_id: str = "agt-test"):
 def test_get_agent_evaluations_returns_scores(mock_jwt, user_id, workspace_id):
     """GET /agents/{id}/evaluations returns parsed evaluator rows."""
     from crud.handler import app
+
     fake_logs = MagicMock()
     fake_logs.describe_log_groups.return_value = {
         "logGroups": [
@@ -147,10 +157,12 @@ def test_get_agent_evaluations_returns_scores(mock_jwt, user_id, workspace_id):
         "onlineEvaluationConfigName": "agentstudio_test",
     }
 
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga, \
-         patch("crud.evaluations._find_config_by_name", return_value=fake_cfg), \
-         patch("crud.evaluations._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agent_item") as ga,
+        patch("crud.evaluations._find_config_by_name", return_value=fake_cfg),
+        patch("crud.evaluations._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(_agent_eval_event(workspace_id), MagicMock())
@@ -166,6 +178,7 @@ def test_get_agent_evaluations_returns_scores(mock_jwt, user_id, workspace_id):
 def test_get_agent_evaluations_empty_when_no_results(mock_jwt, user_id, workspace_id):
     """Empty Logs Insights results → {evaluations: []}, not 500."""
     from crud.handler import app
+
     fake_logs = MagicMock()
     fake_logs.describe_log_groups.return_value = {
         "logGroups": [
@@ -175,9 +188,11 @@ def test_get_agent_evaluations_empty_when_no_results(mock_jwt, user_id, workspac
     fake_logs.start_query.return_value = {"queryId": "q-2"}
     fake_logs.get_query_results.return_value = {"status": "Complete", "results": []}
 
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga, \
-         patch("crud.evaluations._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agent_item") as ga,
+        patch("crud.evaluations._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(_agent_eval_event(workspace_id), MagicMock())
@@ -189,12 +204,15 @@ def test_get_agent_evaluations_empty_when_no_results(mock_jwt, user_id, workspac
 def test_get_agent_evaluations_no_log_groups_returns_empty(mock_jwt, user_id, workspace_id):
     """When no eval output log groups exist yet, short-circuit to []."""
     from crud.handler import app
+
     fake_logs = MagicMock()
     fake_logs.describe_log_groups.return_value = {"logGroups": []}
 
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga, \
-         patch("crud.evaluations._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agent_item") as ga,
+        patch("crud.evaluations._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(_agent_eval_event(workspace_id), MagicMock())
@@ -207,8 +225,8 @@ def test_get_agent_evaluations_no_log_groups_returns_empty(mock_jwt, user_id, wo
 def test_get_agent_evaluations_forbidden_when_agent_not_in_workspace(mock_jwt, user_id, workspace_id):
     """Agent's workspace_id != path wsId → 403."""
     from crud.handler import app
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga:
+
+    with patch("crud.evaluations.auth_check") as auth, patch("crud.evaluations._get_agent_item") as ga:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": "other-ws"}
         resp = app.resolve(_agent_eval_event(workspace_id), MagicMock())
@@ -224,8 +242,10 @@ def test_eval_config_name_is_deterministic_and_capped():
     import importlib
 
     import shared.config as _cfg
+
     importlib.reload(_cfg)
     import crud.evaluations as _ev
+
     importlib.reload(_ev)
     n1 = _ev._eval_config_name_for_agent("ws-very-long-id-12345", "Agent-AAA-bbb-ccc-XYZ")
     n2 = _ev._eval_config_name_for_agent("ws-very-long-id-12345", "Agent-AAA-bbb-ccc-XYZ")
@@ -236,6 +256,7 @@ def test_eval_config_name_is_deterministic_and_capped():
 
 def test_eval_config_name_includes_hash_to_avoid_collision():
     import crud.evaluations as _ev
+
     a = _ev._eval_config_name_for_agent("ws", "CustomerServiceBotV1-x")
     b = _ev._eval_config_name_for_agent("ws", "CustomerServiceBotV2-y")
     assert a != b
@@ -243,11 +264,13 @@ def test_eval_config_name_includes_hash_to_avoid_collision():
 
 def test_runtime_log_group_for_agent():
     import crud.evaluations as _ev
+
     assert _ev._runtime_log_group_for_agent("agt-x") == "/aws/bedrock-agentcore/runtimes/agt-x-DEFAULT"
 
 
 def test_field_helper_returns_value_or_none():
     import crud.evaluations as _ev
+
     row = [{"field": "a", "value": "1"}, {"field": "b", "value": "2"}]
     assert _ev._field(row, "a") == "1"
     assert _ev._field(row, "b") == "2"
@@ -257,6 +280,7 @@ def test_field_helper_returns_value_or_none():
 def test_get_logs_lazy_init():
     """First call constructs the logs client; subsequent calls reuse cache."""
     import crud.evaluations as _ev
+
     _ev._logs = None
     with patch("crud.evaluations.boto3.client") as mock_b:
         mock_b.return_value = MagicMock()
@@ -268,6 +292,7 @@ def test_get_logs_lazy_init():
 
 def test_get_control_lazy_init():
     import crud.evaluations as _ev
+
     _ev._control = None
     with patch("crud.evaluations.boto3.client") as mock_b:
         mock_b.return_value = MagicMock()
@@ -278,6 +303,7 @@ def test_get_control_lazy_init():
 
 def test_get_agents_table_lazy_init():
     import crud.evaluations as _ev
+
     _ev._agents_table = None
     with patch("crud.evaluations.boto3.resource") as mock_r:
         mock_r.return_value.Table.return_value = MagicMock()
@@ -288,6 +314,7 @@ def test_get_agents_table_lazy_init():
 
 def test_get_agent_item_returns_item():
     import crud.evaluations as _ev
+
     fake_table = MagicMock()
     fake_table.get_item.return_value = {"Item": {"agentId": "agt-1"}}
     with patch("crud.evaluations._get_agents_table", return_value=fake_table):
@@ -302,6 +329,7 @@ def test_get_agent_item_returns_item():
 
 def test_find_config_by_name_returns_match_first_page():
     import crud.evaluations as _ev
+
     client = MagicMock()
     client.list_online_evaluation_configs.return_value = {
         "onlineEvaluationConfigs": [
@@ -316,6 +344,7 @@ def test_find_config_by_name_returns_match_first_page():
 
 def test_find_config_by_name_paginates_then_finds():
     import crud.evaluations as _ev
+
     client = MagicMock()
     # First page: nextToken set, no match. Second page: match. Always
     # follow with explicit None nextToken to avoid hangs.
@@ -330,6 +359,7 @@ def test_find_config_by_name_paginates_then_finds():
 
 def test_find_config_by_name_returns_none_when_exhausted():
     import crud.evaluations as _ev
+
     client = MagicMock()
     client.list_online_evaluation_configs.side_effect = [
         {"items": [{"name": "x"}], "nextToken": "t1"},
@@ -351,8 +381,10 @@ def test_create_eval_config_no_role_returns_empty_string(monkeypatch):
     import importlib
 
     import shared.config as _cfg
+
     importlib.reload(_cfg)
     import crud.evaluations as _ev
+
     importlib.reload(_ev)
     name = _ev.create_eval_config_for_agent("ws-1", "agent-1")
     assert name == ""
@@ -360,6 +392,7 @@ def test_create_eval_config_no_role_returns_empty_string(monkeypatch):
 
 def test_create_eval_config_succeeds_path():
     import crud.evaluations as _ev
+
     with patch("crud.evaluations._get_control") as mock_c:
         client = MagicMock()
         client.create_online_evaluation_config.return_value = {}
@@ -373,6 +406,7 @@ def test_create_eval_config_unknown_error_reraises():
     from botocore.exceptions import ClientError
 
     import crud.evaluations as _ev
+
     with patch("crud.evaluations._get_control") as mock_c:
         client = MagicMock()
         client.create_online_evaluation_config.side_effect = ClientError(
@@ -391,8 +425,11 @@ def test_create_eval_config_unknown_error_reraises():
 
 def test_ensure_runtime_log_group_no_match_noops():
     import crud.evaluations as _ev
-    with patch("crud.evaluations._find_config_by_name", return_value=None), \
-         patch("crud.evaluations._get_control") as mock_c:
+
+    with (
+        patch("crud.evaluations._find_config_by_name", return_value=None),
+        patch("crud.evaluations._get_control") as mock_c,
+    ):
         _ev._ensure_runtime_log_group("name-x", "agt-1")
         mock_c.return_value.update_online_evaluation_config.assert_not_called()
 
@@ -401,8 +438,11 @@ def test_ensure_runtime_log_group_find_clienterror_swallowed():
     from botocore.exceptions import ClientError
 
     import crud.evaluations as _ev
-    with patch("crud.evaluations._find_config_by_name") as mock_find, \
-         patch("crud.evaluations._get_control") as mock_c:
+
+    with (
+        patch("crud.evaluations._find_config_by_name") as mock_find,
+        patch("crud.evaluations._get_control") as mock_c,
+    ):
         mock_find.side_effect = ClientError({"Error": {"Code": "Throttling"}}, "List")
         # Should not raise
         _ev._ensure_runtime_log_group("name", "agt-1")
@@ -411,8 +451,11 @@ def test_ensure_runtime_log_group_find_clienterror_swallowed():
 
 def test_ensure_runtime_log_group_no_cfg_id_noops():
     import crud.evaluations as _ev
-    with patch("crud.evaluations._find_config_by_name", return_value={"name": "x"}), \
-         patch("crud.evaluations._get_control") as mock_c:
+
+    with (
+        patch("crud.evaluations._find_config_by_name", return_value={"name": "x"}),
+        patch("crud.evaluations._get_control") as mock_c,
+    ):
         _ev._ensure_runtime_log_group("name-x", "agt-1")
         mock_c.return_value.update_online_evaluation_config.assert_not_called()
 
@@ -421,18 +464,22 @@ def test_ensure_runtime_log_group_get_clienterror_swallowed():
     from botocore.exceptions import ClientError
 
     import crud.evaluations as _ev
+
     client = MagicMock()
     client.get_online_evaluation_config.side_effect = ClientError(
         {"Error": {"Code": "AccessDenied"}}, "GetOnlineEvaluationConfig"
     )
-    with patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-1"}), \
-         patch("crud.evaluations._get_control", return_value=client):
+    with (
+        patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-1"}),
+        patch("crud.evaluations._get_control", return_value=client),
+    ):
         _ev._ensure_runtime_log_group("name-x", "agt-1")
         client.update_online_evaluation_config.assert_not_called()
 
 
 def test_ensure_runtime_log_group_already_present_noops():
     import crud.evaluations as _ev
+
     client = MagicMock()
     client.get_online_evaluation_config.return_value = {
         "dataSourceConfig": {
@@ -442,20 +489,25 @@ def test_ensure_runtime_log_group_already_present_noops():
             },
         }
     }
-    with patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-1"}), \
-         patch("crud.evaluations._get_control", return_value=client):
+    with (
+        patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-1"}),
+        patch("crud.evaluations._get_control", return_value=client),
+    ):
         _ev._ensure_runtime_log_group("name-x", "agt-1")
         client.update_online_evaluation_config.assert_not_called()
 
 
 def test_ensure_runtime_log_group_backfill_path():
     import crud.evaluations as _ev
+
     client = MagicMock()
     client.get_online_evaluation_config.return_value = {
         "dataSourceConfig": {"cloudWatchLogs": {"logGroupNames": ["aws/spans"]}}
     }
-    with patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-1"}), \
-         patch("crud.evaluations._get_control", return_value=client):
+    with (
+        patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-1"}),
+        patch("crud.evaluations._get_control", return_value=client),
+    ):
         _ev._ensure_runtime_log_group("name-x", "agt-1")
     client.update_online_evaluation_config.assert_called_once()
 
@@ -464,6 +516,7 @@ def test_ensure_runtime_log_group_update_clienterror_logged():
     from botocore.exceptions import ClientError
 
     import crud.evaluations as _ev
+
     client = MagicMock()
     client.get_online_evaluation_config.return_value = {
         "dataSourceConfig": {"cloudWatchLogs": {"logGroupNames": []}}
@@ -471,8 +524,10 @@ def test_ensure_runtime_log_group_update_clienterror_logged():
     client.update_online_evaluation_config.side_effect = ClientError(
         {"Error": {"Code": "Throttling"}}, "UpdateOnlineEvaluationConfig"
     )
-    with patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-1"}), \
-         patch("crud.evaluations._get_control", return_value=client):
+    with (
+        patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-1"}),
+        patch("crud.evaluations._get_control", return_value=client),
+    ):
         # Should not raise
         _ev._ensure_runtime_log_group("name-x", "agt-1")
 
@@ -487,8 +542,10 @@ def test_delete_eval_config_no_role_short_circuits(monkeypatch):
     import importlib
 
     import shared.config as _cfg
+
     importlib.reload(_cfg)
     import crud.evaluations as _ev
+
     importlib.reload(_ev)
     with patch("crud.evaluations._find_config_by_name") as f:
         _ev.delete_eval_config_for_agent("ws", "agt")
@@ -497,17 +554,23 @@ def test_delete_eval_config_no_role_short_circuits(monkeypatch):
 
 def test_delete_eval_config_missing_noops():
     import crud.evaluations as _ev
-    with patch("crud.evaluations._find_config_by_name", return_value=None), \
-         patch("crud.evaluations._get_control") as mock_c:
+
+    with (
+        patch("crud.evaluations._find_config_by_name", return_value=None),
+        patch("crud.evaluations._get_control") as mock_c,
+    ):
         _ev.delete_eval_config_for_agent("ws", "agt")
         mock_c.return_value.delete_online_evaluation_config.assert_not_called()
 
 
 def test_delete_eval_config_calls_delete():
     import crud.evaluations as _ev
+
     client = MagicMock()
-    with patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-1"}), \
-         patch("crud.evaluations._get_control", return_value=client):
+    with (
+        patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-1"}),
+        patch("crud.evaluations._get_control", return_value=client),
+    ):
         _ev.delete_eval_config_for_agent("ws", "agt")
     client.delete_online_evaluation_config.assert_called_once_with(onlineEvaluationConfigId="cfg-1")
 
@@ -516,18 +579,22 @@ def test_delete_eval_config_clienterror_swallowed():
     from botocore.exceptions import ClientError
 
     import crud.evaluations as _ev
+
     client = MagicMock()
     client.delete_online_evaluation_config.side_effect = ClientError(
         {"Error": {"Code": "Throttling"}}, "DeleteOnlineEvaluationConfig"
     )
-    with patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-1"}), \
-         patch("crud.evaluations._get_control", return_value=client):
+    with (
+        patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-1"}),
+        patch("crud.evaluations._get_control", return_value=client),
+    ):
         # Must not raise
         _ev.delete_eval_config_for_agent("ws", "agt")
 
 
 def test_sync_eval_config_calls_create():
     import crud.evaluations as _ev
+
     with patch("crud.evaluations.create_eval_config_for_agent", return_value="x") as mock_create:
         _ev.sync_eval_config_for_agent("ws", "agt")
     mock_create.assert_called_once_with("ws", "agt")
@@ -540,17 +607,20 @@ def test_sync_eval_config_calls_create():
 
 def test_create_eval_config_for_workspace_fans_out():
     import crud.evaluations as _ev
+
     fake_table = MagicMock()
     fake_table.query.return_value = {
         "Items": [
             {"agentId": "a1", "status": "active"},
             {"agentId": "a2", "status": "active"},
             {"agentId": "a3", "status": "archived"},  # skipped
-            {"agentId": "", "status": "active"},        # skipped: no id
+            {"agentId": "", "status": "active"},  # skipped: no id
         ],
     }
-    with patch("crud.evaluations._get_agents_table", return_value=fake_table), \
-         patch("crud.evaluations.create_eval_config_for_agent", side_effect=["n1", "n2"]) as mock_create:
+    with (
+        patch("crud.evaluations._get_agents_table", return_value=fake_table),
+        patch("crud.evaluations.create_eval_config_for_agent", side_effect=["n1", "n2"]) as mock_create,
+    ):
         result = _ev.create_eval_config_for_workspace("ws-1")
     assert "n1" in result and "n2" in result
     assert mock_create.call_count == 2
@@ -560,10 +630,9 @@ def test_create_eval_config_for_workspace_clienterror_returns_empty():
     from botocore.exceptions import ClientError
 
     import crud.evaluations as _ev
+
     fake_table = MagicMock()
-    fake_table.query.side_effect = ClientError(
-        {"Error": {"Code": "ResourceNotFoundException"}}, "Query"
-    )
+    fake_table.query.side_effect = ClientError({"Error": {"Code": "ResourceNotFoundException"}}, "Query")
     with patch("crud.evaluations._get_agents_table", return_value=fake_table):
         result = _ev.create_eval_config_for_workspace("ws-1")
     assert result == ""
@@ -576,11 +645,13 @@ def test_create_eval_config_for_workspace_clienterror_returns_empty():
 
 def test_run_logs_query_empty_log_groups_returns_empty():
     import crud.evaluations as _ev
+
     assert _ev._run_logs_query([], "fields @timestamp", 0, 100) == []
 
 
 def test_run_logs_query_complete_returns_results():
     import crud.evaluations as _ev
+
     fake = MagicMock()
     fake.start_query.return_value = {"queryId": "q-1"}
     fake.get_query_results.return_value = {"status": "Complete", "results": [["x"]]}
@@ -591,6 +662,7 @@ def test_run_logs_query_complete_returns_results():
 
 def test_run_logs_query_failed_status_returns_empty():
     import crud.evaluations as _ev
+
     fake = MagicMock()
     fake.start_query.return_value = {"queryId": "q-1"}
     fake.get_query_results.return_value = {"status": "Failed"}
@@ -601,6 +673,7 @@ def test_run_logs_query_failed_status_returns_empty():
 
 def test_run_logs_query_cancelled_status_returns_empty():
     import crud.evaluations as _ev
+
     fake = MagicMock()
     fake.start_query.return_value = {"queryId": "q-1"}
     fake.get_query_results.return_value = {"status": "Cancelled"}
@@ -611,13 +684,16 @@ def test_run_logs_query_cancelled_status_returns_empty():
 
 def test_run_logs_query_timeout_attempts_stop_query():
     import crud.evaluations as _ev
+
     fake = MagicMock()
     fake.start_query.return_value = {"queryId": "q-1"}
     # Always return Running so the deadline elapses.
     fake.get_query_results.return_value = {"status": "Running"}
-    with patch("crud.evaluations._get_logs", return_value=fake), \
-         patch("crud.evaluations.time.time") as mock_time, \
-         patch("crud.evaluations.time.sleep"):
+    with (
+        patch("crud.evaluations._get_logs", return_value=fake),
+        patch("crud.evaluations.time.time") as mock_time,
+        patch("crud.evaluations.time.sleep"),
+    ):
         # First call: now. Loop checks "while time.time() < deadline" so
         # second call is past. Then stop_query runs.
         mock_time.side_effect = [0, 100]
@@ -630,13 +706,16 @@ def test_run_logs_query_timeout_stop_query_clienterror_swallowed():
     from botocore.exceptions import ClientError
 
     import crud.evaluations as _ev
+
     fake = MagicMock()
     fake.start_query.return_value = {"queryId": "q-1"}
     fake.get_query_results.return_value = {"status": "Running"}
     fake.stop_query.side_effect = ClientError({"Error": {"Code": "x"}}, "StopQuery")
-    with patch("crud.evaluations._get_logs", return_value=fake), \
-         patch("crud.evaluations.time.time") as mock_time, \
-         patch("crud.evaluations.time.sleep"):
+    with (
+        patch("crud.evaluations._get_logs", return_value=fake),
+        patch("crud.evaluations.time.time") as mock_time,
+        patch("crud.evaluations.time.sleep"),
+    ):
         mock_time.side_effect = [0, 100]
         out = _ev._run_logs_query(["lg-1"], "q", 0, 100, timeout_s=15)
     assert out == []
@@ -649,6 +728,7 @@ def test_run_logs_query_timeout_stop_query_clienterror_swallowed():
 
 def test_get_agent_evaluations_invalid_agent_id_400(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     bad_event = _agent_eval_event(workspace_id, "bad$id")
     bad_event["pathParameters"] = {"wsId": workspace_id, "agentId": "bad$id"}
     with patch("crud.evaluations.auth_check") as auth:
@@ -660,6 +740,7 @@ def test_get_agent_evaluations_invalid_agent_id_400(mock_jwt, user_id, workspace
 def test_get_agent_evaluations_auth_err_returns_err(mock_jwt, workspace_id):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.evaluations.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         resp = app.resolve(_agent_eval_event(workspace_id), MagicMock())
@@ -669,9 +750,12 @@ def test_get_agent_evaluations_auth_err_returns_err(mock_jwt, workspace_id):
 def test_get_agent_evaluations_no_config_returns_empty(mock_jwt, user_id, workspace_id):
     """If no per-agent config exists yet, returns empty (not 500)."""
     from crud.handler import app
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga, \
-         patch("crud.evaluations._find_config_by_name", return_value=None):
+
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agent_item") as ga,
+        patch("crud.evaluations._find_config_by_name", return_value=None),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(_agent_eval_event(workspace_id), MagicMock())
@@ -682,9 +766,12 @@ def test_get_agent_evaluations_no_config_returns_empty(mock_jwt, user_id, worksp
 def test_get_agent_evaluations_no_cfg_id_returns_empty(mock_jwt, user_id, workspace_id):
     """Config with neither id nor onlineEvaluationConfigId returns []."""
     from crud.handler import app
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga, \
-         patch("crud.evaluations._find_config_by_name", return_value={"foo": "bar"}):
+
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agent_item") as ga,
+        patch("crud.evaluations._find_config_by_name", return_value={"foo": "bar"}),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(_agent_eval_event(workspace_id), MagicMock())
@@ -697,16 +784,19 @@ def test_get_agent_evaluations_describe_log_groups_clienterror_continues(mock_jw
     from botocore.exceptions import ClientError
 
     from crud.handler import app
+
     fake_logs = MagicMock()
     fake_logs.describe_log_groups.side_effect = ClientError(
         {"Error": {"Code": "AccessDenied"}}, "DescribeLogGroups"
     )
     fake_logs.start_query.return_value = {"queryId": "q-1"}
     fake_logs.get_query_results.return_value = {"status": "Complete", "results": []}
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga, \
-         patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-x"}), \
-         patch("crud.evaluations._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agent_item") as ga,
+        patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-x"}),
+        patch("crud.evaluations._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(_agent_eval_event(workspace_id), MagicMock())
@@ -718,15 +808,16 @@ def test_get_agent_evaluations_query_clienterror_500(mock_jwt, user_id, workspac
     from botocore.exceptions import ClientError
 
     from crud.handler import app
+
     fake_logs = MagicMock()
     fake_logs.describe_log_groups.return_value = {"logGroups": []}
-    fake_logs.start_query.side_effect = ClientError(
-        {"Error": {"Code": "AccessDenied"}}, "StartQuery"
-    )
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga, \
-         patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-x"}), \
-         patch("crud.evaluations._get_logs", return_value=fake_logs):
+    fake_logs.start_query.side_effect = ClientError({"Error": {"Code": "AccessDenied"}}, "StartQuery")
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agent_item") as ga,
+        patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-x"}),
+        patch("crud.evaluations._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(_agent_eval_event(workspace_id), MagicMock())
@@ -736,6 +827,7 @@ def test_get_agent_evaluations_query_clienterror_500(mock_jwt, user_id, workspac
 def test_get_agent_evaluations_filters_invalid_score_and_missing_evaluator(mock_jwt, user_id, workspace_id):
     """Rows with no evaluator, non-numeric score, or null score are dropped."""
     from crud.handler import app
+
     fake_logs = MagicMock()
     fake_logs.describe_log_groups.return_value = {"logGroups": []}
     fake_logs.start_query.return_value = {"queryId": "q-1"}
@@ -763,10 +855,12 @@ def test_get_agent_evaluations_filters_invalid_score_and_missing_evaluator(mock_
             ],
         ],
     }
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga, \
-         patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-x"}), \
-         patch("crud.evaluations._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agent_item") as ga,
+        patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-x"}),
+        patch("crud.evaluations._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(_agent_eval_event(workspace_id), MagicMock())
@@ -778,6 +872,7 @@ def test_get_agent_evaluations_filters_invalid_score_and_missing_evaluator(mock_
 def test_get_agent_evaluations_all_errors_diagnostics(mock_jwt, user_id, workspace_id):
     """When all rows have errorType and none parse, surface diagnostics."""
     from crud.handler import app
+
     fake_logs = MagicMock()
     fake_logs.describe_log_groups.return_value = {"logGroups": []}
     fake_logs.start_query.return_value = {"queryId": "q-1"}
@@ -793,10 +888,12 @@ def test_get_agent_evaluations_all_errors_diagnostics(mock_jwt, user_id, workspa
             ],
         ],
     }
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga, \
-         patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-x"}), \
-         patch("crud.evaluations._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agent_item") as ga,
+        patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-x"}),
+        patch("crud.evaluations._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(_agent_eval_event(workspace_id), MagicMock())
@@ -828,6 +925,7 @@ def _enable_event(workspace_id, agent_id="agt-test"):
 def test_enable_agent_evaluations_auth_err(mock_jwt, workspace_id):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.evaluations.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         resp = app.resolve(_enable_event(workspace_id), MagicMock())
@@ -836,6 +934,7 @@ def test_enable_agent_evaluations_auth_err(mock_jwt, workspace_id):
 
 def test_enable_agent_evaluations_invalid_id(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     bad = _enable_event(workspace_id, agent_id="bad$id")
     bad["pathParameters"] = {"wsId": workspace_id, "agentId": "bad$id"}
     with patch("crud.evaluations.auth_check") as auth:
@@ -846,8 +945,8 @@ def test_enable_agent_evaluations_invalid_id(mock_jwt, user_id, workspace_id):
 
 def test_enable_agent_evaluations_agent_not_in_ws(mock_jwt, user_id, workspace_id):
     from crud.handler import app
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga:
+
+    with patch("crud.evaluations.auth_check") as auth, patch("crud.evaluations._get_agent_item") as ga:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": "other"}
         resp = app.resolve(_enable_event(workspace_id), MagicMock())
@@ -859,12 +958,14 @@ def test_enable_agent_evaluations_no_role_arn_500(mock_jwt, user_id, workspace_i
     import importlib
 
     import shared.config as _cfg
+
     importlib.reload(_cfg)
     import crud.evaluations as _ev
+
     importlib.reload(_ev)
     from crud.handler import app
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga:
+
+    with patch("crud.evaluations.auth_check") as auth, patch("crud.evaluations._get_agent_item") as ga:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(_enable_event(workspace_id), MagicMock())
@@ -873,10 +974,13 @@ def test_enable_agent_evaluations_no_role_arn_500(mock_jwt, user_id, workspace_i
 
 def test_enable_agent_evaluations_already_exists(mock_jwt, user_id, workspace_id):
     from crud.handler import app
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga, \
-         patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-1"}), \
-         patch("crud.evaluations.create_eval_config_for_agent") as mock_create:
+
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agent_item") as ga,
+        patch("crud.evaluations._find_config_by_name", return_value={"id": "cfg-1"}),
+        patch("crud.evaluations.create_eval_config_for_agent") as mock_create,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(_enable_event(workspace_id), MagicMock())
@@ -888,10 +992,13 @@ def test_enable_agent_evaluations_already_exists(mock_jwt, user_id, workspace_id
 
 def test_enable_agent_evaluations_creates_when_missing(mock_jwt, user_id, workspace_id):
     from crud.handler import app
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga, \
-         patch("crud.evaluations._find_config_by_name", return_value=None), \
-         patch("crud.evaluations.create_eval_config_for_agent", return_value="name-x"):
+
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agent_item") as ga,
+        patch("crud.evaluations._find_config_by_name", return_value=None),
+        patch("crud.evaluations.create_eval_config_for_agent", return_value="name-x"),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(_enable_event(workspace_id), MagicMock())
@@ -903,9 +1010,12 @@ def test_enable_agent_evaluations_clienterror_500(mock_jwt, user_id, workspace_i
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga, \
-         patch("crud.evaluations._find_config_by_name") as f:
+
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agent_item") as ga,
+        patch("crud.evaluations._find_config_by_name") as f,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         f.side_effect = ClientError({"Error": {"Code": "ServiceUnavailable"}}, "List")
@@ -935,6 +1045,7 @@ def _status_event(workspace_id, agent_id="agt-test"):
 def test_status_auth_err(mock_jwt, workspace_id):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.evaluations.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         resp = app.resolve(_status_event(workspace_id), MagicMock())
@@ -943,6 +1054,7 @@ def test_status_auth_err(mock_jwt, workspace_id):
 
 def test_status_invalid_id(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     bad = _status_event(workspace_id, agent_id="bad$id")
     bad["pathParameters"] = {"wsId": workspace_id, "agentId": "bad$id"}
     with patch("crud.evaluations.auth_check") as auth:
@@ -953,8 +1065,8 @@ def test_status_invalid_id(mock_jwt, user_id, workspace_id):
 
 def test_status_agent_not_in_ws(mock_jwt, user_id, workspace_id):
     from crud.handler import app
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga:
+
+    with patch("crud.evaluations.auth_check") as auth, patch("crud.evaluations._get_agent_item") as ga:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": "other"}
         resp = app.resolve(_status_event(workspace_id), MagicMock())
@@ -963,9 +1075,12 @@ def test_status_agent_not_in_ws(mock_jwt, user_id, workspace_id):
 
 def test_status_returns_not_exists_when_missing(mock_jwt, user_id, workspace_id):
     from crud.handler import app
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga, \
-         patch("crud.evaluations._find_config_by_name", return_value=None):
+
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agent_item") as ga,
+        patch("crud.evaluations._find_config_by_name", return_value=None),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(_status_event(workspace_id), MagicMock())
@@ -977,11 +1092,19 @@ def test_status_returns_not_exists_when_missing(mock_jwt, user_id, workspace_id)
 
 def test_status_returns_active(mock_jwt, user_id, workspace_id):
     from crud.handler import app
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga, \
-         patch("crud.evaluations._find_config_by_name", return_value={
-             "id": "cfg-1", "status": "ACTIVE", "executionStatus": "ENABLED",
-         }):
+
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agent_item") as ga,
+        patch(
+            "crud.evaluations._find_config_by_name",
+            return_value={
+                "id": "cfg-1",
+                "status": "ACTIVE",
+                "executionStatus": "ENABLED",
+            },
+        ),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(_status_event(workspace_id), MagicMock())
@@ -996,9 +1119,12 @@ def test_status_clienterror_500(mock_jwt, user_id, workspace_id):
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agent_item") as ga, \
-         patch("crud.evaluations._find_config_by_name") as f:
+
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agent_item") as ga,
+        patch("crud.evaluations._find_config_by_name") as f,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         f.side_effect = ClientError({"Error": {"Code": "Throttling"}}, "List")
@@ -1042,6 +1168,7 @@ def _ws_status_event(workspace_id):
 def test_ws_enable_auth_err(mock_jwt, workspace_id):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.evaluations.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         resp = app.resolve(_ws_enable_event(workspace_id), MagicMock())
@@ -1053,10 +1180,13 @@ def test_ws_enable_no_role_500(mock_jwt, user_id, workspace_id, monkeypatch):
     import importlib
 
     import shared.config as _cfg
+
     importlib.reload(_cfg)
     import crud.evaluations as _ev
+
     importlib.reload(_ev)
     from crud.handler import app
+
     with patch("crud.evaluations.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         resp = app.resolve(_ws_enable_event(workspace_id), MagicMock())
@@ -1065,8 +1195,11 @@ def test_ws_enable_no_role_500(mock_jwt, user_id, workspace_id, monkeypatch):
 
 def test_ws_enable_creates(mock_jwt, user_id, workspace_id):
     from crud.handler import app
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations.create_eval_config_for_workspace", return_value="n1,n2"):
+
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations.create_eval_config_for_workspace", return_value="n1,n2"),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         resp = app.resolve(_ws_enable_event(workspace_id), MagicMock())
     assert resp["statusCode"] == 200
@@ -1075,8 +1208,11 @@ def test_ws_enable_creates(mock_jwt, user_id, workspace_id):
 
 def test_ws_enable_noop_when_no_agents(mock_jwt, user_id, workspace_id):
     from crud.handler import app
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations.create_eval_config_for_workspace", return_value=""):
+
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations.create_eval_config_for_workspace", return_value=""),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         resp = app.resolve(_ws_enable_event(workspace_id), MagicMock())
     assert resp["statusCode"] == 200
@@ -1086,6 +1222,7 @@ def test_ws_enable_noop_when_no_agents(mock_jwt, user_id, workspace_id):
 def test_ws_status_auth_err(mock_jwt, workspace_id):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.evaluations.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         resp = app.resolve(_ws_status_event(workspace_id), MagicMock())
@@ -1096,12 +1233,13 @@ def test_ws_status_query_clienterror_returns_empty(mock_jwt, user_id, workspace_
     from botocore.exceptions import ClientError
 
     from crud.handler import app
+
     fake_table = MagicMock()
-    fake_table.query.side_effect = ClientError(
-        {"Error": {"Code": "Throttling"}}, "Query"
-    )
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agents_table", return_value=fake_table):
+    fake_table.query.side_effect = ClientError({"Error": {"Code": "Throttling"}}, "Query")
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agents_table", return_value=fake_table),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(_ws_status_event(workspace_id), MagicMock())
     assert resp["statusCode"] == 200
@@ -1112,19 +1250,22 @@ def test_ws_status_query_clienterror_returns_empty(mock_jwt, user_id, workspace_
 
 def test_ws_status_with_agents_returns_active(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_table = MagicMock()
     fake_table.query.return_value = {
         "Items": [
             {"agentId": "a1", "status": "active"},
             {"agentId": "a2", "status": "archived"},  # skipped
-            {"agentId": "", "status": "active"},        # skipped
+            {"agentId": "", "status": "active"},  # skipped
         ],
     }
     # Match returned with ACTIVE status
     fake_match = {"id": "cfg-1", "status": "ACTIVE"}
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agents_table", return_value=fake_table), \
-         patch("crud.evaluations._find_config_by_name", return_value=fake_match):
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agents_table", return_value=fake_table),
+        patch("crud.evaluations._find_config_by_name", return_value=fake_match),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(_ws_status_event(workspace_id), MagicMock())
     body = json.loads(resp["body"])
@@ -1136,14 +1277,17 @@ def test_ws_status_with_agents_returns_active(mock_jwt, user_id, workspace_id):
 def test_ws_status_creating_when_only_inactive(mock_jwt, user_id, workspace_id):
     """At least one config exists but none active → CREATING."""
     from crud.handler import app
+
     fake_table = MagicMock()
     fake_table.query.return_value = {
         "Items": [{"agentId": "a1", "status": "active"}],
     }
     fake_match = {"id": "cfg-1", "status": "CREATING"}
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agents_table", return_value=fake_table), \
-         patch("crud.evaluations._find_config_by_name", return_value=fake_match):
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agents_table", return_value=fake_table),
+        patch("crud.evaluations._find_config_by_name", return_value=fake_match),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(_ws_status_event(workspace_id), MagicMock())
     body = json.loads(resp["body"])
@@ -1154,13 +1298,16 @@ def test_ws_status_creating_when_only_inactive(mock_jwt, user_id, workspace_id):
 
 def test_ws_status_no_configs(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_table = MagicMock()
     fake_table.query.return_value = {
         "Items": [{"agentId": "a1", "status": "active"}],
     }
-    with patch("crud.evaluations.auth_check") as auth, \
-         patch("crud.evaluations._get_agents_table", return_value=fake_table), \
-         patch("crud.evaluations._find_config_by_name", return_value=None):
+    with (
+        patch("crud.evaluations.auth_check") as auth,
+        patch("crud.evaluations._get_agents_table", return_value=fake_table),
+        patch("crud.evaluations._find_config_by_name", return_value=None),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(_ws_status_event(workspace_id), MagicMock())
     body = json.loads(resp["body"])

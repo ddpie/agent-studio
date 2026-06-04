@@ -1,4 +1,5 @@
 """Tests for create_harness_agent tool."""
+
 import json
 import sys
 import types
@@ -35,6 +36,7 @@ sys.modules["config"] = _mock_config
 def _scope(monkeypatch):
     """Meta-Agent's apply_scope sets these at each invoke."""
     from tools import _scope
+
     monkeypatch.setattr(_scope, "_caller_id", "user-1", raising=False)
     monkeypatch.setattr(_scope, "_workspace_id", "ws-1", raising=False)
 
@@ -81,7 +83,9 @@ def test_create_harness_agent_happy_path(monkeypatch):
     kwargs = fake_cp.create_harness.call_args.kwargs
     assert kwargs["harnessName"] == "myBot"
     assert kwargs["executionRoleArn"] == "arn:aws:iam::1:role/ws1"
-    assert kwargs["model"] == {"bedrockModelConfig": {"modelId": "us.anthropic.claude-haiku-4-5-20251001-v1:0"}}
+    assert kwargs["model"] == {
+        "bedrockModelConfig": {"modelId": "us.anthropic.claude-haiku-4-5-20251001-v1:0"}
+    }
     assert kwargs["systemPrompt"] == [{"text": "You are friendly."}]
 
     fake_ddb.put_item.assert_called_once()
@@ -95,6 +99,7 @@ def test_create_harness_agent_happy_path(monkeypatch):
 
 def test_create_harness_agent_rejects_wrong_runtime_type(monkeypatch):
     from tools import create_harness_agent as mod
+
     monkeypatch.setattr(mod, "_read_staging", lambda k: _fake_staging(runtime_type="zip"))
     out = json.loads(mod.create_harness_agent(staging_key="staging/x.json"))
     assert "error" in out
@@ -103,6 +108,7 @@ def test_create_harness_agent_rejects_wrong_runtime_type(monkeypatch):
 
 def test_create_harness_agent_rejects_missing_fields(monkeypatch):
     from tools import create_harness_agent as mod
+
     monkeypatch.setattr(mod, "_read_staging", lambda k: _fake_staging(name=""))
     out = json.loads(mod.create_harness_agent(staging_key="staging/x.json"))
     assert "error" in out
@@ -110,6 +116,7 @@ def test_create_harness_agent_rejects_missing_fields(monkeypatch):
 
 def test_create_harness_agent_wraps_boto_errors(monkeypatch):
     from tools import create_harness_agent as mod
+
     monkeypatch.setattr(mod, "_read_staging", lambda k: _fake_staging())
     monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:aws:iam::1:role/ws1")
 
@@ -141,12 +148,14 @@ def test_create_harness_agent_direct_params_conversational_mode(monkeypatch):
     }
     monkeypatch.setattr(mod, "_get_control_client", lambda: fake_cp)
 
-    out = json.loads(mod.create_harness_agent(
-        name="chatBot",
-        system_prompt="Be concise.",
-        model_id="us.anthropic.claude-sonnet-4-6-20250929-v1:0",
-        description="direct-params sanity",
-    ))
+    out = json.loads(
+        mod.create_harness_agent(
+            name="chatBot",
+            system_prompt="Be concise.",
+            model_id="us.anthropic.claude-sonnet-4-6-20250929-v1:0",
+            description="direct-params sanity",
+        )
+    )
 
     assert out["ok"] is True
     assert out["agentId"] == "chatBot-xyz"
@@ -165,12 +174,16 @@ def test_create_harness_agent_direct_params_conversational_mode(monkeypatch):
 def test_create_harness_agent_direct_params_missing_name(monkeypatch):
     """Direct-params mode: missing name returns a clean error, no boto call."""
     from tools import create_harness_agent as mod
+
     fake_cp = MagicMock()
     monkeypatch.setattr(mod, "_get_control_client", lambda: fake_cp)
 
-    out = json.loads(mod.create_harness_agent(
-        system_prompt="hi", model_id="m",
-    ))
+    out = json.loads(
+        mod.create_harness_agent(
+            system_prompt="hi",
+            model_id="m",
+        )
+    )
     assert "error" in out
     assert "name" in out["error"].lower()
     fake_cp.create_harness.assert_not_called()
@@ -178,6 +191,7 @@ def test_create_harness_agent_direct_params_missing_name(monkeypatch):
 
 def test_create_harness_agent_missing_system_prompt(monkeypatch):
     from tools import create_harness_agent as mod
+
     fake_cp = MagicMock()
     monkeypatch.setattr(mod, "_get_control_client", lambda: fake_cp)
     out = json.loads(mod.create_harness_agent(name="x", model_id="m"))
@@ -188,6 +202,7 @@ def test_create_harness_agent_missing_system_prompt(monkeypatch):
 
 def test_create_harness_agent_missing_model_id(monkeypatch):
     from tools import create_harness_agent as mod
+
     fake_cp = MagicMock()
     monkeypatch.setattr(mod, "_get_control_client", lambda: fake_cp)
     out = json.loads(mod.create_harness_agent(name="x", system_prompt="hi"))
@@ -199,13 +214,18 @@ def test_create_harness_agent_missing_model_id(monkeypatch):
 def test_create_harness_agent_missing_workspace_id(monkeypatch):
     """Direct params + no workspace context → workspace_id required."""
     from tools import _scope, create_harness_agent as mod
+
     monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
     fake_cp = MagicMock()
     monkeypatch.setattr(mod, "_get_control_client", lambda: fake_cp)
 
-    out = json.loads(mod.create_harness_agent(
-        name="x", system_prompt="hi", model_id="m",
-    ))
+    out = json.loads(
+        mod.create_harness_agent(
+            name="x",
+            system_prompt="hi",
+            model_id="m",
+        )
+    )
     assert "error" in out
     assert "workspace_id" in out["error"]
 
@@ -213,15 +233,14 @@ def test_create_harness_agent_missing_workspace_id(monkeypatch):
 def test_create_harness_agent_factories_use_boto3(monkeypatch):
     """Cover _get_control_client / _get_agents_table / _read_staging branches."""
     from tools import create_harness_agent as mod
+
     captured = {"clients": [], "resources": []}
 
     def fake_client(svc, region_name=None):
         captured["clients"].append(svc)
         m = MagicMock()
         if svc == "s3":
-            m.get_object.return_value = {
-                "Body": MagicMock(read=lambda: b'{"runtime_type": "harness"}')
-            }
+            m.get_object.return_value = {"Body": MagicMock(read=lambda: b'{"runtime_type": "harness"}')}
         return m
 
     def fake_resource(svc, region_name=None):
@@ -248,6 +267,7 @@ def test_create_harness_agent_factories_use_boto3(monkeypatch):
 def test_get_workspace_memory_id_returns_value(monkeypatch):
     """Cover _get_workspace_memory_id when META row has memory_id."""
     from tools import create_harness_agent as mod
+
     fake_table = MagicMock()
     fake_table.get_item.return_value = {"Item": {"memory_id": "mem-1"}}
     fake_resource = MagicMock()
@@ -261,6 +281,7 @@ def test_get_workspace_memory_id_returns_value(monkeypatch):
 def test_get_workspace_memory_id_returns_none_when_missing(monkeypatch):
     """No Item or no memory_id key → None."""
     from tools import create_harness_agent as mod
+
     fake_table = MagicMock()
     fake_table.get_item.return_value = {}
     fake_resource = MagicMock()
@@ -273,10 +294,16 @@ def test_create_harness_agent_with_memory_passes_arn(monkeypatch):
     """When staging.memory.enabled=True and workspace has a memory, harness gets memory config."""
     from tools import create_harness_agent as mod
 
-    monkeypatch.setattr(mod, "_read_staging", lambda k: _fake_staging(memory={
-        "enabled": True,
-        "strategies": ["short_term"],
-    }))
+    monkeypatch.setattr(
+        mod,
+        "_read_staging",
+        lambda k: _fake_staging(
+            memory={
+                "enabled": True,
+                "strategies": ["short_term"],
+            }
+        ),
+    )
     monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:aws:iam::1:role/ws1")
     monkeypatch.setattr(mod, "_get_workspace_memory_id", lambda ws: "mem-abc")
 
@@ -318,6 +345,7 @@ def test_create_harness_agent_with_memory_passes_arn(monkeypatch):
 def test_create_harness_agent_memory_skipped_when_no_workspace_memory(monkeypatch):
     """memory.enabled=True but workspace has no memory → memory not forwarded to CP."""
     from tools import create_harness_agent as mod
+
     monkeypatch.setattr(mod, "_read_staging", lambda k: _fake_staging(memory={"enabled": True}))
     monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:aws:iam::1:role/ws1")
     monkeypatch.setattr(mod, "_get_workspace_memory_id", lambda ws: None)
@@ -341,6 +369,7 @@ def test_create_harness_agent_memory_skipped_when_no_workspace_memory(monkeypatc
 def test_create_harness_agent_unexpected_response_shape(monkeypatch):
     """Response without arn/harnessId → returns clean error JSON, no DDB write."""
     from tools import create_harness_agent as mod
+
     monkeypatch.setattr(mod, "_read_staging", lambda k: _fake_staging())
     monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:aws:iam::1:role/ws1")
 
@@ -361,7 +390,8 @@ def test_create_harness_agent_carries_mcp_targets_to_ddb(monkeypatch):
     from tools import create_harness_agent as mod
 
     monkeypatch.setattr(
-        mod, "_read_staging",
+        mod,
+        "_read_staging",
         lambda k: _fake_staging(mcp_targets=["mcp-iam", "  ", "mcp-cloudwatch", 0]),
     )
     monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:aws:iam::1:role/ws1")

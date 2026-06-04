@@ -1,4 +1,5 @@
 """Tests for create_schedule tool — EventBridge Scheduler integration."""
+
 import json
 import sys
 import types
@@ -31,6 +32,7 @@ sys.modules["config"] = _mock_config
 @pytest.fixture(autouse=True)
 def _scope(monkeypatch):
     from tools import _scope
+
     monkeypatch.setattr(_scope, "_caller_id", "user-1", raising=False)
     monkeypatch.setattr(_scope, "_workspace_id", "ws-test", raising=False)
 
@@ -40,7 +42,8 @@ def test_create_schedule_happy_path(monkeypatch):
 
     # Bypass the workspace + role gate, return a record carrying ws_id
     monkeypatch.setattr(
-        mod, "ensure_agent_in_workspace",
+        mod,
+        "ensure_agent_in_workspace",
         lambda agent_id, min_role: ({"workspace_id": "ws-test"}, None),
     )
 
@@ -50,12 +53,14 @@ def test_create_schedule_happy_path(monkeypatch):
     }
     monkeypatch.setattr(mod.boto3, "client", lambda svc, **_: fake_scheduler)
 
-    out = json.loads(mod.create_schedule(
-        schedule_name="my-sched",
-        agent_id="rt-abc",
-        cron_expression="cron(0 9 * * ? *)",
-        prompt="Do morning report",
-    ))
+    out = json.loads(
+        mod.create_schedule(
+            schedule_name="my-sched",
+            agent_id="rt-abc",
+            cron_expression="cron(0 9 * * ? *)",
+            prompt="Do morning report",
+        )
+    )
 
     assert out["status"] == "created"
     assert out["schedule_name"] == "my-sched"
@@ -89,7 +94,8 @@ def test_create_schedule_rejects_when_caller_below_editor(monkeypatch):
     from tools import create_schedule as mod
 
     monkeypatch.setattr(
-        mod, "ensure_agent_in_workspace",
+        mod,
+        "ensure_agent_in_workspace",
         lambda agent_id, min_role: (None, {"error": "Permission denied: editor role required"}),
     )
 
@@ -97,9 +103,14 @@ def test_create_schedule_rejects_when_caller_below_editor(monkeypatch):
     fake_scheduler = MagicMock()
     monkeypatch.setattr(mod.boto3, "client", lambda svc, **_: fake_scheduler)
 
-    out = json.loads(mod.create_schedule(
-        "name", "rt-abc", "cron(0 * * * ? *)", "p",
-    ))
+    out = json.loads(
+        mod.create_schedule(
+            "name",
+            "rt-abc",
+            "cron(0 * * * ? *)",
+            "p",
+        )
+    )
     assert "error" in out
     assert "Permission denied" in out["error"]
     fake_scheduler.create_schedule.assert_not_called()
@@ -110,7 +121,8 @@ def test_create_schedule_includes_substitution_token(monkeypatch):
     from tools import create_schedule as mod
 
     monkeypatch.setattr(
-        mod, "ensure_agent_in_workspace",
+        mod,
+        "ensure_agent_in_workspace",
         lambda agent_id, min_role: ({"workspace_id": "ws-1"}, None),
     )
 
@@ -120,9 +132,7 @@ def test_create_schedule_includes_substitution_token(monkeypatch):
 
     mod.create_schedule("daily", "rt-1", "cron(0 9 * * ? *)", "hi")
 
-    target_input = json.loads(
-        fake_scheduler.create_schedule.call_args.kwargs["Target"]["Input"]
-    )
+    target_input = json.loads(fake_scheduler.create_schedule.call_args.kwargs["Target"]["Input"])
     assert "<aws.scheduler.scheduled-time>" in target_input["RuntimeSessionId"]
 
 
@@ -131,7 +141,8 @@ def test_create_schedule_handles_missing_workspace_in_record(monkeypatch):
     from tools import create_schedule as mod
 
     monkeypatch.setattr(
-        mod, "ensure_agent_in_workspace",
+        mod,
+        "ensure_agent_in_workspace",
         lambda agent_id, min_role: ({}, None),  # record without workspace_id
     )
 
@@ -141,8 +152,6 @@ def test_create_schedule_handles_missing_workspace_in_record(monkeypatch):
 
     out = json.loads(mod.create_schedule("n", "rt-1", "cron(0 9 * * ? *)", "p"))
     assert out["status"] == "created"
-    payload = json.loads(
-        fake_scheduler.create_schedule.call_args.kwargs["Target"]["Input"]
-    )
+    payload = json.loads(fake_scheduler.create_schedule.call_args.kwargs["Target"]["Input"])
     inner = json.loads(payload["Payload"])
     assert inner["workspace_id"] == ""

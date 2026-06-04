@@ -4,6 +4,7 @@ If the harness is already gone on the AgentCore side (ResourceNotFound), the
 DDB record is still archived — lets us clean up orphan records after manual
 AWS-console deletions.
 """
+
 import json
 from datetime import datetime
 
@@ -39,9 +40,9 @@ def delete_harness_agent(agent_id: str) -> str:
         if not existing:
             return json.dumps({"error": f"agent not found: {agent_id}"})
         if existing.get("runtime_type") != "harness":
-            return json.dumps({
-                "error": f"agent runtime_type is not 'harness': {existing.get('runtime_type')}"
-            })
+            return json.dumps(
+                {"error": f"agent runtime_type is not 'harness': {existing.get('runtime_type')}"}
+            )
 
         cp = _get_control_client()
         try:

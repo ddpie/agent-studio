@@ -3,6 +3,7 @@
 These focus on the pure helper functions (no AWS calls). The full redeploy
 path is exercised by the Sprint 3 E2E suite.
 """
+
 import ast
 import json
 import sys
@@ -149,7 +150,7 @@ class _FakeWorkspaceTable:
         ws = Key.get("workspaceId")
         sk = Key.get("sk", "")
         if sk.startswith("MEMBER#"):
-            user = sk[len("MEMBER#"):]
+            user = sk[len("MEMBER#") :]
             role = self._members.get((ws, user))
             if role is None:
                 return {}
@@ -472,7 +473,8 @@ def test_link_agent_redeploy_failure_returns_key(monkeypatch):
 
     monkeypatch.setattr(mod, "_mint_a2a_key", lambda **kw: ("k-1", "as_x"))
     monkeypatch.setattr(
-        mod, "_update_linked_keys_secret",
+        mod,
+        "_update_linked_keys_secret",
         lambda *a, **kw: ('{"tgt-1": "as_x"}', {"tgt-1": "as_x"}),
     )
     monkeypatch.setattr(mod, "_load_metadata", lambda _id: {"system_prompt": ""})
@@ -503,7 +505,8 @@ def test_link_agent_replaces_stale_call_agent_def(monkeypatch):
     monkeypatch.setenv("AGENT_STUDIO_CLOUDFRONT_DOMAIN", "d.cloudfront.net")
     monkeypatch.setattr(mod, "_mint_a2a_key", lambda **kw: ("k-1", "as_y"))
     monkeypatch.setattr(
-        mod, "_update_linked_keys_secret",
+        mod,
+        "_update_linked_keys_secret",
         lambda *a, **kw: ('{"tgt-1": "as_y"}', {"tgt-1": "as_y"}),
     )
 
@@ -519,7 +522,8 @@ def test_link_agent_replaces_stale_call_agent_def(monkeypatch):
         "    return 'old'\n"
     )
     monkeypatch.setattr(
-        mod, "_load_metadata",
+        mod,
+        "_load_metadata",
         lambda _id: {"system_prompt": "", "tool_definitions": stale, "tools": []},
     )
     monkeypatch.setattr(mod, "_save_metadata", fake_save)
@@ -530,8 +534,7 @@ def test_link_agent_replaces_stale_call_agent_def(monkeypatch):
         '    """New impl."""\n'
         "    return 'new'\n"
     )
-    monkeypatch.setattr(mod, "_get_builtin_code",
-                        lambda n: new_call if n == "call_agent" else "")
+    monkeypatch.setattr(mod, "_get_builtin_code", lambda n: new_call if n == "call_agent" else "")
 
     out = json.loads(mod.link_agent("src-1", "tgt-1"))
     assert out["status"] == "READY"
@@ -619,8 +622,7 @@ def test_unlink_agent_happy_path(monkeypatch):
 
     monkeypatch.setattr(mod, "_load_metadata", lambda _id: dict(initial_meta))
     monkeypatch.setattr(mod, "_save_metadata", fake_save)
-    monkeypatch.setattr(mod, "_remove_linked_key_from_secret",
-                        lambda *a, **kw: ("{}", {}))
+    monkeypatch.setattr(mod, "_remove_linked_key_from_secret", lambda *a, **kw: ("{}", {}))
     monkeypatch.setattr(mod, "_redeploy_source", lambda *a, **kw: "READY")
 
     out = json.loads(mod.unlink_agent("src-1", "tgt-1"))
@@ -643,13 +645,16 @@ def test_unlink_agent_redeploy_failure_returns_error(monkeypatch):
         members={("ws-1", "user-editor"): "editor"},
         agents=_agents_fixture(),
     )
-    monkeypatch.setattr(mod, "_load_metadata", lambda _id: {
-        "linked_agents": [{"agent_id": "tgt-1"}],
-        "tools": ["call_agent"],
-    })
+    monkeypatch.setattr(
+        mod,
+        "_load_metadata",
+        lambda _id: {
+            "linked_agents": [{"agent_id": "tgt-1"}],
+            "tools": ["call_agent"],
+        },
+    )
     monkeypatch.setattr(mod, "_save_metadata", lambda *a, **kw: None)
-    monkeypatch.setattr(mod, "_remove_linked_key_from_secret",
-                        lambda *a, **kw: ("{}", {}))
+    monkeypatch.setattr(mod, "_remove_linked_key_from_secret", lambda *a, **kw: ("{}", {}))
 
     def _bang(*a, **kw):
         raise RuntimeError("redeploy nope")
@@ -690,10 +695,10 @@ def test_unlink_agent_keeps_call_agent_when_peers_remain(monkeypatch):
     }
     saved = {}
     monkeypatch.setattr(mod, "_load_metadata", lambda _id: dict(initial))
-    monkeypatch.setattr(mod, "_save_metadata",
-                        lambda agent_id, meta: saved.setdefault("meta", meta))
+    monkeypatch.setattr(mod, "_save_metadata", lambda agent_id, meta: saved.setdefault("meta", meta))
     monkeypatch.setattr(
-        mod, "_remove_linked_key_from_secret",
+        mod,
+        "_remove_linked_key_from_secret",
         lambda *a, **kw: ('{"tgt-2": "as_y"}', {"tgt-2": "as_y"}),
     )
     monkeypatch.setattr(mod, "_redeploy_source", lambda *a, **kw: "READY")
@@ -826,6 +831,7 @@ def test_revoke_a2a_key_swallows_failures(monkeypatch):
             class _T:
                 def update_item(self, **kw):
                     raise RuntimeError("ddb down")
+
             return _T()
 
     monkeypatch.setattr(mod.boto3, "resource", lambda *a, **kw: _Bad())
@@ -874,6 +880,7 @@ def test_save_metadata_mirrors_to_standalone_files(monkeypatch):
 
 def test_linked_keys_secret_path_format():
     from tools.link_agent import _A2A_KEYS_ENV_KEY, _linked_keys_secret_path
+
     assert _linked_keys_secret_path("ws-1", "src-1") == f"agent-studio/ws-1/src-1/{_A2A_KEYS_ENV_KEY}"
 
 

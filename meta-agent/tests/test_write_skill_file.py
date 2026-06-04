@@ -10,6 +10,7 @@ re-explaining its plan.
 Mocks boto3 + _skill_in_workspace directly (same style as
 test_skill_crud_scope) so the tests stay fast and don't need real AWS.
 """
+
 import json
 import sys
 import types
@@ -355,6 +356,7 @@ def test_write_rejects_non_string_content():
 
 def test_write_handles_s3_failure():
     """When put_object raises, the tool returns 'S3 write failed: ...'."""
+
     class _BadS3(FakeS3):
         def put_object(self, Bucket, Key, Body, ContentType):
             raise RuntimeError("s3 boom")
@@ -426,6 +428,7 @@ def test_delete_rejects_viewer_role():
 
 def test_delete_handles_s3_failure():
     """When delete_object raises, the tool returns clean error JSON."""
+
     class _BadS3(FakeS3):
         def delete_object(self, Bucket, Key):
             raise RuntimeError("s3 boom")

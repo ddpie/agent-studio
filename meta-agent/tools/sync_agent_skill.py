@@ -55,7 +55,7 @@ def _read_library_skill_files(s3, skill_id: str) -> dict[str, str]:
     for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
         for obj in page.get("Contents", []) or []:
             key = obj["Key"]
-            rel = key[len(prefix):]
+            rel = key[len(prefix) :]
             if not rel:
                 continue
             body = s3.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read()
@@ -122,8 +122,7 @@ def _resolve_library_skill(name: str, explicit_id: str) -> tuple[dict | None, st
     if len(matches) > 1:
         ids = [m.get("skillId", "") for m in matches]
         return None, (
-            f"Multiple library skills named '{name}': {ids}. "
-            "Pass new_source_skill_id to disambiguate."
+            f"Multiple library skills named '{name}': {ids}. Pass new_source_skill_id to disambiguate."
         )
     return matches[0], None
 
@@ -153,7 +152,7 @@ def _copy_prefix(s3, src_prefix: str, dst_prefix: str) -> int:
     for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=src_prefix):
         for obj in page.get("Contents", []) or []:
             src_key = obj["Key"]
-            rel = src_key[len(src_prefix):]
+            rel = src_key[len(src_prefix) :]
             if not rel:
                 continue
             s3.copy_object(
@@ -231,16 +230,20 @@ def sync_agent_skill(
     )
     if target_idx < 0:
         attached = [s.get("name", "") for s in skills_list]
-        return json.dumps({
-            "error": f"Agent {agent_id} has no attached skill named '{skill_name}'.",
-            "attached_skills": attached,
-        })
+        return json.dumps(
+            {
+                "error": f"Agent {agent_id} has no attached skill named '{skill_name}'.",
+                "attached_skills": attached,
+            }
+        )
     attached_skill = skills_list[target_idx]
     local_skill_id = attached_skill.get("id", "")
     if not local_skill_id:
-        return json.dumps({
-            "error": f"Attached skill '{skill_name}' has no local id — metadata corrupted.",
-        })
+        return json.dumps(
+            {
+                "error": f"Attached skill '{skill_name}' has no local id — metadata corrupted.",
+            }
+        )
     old_source_id = attached_skill.get("sourceSkillId", "")
     old_content_hash = attached_skill.get("contentHash", "")
 
@@ -257,20 +260,24 @@ def sync_agent_skill(
     # on an accidental library prune would be destructive.
     library_files = _read_library_skill_files(s3, library_skill_id)
     if not library_files:
-        return json.dumps({
-            "error": f"Library skill {library_skill_id} has no files under "
-                     f"skills/{library_skill_id}/ — refusing to sync.",
-        })
+        return json.dumps(
+            {
+                "error": f"Library skill {library_skill_id} has no files under "
+                f"skills/{library_skill_id}/ — refusing to sync.",
+            }
+        )
     new_content_hash = _compute_content_hash(library_files)
 
     if new_content_hash == old_content_hash and old_source_id == library_skill_id:
-        return json.dumps({
-            "agent_id": agent_id,
-            "skill_name": skill_name,
-            "status": "noop",
-            "message": "Agent copy already matches library version — no sync needed.",
-            "contentHash": old_content_hash,
-        })
+        return json.dumps(
+            {
+                "agent_id": agent_id,
+                "skill_name": skill_name,
+                "status": "noop",
+                "message": "Agent copy already matches library version — no sync needed.",
+                "contentHash": old_content_hash,
+            }
+        )
 
     # 4. Overwrite the agent's private copy: wipe then copy. Doing delete
     # before copy avoids leaving behind files that the library removed
@@ -287,10 +294,12 @@ def sync_agent_skill(
         copied = _copy_prefix(s3, src_prefix, dst_prefix)
     except Exception as e:
         # Partial copy leaves the agent in a broken state. Surface clearly.
-        return json.dumps({
-            "error": f"Copy failed after deleting old copy: {e}. "
-                     f"Agent skill directory is now empty — retry the sync.",
-        })
+        return json.dumps(
+            {
+                "error": f"Copy failed after deleting old copy: {e}. "
+                f"Agent skill directory is now empty — retry the sync.",
+            }
+        )
 
     # 5. Update the agent's skills manifest in-place. We keep local_skill_id
     # stable so any cached references (e.g. log correlations) still resolve.
@@ -348,7 +357,7 @@ def sync_agent_skill(
         result["redeploy"] = {
             "skipped": True,
             "note": "scripts/ will be picked up on next invocation; "
-                    "prompt's ## Skill: section is still stale until next deploy.",
+            "prompt's ## Skill: section is still stale until next deploy.",
         }
 
     return json.dumps(result, indent=2, ensure_ascii=False)

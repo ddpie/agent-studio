@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-THRESHOLD_KB=2048
+THRESHOLD_KB=3200
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

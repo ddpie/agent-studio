@@ -87,10 +87,12 @@ def check_workspace_permissions(workspace_id: str, actions: str) -> str:
             return json.dumps({"has_role": True, "role_arn": role_arn, "results": []})
 
         results = _simulate_actions(role_arn, action_list)
-        return json.dumps({
-            "has_role": True,
-            "role_arn": role_arn,
-            "results": results,
-        })
+        return json.dumps(
+            {
+                "has_role": True,
+                "role_arn": role_arn,
+                "results": results,
+            }
+        )
     except Exception as e:
         return json.dumps({"error": str(e)})

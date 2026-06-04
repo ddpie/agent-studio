@@ -7,6 +7,7 @@ ACCOUNT_ID = os.environ.get("AWS_ACCOUNT_ID", "")
 if not ACCOUNT_ID:
     try:
         import boto3
+
         ACCOUNT_ID = boto3.client("sts", region_name=REGION).get_caller_identity()["Account"]
     except Exception:
         ACCOUNT_ID = ""
@@ -29,9 +30,7 @@ BASE_DEPLOYMENT_KEY = "base/deployment.zip"
 # Agents use a fatter base layer that includes Playwright + strands-agents-tools
 # (for browser_use tool). Meta-Agent stays on the slim base to keep cold-start
 # inside the 30s AgentCore runtime init budget.
-SUB_AGENT_BASE_DEPLOYMENT_KEY = os.getenv(
-    "SUB_AGENT_BASE_DEPLOYMENT_KEY", "base/agent-deployment.zip"
-)
+SUB_AGENT_BASE_DEPLOYMENT_KEY = os.getenv("SUB_AGENT_BASE_DEPLOYMENT_KEY", "base/agent-deployment.zip")
 # Default to the `global.*` inference profile so the same default works in
 # both us-east-1 and us-west-2 (the `us.*` profile also exists in both, but
 # `global.*` covers any future region without a per-region branch).
@@ -58,19 +57,19 @@ BROWSER_ID = os.environ.get("AGENT_STUDIO_BROWSER_ID", "")
 # Bedrock API doesn't expose this; values from Anthropic docs + runtime errors.
 # Key: substring matched against model_id (first match wins, checked in order).
 _MAX_TOKENS_TABLE = [
-    ("opus-4-7",    128000),   # Claude Opus 4.7
-    ("opus-4-6",    128000),   # Claude Opus 4.6
-    ("opus-4-5",    32000),    # Claude Opus 4.5
-    ("opus-4-1",    32000),    # Claude Opus 4.1
-    ("opus",        128000),   # Opus fallback (future versions)
-    ("sonnet-4-6",  65536),    # Claude Sonnet 4.6
-    ("sonnet-4-5",  16384),    # Claude Sonnet 4.5
-    ("sonnet-4",    65536),    # Claude Sonnet 4 / 4.x fallback
-    ("sonnet-3-5",  8192),     # Claude 3.5 Sonnet
-    ("sonnet",      65536),    # Sonnet fallback
-    ("haiku-4-5",   16384),    # Claude Haiku 4.5
-    ("haiku-3",     4096),     # Claude 3 Haiku
-    ("haiku",       16384),    # Haiku fallback
+    ("opus-4-7", 128000),  # Claude Opus 4.7
+    ("opus-4-6", 128000),  # Claude Opus 4.6
+    ("opus-4-5", 32000),  # Claude Opus 4.5
+    ("opus-4-1", 32000),  # Claude Opus 4.1
+    ("opus", 128000),  # Opus fallback (future versions)
+    ("sonnet-4-6", 65536),  # Claude Sonnet 4.6
+    ("sonnet-4-5", 16384),  # Claude Sonnet 4.5
+    ("sonnet-4", 65536),  # Claude Sonnet 4 / 4.x fallback
+    ("sonnet-3-5", 8192),  # Claude 3.5 Sonnet
+    ("sonnet", 65536),  # Sonnet fallback
+    ("haiku-4-5", 16384),  # Claude Haiku 4.5
+    ("haiku-3", 4096),  # Claude 3 Haiku
+    ("haiku", 16384),  # Haiku fallback
 ]
 
 
@@ -94,12 +93,11 @@ VECTORS_BUCKET = os.getenv(
     f"studio-vectors-{ACCOUNT_ID}-{REGION}",
 )
 
-MCP_GATEWAY_URL = os.getenv("MCP_GATEWAY_URL", "") or os.getenv(
-    "AGENT_STUDIO_MCP_GATEWAY_URL", ""
-)
+MCP_GATEWAY_URL = os.getenv("MCP_GATEWAY_URL", "") or os.getenv("AGENT_STUDIO_MCP_GATEWAY_URL", "")
 if not MCP_GATEWAY_URL:
     try:
         import boto3 as _b3
+
         _resp = _b3.client("s3", region_name=REGION).get_object(
             Bucket=S3_BUCKET, Key="config/mcp_gateway_url.txt"
         )

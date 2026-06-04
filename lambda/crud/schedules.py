@@ -21,6 +21,7 @@ The scheduler target role is reused from the agent readonly tier
 (mirrors meta-agent/tools/create_schedule.py); redeploying a dedicated
 scheduler role is deferred to infra.
 """
+
 import json
 import os
 import re
@@ -108,10 +109,7 @@ def _validate_cron(expr: str) -> str | None:
         return "cron expression is required (max 256 chars)"
     if _CRON_RE.match(expr) or _RATE_RE.match(expr):
         return None
-    return (
-        "Invalid schedule expression: must be cron(...) or "
-        "rate(N minute|hour|day...)"
-    )
+    return "Invalid schedule expression: must be cron(...) or rate(N minute|hour|day...)"
 
 
 def _validate_suffix(suffix: str) -> str | None:
@@ -151,7 +149,7 @@ def _schedule_response(agent_id: str, sched: dict) -> dict:
     """Shape a Scheduler API item for the frontend."""
     name = sched.get("Name", "")
     prefix = _name_prefix(agent_id)
-    suffix = name[len(prefix):] if name.startswith(prefix) else name
+    suffix = name[len(prefix) :] if name.startswith(prefix) else name
     return {
         "name": name,
         "suffix": suffix,
@@ -174,6 +172,7 @@ def _iso(value) -> str:
         return ""
     try:
         import datetime as _dt
+
         if isinstance(value, _dt.datetime) and value.tzinfo is None:
             value = value.replace(tzinfo=_dt.timezone.utc)
         return value.isoformat()
@@ -243,7 +242,7 @@ def create_schedule(wsId: str, agentId: str):
     # Accept either the bare suffix or the full "agent-studio-{id}-{suffix}"
     # name — normalise to suffix for validation.
     prefix = _name_prefix(agentId)
-    suffix = raw_name[len(prefix):] if raw_name.startswith(prefix) else raw_name
+    suffix = raw_name[len(prefix) :] if raw_name.startswith(prefix) else raw_name
 
     suffix_err = _validate_suffix(suffix)
     if suffix_err:
@@ -393,7 +392,7 @@ def update_schedule(wsId: str, agentId: str, name: str):
         )
         return internal_error()
 
-    suffix = name[len(prefix):]
+    suffix = name[len(prefix) :]
     existing_target = existing.get("Target", {}) or {}
     existing_input_raw = existing_target.get("Input") or "{}"
     try:
@@ -414,11 +413,13 @@ def update_schedule(wsId: str, agentId: str, name: str):
     inner_payload["workspace_id"] = ws_id
 
     runtime_arn = existing_payload.get("AgentRuntimeArn") or _agent_arn(agentId)
-    new_input = json.dumps({
-        "AgentRuntimeArn": runtime_arn,
-        "RuntimeSessionId": inner_payload["session_id"],
-        "Payload": json.dumps(inner_payload),
-    })
+    new_input = json.dumps(
+        {
+            "AgentRuntimeArn": runtime_arn,
+            "RuntimeSessionId": inner_payload["session_id"],
+            "Payload": json.dumps(inner_payload),
+        }
+    )
 
     new_target = {
         "Arn": _SCHEDULE_RUNNER_LAMBDA_ARN or existing_target.get("Arn", ""),
@@ -513,6 +514,7 @@ def run_schedule_now(wsId: str, agentId: str, name: str):
     cases, and the API call returns in <1s (not blocked on agent runtime).
     """
     from datetime import datetime, timedelta, timezone
+
     user_id, ws_id, _, err = auth_check(router.current_event, min_role="editor", ws_id=wsId)
     if err:
         return err
@@ -542,8 +544,10 @@ def run_schedule_now(wsId: str, agentId: str, name: str):
         code = e.response.get("Error", {}).get("Code", "")
         if code == "ResourceNotFoundException":
             return not_found()
-        logger.exception("get_schedule before run-now failed",
-                         extra={"agentId": agentId, "schedule_name": name, "code": code})
+        logger.exception(
+            "get_schedule before run-now failed",
+            extra={"agentId": agentId, "schedule_name": name, "code": code},
+        )
         return internal_error()
 
     target = existing.get("Target", {}) or {}
@@ -556,7 +560,7 @@ def run_schedule_now(wsId: str, agentId: str, name: str):
     if not prompt:
         return bad_request("schedule has no prompt to run")
 
-    suffix = name[len(prefix):]
+    suffix = name[len(prefix) :]
     ts = int(time.time())
     fire_at = datetime.now(timezone.utc) + timedelta(seconds=5)
     fire_iso = fire_at.replace(microsecond=0).isoformat().replace("+00:00", "")
@@ -594,18 +598,22 @@ def run_schedule_now(wsId: str, agentId: str, name: str):
     except ClientError as e:
         code = e.response.get("Error", {}).get("Code", "")
         message = e.response.get("Error", {}).get("Message", code)
-        logger.exception("run-now create_schedule failed",
-                         extra={"agentId": agentId, "schedule_name": name, "code": code})
+        logger.exception(
+            "run-now create_schedule failed", extra={"agentId": agentId, "schedule_name": name, "code": code}
+        )
         if code == "ConflictException":
             return bad_request("another manual run is already queued")
         return internal_error(message or "run-now failed")
 
-    return success({
-        "sessionId": session_id,
-        "invokedAt": ts,
-        "scheduledFor": fire_iso,
-        "oneShotName": one_shot_name,
-    }, status_code=202)
+    return success(
+        {
+            "sessionId": session_id,
+            "invokedAt": ts,
+            "scheduledFor": fire_iso,
+            "oneShotName": one_shot_name,
+        },
+        status_code=202,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -658,7 +666,7 @@ def list_schedule_executions(wsId: str, agentId: str, name: str):
     if not re.fullmatch(r"[0-9a-zA-Z_.\-]{1,64}", name):
         return bad_request("invalid schedule name")
 
-    suffix = name[len(prefix):]
+    suffix = name[len(prefix) :]
     # Agent bakes session_id = sched-<suffix>-<scheduled-time> when
     # the scheduler fires. Fall back to matching `__schedule_name`
     # embedded in the prompt attribute so older records are still
@@ -681,8 +689,11 @@ def list_schedule_executions(wsId: str, agentId: str, name: str):
         except ClientError as e:
             logger.exception(
                 "schedule executions start_query failed",
-                extra={"agentId": agentId, "schedule_name": name,
-                       "error_code": e.response.get("Error", {}).get("Code")},
+                extra={
+                    "agentId": agentId,
+                    "schedule_name": name,
+                    "error_code": e.response.get("Error", {}).get("Code"),
+                },
             )
             return []
         deadline = time.time() + _EXEC_QUERY_TIMEOUT_S
@@ -692,8 +703,11 @@ def list_schedule_executions(wsId: str, agentId: str, name: str):
             except ClientError as e:
                 logger.exception(
                     "schedule executions get_query_results failed",
-                    extra={"agentId": agentId, "schedule_name": name,
-                           "error_code": e.response.get("Error", {}).get("Code")},
+                    extra={
+                        "agentId": agentId,
+                        "schedule_name": name,
+                        "error_code": e.response.get("Error", {}).get("Code"),
+                    },
                 )
                 return []
             status = resp.get("status")
@@ -752,7 +766,7 @@ fields coalesce(attributes.agent_studio.session_id, attributes.session.id) as se
         # precise than parsing @timestamp. Fallback rows may not match
         # the prefix, leave scheduled_time empty in that case.
         if sid.startswith(session_prefix) and len(sid) > len(session_prefix):
-            scheduled_time = sid[len(session_prefix):]
+            scheduled_time = sid[len(session_prefix) :]
         else:
             scheduled_time = ""
         try:
@@ -763,16 +777,20 @@ fields coalesce(attributes.agent_studio.session_id, attributes.session.id) as se
             end_ns = 0
         duration_ms = max(0, (end_ns - start_ns) // 1_000_000)
         worst_status = _field(row, "worstStatus") or ""
-        executions.append({
-            "sessionId": sid,
-            "scheduledTime": scheduled_time,
-            "startMs": start_ns // 1_000_000 if start_ns else None,
-            "durationMs": duration_ms,
-            "status": _status_from_code(worst_status),
-            "statusCode": worst_status or None,
-        })
+        executions.append(
+            {
+                "sessionId": sid,
+                "scheduledTime": scheduled_time,
+                "startMs": start_ns // 1_000_000 if start_ns else None,
+                "durationMs": duration_ms,
+                "status": _status_from_code(worst_status),
+                "statusCode": worst_status or None,
+            }
+        )
 
-    return success({
-        "executions": executions,
-        "scheduleName": name,
-    })
+    return success(
+        {
+            "executions": executions,
+            "scheduleName": name,
+        }
+    )

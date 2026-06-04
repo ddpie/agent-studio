@@ -11,6 +11,7 @@ Tenancy: user_id is taken from the JWT, never from the request path or body,
 so a caller cannot address another user's chat folder. The workspace ID is
 path-bound and validated by auth_check the same way every other route does it.
 """
+
 import json
 
 import boto3

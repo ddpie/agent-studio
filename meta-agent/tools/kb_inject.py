@@ -45,11 +45,13 @@ def resolve_kb_bindings(ws_id: str, kb_ids: list[str]) -> list[dict]:
             )
             item = resp.get("Item")
             if item and item.get("bedrock_kb_id"):
-                results.append({
-                    "kb_id": item["kb_id"]["S"],
-                    "bedrock_kb_id": item["bedrock_kb_id"]["S"],
-                    "name": item.get("name", {}).get("S", kb_id),
-                })
+                results.append(
+                    {
+                        "kb_id": item["kb_id"]["S"],
+                        "bedrock_kb_id": item["bedrock_kb_id"]["S"],
+                        "name": item.get("name", {}).get("S", kb_id),
+                    }
+                )
         except Exception:
             pass
     return results

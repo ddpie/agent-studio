@@ -4,6 +4,7 @@ Manages channel configurations (Feishu, DingTalk, Slack) that connect
 deployed Agents to external messaging platforms. Each channel stores
 platform credentials in Secrets Manager and configuration in DynamoDB.
 """
+
 import json
 import time
 from uuid import uuid4
@@ -165,7 +166,11 @@ def create_channel(wsId: str):
     if trigger_mode not in VALID_TRIGGER_MODES:
         return bad_request(f"triggerMode must be one of: {', '.join(VALID_TRIGGER_MODES)}")
 
-    if not isinstance(max_history_turns, int) or max_history_turns < 0 or max_history_turns > MAX_HISTORY_TURNS:
+    if (
+        not isinstance(max_history_turns, int)
+        or max_history_turns < 0
+        or max_history_turns > MAX_HISTORY_TURNS
+    ):
         return bad_request(f"maxHistoryTurns must be an integer between 0 and {MAX_HISTORY_TURNS}")
 
     if language not in ("zh", "en"):
@@ -248,10 +253,7 @@ def list_channels(wsId: str):
         return internal_error()
 
     # Filter out group metadata records (SK contains "#group#")
-    channels = [
-        _channel_response(item) for item in items
-        if "#group#" not in item.get("sk", "")
-    ]
+    channels = [_channel_response(item) for item in items if "#group#" not in item.get("sk", "")]
 
     return success({"channels": channels})
 
@@ -545,6 +547,7 @@ def list_channel_messages(wsId: str, chId: str):
     # History table PK starts with channelId, so we filter by begins_with(pk, channelId).
     try:
         from boto3.dynamodb.conditions import Attr
+
         resp = _get_history_table().scan(
             FilterExpression=Attr("pk").begins_with(chId),
             Limit=50,

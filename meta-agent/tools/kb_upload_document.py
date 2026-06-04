@@ -16,7 +16,7 @@ MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 
 
 def _safe_filename(filename: str) -> str:
-    name = re.sub(r'[^\w\-.]', '_', filename)
+    name = re.sub(r"[^\w\-.]", "_", filename)
     return name[:100]
 
 
@@ -62,7 +62,13 @@ def kb_upload_document(kb_id: str, staging_key: str, filename: str) -> str:
     try:
         head = s3.head_object(Bucket=S3_BUCKET, Key=staging_key)
         if head["ContentLength"] > MAX_FILE_SIZE_BYTES:
-            return json.dumps({"error": "file_too_large", "max_mb": 50, "actual_mb": round(head["ContentLength"] / 1024 / 1024, 1)})
+            return json.dumps(
+                {
+                    "error": "file_too_large",
+                    "max_mb": 50,
+                    "actual_mb": round(head["ContentLength"] / 1024 / 1024, 1),
+                }
+            )
     except Exception as e:
         return json.dumps({"error": "staging_file_not_found", "message": str(e)})
 
@@ -71,7 +77,9 @@ def kb_upload_document(kb_id: str, staging_key: str, filename: str) -> str:
     document_key = f"{s3_prefix}{doc_id}-{safe_name}"
 
     try:
-        s3.copy_object(Bucket=S3_BUCKET, CopySource={"Bucket": S3_BUCKET, "Key": staging_key}, Key=document_key)
+        s3.copy_object(
+            Bucket=S3_BUCKET, CopySource={"Bucket": S3_BUCKET, "Key": staging_key}, Key=document_key
+        )
     except Exception as e:
         return json.dumps({"error": "copy_failed", "message": str(e)})
 
@@ -80,21 +88,29 @@ def kb_upload_document(kb_id: str, staging_key: str, filename: str) -> str:
         ingest_resp = bedrock.start_ingestion_job(knowledgeBaseId=bedrock_kb_id, dataSourceId=data_source_id)
         ingestion_job_id = ingest_resp["ingestionJob"]["ingestionJobId"]
     except Exception as e:
-        return json.dumps({"error": "ingestion_start_failed", "message": str(e), "document_key": document_key})
+        return json.dumps(
+            {"error": "ingestion_start_failed", "message": str(e), "document_key": document_key}
+        )
 
     try:
         ddb.update_item(
             TableName=KB_TABLE,
             Key={"ws_id": {"S": ws_id}, "kb_id": {"S": kb_id}},
             UpdateExpression="SET last_ingestion_job_id = :job, updated_at = :now",
-            ExpressionAttributeValues={":job": {"S": ingestion_job_id}, ":now": {"S": datetime.now(timezone.utc).isoformat()}},
+            ExpressionAttributeValues={
+                ":job": {"S": ingestion_job_id},
+                ":now": {"S": datetime.now(timezone.utc).isoformat()},
+            },
         )
     except Exception:
         pass
 
-    return json.dumps({
-        "document_key": document_key,
-        "ingestion_job_id": ingestion_job_id,
-        "status": "IN_PROGRESS",
-        "message": f"Document '{filename}' uploaded. Ingestion started (usually 1-3 minutes).",
-    }, ensure_ascii=False)
+    return json.dumps(
+        {
+            "document_key": document_key,
+            "ingestion_job_id": ingestion_job_id,
+            "status": "IN_PROGRESS",
+            "message": f"Document '{filename}' uploaded. Ingestion started (usually 1-3 minutes).",
+        },
+        ensure_ascii=False,
+    )

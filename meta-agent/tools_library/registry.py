@@ -38,18 +38,21 @@ for _mod in _ALL_TOOLS:
 
 _ddb_client = None
 
+
 def _get_ddb_client():
     """Lazy-init and cache DynamoDB client."""
     global _ddb_client
     if _ddb_client is None:
         import boto3
         from config import REGION
+
         _ddb_client = boto3.client("dynamodb", region_name=REGION)
     return _ddb_client
 
 
 def _get_tools_table():
     from config import TOOLS_TABLE
+
     return TOOLS_TABLE
 
 
@@ -63,13 +66,15 @@ def list_tool_library() -> str:
     catalog = []
     for mod in _ALL_TOOLS:
         meta = mod.TOOL_META
-        catalog.append({
-            "id": meta["id"],
-            "name": meta["name"],
-            "description": meta["description"],
-            "category": meta["category"],
-            "tool_names": mod.TOOL_NAMES,
-        })
+        catalog.append(
+            {
+                "id": meta["id"],
+                "name": meta["name"],
+                "description": meta["description"],
+                "category": meta["category"],
+                "tool_names": mod.TOOL_NAMES,
+            }
+        )
     return json.dumps(catalog, indent=2, ensure_ascii=False)
 
 
@@ -217,11 +222,7 @@ def upload_tool_catalog():
                         "created_at = if_not_exists(created_at, :u), updated_at = :u "
                         "REMOVE workspace_id"
                     ),
-                    ConditionExpression=(
-                        "attribute_not_exists(toolId) OR "
-                        "builtin = :t OR "
-                        "#o = :o"
-                    ),
+                    ConditionExpression=("attribute_not_exists(toolId) OR builtin = :t OR #o = :o"),
                     ExpressionAttributeNames={"#n": "name", "#o": "owner"},
                     ExpressionAttributeValues={
                         ":n": {"S": meta["name"]},

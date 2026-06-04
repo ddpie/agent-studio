@@ -5,6 +5,7 @@ the four input strings into a SKILL suggestion JSON. Tests guard the
 output schema so downstream UI code (which keys off `suggested_skill.*`
 and `action_needed`) isn't broken by a refactor.
 """
+
 import json
 import sys
 import types
@@ -22,12 +23,14 @@ sys.modules["strands"] = _mock_strands
 def test_analyze_trace_returns_schema():
     from tools.analyze_trace import analyze_trace
 
-    out = json.loads(analyze_trace(
-        agent_name="dataBot",
-        task_description="Summarize sales report",
-        tools_used="s3_read,chart",
-        steps_taken="1) read csv; 2) chart it",
-    ))
+    out = json.loads(
+        analyze_trace(
+            agent_name="dataBot",
+            task_description="Summarize sales report",
+            tools_used="s3_read,chart",
+            steps_taken="1) read csv; 2) chart it",
+        )
+    )
 
     assert "suggested_skill" in out
     skill = out["suggested_skill"]
@@ -67,12 +70,14 @@ def test_analyze_trace_preserves_unicode():
     """Names/instructions in non-ASCII pass through unchanged."""
     from tools.analyze_trace import analyze_trace
 
-    out = json.loads(analyze_trace(
-        agent_name="财务机器人",
-        task_description="生成季度报表",
-        tools_used="excel_read",
-        steps_taken="读取数据后导出",
-    ))
+    out = json.loads(
+        analyze_trace(
+            agent_name="财务机器人",
+            task_description="生成季度报表",
+            tools_used="excel_read",
+            steps_taken="读取数据后导出",
+        )
+    )
     assert out["suggested_skill"]["name"] == "财务机器人-workflow"
     assert "生成季度报表" in out["suggested_skill"]["description"]
     assert out["suggested_skill"]["instructions"] == "读取数据后导出"

@@ -218,5 +218,3 @@ def get_tool_usage_guide(lang: str | None = None) -> str:
     Only appended when the agent actually has tools defined.
     """
     return _TOOL_USAGE_GUIDE_ZH if _pick_lang(lang) == "zh" else _TOOL_USAGE_GUIDE_EN
-
-

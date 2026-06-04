@@ -1,4 +1,5 @@
 """Tests for check_workspace_permissions tool + _simulate_actions cache."""
+
 import json
 import sys
 import types
@@ -30,6 +31,7 @@ sys.modules["config"] = _mock_config
 @pytest.fixture(autouse=True)
 def _scope(monkeypatch):
     from tools import _scope
+
     monkeypatch.setattr(_scope, "_caller_id", "user-1", raising=False)
     monkeypatch.setattr(_scope, "_workspace_id", "ws-test", raising=False)
 
@@ -38,6 +40,7 @@ def _scope(monkeypatch):
 def _clear_cache():
     """Each test starts with an empty permission cache."""
     from tools import check_workspace_permissions as mod
+
     mod._permission_cache.clear()
     yield
     mod._permission_cache.clear()
@@ -56,7 +59,9 @@ def test_check_returns_empty_results_for_blank_actions(monkeypatch):
     from tools import check_workspace_permissions as mod
 
     monkeypatch.setattr(
-        mod, "_get_workspace_role_arn", lambda ws: "arn:aws:iam::1:role/r",
+        mod,
+        "_get_workspace_role_arn",
+        lambda ws: "arn:aws:iam::1:role/r",
     )
     out = json.loads(mod.check_workspace_permissions("ws-1", ""))
     assert out["has_role"] is True
@@ -68,7 +73,9 @@ def test_check_returns_simulation_results(monkeypatch):
     from tools import check_workspace_permissions as mod
 
     monkeypatch.setattr(
-        mod, "_get_workspace_role_arn", lambda ws: "arn:aws:iam::1:role/r",
+        mod,
+        "_get_workspace_role_arn",
+        lambda ws: "arn:aws:iam::1:role/r",
     )
 
     fake_iam = MagicMock()
@@ -79,12 +86,17 @@ def test_check_returns_simulation_results(monkeypatch):
         ]
     }
     monkeypatch.setattr(
-        mod.boto3, "client", lambda svc, **_: fake_iam,
+        mod.boto3,
+        "client",
+        lambda svc, **_: fake_iam,
     )
 
-    out = json.loads(mod.check_workspace_permissions(
-        "ws-1", "iam:GetRole, iam:DeleteRole",
-    ))
+    out = json.loads(
+        mod.check_workspace_permissions(
+            "ws-1",
+            "iam:GetRole, iam:DeleteRole",
+        )
+    )
     assert out["has_role"] is True
     assert out["results"] == [
         {"action": "iam:GetRole", "allowed": True},
@@ -104,8 +116,7 @@ def test_simulate_actions_paginates_at_25(monkeypatch):
         # Each batch: return all-allowed
         return {
             "EvaluationResults": [
-                {"EvalActionName": a, "EvalDecision": "allowed"}
-                for a in kwargs["ActionNames"]
+                {"EvalActionName": a, "EvalDecision": "allowed"} for a in kwargs["ActionNames"]
             ]
         }
 
@@ -153,7 +164,9 @@ def test_check_handles_iam_failure(monkeypatch):
     from tools import check_workspace_permissions as mod
 
     monkeypatch.setattr(
-        mod, "_get_workspace_role_arn", lambda ws: "arn:aws:iam::1:role/r",
+        mod,
+        "_get_workspace_role_arn",
+        lambda ws: "arn:aws:iam::1:role/r",
     )
 
     fake_iam = MagicMock()
@@ -170,7 +183,9 @@ def test_check_filters_blank_actions(monkeypatch):
     from tools import check_workspace_permissions as mod
 
     monkeypatch.setattr(
-        mod, "_get_workspace_role_arn", lambda ws: "arn:aws:iam::1:role/r",
+        mod,
+        "_get_workspace_role_arn",
+        lambda ws: "arn:aws:iam::1:role/r",
     )
 
     fake_iam = MagicMock()

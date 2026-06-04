@@ -10,6 +10,7 @@ Usage:
   python scripts/sync-mcp-iam-policies.py          # generate files
   python scripts/sync-mcp-iam-policies.py --check   # CI mode: exit 1 if files are stale
 """
+
 import argparse
 import hashlib
 import json
@@ -32,13 +33,13 @@ Regenerate:     python scripts/sync-mcp-iam-policies.py
 # SYNC_HASH: {hash}
 '''
 
-HEADER_FRONTEND = '''// Auto-generated MCP target definitions — DO NOT EDIT.
+HEADER_FRONTEND = """// Auto-generated MCP target definitions — DO NOT EDIT.
 //
 // Source of truth: mcp-runtime/mcp-registry.yaml
 // Regenerate:     python scripts/sync-mcp-iam-policies.py
 //
 // SYNC_HASH: {hash}
-'''
+"""
 
 # Virtual targets: workspace-role grants that map to an AWS service not backed
 # by an MCP server. These appear in the grant UI alongside real MCP targets.
@@ -55,63 +56,111 @@ VIRTUAL_TARGETS: dict[str, dict] = {
         "displayName": "RDS",
         "category": "database",
         "policy": {
-            "Statement": [{"Sid": "Rds", "Effect": "Allow", "Action": ["rds:Describe*", "rds:List*"], "Resource": "*"}]
+            "Statement": [
+                {"Sid": "Rds", "Effect": "Allow", "Action": ["rds:Describe*", "rds:List*"], "Resource": "*"}
+            ]
         },
     },
     "s3-readonly": {
         "displayName": "S3 (Read-Only)",
         "category": "storage",
         "policy": {
-            "Statement": [{"Sid": "S3ReadOnly", "Effect": "Allow", "Action": ["s3:GetBucketLocation", "s3:GetBucketTagging", "s3:ListAllMyBuckets", "s3:ListBucket"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "S3ReadOnly",
+                    "Effect": "Allow",
+                    "Action": [
+                        "s3:GetBucketLocation",
+                        "s3:GetBucketTagging",
+                        "s3:ListAllMyBuckets",
+                        "s3:ListBucket",
+                    ],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "dynamodb-readonly": {
         "displayName": "DynamoDB (Read-Only)",
         "category": "database",
         "policy": {
-            "Statement": [{"Sid": "DynamoDBReadOnly", "Effect": "Allow", "Action": ["dynamodb:Describe*", "dynamodb:List*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "DynamoDBReadOnly",
+                    "Effect": "Allow",
+                    "Action": ["dynamodb:Describe*", "dynamodb:List*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "sns": {
         "displayName": "SNS",
         "category": "messaging",
         "policy": {
-            "Statement": [{"Sid": "Sns", "Effect": "Allow", "Action": ["sns:Get*", "sns:List*"], "Resource": "*"}]
+            "Statement": [
+                {"Sid": "Sns", "Effect": "Allow", "Action": ["sns:Get*", "sns:List*"], "Resource": "*"}
+            ]
         },
     },
     "sqs": {
         "displayName": "SQS",
         "category": "messaging",
         "policy": {
-            "Statement": [{"Sid": "Sqs", "Effect": "Allow", "Action": ["sqs:Get*", "sqs:List*"], "Resource": "*"}]
+            "Statement": [
+                {"Sid": "Sqs", "Effect": "Allow", "Action": ["sqs:Get*", "sqs:List*"], "Resource": "*"}
+            ]
         },
     },
     "route53": {
         "displayName": "Route 53",
         "category": "networking",
         "policy": {
-            "Statement": [{"Sid": "Route53", "Effect": "Allow", "Action": ["route53:Get*", "route53:List*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "Route53",
+                    "Effect": "Allow",
+                    "Action": ["route53:Get*", "route53:List*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "elb": {
         "displayName": "Elastic Load Balancing",
         "category": "networking",
         "policy": {
-            "Statement": [{"Sid": "Elb", "Effect": "Allow", "Action": ["elasticloadbalancing:Describe*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "Elb",
+                    "Effect": "Allow",
+                    "Action": ["elasticloadbalancing:Describe*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "api-gateway": {
         "displayName": "API Gateway",
         "category": "networking",
         "policy": {
-            "Statement": [{"Sid": "ApiGateway", "Effect": "Allow", "Action": ["apigateway:GET"], "Resource": "*"}]
+            "Statement": [
+                {"Sid": "ApiGateway", "Effect": "Allow", "Action": ["apigateway:GET"], "Resource": "*"}
+            ]
         },
     },
     "cloudfront": {
         "displayName": "CloudFront",
         "category": "networking",
         "policy": {
-            "Statement": [{"Sid": "CloudFront", "Effect": "Allow", "Action": ["cloudfront:Get*", "cloudfront:List*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "CloudFront",
+                    "Effect": "Allow",
+                    "Action": ["cloudfront:Get*", "cloudfront:List*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "kms": {
@@ -120,112 +169,218 @@ VIRTUAL_TARGETS: dict[str, dict] = {
         "sensitivity": "medium",
         "sensitiveReasons": ["kms:GetKeyPolicy 可读取密钥策略内容"],
         "policy": {
-            "Statement": [{"Sid": "Kms", "Effect": "Allow", "Action": ["kms:Describe*", "kms:List*", "kms:Get*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "Kms",
+                    "Effect": "Allow",
+                    "Action": ["kms:Describe*", "kms:List*", "kms:Get*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "acm": {
         "displayName": "ACM (Certificates)",
         "category": "security",
         "policy": {
-            "Statement": [{"Sid": "Acm", "Effect": "Allow", "Action": ["acm:Describe*", "acm:List*", "acm:GetCertificate"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "Acm",
+                    "Effect": "Allow",
+                    "Action": ["acm:Describe*", "acm:List*", "acm:GetCertificate"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "guardduty": {
         "displayName": "GuardDuty",
         "category": "security",
         "policy": {
-            "Statement": [{"Sid": "GuardDuty", "Effect": "Allow", "Action": ["guardduty:Get*", "guardduty:List*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "GuardDuty",
+                    "Effect": "Allow",
+                    "Action": ["guardduty:Get*", "guardduty:List*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "security-hub": {
         "displayName": "Security Hub",
         "category": "security",
         "policy": {
-            "Statement": [{"Sid": "SecurityHub", "Effect": "Allow", "Action": ["securityhub:Get*", "securityhub:List*", "securityhub:BatchGet*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "SecurityHub",
+                    "Effect": "Allow",
+                    "Action": ["securityhub:Get*", "securityhub:List*", "securityhub:BatchGet*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "inspector": {
         "displayName": "Inspector",
         "category": "security",
         "policy": {
-            "Statement": [{"Sid": "Inspector", "Effect": "Allow", "Action": ["inspector2:Get*", "inspector2:List*", "inspector2:BatchGet*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "Inspector",
+                    "Effect": "Allow",
+                    "Action": ["inspector2:Get*", "inspector2:List*", "inspector2:BatchGet*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "config": {
         "displayName": "AWS Config",
         "category": "security",
         "policy": {
-            "Statement": [{"Sid": "Config", "Effect": "Allow", "Action": ["config:Describe*", "config:Get*", "config:List*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "Config",
+                    "Effect": "Allow",
+                    "Action": ["config:Describe*", "config:Get*", "config:List*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "sts": {
         "displayName": "STS (Identity)",
         "category": "security",
         "policy": {
-            "Statement": [{"Sid": "Sts", "Effect": "Allow", "Action": ["sts:GetCallerIdentity"], "Resource": "*"}]
+            "Statement": [
+                {"Sid": "Sts", "Effect": "Allow", "Action": ["sts:GetCallerIdentity"], "Resource": "*"}
+            ]
         },
     },
     "autoscaling": {
         "displayName": "Auto Scaling",
         "category": "compute",
         "policy": {
-            "Statement": [{"Sid": "AutoScaling", "Effect": "Allow", "Action": ["autoscaling:Describe*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "AutoScaling",
+                    "Effect": "Allow",
+                    "Action": ["autoscaling:Describe*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "efs": {
         "displayName": "EFS",
         "category": "storage",
         "policy": {
-            "Statement": [{"Sid": "Efs", "Effect": "Allow", "Action": ["elasticfilesystem:Describe*"], "Resource": "*"}]
+            "Statement": [
+                {"Sid": "Efs", "Effect": "Allow", "Action": ["elasticfilesystem:Describe*"], "Resource": "*"}
+            ]
         },
     },
     "opensearch": {
         "displayName": "OpenSearch",
         "category": "database",
         "policy": {
-            "Statement": [{"Sid": "OpenSearch", "Effect": "Allow", "Action": ["es:Describe*", "es:List*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "OpenSearch",
+                    "Effect": "Allow",
+                    "Action": ["es:Describe*", "es:List*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "eventbridge": {
         "displayName": "EventBridge",
         "category": "messaging",
         "policy": {
-            "Statement": [{"Sid": "EventBridge", "Effect": "Allow", "Action": ["events:Describe*", "events:List*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "EventBridge",
+                    "Effect": "Allow",
+                    "Action": ["events:Describe*", "events:List*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "cloudformation": {
         "displayName": "CloudFormation",
         "category": "management",
         "policy": {
-            "Statement": [{"Sid": "CloudFormation", "Effect": "Allow", "Action": ["cloudformation:Describe*", "cloudformation:List*", "cloudformation:GetTemplateSummary"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "CloudFormation",
+                    "Effect": "Allow",
+                    "Action": [
+                        "cloudformation:Describe*",
+                        "cloudformation:List*",
+                        "cloudformation:GetTemplateSummary",
+                    ],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "ssm": {
         "displayName": "Systems Manager",
         "category": "management",
         "policy": {
-            "Statement": [{"Sid": "Ssm", "Effect": "Allow", "Action": ["ssm:DescribeParameters", "ssm:GetParameter", "ssm:GetParameters", "ssm:List*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "Ssm",
+                    "Effect": "Allow",
+                    "Action": [
+                        "ssm:DescribeParameters",
+                        "ssm:GetParameter",
+                        "ssm:GetParameters",
+                        "ssm:List*",
+                    ],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "service-quotas": {
         "displayName": "Service Quotas",
         "category": "management",
         "policy": {
-            "Statement": [{"Sid": "ServiceQuotas", "Effect": "Allow", "Action": ["servicequotas:Get*", "servicequotas:List*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "ServiceQuotas",
+                    "Effect": "Allow",
+                    "Action": ["servicequotas:Get*", "servicequotas:List*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "health": {
         "displayName": "AWS Health",
         "category": "management",
         "policy": {
-            "Statement": [{"Sid": "Health", "Effect": "Allow", "Action": ["health:Describe*"], "Resource": "*"}]
+            "Statement": [
+                {"Sid": "Health", "Effect": "Allow", "Action": ["health:Describe*"], "Resource": "*"}
+            ]
         },
     },
     "compute-optimizer": {
         "displayName": "Compute Optimizer",
         "category": "management",
         "policy": {
-            "Statement": [{"Sid": "ComputeOptimizer", "Effect": "Allow", "Action": ["compute-optimizer:Get*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "ComputeOptimizer",
+                    "Effect": "Allow",
+                    "Action": ["compute-optimizer:Get*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "cost-explorer": {
@@ -234,21 +389,42 @@ VIRTUAL_TARGETS: dict[str, dict] = {
         "sensitivity": "medium",
         "sensitiveReasons": ["可查看完整的 AWS 账单和成本数据"],
         "policy": {
-            "Statement": [{"Sid": "CostExplorer", "Effect": "Allow", "Action": ["ce:Get*", "ce:Describe*", "ce:List*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "CostExplorer",
+                    "Effect": "Allow",
+                    "Action": ["ce:Get*", "ce:Describe*", "ce:List*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "athena": {
         "displayName": "Athena",
         "category": "analytics",
         "policy": {
-            "Statement": [{"Sid": "Athena", "Effect": "Allow", "Action": ["athena:Get*", "athena:List*", "athena:BatchGet*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "Athena",
+                    "Effect": "Allow",
+                    "Action": ["athena:Get*", "athena:List*", "athena:BatchGet*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "kinesis": {
         "displayName": "Kinesis",
         "category": "analytics",
         "policy": {
-            "Statement": [{"Sid": "Kinesis", "Effect": "Allow", "Action": ["kinesis:Describe*", "kinesis:List*", "kinesis:Get*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "Kinesis",
+                    "Effect": "Allow",
+                    "Action": ["kinesis:Describe*", "kinesis:List*", "kinesis:Get*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "cognito": {
@@ -257,49 +433,98 @@ VIRTUAL_TARGETS: dict[str, dict] = {
         "sensitivity": "medium",
         "sensitiveReasons": ["可查看用户池列表和用户信息"],
         "policy": {
-            "Statement": [{"Sid": "Cognito", "Effect": "Allow", "Action": ["cognito-idp:Describe*", "cognito-idp:List*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "Cognito",
+                    "Effect": "Allow",
+                    "Action": ["cognito-idp:Describe*", "cognito-idp:List*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "backup": {
         "displayName": "AWS Backup",
         "category": "management",
         "policy": {
-            "Statement": [{"Sid": "Backup", "Effect": "Allow", "Action": ["backup:Describe*", "backup:Get*", "backup:List*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "Backup",
+                    "Effect": "Allow",
+                    "Action": ["backup:Describe*", "backup:Get*", "backup:List*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "ecr": {
         "displayName": "ECR",
         "category": "compute",
         "policy": {
-            "Statement": [{"Sid": "Ecr", "Effect": "Allow", "Action": ["ecr:Describe*", "ecr:List*", "ecr:BatchGetImage"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "Ecr",
+                    "Effect": "Allow",
+                    "Action": ["ecr:Describe*", "ecr:List*", "ecr:BatchGetImage"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "bedrock-readonly": {
         "displayName": "Bedrock (Read-Only)",
         "category": "ai_ml",
         "policy": {
-            "Statement": [{"Sid": "BedrockReadOnly", "Effect": "Allow", "Action": ["bedrock:Get*", "bedrock:List*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "BedrockReadOnly",
+                    "Effect": "Allow",
+                    "Action": ["bedrock:Get*", "bedrock:List*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "sagemaker": {
         "displayName": "SageMaker",
         "category": "ai_ml",
         "policy": {
-            "Statement": [{"Sid": "SageMaker", "Effect": "Allow", "Action": ["sagemaker:Describe*", "sagemaker:List*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "SageMaker",
+                    "Effect": "Allow",
+                    "Action": ["sagemaker:Describe*", "sagemaker:List*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "glue": {
         "displayName": "Glue",
         "category": "analytics",
         "policy": {
-            "Statement": [{"Sid": "Glue", "Effect": "Allow", "Action": ["glue:Get*", "glue:List*", "glue:BatchGet*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "Glue",
+                    "Effect": "Allow",
+                    "Action": ["glue:Get*", "glue:List*", "glue:BatchGet*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
     "redshift": {
         "displayName": "Redshift",
         "category": "database",
         "policy": {
-            "Statement": [{"Sid": "Redshift", "Effect": "Allow", "Action": ["redshift:Describe*", "redshift:List*"], "Resource": "*"}]
+            "Statement": [
+                {
+                    "Sid": "Redshift",
+                    "Effect": "Allow",
+                    "Action": ["redshift:Describe*", "redshift:List*"],
+                    "Resource": "*",
+                }
+            ]
         },
     },
 }
@@ -392,16 +617,18 @@ def _extract_targets(registry: dict) -> list[dict]:
     targets = []
 
     for remote in registry.get("remote_targets", []):
-        targets.append({
-            "name": remote["name"],
-            "displayName": DISPLAY_NAME_OVERRIDES.get(remote["name"], remote["name"]),
-            "category": remote.get("category", "general"),
-            "enabled": remote.get("enabled", True),
-            "iamPolicy": remote.get("iam_policy"),
-            "sensitivity": remote.get("sensitivity", "low"),
-            "sensitiveReasons": remote.get("sensitive_reasons", []),
-            "source": "yaml",
-        })
+        targets.append(
+            {
+                "name": remote["name"],
+                "displayName": DISPLAY_NAME_OVERRIDES.get(remote["name"], remote["name"]),
+                "category": remote.get("category", "general"),
+                "enabled": remote.get("enabled", True),
+                "iamPolicy": remote.get("iam_policy"),
+                "sensitivity": remote.get("sensitivity", "low"),
+                "sensitiveReasons": remote.get("sensitive_reasons", []),
+                "source": "yaml",
+            }
+        )
 
     for rt in registry.get("runtime_targets", []):
         policy = rt.get("iam_policy")
@@ -409,31 +636,35 @@ def _extract_targets(registry: dict) -> list[dict]:
             for stmt in policy.get("Statement", []):
                 if "Sid" not in stmt:
                     stmt["Sid"] = _to_sid(rt["name"])
-        targets.append({
-            "name": rt["name"],
-            "displayName": DISPLAY_NAME_OVERRIDES.get(rt["name"], rt["name"]),
-            "category": rt.get("category", "general"),
-            "enabled": rt.get("enabled", True),
-            "iamPolicy": policy,
-            "sensitivity": rt.get("sensitivity", "low"),
-            "sensitiveReasons": rt.get("sensitive_reasons", []),
-            "source": "yaml",
-        })
+        targets.append(
+            {
+                "name": rt["name"],
+                "displayName": DISPLAY_NAME_OVERRIDES.get(rt["name"], rt["name"]),
+                "category": rt.get("category", "general"),
+                "enabled": rt.get("enabled", True),
+                "iamPolicy": policy,
+                "sensitivity": rt.get("sensitivity", "low"),
+                "sensitiveReasons": rt.get("sensitive_reasons", []),
+                "source": "yaml",
+            }
+        )
 
     # Add virtual targets (not backed by MCP servers)
     yaml_names = {t["name"] for t in targets}
     for name, vt in VIRTUAL_TARGETS.items():
         if name not in yaml_names:
-            targets.append({
-                "name": name,
-                "displayName": vt["displayName"],
-                "category": vt["category"],
-                "enabled": True,
-                "iamPolicy": vt["policy"],
-                "sensitivity": vt.get("sensitivity", "low"),
-                "sensitiveReasons": vt.get("sensitiveReasons", []),
-                "source": "virtual",
-            })
+            targets.append(
+                {
+                    "name": name,
+                    "displayName": vt["displayName"],
+                    "category": vt["category"],
+                    "enabled": True,
+                    "iamPolicy": vt["policy"],
+                    "sensitivity": vt.get("sensitivity", "low"),
+                    "sensitiveReasons": vt.get("sensitiveReasons", []),
+                    "source": "virtual",
+                }
+            )
 
     # Sort by category order, then by name within category
     def sort_key(t):
@@ -471,7 +702,7 @@ def _generate_backend(targets: list[dict], sync_hash: str) -> str:
     lines.append("")
     lines.append("# Targets that exist but require no IAM permissions.")
     no_iam = sorted(t["name"] for t in targets if t["iamPolicy"] is None)
-    lines.append(f'_NO_IAM_TARGETS = {{{", ".join(repr(n) for n in no_iam)}}}')
+    lines.append(f"_NO_IAM_TARGETS = {{{', '.join(repr(n) for n in no_iam)}}}")
     lines.append("")
     return "\n".join(lines)
 
@@ -480,7 +711,7 @@ def _generate_frontend(targets: list[dict], sync_hash: str) -> str:
     """Generate TypeScript source for MCP_TARGETS array."""
     lines = [HEADER_FRONTEND.format(hash=sync_hash)]
     lines.append("")
-    lines.append("export type Sensitivity = \"low\" | \"medium\" | \"high\";")
+    lines.append('export type Sensitivity = "low" | "medium" | "high";')
     lines.append("")
     lines.append("export interface McpTargetDef {")
     lines.append("  name: string;")
@@ -488,7 +719,9 @@ def _generate_frontend(targets: list[dict], sync_hash: str) -> str:
     lines.append("  category: string;")
     lines.append("  sensitivity: Sensitivity;")
     lines.append("  sensitiveReasons: string[];")
-    lines.append("  iamPolicy: { Statement: { Sid: string; Effect: string; Action: string[]; Resource: string }[] } | null;")
+    lines.append(
+        "  iamPolicy: { Statement: { Sid: string; Effect: string; Action: string[]; Resource: string }[] } | null;"
+    )
     lines.append("}")
     lines.append("")
     lines.append("export const MCP_TARGETS: McpTargetDef[] = [")
@@ -507,9 +740,11 @@ def _generate_frontend(targets: list[dict], sync_hash: str) -> str:
             policy_ts = "{ Statement: [" + ", ".join(stmt_parts) + "] }"
 
         reasons_ts = json.dumps(t.get("sensitiveReasons", []), ensure_ascii=False)
-        lines.append(f'  {{ name: "{t["name"]}", displayName: "{t["displayName"]}", '
-                     f'category: "{t["category"]}", sensitivity: "{t["sensitivity"]}", '
-                     f'sensitiveReasons: {reasons_ts}, iamPolicy: {policy_ts} }},')
+        lines.append(
+            f'  {{ name: "{t["name"]}", displayName: "{t["displayName"]}", '
+            f'category: "{t["category"]}", sensitivity: "{t["sensitivity"]}", '
+            f"sensitiveReasons: {reasons_ts}, iamPolicy: {policy_ts} }},"
+        )
 
     lines.append("];")
     lines.append("")

@@ -36,6 +36,7 @@ sys.modules["config"] = _mock_config
 def _exec_builtin(s3_mock):
     """Execute BUILTIN_TOOLS_CODE with boto3.client patched to return s3_mock."""
     from templates.agent_template_v2 import BUILTIN_TOOLS_CODE
+
     ns: dict = {"__name__": "builtin_tools_test"}
     with patch("boto3.client", return_value=s3_mock):
         exec(BUILTIN_TOOLS_CODE, ns)
@@ -51,6 +52,7 @@ def _make_s3_get_mock(body_bytes: bytes):
 
 
 # ── Fixtures: synthetic documents generated at import time ────────────────
+
 
 def _make_pdf_bytes(pages: list[str]) -> bytes:
     """Construct a minimal PDF with a short text string on each page.
@@ -79,17 +81,17 @@ def _make_pdf_bytes(pages: list[str]) -> bytes:
 
     page_ids: list[int] = []
     for cid in content_ids:
-        page_ids.append(add(
-            f"<< /Type /Page /Parent {pages_id} 0 R "
-            f"/MediaBox [0 0 612 792] "
-            f"/Contents {cid} 0 R "
-            f"/Resources << /Font << /F1 {font_id} 0 R >> >> >>"
-        ))
+        page_ids.append(
+            add(
+                f"<< /Type /Page /Parent {pages_id} 0 R "
+                f"/MediaBox [0 0 612 792] "
+                f"/Contents {cid} 0 R "
+                f"/Resources << /Font << /F1 {font_id} 0 R >> >> >>"
+            )
+        )
 
     actual_pages_id = add(
-        "<< /Type /Pages /Kids ["
-        + " ".join(f"{p} 0 R" for p in page_ids)
-        + f"] /Count {len(page_ids)} >>"
+        "<< /Type /Pages /Kids [" + " ".join(f"{p} 0 R" for p in page_ids) + f"] /Count {len(page_ids)} >>"
     )
     assert actual_pages_id == pages_id
     catalog_id = add(f"<< /Type /Catalog /Pages {pages_id} 0 R >>")
@@ -101,12 +103,11 @@ def _make_pdf_bytes(pages: list[str]) -> bytes:
         out += f"{i} 0 obj\n{body}\nendobj\n".encode()
 
     xref_start = len(out)
-    out += f"xref\n0 {len(objs)+1}\n0000000000 65535 f \n".encode()
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode()
     for off in offsets[1:]:
         out += f"{off:010d} 00000 n \n".encode()
     out += (
-        f"trailer\n<< /Size {len(objs)+1} /Root {catalog_id} 0 R >>\n"
-        f"startxref\n{xref_start}\n%%EOF"
+        f"trailer\n<< /Size {len(objs) + 1} /Root {catalog_id} 0 R >>\nstartxref\n{xref_start}\n%%EOF"
     ).encode()
     return bytes(out)
 
@@ -127,6 +128,7 @@ def _make_xlsx_bytes(sheets: dict[str, list[list]]) -> bytes:
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────
+
 
 def test_read_document_rejects_cross_workspace_key():
     s3 = _make_s3_get_mock(b"")
@@ -226,10 +228,12 @@ def test_read_document_rejects_oversized_file():
 
 
 def test_read_document_xlsx_extracts_sheet_headers_and_cells():
-    xlsx_bytes = _make_xlsx_bytes({
-        "Alpha": [["name", "qty"], ["apple", 3], ["pear", 7]],
-        "Beta":  [["id"], [1], [2]],
-    })
+    xlsx_bytes = _make_xlsx_bytes(
+        {
+            "Alpha": [["name", "qty"], ["apple", 3], ["pear", 7]],
+            "Beta": [["id"], [1], [2]],
+        }
+    )
     s3 = _make_s3_get_mock(xlsx_bytes)
     ns = _exec_builtin(s3)
     ns["_workspace_id"] = "ws-alpha"

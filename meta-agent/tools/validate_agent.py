@@ -32,7 +32,12 @@ def _extract_tool_blocks(source: str) -> str:
             current = [line]
             continue
         if in_tool:
-            if trimmed and line[0:1] not in (" ", "\t") and not trimmed.startswith("def ") and not trimmed.startswith("#"):
+            if (
+                trimmed
+                and line[0:1] not in (" ", "\t")
+                and not trimmed.startswith("def ")
+                and not trimmed.startswith("#")
+            ):
                 blocks.append("\n".join(current))
                 in_tool = False
                 current = []
@@ -50,24 +55,55 @@ def _extract_tool_blocks(source: str) -> str:
         return ""
     return "\n".join(imports) + "\n\n" + "\n\n".join(blocks) if imports else "\n\n".join(blocks)
 
+
 # Write-operation patterns that readonly agents should not use
 _WRITE_PATTERNS = [
-    r'\bput_item\b', r'\bdelete_item\b', r'\bupdate_item\b',
-    r'\bput_object\b', r'\bdelete_object\b',
-    r'\bcreate_\w+\b', r'\bdelete_\w+\b', r'\bupdate_\w+\b',
-    r'\bINSERT\s+INTO\b', r'\bUPDATE\s+\w+\s+SET\b', r'\bDELETE\s+FROM\b',
-    r'\bDROP\s+TABLE\b', r'\bCREATE\s+TABLE\b',
-    r'\.put\(', r'\.delete\(', r'\.post\(',
-    r'\bos\.remove\b', r'\bos\.unlink\b', r'\bshutil\.rmtree\b',
+    r"\bput_item\b",
+    r"\bdelete_item\b",
+    r"\bupdate_item\b",
+    r"\bput_object\b",
+    r"\bdelete_object\b",
+    r"\bcreate_\w+\b",
+    r"\bdelete_\w+\b",
+    r"\bupdate_\w+\b",
+    r"\bINSERT\s+INTO\b",
+    r"\bUPDATE\s+\w+\s+SET\b",
+    r"\bDELETE\s+FROM\b",
+    r"\bDROP\s+TABLE\b",
+    r"\bCREATE\s+TABLE\b",
+    r"\.put\(",
+    r"\.delete\(",
+    r"\.post\(",
+    r"\bos\.remove\b",
+    r"\bos\.unlink\b",
+    r"\bshutil\.rmtree\b",
 ]
-_WRITE_RE = re.compile('|'.join(_WRITE_PATTERNS), re.IGNORECASE)
+_WRITE_RE = re.compile("|".join(_WRITE_PATTERNS), re.IGNORECASE)
 
 # Libraries NOT available in the sandbox
 _UNAVAILABLE_LIBS = {
-    'scrapy', 'selenium', 'playwright', 'pandas', 'numpy', 'scipy',
-    'Pillow', 'PIL', 'feedparser', 'lxml', 'matplotlib', 'seaborn',
-    'sklearn', 'tensorflow', 'torch', 'cv2', 'flask', 'django',
-    'fastapi', 'sqlalchemy', 'celery', 'redis',
+    "scrapy",
+    "selenium",
+    "playwright",
+    "pandas",
+    "numpy",
+    "scipy",
+    "Pillow",
+    "PIL",
+    "feedparser",
+    "lxml",
+    "matplotlib",
+    "seaborn",
+    "sklearn",
+    "tensorflow",
+    "torch",
+    "cv2",
+    "flask",
+    "django",
+    "fastapi",
+    "sqlalchemy",
+    "celery",
+    "redis",
 }
 
 
@@ -75,6 +111,7 @@ def _get_builtin_tool_names() -> set[str]:
     """Dynamically get all built-in tool names from tools_library registry."""
     try:
         from tools_library import registry
+
         names = set()
         for mod in registry._ALL_TOOLS:
             for n in mod.TOOL_NAMES.split(","):
@@ -84,6 +121,7 @@ def _get_builtin_tool_names() -> set[str]:
         return names
     except Exception:
         return set()
+
 
 def _get_mcp_tool_names(mcp_targets_list: list[str]) -> list[str]:
     """Fetch tool names from S3 manifests for the given MCP targets.
@@ -97,6 +135,7 @@ def _get_mcp_tool_names(mcp_targets_list: list[str]) -> list[str]:
     try:
         import boto3
         from config import REGION, S3_BUCKET
+
         s3 = boto3.client("s3", region_name=REGION)
     except Exception:
         return []
@@ -207,8 +246,13 @@ Evaluate based on the ACTUAL tools and permission tier — not generic rules.
 """
 
 
-def _review_prompt_quality(system_prompt: str, tool_names_list: list[str], permission_tier: str,
-                           description: str = "", welcome_message: str = "") -> dict | None:
+def _review_prompt_quality(
+    system_prompt: str,
+    tool_names_list: list[str],
+    permission_tier: str,
+    description: str = "",
+    welcome_message: str = "",
+) -> dict | None:
     """Use an Agent to review prompt quality. Returns scores dict or None on failure."""
     reviewer = Agent(
         model=BedrockModel(model_id=MODEL_ID),
@@ -222,10 +266,10 @@ def _review_prompt_quality(system_prompt: str, tool_names_list: list[str], permi
 ```
 
 Agent context:
-- Tools: [{', '.join(tool_names_list) if tool_names_list else 'none'}]
-- Permission tier: {permission_tier or 'unknown'}
-- Description: {description or '(empty)'}
-- Welcome message: {welcome_message or '(empty)'}
+- Tools: [{", ".join(tool_names_list) if tool_names_list else "none"}]
+- Permission tier: {permission_tier or "unknown"}
+- Description: {description or "(empty)"}
+- Welcome message: {welcome_message or "(empty)"}
 
 Return the JSON scores."""
 
@@ -235,7 +279,7 @@ Return the JSON scores."""
     # Extract JSON — find the outermost { } containing "scores"
     start = text.find('{"scores"')
     if start == -1:
-        start = text.find('{')
+        start = text.find("{")
     if start == -1:
         return None
 
@@ -248,7 +292,7 @@ Return the JSON scores."""
         if esc:
             esc = False
             continue
-        if ch == '\\':
+        if ch == "\\":
             esc = True
             continue
         if ch == '"':
@@ -256,9 +300,9 @@ Return the JSON scores."""
             continue
         if in_str:
             continue
-        if ch == '{':
+        if ch == "{":
             depth += 1
-        elif ch == '}':
+        elif ch == "}":
             depth -= 1
             if depth == 0:
                 end = i + 1
@@ -314,6 +358,7 @@ def validate_agent(
         try:
             import boto3
             from config import REGION, S3_BUCKET
+
             s3 = boto3.client("s3", region_name=REGION)
             obj = s3.get_object(Bucket=S3_BUCKET, Key=staging_key)
             staged = json.loads(obj["Body"].read().decode("utf-8"))
@@ -326,7 +371,9 @@ def validate_agent(
             permission_tier = staged.get("permission_tier", permission_tier) or permission_tier
             mcp_targets_raw = staged.get("mcp_targets", [])
         except Exception as e:
-            return json.dumps({"valid": False, "errors": [f"Failed to read staging config: {e}"], "warnings": []})
+            return json.dumps(
+                {"valid": False, "errors": [f"Failed to read staging config: {e}"], "warnings": []}
+            )
 
     errors = []
     warnings = []
@@ -334,8 +381,10 @@ def validate_agent(
     # 1. Required fields
     if not agent_name or not agent_name.strip():
         errors.append("Agent name is required.")
-    elif not re.match(r'^[A-Za-z0-9]+$', agent_name):
-        errors.append(f"Agent name '{agent_name}' must be alphanumeric only (no hyphens, underscores, or spaces).")
+    elif not re.match(r"^[A-Za-z0-9]+$", agent_name):
+        errors.append(
+            f"Agent name '{agent_name}' must be alphanumeric only (no hyphens, underscores, or spaces)."
+        )
     if not description or not description.strip():
         warnings.append("Description is empty. Consider adding one for discoverability.")
     if not system_prompt or not system_prompt.strip():
@@ -344,7 +393,7 @@ def validate_agent(
     # 2. Python syntax check for tool_definitions
     defined_funcs = []
     if tool_definitions and tool_definitions.strip():
-        defined_funcs = re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', tool_definitions)
+        defined_funcs = re.findall(r"@tool\s*\ndef\s+(\w+)\s*\(", tool_definitions)
 
         try:
             ast.parse(tool_definitions)
@@ -370,6 +419,7 @@ def validate_agent(
                     else:
                         # Try calling with introspected default args to catch obvious type errors
                         import inspect
+
                         sig = inspect.signature(fn)
                         test_args = {}
                         for pname, param in sig.parameters.items():
@@ -393,22 +443,28 @@ def validate_agent(
                             fn(**test_args)
                         except Exception as call_err:
                             err_type = type(call_err).__name__
-                            warnings.append(f"Dry-run: '{fname}' raised {err_type} with default args: {call_err}")
+                            warnings.append(
+                                f"Dry-run: '{fname}' raised {err_type} with default args: {call_err}"
+                            )
             except Exception as exec_err:
                 warnings.append(f"Dry-run exec failed: {type(exec_err).__name__}: {exec_err}")
 
         # 5. Check for unavailable library imports
-        imports = re.findall(r'(?:from\s+(\w+)|import\s+(\w+))', tool_definitions)
+        imports = re.findall(r"(?:from\s+(\w+)|import\s+(\w+))", tool_definitions)
         for imp in imports:
             lib = imp[0] or imp[1]
             if lib in _UNAVAILABLE_LIBS:
-                errors.append(f"Library '{lib}' is not available in the sandbox. Use MCP Gateway or a different approach.")
+                errors.append(
+                    f"Library '{lib}' is not available in the sandbox. Use MCP Gateway or a different approach."
+                )
 
         # 6. (Removed) Previously checked readonly tier vs write operations.
         # All agents now use a unified role with sufficient permissions.
 
         # 7. Security patterns
-        if "import os" in tool_definitions and ("os.system" in tool_definitions or "subprocess" in tool_definitions):
+        if "import os" in tool_definitions and (
+            "os.system" in tool_definitions or "subprocess" in tool_definitions
+        ):
             warnings.append("Tool code uses os.system or subprocess — ensure this is intentional and safe.")
 
     # 3. tool_names vs actual @tool functions (exclude built-in tools and MCP tools)
@@ -418,7 +474,8 @@ def validate_agent(
     # Resolve MCP tool names (for steps 3 and 8)
     mcp_target_names = (
         [t.strip() for t in mcp_targets_raw.split(",") if t.strip()]
-        if isinstance(mcp_targets_raw, str) else list(mcp_targets_raw)
+        if isinstance(mcp_targets_raw, str)
+        else list(mcp_targets_raw)
     )
     mcp_tool_names = _get_mcp_tool_names(mcp_target_names)
     mcp_tool_names_set = set(mcp_tool_names)
@@ -464,7 +521,11 @@ def validate_agent(
                 if not result["granted"]:
                     missing = result.get("missing_actions", [])
                     # Extract role name from ARN for CLI command
-                    role_name = workspace_role_arn.rsplit("/", 1)[-1] if "/" in workspace_role_arn else workspace_role_arn
+                    role_name = (
+                        workspace_role_arn.rsplit("/", 1)[-1]
+                        if "/" in workspace_role_arn
+                        else workspace_role_arn
+                    )
                     policy_json = json.dumps(iam_policy, separators=(",", ":"))
                     cli_cmd = (
                         f"aws iam put-role-policy "
@@ -490,16 +551,24 @@ def validate_agent(
         missing_in_names = defined_set - declared_set
 
         if missing_in_code:
-            errors.append(f"tool_names declares [{', '.join(sorted(missing_in_code))}] but no matching @tool function found in code.")
+            errors.append(
+                f"tool_names declares [{', '.join(sorted(missing_in_code))}] but no matching @tool function found in code."
+            )
         if missing_in_names:
-            warnings.append(f"@tool functions [{', '.join(sorted(missing_in_names))}] exist in code but not listed in tool_names. They will be ignored at runtime.")
+            warnings.append(
+                f"@tool functions [{', '.join(sorted(missing_in_names))}] exist in code but not listed in tool_names. They will be ignored at runtime."
+            )
     elif defined_funcs and not declared_names:
-        warnings.append(f"tool_definitions has {len(defined_funcs)} @tool functions but tool_names is empty. Tools won't be registered.")
+        warnings.append(
+            f"tool_definitions has {len(defined_funcs)} @tool functions but tool_names is empty. Tools won't be registered."
+        )
     elif declared_names and not defined_funcs:
         # All declared names are built-in — no warning needed
         custom_names = set(declared_names) - builtin_names - mcp_tool_names_set
         if custom_names:
-            warnings.append(f"tool_names declares [{', '.join(sorted(custom_names))}] but tool_definitions has no matching @tool functions.")
+            warnings.append(
+                f"tool_names declares [{', '.join(sorted(custom_names))}] but tool_definitions has no matching @tool functions."
+            )
 
     # 4. system_prompt ↔ tool consistency
     if system_prompt and defined_funcs:
@@ -507,7 +576,9 @@ def validate_agent(
         for func_name in defined_funcs:
             readable_name = func_name.replace("_", " ")
             if func_name not in prompt_lower and readable_name not in prompt_lower:
-                warnings.append(f"Tool '{func_name}' is not mentioned in system_prompt. The agent may not know when to use it.")
+                warnings.append(
+                    f"Tool '{func_name}' is not mentioned in system_prompt. The agent may not know when to use it."
+                )
 
     # 4b. Ghost-tool detection — names the prompt references in backticks that
     # don't exist in any known tool surface. This is the check that would have
@@ -516,7 +587,7 @@ def validate_agent(
     # on AWS service names, English phrases, or MCP target/category names.
     if system_prompt:
         # Extract `snake_case_ident` tokens — same shape as real tool names
-        backtick_tokens = set(re.findall(r'`([a-z][a-z0-9_]*[a-z0-9])`', system_prompt))
+        backtick_tokens = set(re.findall(r"`([a-z][a-z0-9_]*[a-z0-9])`", system_prompt))
         # Known tool surfaces the agent will actually have at runtime
         known = set(defined_funcs or []) | set(declared_names) | set(builtin_names) | mcp_tool_names_set
         # Skill-provided @tool functions (if staging_key tells us about skills)
@@ -533,21 +604,42 @@ def validate_agent(
                         resp = s3_scan.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix)
                         for obj in resp.get("Contents", []):
                             if obj["Key"].endswith(".py"):
-                                code = s3_scan.get_object(Bucket=S3_BUCKET, Key=obj["Key"])["Body"].read().decode("utf-8", errors="ignore")
-                                known.update(re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', code))
+                                code = (
+                                    s3_scan.get_object(Bucket=S3_BUCKET, Key=obj["Key"])["Body"]
+                                    .read()
+                                    .decode("utf-8", errors="ignore")
+                                )
+                                known.update(re.findall(r"@tool\s*\ndef\s+(\w+)\s*\(", code))
                     except Exception:
                         pass
             except Exception:
                 pass
         # Runtime builtins that every agent gets (see agent_template_v2.py:275)
-        known.update({
-            "load_skill", "run_command", "upload_to_s3", "read_document",
-            "browser_use", "run_skill_script", "check_capabilities",
-        })
+        known.update(
+            {
+                "load_skill",
+                "run_command",
+                "upload_to_s3",
+                "read_document",
+                "browser_use",
+                "run_skill_script",
+                "check_capabilities",
+            }
+        )
         # Common Python/English terms that shouldn't count even in backticks
         allowlist = {
-            "true", "false", "none", "null", "json", "str", "int", "bool",
-            "list", "dict", "yes", "no",
+            "true",
+            "false",
+            "none",
+            "null",
+            "json",
+            "str",
+            "int",
+            "bool",
+            "list",
+            "dict",
+            "yes",
+            "no",
         }
         ghost = {t for t in backtick_tokens if t not in known and t not in allowlist and "_" in t}
         if ghost:
@@ -560,7 +652,9 @@ def validate_agent(
 
     # Check for overly long system_prompt
     if system_prompt and len(system_prompt) > 10000:
-        warnings.append(f"System prompt is very long ({len(system_prompt)} chars). Consider trimming for better performance.")
+        warnings.append(
+            f"System prompt is very long ({len(system_prompt)} chars). Consider trimming for better performance."
+        )
 
     # Skill conflict detection
     skills_config = staged.get("skills", []) if staging_key else []
@@ -589,8 +683,12 @@ def validate_agent(
                         fnames.append(filename)
                         if filename.endswith(".py"):
                             try:
-                                content = s3_val.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read().decode("utf-8")
-                                tool_funcs = re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', content)
+                                content = (
+                                    s3_val.get_object(Bucket=S3_BUCKET, Key=key)["Body"]
+                                    .read()
+                                    .decode("utf-8")
+                                )
+                                tool_funcs = re.findall(r"@tool\s*\ndef\s+(\w+)\s*\(", content)
                                 funcs.extend(tool_funcs)
                             except Exception as e:
                                 warnings.append(f"Could not check skill {skill_name} for conflicts: {e}")
@@ -606,7 +704,9 @@ def validate_agent(
                     all_files.setdefault(fname, []).append(sname)
             for fname, snames in all_files.items():
                 if len(snames) > 1:
-                    errors.append(f"Skill script file name collision: '{fname}' exists in skills [{', '.join(snames)}]")
+                    errors.append(
+                        f"Skill script file name collision: '{fname}' exists in skills [{', '.join(snames)}]"
+                    )
 
             # @tool function name collisions across skills
             all_funcs = {}
@@ -615,14 +715,18 @@ def validate_agent(
                     all_funcs.setdefault(func, []).append(sname)
             for func, snames in all_funcs.items():
                 if len(snames) > 1:
-                    errors.append(f"Skill @tool function name collision: '{func}' defined in skills [{', '.join(snames)}]")
+                    errors.append(
+                        f"Skill @tool function name collision: '{func}' defined in skills [{', '.join(snames)}]"
+                    )
 
             # Skill @tool vs agent's own tool_definitions
             agent_defined = set(defined_funcs) if defined_funcs else set()
             for sname, funcs in skill_tool_funcs.items():
                 for func in funcs:
                     if func in agent_defined:
-                        errors.append(f"Skill @tool function '{func}' in skill '{sname}' conflicts with agent's own tool_definitions")
+                        errors.append(
+                            f"Skill @tool function '{func}' in skill '{sname}' conflicts with agent's own tool_definitions"
+                        )
         except Exception as e:
             warnings.append(f"Skill conflict detection skipped: {e}")
 
@@ -634,8 +738,11 @@ def validate_agent(
             tool_names_list.extend(mcp_tool_names)
         try:
             prompt_review = _review_prompt_quality(
-                system_prompt, tool_names_list, permission_tier,
-                description=description, welcome_message=welcome_message,
+                system_prompt,
+                tool_names_list,
+                permission_tier,
+                description=description,
+                welcome_message=welcome_message,
             )
         except Exception as e:
             warnings.append(f"Prompt quality review skipped: {e}")
@@ -645,7 +752,9 @@ def validate_agent(
             issues = prompt_review.get("issues", [])
 
             if overall < 3:
-                warnings.append(f"Prompt quality score: {overall}/5 — consider optimizing with Auto-fix or AI assistant.")
+                warnings.append(
+                    f"Prompt quality score: {overall}/5 — consider optimizing with Auto-fix or AI assistant."
+                )
             # Only show issues when overall score is low — high scores mean the prompt is good
             if overall < 4:
                 for issue in issues[:5]:

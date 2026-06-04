@@ -1,4 +1,5 @@
 """Tests for delete_agent / restore_agent / purge_agent."""
+
 import json
 import sys
 import types
@@ -40,12 +41,14 @@ sys.modules["config"] = _mock_config
 @pytest.fixture(autouse=True)
 def _scope(monkeypatch):
     from tools import _scope
+
     monkeypatch.setattr(_scope, "_caller_id", "user-1", raising=False)
     monkeypatch.setattr(_scope, "_workspace_id", "ws-1", raising=False)
 
 
-def _grant_membership(monkeypatch, role="admin", agent_status="active",
-                      agent_workspace="ws-1", agent_name="myAgent"):
+def _grant_membership(
+    monkeypatch, role="admin", agent_status="active", agent_workspace="ws-1", agent_name="myAgent"
+):
     """Configure scope so ensure_agent_in_workspace passes for given role."""
     from tools import _scope
 
@@ -67,9 +70,11 @@ def _grant_membership(monkeypatch, role="admin", agent_status="active",
 
 # ── delete_agent (archive) ────────────────────────────────────────────────
 
+
 def test_delete_agent_denies_non_admin(monkeypatch):
     """ROLE_ADMIN required to archive."""
     from tools import delete_agent as mod
+
     _grant_membership(monkeypatch, role="editor")
 
     out = json.loads(mod.delete_agent("a-1"))
@@ -79,6 +84,7 @@ def test_delete_agent_denies_non_admin(monkeypatch):
 
 def test_delete_agent_rejects_already_archived(monkeypatch):
     from tools import delete_agent as mod
+
     _grant_membership(monkeypatch, role="admin", agent_status="archived")
 
     out = json.loads(mod.delete_agent("a-1"))
@@ -87,6 +93,7 @@ def test_delete_agent_rejects_already_archived(monkeypatch):
 
 def test_delete_agent_archive_happy_path(monkeypatch):
     from tools import delete_agent as mod
+
     _grant_membership(monkeypatch, role="admin")
 
     monkeypatch.setattr(mod, "delete_runtime", lambda aid: None)
@@ -109,10 +116,10 @@ def test_delete_agent_archive_happy_path(monkeypatch):
 def test_delete_agent_swallows_benign_runtime_errors(monkeypatch):
     """AccessDeniedException / ResourceNotFoundException = placeholder agent."""
     from tools import delete_agent as mod
+
     _grant_membership(monkeypatch, role="admin")
 
-    monkeypatch.setattr(mod, "delete_runtime",
-                         MagicMock(side_effect=Exception("ResourceNotFoundException")))
+    monkeypatch.setattr(mod, "delete_runtime", MagicMock(side_effect=Exception("ResourceNotFoundException")))
 
     fake_table = MagicMock()
     fake_resource = MagicMock()
@@ -129,10 +136,10 @@ def test_delete_agent_swallows_benign_runtime_errors(monkeypatch):
 def test_delete_agent_propagates_non_benign_runtime_errors(monkeypatch):
     """Other exceptions abort with error JSON."""
     from tools import delete_agent as mod
+
     _grant_membership(monkeypatch, role="admin")
 
-    monkeypatch.setattr(mod, "delete_runtime",
-                         MagicMock(side_effect=Exception("ThrottlingException: rate")))
+    monkeypatch.setattr(mod, "delete_runtime", MagicMock(side_effect=Exception("ThrottlingException: rate")))
 
     out = json.loads(mod.delete_agent("a-1"))
     assert "error" in out
@@ -141,8 +148,10 @@ def test_delete_agent_propagates_non_benign_runtime_errors(monkeypatch):
 
 # ── restore_agent ─────────────────────────────────────────────────────────
 
+
 def test_restore_agent_denies_non_admin(monkeypatch):
     from tools import delete_agent as mod
+
     _grant_membership(monkeypatch, role="editor", agent_status="archived")
 
     out = json.loads(mod.restore_agent("a-1"))
@@ -152,6 +161,7 @@ def test_restore_agent_denies_non_admin(monkeypatch):
 
 def test_restore_agent_rejects_active_agent(monkeypatch):
     from tools import delete_agent as mod
+
     _grant_membership(monkeypatch, role="admin", agent_status="active")
 
     out = json.loads(mod.restore_agent("a-1"))
@@ -161,6 +171,7 @@ def test_restore_agent_rejects_active_agent(monkeypatch):
 def test_restore_agent_rejects_when_no_zip(monkeypatch):
     """When neither agentId nor name path has deployment.zip, error."""
     from tools import delete_agent as mod
+
     _grant_membership(monkeypatch, role="admin", agent_status="archived")
 
     fake_s3 = MagicMock()
@@ -170,8 +181,7 @@ def test_restore_agent_rejects_when_no_zip(monkeypatch):
     fake_resource = MagicMock()
     fake_resource.Table.return_value = fake_table
 
-    with patch("boto3.client", return_value=fake_s3), \
-         patch("boto3.resource", return_value=fake_resource):
+    with patch("boto3.client", return_value=fake_s3), patch("boto3.resource", return_value=fake_resource):
         out = json.loads(mod.restore_agent("a-1"))
 
     assert "error" in out
@@ -181,6 +191,7 @@ def test_restore_agent_rejects_when_no_zip(monkeypatch):
 def test_restore_agent_happy_path(monkeypatch):
     """Recreates runtime, copies metadata, swaps DDB record."""
     from tools import delete_agent as mod
+
     _grant_membership(monkeypatch, role="admin", agent_status="archived")
 
     fake_s3 = MagicMock()
@@ -196,8 +207,7 @@ def test_restore_agent_happy_path(monkeypatch):
     fake_resource = MagicMock()
     fake_resource.Table.return_value = fake_table
 
-    with patch("boto3.client", return_value=fake_s3), \
-         patch("boto3.resource", return_value=fake_resource):
+    with patch("boto3.client", return_value=fake_s3), patch("boto3.resource", return_value=fake_resource):
         out = json.loads(mod.restore_agent("a-1"))
 
     assert out["action"] == "restored"
@@ -214,8 +224,10 @@ def test_restore_agent_happy_path(monkeypatch):
 
 # ── purge_agent ───────────────────────────────────────────────────────────
 
+
 def test_purge_agent_requires_owner(monkeypatch):
     from tools import delete_agent as mod
+
     _grant_membership(monkeypatch, role="admin", agent_status="archived")
 
     out = json.loads(mod.purge_agent("a-1"))
@@ -226,6 +238,7 @@ def test_purge_agent_requires_owner(monkeypatch):
 
 def test_purge_agent_rejects_active(monkeypatch):
     from tools import delete_agent as mod
+
     _grant_membership(monkeypatch, role="owner", agent_status="active")
 
     out = json.loads(mod.purge_agent("a-1"))
@@ -236,8 +249,8 @@ def test_purge_agent_rejects_active(monkeypatch):
 def test_purge_agent_happy_path(monkeypatch):
     """Deletes S3 prefix + DDB record."""
     from tools import delete_agent as mod
-    _grant_membership(monkeypatch, role="owner", agent_status="archived",
-                      agent_name="myAgent")
+
+    _grant_membership(monkeypatch, role="owner", agent_status="archived", agent_name="myAgent")
 
     fake_s3 = MagicMock()
     fake_s3.list_objects_v2.return_value = {
@@ -248,8 +261,7 @@ def test_purge_agent_happy_path(monkeypatch):
     fake_resource = MagicMock()
     fake_resource.Table.return_value = fake_table
 
-    with patch("boto3.client", return_value=fake_s3), \
-         patch("boto3.resource", return_value=fake_resource):
+    with patch("boto3.client", return_value=fake_s3), patch("boto3.resource", return_value=fake_resource):
         out = json.loads(mod.purge_agent("a-1"))
 
     assert out["action"] == "purged"
@@ -262,6 +274,7 @@ def test_purge_agent_happy_path(monkeypatch):
 def test_purge_agent_tolerates_s3_errors(monkeypatch):
     """S3 listing errors are swallowed; DDB cleanup still runs."""
     from tools import delete_agent as mod
+
     _grant_membership(monkeypatch, role="owner", agent_status="archived")
 
     fake_s3 = MagicMock()
@@ -271,8 +284,7 @@ def test_purge_agent_tolerates_s3_errors(monkeypatch):
     fake_resource = MagicMock()
     fake_resource.Table.return_value = fake_table
 
-    with patch("boto3.client", return_value=fake_s3), \
-         patch("boto3.resource", return_value=fake_resource):
+    with patch("boto3.client", return_value=fake_s3), patch("boto3.resource", return_value=fake_resource):
         out = json.loads(mod.purge_agent("a-1"))
 
     assert out["action"] == "purged"

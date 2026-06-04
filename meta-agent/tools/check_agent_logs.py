@@ -124,11 +124,13 @@ def check_agent_logs(agent_id: str, minutes: int = 30, tz: str = "UTC") -> str:
 
         events = resp.get("events", [])
         if not events:
-            return json.dumps({
-                "message": f"No logs found in the last {minutes} minutes.",
-                "log_group": log_group,
-                "resolved_agent_id": resolved_id,
-            })
+            return json.dumps(
+                {
+                    "message": f"No logs found in the last {minutes} minutes.",
+                    "log_group": log_group,
+                    "resolved_agent_id": resolved_id,
+                }
+            )
 
         log_lines = []
         for event in events:
@@ -136,9 +138,7 @@ def check_agent_logs(agent_id: str, minutes: int = 30, tz: str = "UTC") -> str:
             msg = event.get("message", "").strip()
             # Full date + timezone suffix so humans can cross-reference
             # with CloudWatch without reading "is that UTC or local?".
-            dt = datetime.fromtimestamp(ts / 1000, tz=display_tz).strftime(
-                f"%Y-%m-%d %H:%M:%S {tz_label}"
-            )
+            dt = datetime.fromtimestamp(ts / 1000, tz=display_tz).strftime(f"%Y-%m-%d %H:%M:%S {tz_label}")
 
             # Parse JSON log entries for cleaner output. Multiple field
             # conventions coexist: stdlib `logging` uses message/level,
@@ -163,16 +163,24 @@ def check_agent_logs(agent_id: str, minutes: int = 30, tz: str = "UTC") -> str:
                 if msg and "Invalid HTTP request" not in msg:
                     log_lines.append(f"[{dt}] {msg}")
 
-        return "\n".join(log_lines) if log_lines else json.dumps({
-            "message": "Only noise entries found (no meaningful logs).",
-            "log_group": log_group,
-        })
+        return (
+            "\n".join(log_lines)
+            if log_lines
+            else json.dumps(
+                {
+                    "message": "Only noise entries found (no meaningful logs).",
+                    "log_group": log_group,
+                }
+            )
+        )
 
     except logs_client.exceptions.ResourceNotFoundException:
-        return json.dumps({
-            "error": f"Log group not found: {log_group}",
-            "hint": "The agent may not have been invoked yet, or the name/ID is incorrect.",
-            "resolved_agent_id": resolved_id,
-        })
+        return json.dumps(
+            {
+                "error": f"Log group not found: {log_group}",
+                "hint": "The agent may not have been invoked yet, or the name/ID is incorrect.",
+                "resolved_agent_id": resolved_id,
+            }
+        )
     except Exception as e:
         return json.dumps({"error": str(e), "log_group": log_group})

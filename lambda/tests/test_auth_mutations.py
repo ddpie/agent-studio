@@ -5,6 +5,7 @@ Strategy: exercise REAL code paths with minimal mocking. Only the network bounda
 ensure that mutations to algorithms, audience, issuer, token_use checks, key
 lookups, and permission comparisons are caught.
 """
+
 import json
 import os
 import time
@@ -35,6 +36,7 @@ from shared.middleware import auth_check, check_platform_admin
 # RSA Key Infrastructure
 # ---------------------------------------------------------------------------
 
+
 def _generate_rsa_key():
     """Generate an RSA private key for signing JWTs."""
     return rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -52,6 +54,7 @@ def _private_key_pem(private_key) -> str:
 def _build_jwk(private_key, kid: str) -> dict:
     """Build a JWK dict from an RSA private key (public components only)."""
     from jose.backends import RSAKey
+
     pub_key = private_key.public_key()
     pub_pem = pub_key.public_bytes(
         encoding=serialization.Encoding.PEM,
@@ -126,6 +129,7 @@ def _event_with_auth(header_value: str | None) -> MagicMock:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def _reset_caches():
     """Clear JWKS cache and ws_table before/after each test."""
@@ -146,6 +150,7 @@ def mock_urlopen():
 # ---------------------------------------------------------------------------
 # 1. Real RSA key signing — full verify_jwt path
 # ---------------------------------------------------------------------------
+
 
 class TestVerifyJwtRealCrypto:
     """Exercise verify_jwt with real RSA signing. Only urlopen is mocked."""
@@ -273,6 +278,7 @@ class TestVerifyJwtRealCrypto:
 # 2. verify_jwt spy tests — assert correct parameters
 # ---------------------------------------------------------------------------
 
+
 class TestVerifyJwtSpy:
     """Use wraps=jose_jwt.decode as a spy to check call arguments."""
 
@@ -283,8 +289,11 @@ class TestVerifyJwtSpy:
             verify_jwt(token)
         spy.assert_called_once()
         _, kwargs = spy.call_args
-        assert kwargs.get("algorithms") == ["RS256"] or spy.call_args[0][2] == ["RS256"] or \
-            "RS256" in str(spy.call_args)
+        assert (
+            kwargs.get("algorithms") == ["RS256"]
+            or spy.call_args[0][2] == ["RS256"]
+            or "RS256" in str(spy.call_args)
+        )
         # More precise check
         args, kwargs = spy.call_args
         # jose.jwt.decode(token, key, algorithms=..., audience=..., issuer=..., options=...)
@@ -323,6 +332,7 @@ class TestVerifyJwtSpy:
 # 3. _get_signing_key detailed tests
 # ---------------------------------------------------------------------------
 
+
 class TestGetSigningKeyReal:
     """Test _get_signing_key with real tokens."""
 
@@ -354,6 +364,7 @@ class TestGetSigningKeyReal:
     def test_raises_when_kid_not_found_anywhere(self, mock_urlopen):
         """Kid missing from both cache and fetched JWKS → JWTError."""
         from jose import JWTError
+
         token = _make_token(kid="ghost-kid")
         with pytest.raises(JWTError, match="Signing key not found"):
             _get_signing_key(token)
@@ -374,6 +385,7 @@ class TestGetSigningKeyReal:
 # ---------------------------------------------------------------------------
 # 4. _fetch_jwks tests
 # ---------------------------------------------------------------------------
+
 
 class TestFetchJwksUrl:
     """Verify that _fetch_jwks constructs the correct URL."""
@@ -411,6 +423,7 @@ class TestFetchJwksUrl:
 # 5. auth_check integration tests (real JWT, mock only network + DDB)
 # ---------------------------------------------------------------------------
 
+
 class TestAuthCheckIntegration:
     """Test auth_check without mocking verify_jwt — only mock urlopen + DDB."""
 
@@ -419,8 +432,10 @@ class TestAuthCheckIntegration:
         token = _make_token(sub="user-int-1")
         ev = _event_with_auth(f"Bearer {token}")
         member = {"workspaceId": "ws-valid", "userId": "user-int-1", "role": "editor"}
-        with patch("shared.auth.get_membership", return_value=member), \
-             patch("shared.middleware.get_membership", return_value=member):
+        with (
+            patch("shared.auth.get_membership", return_value=member),
+            patch("shared.middleware.get_membership", return_value=member),
+        ):
             user_id, ws, m, err = auth_check(ev, ws_id="ws-valid")
         assert err is None
         assert user_id == "user-int-1"
@@ -432,8 +447,10 @@ class TestAuthCheckIntegration:
         token = _make_token(sub="user-strip")
         ev = _event_with_auth(f"Bearer {token}")
         member = {"workspaceId": "ws1", "userId": "user-strip", "role": "viewer"}
-        with patch("shared.auth.get_membership", return_value=member), \
-             patch("shared.middleware.get_membership", return_value=member):
+        with (
+            patch("shared.auth.get_membership", return_value=member),
+            patch("shared.middleware.get_membership", return_value=member),
+        ):
             user_id, ws, m, err = auth_check(ev, ws_id="ws1")
         assert err is None
         assert user_id == "user-strip"
@@ -471,8 +488,10 @@ class TestAuthCheckIntegration:
         token = _make_token(sub="viewer-user")
         ev = _event_with_auth(f"Bearer {token}")
         member = {"workspaceId": "ws1", "userId": "viewer-user", "role": "viewer"}
-        with patch("shared.auth.get_membership", return_value=member), \
-             patch("shared.middleware.get_membership", return_value=member):
+        with (
+            patch("shared.auth.get_membership", return_value=member),
+            patch("shared.middleware.get_membership", return_value=member),
+        ):
             user_id, ws, m, err = auth_check(ev, ws_id="ws1")
         assert err is None
         assert user_id == "viewer-user"
@@ -482,8 +501,10 @@ class TestAuthCheckIntegration:
         token = _make_token(sub="viewer-user")
         ev = _event_with_auth(f"Bearer {token}")
         member = {"workspaceId": "ws1", "userId": "viewer-user", "role": "viewer"}
-        with patch("shared.auth.get_membership", return_value=member), \
-             patch("shared.middleware.get_membership", return_value=member):
+        with (
+            patch("shared.auth.get_membership", return_value=member),
+            patch("shared.middleware.get_membership", return_value=member),
+        ):
             user_id, ws, m, err = auth_check(ev, min_role="editor", ws_id="ws1")
         assert err is not None
         assert err.status_code == 403
@@ -510,8 +531,10 @@ class TestAuthCheckIntegration:
         """User not a member of workspace → 403."""
         token = _make_token(sub="outsider")
         ev = _event_with_auth(f"Bearer {token}")
-        with patch("shared.auth.get_membership", return_value=None), \
-             patch("shared.middleware.get_membership", return_value=None):
+        with (
+            patch("shared.auth.get_membership", return_value=None),
+            patch("shared.middleware.get_membership", return_value=None),
+        ):
             user_id, ws, m, err = auth_check(ev, ws_id="ws1")
         assert err is not None
         assert err.status_code == 403
@@ -528,6 +551,7 @@ class TestAuthCheckIntegration:
 # ---------------------------------------------------------------------------
 # 6. check_platform_admin integration tests
 # ---------------------------------------------------------------------------
+
 
 class TestCheckPlatformAdminIntegration:
     """Test check_platform_admin with real JWT, mock only network."""
@@ -587,6 +611,7 @@ class TestCheckPlatformAdminIntegration:
 # 7. check_permission boundary tests (>= vs > mutations)
 # ---------------------------------------------------------------------------
 
+
 class TestCheckPermissionBoundary:
     """Target the >= comparison: ROLE_LEVEL[member_role] >= ROLE_LEVEL[min_role]."""
 
@@ -641,6 +666,7 @@ class TestCheckPermissionBoundary:
     def test_role_level_values_exact(self):
         """Verify exact numeric values — catches mutations to level constants."""
         from shared.auth import ROLE_LEVEL
+
         assert ROLE_LEVEL["viewer"] == 0
         assert ROLE_LEVEL["editor"] == 1
         assert ROLE_LEVEL["admin"] == 2
@@ -649,17 +675,20 @@ class TestCheckPermissionBoundary:
     def test_default_for_missing_role_is_negative(self):
         """member.get("role", "") → ROLE_LEVEL.get("", -1) == -1."""
         from shared.auth import ROLE_LEVEL
+
         assert ROLE_LEVEL.get("", -1) == -1
 
     def test_default_for_missing_min_role_is_99(self):
         """ROLE_LEVEL.get(min_role, 99) for unknown min_role."""
         from shared.auth import ROLE_LEVEL
+
         assert ROLE_LEVEL.get("nonexistent", 99) == 99
 
 
 # ---------------------------------------------------------------------------
 # 8. is_platform_admin targeted mutations
 # ---------------------------------------------------------------------------
+
 
 class TestIsPlatformAdminMutations:
     """Kill mutations to the PLATFORM_ADMIN_GROUP constant and `in` check."""
@@ -690,12 +719,14 @@ class TestIsPlatformAdminMutations:
     def test_platform_admin_group_constant(self):
         """Verify the constant value — catches mutations to the string."""
         from shared.auth import PLATFORM_ADMIN_GROUP
+
         assert PLATFORM_ADMIN_GROUP == "platform-admins"
 
 
 # ---------------------------------------------------------------------------
 # 9. JWKS cache behavior mutations
 # ---------------------------------------------------------------------------
+
 
 class TestJwksCacheBehavior:
     """Kill mutations to cache logic: _jwks_cache or _fetch_jwks()."""
@@ -732,6 +763,7 @@ class TestJwksCacheBehavior:
 # ---------------------------------------------------------------------------
 # 10. Default parameter mutations — callers relying on defaults
 # ---------------------------------------------------------------------------
+
 
 class TestDefaultParameterMutations:
     """Kill mutations to default argument values by calling without explicit args."""

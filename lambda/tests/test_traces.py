@@ -1,4 +1,5 @@
 """Tests for crud/traces.py — OTEL span tree assembly."""
+
 import json
 from unittest.mock import MagicMock, patch
 
@@ -12,11 +13,13 @@ def inject_env(monkeypatch):
     import importlib
 
     import shared.config as _cfg
+
     importlib.reload(_cfg)
 
 
-def _base_event(workspace_id: str, path_suffix: str, path_params: dict, resource: str,
-                query: dict | None = None):
+def _base_event(
+    workspace_id: str, path_suffix: str, path_params: dict, resource: str, query: dict | None = None
+):
     return {
         "httpMethod": "GET",
         "path": f"/api/workspaces/{workspace_id}{path_suffix}",
@@ -38,12 +41,14 @@ def _base_event(workspace_id: str, path_suffix: str, path_params: dict, resource
 class TestFieldHelper:
     def test_field_present(self):
         from crud.traces import _field
+
         row = [{"field": "a", "value": "1"}, {"field": "b", "value": "2"}]
         assert _field(row, "a") == "1"
         assert _field(row, "b") == "2"
 
     def test_field_missing(self):
         from crud.traces import _field
+
         assert _field([], "missing") is None
         assert _field([{"field": "x", "value": "y"}], "z") is None
 
@@ -51,34 +56,41 @@ class TestFieldHelper:
 class TestAsUtcIso:
     def test_none_returns_none(self):
         from crud.traces import _as_utc_iso
+
         assert _as_utc_iso(None) is None
 
     def test_empty_returns_empty(self):
         from crud.traces import _as_utc_iso
+
         assert _as_utc_iso("") == ""
         # whitespace strips to empty
         assert _as_utc_iso("   ") == ""
 
     def test_already_zulu(self):
         from crud.traces import _as_utc_iso
+
         assert _as_utc_iso("2026-04-19T00:00:00Z") == "2026-04-19T00:00:00Z"
 
     def test_offset_kept(self):
         from crud.traces import _as_utc_iso
+
         assert _as_utc_iso("2026-04-19T00:00:00+05:00") == "2026-04-19T00:00:00+05:00"
 
     def test_utc_suffix_kept(self):
         from crud.traces import _as_utc_iso
+
         assert _as_utc_iso("2026-04-19 00:00:00 UTC") == "2026-04-19 00:00:00 UTC"
 
     def test_naive_normalised(self):
         from crud.traces import _as_utc_iso
+
         assert _as_utc_iso("2026-04-19 00:00:00.123") == "2026-04-19T00:00:00.123Z"
 
 
 class TestNumericHelpers:
     def test_to_float(self):
         from crud.traces import _to_float
+
         assert _to_float(None) is None
         assert _to_float("3.14") == 3.14
         assert _to_float("bad") is None
@@ -87,6 +99,7 @@ class TestNumericHelpers:
 
     def test_to_int(self):
         from crud.traces import _to_int
+
         assert _to_int(None) == 0
         assert _to_int("5.7") == 5
         assert _to_int("bad") == 0
@@ -94,6 +107,7 @@ class TestNumericHelpers:
 
     def test_round_ms(self):
         from crud.traces import _round_ms
+
         assert _round_ms(None) is None
         assert _round_ms("12.4") == 12
         assert _round_ms("12.6") == 13
@@ -108,6 +122,7 @@ class TestNumericHelpers:
 class TestRunQuery:
     def test_complete_returns_results(self):
         from crud.traces import _run_query
+
         fake_logs = MagicMock()
         fake_logs.start_query.return_value = {"queryId": "q1"}
         fake_logs.get_query_results.return_value = {
@@ -120,6 +135,7 @@ class TestRunQuery:
 
     def test_failed_returns_empty(self):
         from crud.traces import _run_query
+
         fake_logs = MagicMock()
         fake_logs.start_query.return_value = {"queryId": "q1"}
         fake_logs.get_query_results.return_value = {"status": "Failed", "results": []}
@@ -129,6 +145,7 @@ class TestRunQuery:
 
     def test_cancelled_returns_empty(self):
         from crud.traces import _run_query
+
         fake_logs = MagicMock()
         fake_logs.start_query.return_value = {"queryId": "q1"}
         fake_logs.get_query_results.return_value = {"status": "Cancelled", "results": []}
@@ -143,6 +160,7 @@ class TestRunQuery:
         patching time.time globally.
         """
         from crud.traces import _run_query
+
         fake_logs = MagicMock()
         fake_logs.start_query.return_value = {"queryId": "q1"}
         fake_logs.get_query_results.return_value = {"status": "Running", "results": []}
@@ -153,12 +171,11 @@ class TestRunQuery:
 
     def test_timeout_stop_query_clienterror_swallowed(self):
         from crud.traces import _run_query
+
         fake_logs = MagicMock()
         fake_logs.start_query.return_value = {"queryId": "q1"}
         fake_logs.get_query_results.return_value = {"status": "Running", "results": []}
-        fake_logs.stop_query.side_effect = ClientError(
-            {"Error": {"Code": "X", "Message": "x"}}, "StopQuery"
-        )
+        fake_logs.stop_query.side_effect = ClientError({"Error": {"Code": "X", "Message": "x"}}, "StopQuery")
         with patch("crud.traces._get_logs", return_value=fake_logs):
             rows = _run_query("query", hours=1, timeout_s=-1)
         assert rows == []
@@ -172,6 +189,7 @@ class TestRunQuery:
 class TestLazyInit:
     def test_get_logs_caches(self):
         import crud.traces as t
+
         t._logs = None
         with patch("crud.traces.boto3.client") as mk:
             mk.return_value = MagicMock(name="logs")
@@ -183,6 +201,7 @@ class TestLazyInit:
 
     def test_get_agent_item_caches_table(self):
         import crud.traces as t
+
         t._agents_table = None
         fake_resource = MagicMock()
         fake_table = MagicMock()
@@ -202,6 +221,7 @@ class TestLazyInit:
 
 def test_list_traces_returns_session_summaries(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_logs = MagicMock()
     fake_logs.start_query.return_value = {"queryId": "q-1"}
     fake_logs.get_query_results.return_value = {
@@ -227,9 +247,11 @@ def test_list_traces_returns_session_summaries(mock_jwt, user_id, workspace_id):
         {"wsId": workspace_id, "agentId": "agt-test"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga, \
-         patch("crud.traces._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.traces.auth_check") as auth,
+        patch("crud.traces._get_agent_item") as ga,
+        patch("crud.traces._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -246,6 +268,7 @@ def test_list_traces_returns_session_summaries(mock_jwt, user_id, workspace_id):
 
 def test_list_traces_skips_rows_without_session_id(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_logs = MagicMock()
     fake_logs.start_query.return_value = {"queryId": "q-1"}
     fake_logs.get_query_results.return_value = {
@@ -271,9 +294,11 @@ def test_list_traces_skips_rows_without_session_id(mock_jwt, user_id, workspace_
         {"wsId": workspace_id, "agentId": "agt-test"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga, \
-         patch("crud.traces._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.traces.auth_check") as auth,
+        patch("crud.traces._get_agent_item") as ga,
+        patch("crud.traces._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -286,6 +311,7 @@ def test_list_traces_skips_rows_without_session_id(mock_jwt, user_id, workspace_
 def test_list_traces_meta_rows_merge(mock_jwt, user_id, workspace_id):
     """Rows from the second meta query merge into list rows by sessionId."""
     from crud.handler import app
+
     list_rows = [
         [
             {"field": "sessionId", "value": "sess-a"},
@@ -319,9 +345,11 @@ def test_list_traces_meta_rows_merge(mock_jwt, user_id, workspace_id):
         {"wsId": workspace_id, "agentId": "agt-test"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga, \
-         patch("crud.traces._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.traces.auth_check") as auth,
+        patch("crud.traces._get_agent_item") as ga,
+        patch("crud.traces._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -335,6 +363,7 @@ def test_list_traces_meta_rows_merge(mock_jwt, user_id, workspace_id):
 
 def test_list_traces_list_query_clienterror_returns_500(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_logs = MagicMock()
     fake_logs.start_query.side_effect = ClientError(
         {"Error": {"Code": "ResourceNotFoundException", "Message": "x"}},
@@ -346,9 +375,11 @@ def test_list_traces_list_query_clienterror_returns_500(mock_jwt, user_id, works
         {"wsId": workspace_id, "agentId": "agt-test"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga, \
-         patch("crud.traces._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.traces.auth_check") as auth,
+        patch("crud.traces._get_agent_item") as ga,
+        patch("crud.traces._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -358,6 +389,7 @@ def test_list_traces_list_query_clienterror_returns_500(mock_jwt, user_id, works
 def test_list_traces_meta_query_clienterror_swallowed(mock_jwt, user_id, workspace_id):
     """A ClientError on the meta query keeps the list result; no meta values."""
     from crud.handler import app
+
     list_rows = [
         [
             {"field": "sessionId", "value": "sess-a"},
@@ -381,9 +413,11 @@ def test_list_traces_meta_query_clienterror_swallowed(mock_jwt, user_id, workspa
         {"wsId": workspace_id, "agentId": "agt-test"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga, \
-         patch("crud.traces._run_query", side_effect=fake_run_query):
+    with (
+        patch("crud.traces.auth_check") as auth,
+        patch("crud.traces._get_agent_item") as ga,
+        patch("crud.traces._run_query", side_effect=fake_run_query),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -396,6 +430,7 @@ def test_list_traces_meta_query_clienterror_swallowed(mock_jwt, user_id, workspa
 
 def test_list_traces_invalid_agent_id(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     bad = "bad$id"
     event = _base_event(
         workspace_id,
@@ -403,8 +438,7 @@ def test_list_traces_invalid_agent_id(mock_jwt, user_id, workspace_id):
         {"wsId": workspace_id, "agentId": bad},
         "/api/workspaces/{wsId}/agents/{agentId}/traces",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga:
+    with patch("crud.traces.auth_check") as auth, patch("crud.traces._get_agent_item") as ga:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = None
         resp = app.resolve(event, MagicMock())
@@ -415,6 +449,7 @@ def test_list_traces_auth_check_failure(mock_jwt, user_id, workspace_id):
     """When auth_check returns an error response, the route returns it directly."""
     from crud.handler import app
     from shared.response import forbidden
+
     event = _base_event(
         workspace_id,
         "/agents/agt-test/traces",
@@ -429,14 +464,14 @@ def test_list_traces_auth_check_failure(mock_jwt, user_id, workspace_id):
 
 def test_list_traces_forbidden_when_agent_in_other_workspace(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     event = _base_event(
         workspace_id,
         "/agents/agt-test/traces",
         {"wsId": workspace_id, "agentId": "agt-test"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga:
+    with patch("crud.traces.auth_check") as auth, patch("crud.traces._get_agent_item") as ga:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": "other-ws"}
         resp = app.resolve(event, MagicMock())
@@ -445,14 +480,14 @@ def test_list_traces_forbidden_when_agent_in_other_workspace(mock_jwt, user_id, 
 
 def test_list_traces_agent_missing_returns_403(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     event = _base_event(
         workspace_id,
         "/agents/agt-test/traces",
         {"wsId": workspace_id, "agentId": "agt-test"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga:
+    with patch("crud.traces.auth_check") as auth, patch("crud.traces._get_agent_item") as ga:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = None
         resp = app.resolve(event, MagicMock())
@@ -466,6 +501,7 @@ def test_list_traces_agent_missing_returns_403(mock_jwt, user_id, workspace_id):
 
 def test_get_session_trace_assembles_tree(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_logs = MagicMock()
     fake_logs.start_query.return_value = {"queryId": "q-2"}
     fake_logs.get_query_results.return_value = {
@@ -494,9 +530,11 @@ def test_get_session_trace_assembles_tree(mock_jwt, user_id, workspace_id):
         {"wsId": workspace_id, "agentId": "agt-test", "sessionId": "sess-a"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga, \
-         patch("crud.traces._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.traces.auth_check") as auth,
+        patch("crud.traces._get_agent_item") as ga,
+        patch("crud.traces._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -511,14 +549,13 @@ def test_get_session_trace_assembles_tree(mock_jwt, user_id, workspace_id):
     assert data["totalSpans"] == 2
 
 
-def test_get_session_trace_synthetic_root_when_all_rows_invalid(
-    mock_jwt, user_id, workspace_id
-):
+def test_get_session_trace_synthetic_root_when_all_rows_invalid(mock_jwt, user_id, workspace_id):
     """When all rows have empty spanId (skipped) but at least one row
     exists, the function reaches the spans_by_id assembly with an empty
     dict — no root, no orphans, so the synthetic root branch fires.
     """
     from crud.handler import app
+
     fake_logs = MagicMock()
     fake_logs.start_query.return_value = {"queryId": "q"}
     fake_logs.get_query_results.return_value = {
@@ -535,9 +572,11 @@ def test_get_session_trace_synthetic_root_when_all_rows_invalid(
         {"wsId": workspace_id, "agentId": "agt-test", "sessionId": "sess-empty"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga, \
-         patch("crud.traces._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.traces.auth_check") as auth,
+        patch("crud.traces._get_agent_item") as ga,
+        patch("crud.traces._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -552,6 +591,7 @@ def test_get_session_trace_synthetic_root_when_all_rows_invalid(
 def test_get_session_trace_with_orphans(mock_jwt, user_id, workspace_id):
     """Multiple roots → first becomes root, rest are appended as orphans."""
     from crud.handler import app
+
     fake_logs = MagicMock()
     fake_logs.start_query.return_value = {"queryId": "q-2"}
     fake_logs.get_query_results.return_value = {
@@ -577,9 +617,11 @@ def test_get_session_trace_with_orphans(mock_jwt, user_id, workspace_id):
         {"wsId": workspace_id, "agentId": "agt-test", "sessionId": "sess-orph"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga, \
-         patch("crud.traces._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.traces.auth_check") as auth,
+        patch("crud.traces._get_agent_item") as ga,
+        patch("crud.traces._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -594,6 +636,7 @@ def test_get_session_trace_with_orphans(mock_jwt, user_id, workspace_id):
 def test_get_session_trace_skips_invalid_rows(mock_jwt, user_id, workspace_id):
     """Rows missing spanId or with non-numeric times are skipped."""
     from crud.handler import app
+
     fake_logs = MagicMock()
     fake_logs.start_query.return_value = {"queryId": "q-2"}
     fake_logs.get_query_results.return_value = {
@@ -623,9 +666,11 @@ def test_get_session_trace_skips_invalid_rows(mock_jwt, user_id, workspace_id):
         {"wsId": workspace_id, "agentId": "agt-test", "sessionId": "sess-x"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga, \
-         patch("crud.traces._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.traces.auth_check") as auth,
+        patch("crud.traces._get_agent_item") as ga,
+        patch("crud.traces._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -637,6 +682,7 @@ def test_get_session_trace_skips_invalid_rows(mock_jwt, user_id, workspace_id):
 
 def test_get_session_trace_no_rows_returns_404(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_logs = MagicMock()
     fake_logs.start_query.return_value = {"queryId": "q"}
     fake_logs.get_query_results.return_value = {"status": "Complete", "results": []}
@@ -646,9 +692,11 @@ def test_get_session_trace_no_rows_returns_404(mock_jwt, user_id, workspace_id):
         {"wsId": workspace_id, "agentId": "agt-test", "sessionId": "sess-empty"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga, \
-         patch("crud.traces._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.traces.auth_check") as auth,
+        patch("crud.traces._get_agent_item") as ga,
+        patch("crud.traces._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -657,17 +705,21 @@ def test_get_session_trace_no_rows_returns_404(mock_jwt, user_id, workspace_id):
 
 def test_get_session_trace_query_clienterror_returns_500(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     event = _base_event(
         workspace_id,
         "/agents/agt-test/traces/sess-x",
         {"wsId": workspace_id, "agentId": "agt-test", "sessionId": "sess-x"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga, \
-         patch("crud.traces._run_query", side_effect=ClientError(
-             {"Error": {"Code": "X", "Message": "boom"}}, "StartQuery"
-         )):
+    with (
+        patch("crud.traces.auth_check") as auth,
+        patch("crud.traces._get_agent_item") as ga,
+        patch(
+            "crud.traces._run_query",
+            side_effect=ClientError({"Error": {"Code": "X", "Message": "boom"}}, "StartQuery"),
+        ),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -676,6 +728,7 @@ def test_get_session_trace_query_clienterror_returns_500(mock_jwt, user_id, work
 
 def test_get_session_trace_invalid_agent_id(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     bad = "bad$id"
     event = _base_event(
         workspace_id,
@@ -683,8 +736,7 @@ def test_get_session_trace_invalid_agent_id(mock_jwt, user_id, workspace_id):
         {"wsId": workspace_id, "agentId": bad, "sessionId": "sess-x"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga:
+    with patch("crud.traces.auth_check") as auth, patch("crud.traces._get_agent_item") as ga:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = None
         resp = app.resolve(event, MagicMock())
@@ -693,14 +745,14 @@ def test_get_session_trace_invalid_agent_id(mock_jwt, user_id, workspace_id):
 
 def test_get_session_trace_agent_other_workspace_forbidden(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     event = _base_event(
         workspace_id,
         "/agents/agt-test/traces/sess-x",
         {"wsId": workspace_id, "agentId": "agt-test", "sessionId": "sess-x"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga:
+    with patch("crud.traces.auth_check") as auth, patch("crud.traces._get_agent_item") as ga:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": "other-ws"}
         resp = app.resolve(event, MagicMock())
@@ -710,6 +762,7 @@ def test_get_session_trace_agent_other_workspace_forbidden(mock_jwt, user_id, wo
 def test_get_session_trace_auth_failure(mock_jwt, user_id, workspace_id):
     from crud.handler import app
     from shared.response import forbidden
+
     event = _base_event(
         workspace_id,
         "/agents/agt-test/traces/sess-x",
@@ -726,6 +779,7 @@ def test_get_session_trace_rejects_bad_session_id(mock_jwt, user_id, workspace_i
     """sessionId outside the safe charset must 400 — guards against query
     injection into the interpolated Logs Insights string."""
     from crud.handler import app
+
     bad_id = "bad$id"
     event = _base_event(
         workspace_id,
@@ -733,8 +787,7 @@ def test_get_session_trace_rejects_bad_session_id(mock_jwt, user_id, workspace_i
         {"wsId": workspace_id, "agentId": "agt-test", "sessionId": bad_id},
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga:
+    with patch("crud.traces.auth_check") as auth, patch("crud.traces._get_agent_item") as ga:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -758,15 +811,18 @@ def _stats_logs_with(summary_rows, series_rows):
 
 def test_get_trace_stats_default_24h(mock_jwt, user_id, workspace_id):
     from crud.handler import app
-    summary_rows = [[
-        {"field": "total", "value": "10"},
-        {"field": "errors", "value": "2"},
-        {"field": "avgMs", "value": "300.7"},
-        {"field": "p50", "value": "100"},
-        {"field": "p90", "value": "400"},
-        {"field": "p95", "value": "450"},
-        {"field": "p99", "value": "500"},
-    ]]
+
+    summary_rows = [
+        [
+            {"field": "total", "value": "10"},
+            {"field": "errors", "value": "2"},
+            {"field": "avgMs", "value": "300.7"},
+            {"field": "p50", "value": "100"},
+            {"field": "p90", "value": "400"},
+            {"field": "p95", "value": "450"},
+            {"field": "p99", "value": "500"},
+        ]
+    ]
     series_rows = [
         [
             {"field": "bucket", "value": "2026-04-19 00:00:00.000"},
@@ -791,9 +847,11 @@ def test_get_trace_stats_default_24h(mock_jwt, user_id, workspace_id):
         {"wsId": workspace_id, "agentId": "agt-test", "sessionId": "stats"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga, \
-         patch("crud.traces._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.traces.auth_check") as auth,
+        patch("crud.traces._get_agent_item") as ga,
+        patch("crud.traces._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -812,6 +870,7 @@ def test_get_trace_stats_default_24h(mock_jwt, user_id, workspace_id):
 
 def test_get_trace_stats_explicit_7d(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     fake_logs = _stats_logs_with([], [])
     event = _base_event(
         workspace_id,
@@ -820,9 +879,11 @@ def test_get_trace_stats_explicit_7d(mock_jwt, user_id, workspace_id):
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
         query={"range": "7d"},
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga, \
-         patch("crud.traces._get_logs", return_value=fake_logs):
+    with (
+        patch("crud.traces.auth_check") as auth,
+        patch("crud.traces._get_agent_item") as ga,
+        patch("crud.traces._get_logs", return_value=fake_logs),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -836,6 +897,7 @@ def test_get_trace_stats_explicit_7d(mock_jwt, user_id, workspace_id):
 
 def test_get_trace_stats_invalid_range(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     event = _base_event(
         workspace_id,
         "/agents/agt-test/traces/stats",
@@ -843,8 +905,7 @@ def test_get_trace_stats_invalid_range(mock_jwt, user_id, workspace_id):
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
         query={"range": "weekly"},
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga:
+    with patch("crud.traces.auth_check") as auth, patch("crud.traces._get_agent_item") as ga:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -853,6 +914,7 @@ def test_get_trace_stats_invalid_range(mock_jwt, user_id, workspace_id):
 
 def test_get_trace_stats_invalid_agent_id(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     bad = "bad$id"
     event = _base_event(
         workspace_id,
@@ -860,8 +922,7 @@ def test_get_trace_stats_invalid_agent_id(mock_jwt, user_id, workspace_id):
         {"wsId": workspace_id, "agentId": bad, "sessionId": "stats"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga:
+    with patch("crud.traces.auth_check") as auth, patch("crud.traces._get_agent_item") as ga:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = None
         resp = app.resolve(event, MagicMock())
@@ -870,14 +931,14 @@ def test_get_trace_stats_invalid_agent_id(mock_jwt, user_id, workspace_id):
 
 def test_get_trace_stats_agent_in_other_workspace(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     event = _base_event(
         workspace_id,
         "/agents/agt-test/traces/stats",
         {"wsId": workspace_id, "agentId": "agt-test", "sessionId": "stats"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga:
+    with patch("crud.traces.auth_check") as auth, patch("crud.traces._get_agent_item") as ga:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": "other-ws"}
         resp = app.resolve(event, MagicMock())
@@ -887,6 +948,7 @@ def test_get_trace_stats_agent_in_other_workspace(mock_jwt, user_id, workspace_i
 def test_get_trace_stats_auth_failure(mock_jwt, user_id, workspace_id):
     from crud.handler import app
     from shared.response import forbidden
+
     event = _base_event(
         workspace_id,
         "/agents/agt-test/traces/stats",
@@ -901,16 +963,21 @@ def test_get_trace_stats_auth_failure(mock_jwt, user_id, workspace_id):
 
 def test_get_trace_stats_summary_clienterror_returns_500(mock_jwt, user_id, workspace_id):
     from crud.handler import app
+
     event = _base_event(
         workspace_id,
         "/agents/agt-test/traces/stats",
         {"wsId": workspace_id, "agentId": "agt-test", "sessionId": "stats"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga, \
-         patch("crud.traces._run_query", side_effect=ClientError(
-             {"Error": {"Code": "X", "Message": "boom"}}, "StartQuery")):
+    with (
+        patch("crud.traces.auth_check") as auth,
+        patch("crud.traces._get_agent_item") as ga,
+        patch(
+            "crud.traces._run_query",
+            side_effect=ClientError({"Error": {"Code": "X", "Message": "boom"}}, "StartQuery"),
+        ),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())
@@ -919,15 +986,18 @@ def test_get_trace_stats_summary_clienterror_returns_500(mock_jwt, user_id, work
 
 def test_get_trace_stats_series_clienterror_keeps_summary(mock_jwt, user_id, workspace_id):
     from crud.handler import app
-    summary_rows = [[
-        {"field": "total", "value": "10"},
-        {"field": "errors", "value": "0"},
-        {"field": "avgMs", "value": "100"},
-        {"field": "p50", "value": "100"},
-        {"field": "p90", "value": "100"},
-        {"field": "p95", "value": "100"},
-        {"field": "p99", "value": "100"},
-    ]]
+
+    summary_rows = [
+        [
+            {"field": "total", "value": "10"},
+            {"field": "errors", "value": "0"},
+            {"field": "avgMs", "value": "100"},
+            {"field": "p50", "value": "100"},
+            {"field": "p90", "value": "100"},
+            {"field": "p95", "value": "100"},
+            {"field": "p99", "value": "100"},
+        ]
+    ]
     call_count = {"n": 0}
 
     def fake_run_query(*args, **kwargs):
@@ -942,9 +1012,11 @@ def test_get_trace_stats_series_clienterror_keeps_summary(mock_jwt, user_id, wor
         {"wsId": workspace_id, "agentId": "agt-test", "sessionId": "stats"},
         "/api/workspaces/{wsId}/agents/{agentId}/traces/{sessionId}",
     )
-    with patch("crud.traces.auth_check") as auth, \
-         patch("crud.traces._get_agent_item") as ga, \
-         patch("crud.traces._run_query", side_effect=fake_run_query):
+    with (
+        patch("crud.traces.auth_check") as auth,
+        patch("crud.traces._get_agent_item") as ga,
+        patch("crud.traces._run_query", side_effect=fake_run_query),
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         resp = app.resolve(event, MagicMock())

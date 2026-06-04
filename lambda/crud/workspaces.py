@@ -1,4 +1,5 @@
 """Workspace CRUD endpoints."""
+
 import json
 import uuid
 from datetime import datetime
@@ -206,7 +207,10 @@ def _hydrate_owner_identities(workspaces: list) -> None:
             try:
                 resp = _get_cognito().admin_get_user(UserPoolId=COGNITO_USER_POOL_ID, Username=uid)
                 attrs = {a["Name"]: a["Value"] for a in resp.get("UserAttributes", [])}
-                info = {"display_name": attrs.get("name", attrs.get("email", uid[:8])), "email": attrs.get("email", "")}
+                info = {
+                    "display_name": attrs.get("name", attrs.get("email", uid[:8])),
+                    "email": attrs.get("email", ""),
+                }
                 _identity_cache[uid] = info
                 owner_map[uid] = info
             except Exception:
@@ -238,14 +242,16 @@ def list_workspaces():
         meta_resp = table.get_item(Key={"workspaceId": ws_id, "sk": "META"}, ConsistentRead=True)
         meta = meta_resp.get("Item")
         if meta:
-            workspaces.append({
-                "workspaceId": meta["workspaceId"],
-                "name": meta.get("name", ""),
-                "description": meta.get("description", ""),
-                "role": rec.get("role", "viewer"),
-                "created_at": meta.get("created_at", ""),
-                "owner_id": meta.get("owner_id", ""),
-            })
+            workspaces.append(
+                {
+                    "workspaceId": meta["workspaceId"],
+                    "name": meta.get("name", ""),
+                    "description": meta.get("description", ""),
+                    "role": rec.get("role", "viewer"),
+                    "created_at": meta.get("created_at", ""),
+                    "owner_id": meta.get("owner_id", ""),
+                }
+            )
 
     _hydrate_owner_identities(workspaces)
     return success({"items": workspaces})
@@ -271,6 +277,7 @@ def list_all_workspaces_as_admin():
     next_token = qp.get("next")
 
     import base64
+
     start_key = None
     if next_token:
         try:
@@ -289,13 +296,15 @@ def list_all_workspaces_as_admin():
 
     workspaces = []
     for meta in resp.get("Items", []):
-        workspaces.append({
-            "workspaceId": meta["workspaceId"],
-            "name": meta.get("name", ""),
-            "description": meta.get("description", ""),
-            "created_at": meta.get("created_at", ""),
-            "owner_id": meta.get("owner_id", ""),
-        })
+        workspaces.append(
+            {
+                "workspaceId": meta["workspaceId"],
+                "name": meta.get("name", ""),
+                "description": meta.get("description", ""),
+                "created_at": meta.get("created_at", ""),
+                "owner_id": meta.get("owner_id", ""),
+            }
+        )
 
     _hydrate_owner_identities(workspaces)
 
@@ -346,13 +355,15 @@ def create_workspace():
     # AttributeValue dicts. Using the Table resource keeps the code path
     # consistent with the rest of this module.
     table.put_item(Item=meta_item)
-    table.put_item(Item={
-        "workspaceId": ws_id,
-        "sk": f"MEMBER#{user_id}",
-        "userId": user_id,
-        "role": "owner",
-        "joined_at": now,
-    })
+    table.put_item(
+        Item={
+            "workspaceId": ws_id,
+            "sk": f"MEMBER#{user_id}",
+            "userId": user_id,
+            "role": "owner",
+            "joined_at": now,
+        }
+    )
 
     memory_id = _create_workspace_memory(ws_id)
     if memory_id:
@@ -362,14 +373,17 @@ def create_workspace():
             ExpressionAttributeValues={":m": memory_id},
         )
 
-    return success({
-        "workspaceId": ws_id,
-        "name": name,
-        "description": body.get("description", ""),
-        "role": "owner",
-        "created_at": now,
-        "memory_id": memory_id,
-    }, status_code=201)
+    return success(
+        {
+            "workspaceId": ws_id,
+            "name": name,
+            "description": body.get("description", ""),
+            "role": "owner",
+            "created_at": now,
+            "memory_id": memory_id,
+        },
+        status_code=201,
+    )
 
 
 # ─── POST /api/onboarding ───
@@ -452,14 +466,16 @@ def onboarding():
                 Key={"workspaceId": existing_ws_id, "sk": "META"},
                 ConsistentRead=True,
             ).get("Item", {})
-            return success({
-                "workspaceId": existing_ws_id,
-                "name": meta.get("name", ""),
-                "description": meta.get("description", ""),
-                "role": "owner",
-                "created_at": meta.get("created_at", ""),
-                "onboarding": False,
-            })
+            return success(
+                {
+                    "workspaceId": existing_ws_id,
+                    "name": meta.get("name", ""),
+                    "description": meta.get("description", ""),
+                    "role": "owner",
+                    "created_at": meta.get("created_at", ""),
+                    "onboarding": False,
+                }
+            )
         return bad_request("User already has a workspace")
 
     memory_id = _create_workspace_memory(ws_id)
@@ -470,15 +486,18 @@ def onboarding():
             ExpressionAttributeValues={":m": memory_id},
         )
 
-    return success({
-        "workspaceId": ws_id,
-        "name": default_name,
-        "description": "Default workspace",
-        "role": "owner",
-        "created_at": now,
-        "onboarding": True,
-        "memory_id": memory_id,
-    }, status_code=201)
+    return success(
+        {
+            "workspaceId": ws_id,
+            "name": default_name,
+            "description": "Default workspace",
+            "role": "owner",
+            "created_at": now,
+            "onboarding": True,
+            "memory_id": memory_id,
+        },
+        status_code=201,
+    )
 
 
 # ─── GET /api/workspaces/{wsId} ───
@@ -499,25 +518,29 @@ def get_workspace(wsId: str):
     )
     members = []
     for m in members_resp.get("Items", []):
-        members.append({
-            "userId": m.get("userId", ""),
-            "role": m.get("role", "viewer"),
-            "joined_at": m.get("joined_at", ""),
-            "display_name": m.get("display_name", ""),
-            "email": m.get("email", ""),
-        })
+        members.append(
+            {
+                "userId": m.get("userId", ""),
+                "role": m.get("role", "viewer"),
+                "joined_at": m.get("joined_at", ""),
+                "display_name": m.get("display_name", ""),
+                "email": m.get("email", ""),
+            }
+        )
     members = _hydrate_member_identities(members)
 
-    return success({
-        "workspaceId": meta["workspaceId"],
-        "name": meta.get("name", ""),
-        "description": meta.get("description", ""),
-        "owner_id": meta.get("owner_id", ""),
-        "created_at": meta.get("created_at", ""),
-        "updated_at": meta.get("updated_at", ""),
-        "memory_id": meta.get("memory_id", ""),
-        "members": members,
-    })
+    return success(
+        {
+            "workspaceId": meta["workspaceId"],
+            "name": meta.get("name", ""),
+            "description": meta.get("description", ""),
+            "owner_id": meta.get("owner_id", ""),
+            "created_at": meta.get("created_at", ""),
+            "updated_at": meta.get("updated_at", ""),
+            "memory_id": meta.get("memory_id", ""),
+            "members": members,
+        }
+    )
 
 
 # ─── PUT /api/workspaces/{wsId} ───
@@ -564,15 +587,18 @@ def update_workspace(wsId: str):
     except table.meta.client.exceptions.ConditionalCheckFailedException:
         return version_conflict("Workspace was modified by another request")
 
-    return success({
-        "workspaceId": ws_id,
-        "name": name,
-        "description": body.get("description", ""),
-        "updated_at": now,
-    })
+    return success(
+        {
+            "workspaceId": ws_id,
+            "name": name,
+            "description": body.get("description", ""),
+            "updated_at": now,
+        }
+    )
 
 
 # ─── Workspace IAM role cleanup ───
+
 
 def _get_iam_client():
     global _iam_client
@@ -662,6 +688,7 @@ def invite_member(wsId: str):
         return err
 
     import secrets
+
     body = router.current_event.json_body or {}
     email = body.get("email", "").strip()
     role = body.get("role", "viewer")
@@ -677,6 +704,7 @@ def invite_member(wsId: str):
     token = secrets.token_urlsafe(32)
     now = datetime.utcnow().isoformat() + "Z"
     import time
+
     ttl = int(time.time()) + 7 * 24 * 3600
 
     table = _get_table()
@@ -693,12 +721,15 @@ def invite_member(wsId: str):
         }
     )
 
-    return success({
-        "token": token,
-        "email": email,
-        "role": role,
-        "created_at": now,
-    }, status_code=201)
+    return success(
+        {
+            "token": token,
+            "email": email,
+            "role": role,
+            "created_at": now,
+        },
+        status_code=201,
+    )
 
 
 # ─── PUT /api/workspaces/{wsId}/members/{userId} — 修改角色 ───
@@ -873,13 +904,15 @@ def list_invitations(wsId: str):
     )
     invitations = []
     for item in resp.get("Items", []):
-        invitations.append({
-            "token": item.get("token", ""),
-            "email": item.get("email", ""),
-            "role": item.get("role", "viewer"),
-            "invited_by": item.get("invited_by", ""),
-            "created_at": item.get("created_at", ""),
-        })
+        invitations.append(
+            {
+                "token": item.get("token", ""),
+                "email": item.get("email", ""),
+                "role": item.get("role", "viewer"),
+                "invited_by": item.get("invited_by", ""),
+                "created_at": item.get("created_at", ""),
+            }
+        )
 
     return success({"items": invitations})
 
@@ -923,9 +956,11 @@ def verify_invitation(token: str):
     ws_id = invite["workspaceId"]
     meta = table.get_item(Key={"workspaceId": ws_id, "sk": "META"}, ConsistentRead=True).get("Item", {})
 
-    return success({
-        "workspaceName": meta.get("name", ""),
-    })
+    return success(
+        {
+            "workspaceName": meta.get("name", ""),
+        }
+    )
 
 
 # ─── POST /api/invitations/{token}/accept — 接受邀请 ───
@@ -968,17 +1003,21 @@ def accept_invitation(token: str):
     # nested {"M": {"S": ...}} and a ValidationError. Use native Python values
     # via table.put_item / delete_item. If we crash between the two the user
     # can re-accept — idempotent because of the member-exists check above.
-    table.put_item(Item={
-        "workspaceId": ws_id,
-        "sk": f"MEMBER#{user_id}",
-        "userId": user_id,
-        "role": role,
-        "joined_at": now,
-    })
+    table.put_item(
+        Item={
+            "workspaceId": ws_id,
+            "sk": f"MEMBER#{user_id}",
+            "userId": user_id,
+            "role": role,
+            "joined_at": now,
+        }
+    )
     table.delete_item(Key={"workspaceId": ws_id, "sk": f"INVITE#{token}"})
 
-    return success({
-        "workspaceId": ws_id,
-        "role": role,
-        "joined_at": now,
-    })
+    return success(
+        {
+            "workspaceId": ws_id,
+            "role": role,
+            "joined_at": now,
+        }
+    )

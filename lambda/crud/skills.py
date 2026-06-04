@@ -1,4 +1,5 @@
 """Skill CRUD endpoints."""
+
 import json
 import uuid
 from datetime import datetime
@@ -88,6 +89,7 @@ def list_skills(wsId: str):
     }
     if cursor:
         import base64
+
         try:
             query_kwargs["ExclusiveStartKey"] = json.loads(base64.b64decode(cursor).decode())
         except Exception:
@@ -107,6 +109,7 @@ def list_skills(wsId: str):
     next_cursor = None
     if last_key:
         import base64
+
         next_cursor = base64.b64encode(json.dumps(last_key).encode()).decode()
 
     return paginated(items, next_cursor)
@@ -238,7 +241,7 @@ def update_skill(wsId: str, skillId: str):
         resp = table.update_item(
             Key={"skillId": skillId},
             UpdateExpression=update_expr,
-            **({'ExpressionAttributeNames': expr_names} if expr_names else {}),
+            **({"ExpressionAttributeNames": expr_names} if expr_names else {}),
             ExpressionAttributeValues=expr_values,
             ConditionExpression=condition,
             ReturnValues="ALL_NEW",
@@ -343,6 +346,7 @@ def import_skill(wsId: str):
     if not name and content.startswith("---"):
         try:
             import re
+
             fm_match = re.match(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
             if fm_match:
                 fm_text = fm_match.group(1)
@@ -383,6 +387,7 @@ def import_skill(wsId: str):
     scripts = body.get("scripts", {})
     extra_files = body.get("files", {})
     import re as _re
+
     for script_name in scripts:
         if not _re.match(r"^[a-zA-Z0-9._-]+$", script_name):
             return bad_request("Invalid script name: must match [a-zA-Z0-9._-]+")
@@ -515,12 +520,14 @@ def approve_skill(wsId: str, skillId: str):
         ConditionExpression="attribute_exists(skillId) AND workspace_id = :ws",
     )
 
-    return success({
-        "skillId": skillId,
-        "approved": True,
-        "approved_by": user_id,
-        "approved_at": now,
-    })
+    return success(
+        {
+            "skillId": skillId,
+            "approved": True,
+            "approved_by": user_id,
+            "approved_at": now,
+        }
+    )
 
 
 # ── File endpoints ──
@@ -559,7 +566,7 @@ def get_skill_file(wsId: str, skillId: str):
                     kwargs["ContinuationToken"] = continuation
                 resp = s3.list_objects_v2(**kwargs)
                 for obj in resp.get("Contents", []):
-                    rel = obj["Key"][len(prefix):]
+                    rel = obj["Key"][len(prefix) :]
                     if rel and not rel.startswith("."):
                         files.append(rel)
                 if not resp.get("IsTruncated"):
@@ -615,9 +622,15 @@ def put_skill_file(wsId: str, skillId: str):
 
     try:
         s3 = _get_s3()
-        content_type = "text/markdown" if path.endswith(".md") else \
-                        "text/x-python" if path.endswith(".py") else \
-                        "application/json" if path.endswith(".json") else "text/plain"
+        content_type = (
+            "text/markdown"
+            if path.endswith(".md")
+            else "text/x-python"
+            if path.endswith(".py")
+            else "application/json"
+            if path.endswith(".json")
+            else "text/plain"
+        )
         s3.put_object(
             Bucket=ASSETS_BUCKET,
             Key=f"skills/{skillId}/{path}",
@@ -637,6 +650,7 @@ def put_skill_file(wsId: str, skillId: str):
     if path == "SKILL.md" and content.startswith("---"):
         try:
             import re
+
             fm_match = re.match(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
             if fm_match:
                 fm_text = fm_match.group(1)

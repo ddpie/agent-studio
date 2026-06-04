@@ -1,4 +1,5 @@
 """Tests for crud.channels module."""
+
 import json
 from datetime import datetime
 from unittest.mock import MagicMock, patch
@@ -140,6 +141,7 @@ def _apigw(method, path, body=None, query_params=None):
 
 def _invoke(event):
     from crud.handler import lambda_handler
+
     return lambda_handler(event, MagicMock())
 
 
@@ -163,8 +165,7 @@ def _valid_create_body(agent_id="agent123"):
 
 class TestCreateChannel:
     def test_success(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         """Successful channel creation stores secret and DDB record."""
         agent_id = "agent123"
@@ -193,8 +194,7 @@ class TestCreateChannel:
         mock_channels_table.put_item.assert_called_once()
 
     def test_default_trigger_mode_at_bot_rejected(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         """Known bug: when triggerMode is omitted, the default 'at_bot' is not
         in VALID_TRIGGER_MODES and validation rejects it."""
@@ -214,8 +214,7 @@ class TestCreateChannel:
         assert "triggerMode" in data["error"]
 
     def test_missing_channel_type(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         body = _valid_create_body()
         del body["channelType"]
@@ -224,8 +223,7 @@ class TestCreateChannel:
         assert "channelType" in json.loads(resp["body"])["error"]
 
     def test_invalid_channel_type(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         body = _valid_create_body()
         body["channelType"] = "telegram"
@@ -234,8 +232,7 @@ class TestCreateChannel:
         assert "channelType" in json.loads(resp["body"])["error"]
 
     def test_missing_channel_name(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         body = _valid_create_body()
         del body["channelName"]
@@ -244,8 +241,7 @@ class TestCreateChannel:
         assert "channelName" in json.loads(resp["body"])["error"]
 
     def test_channel_name_too_long(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         body = _valid_create_body()
         body["channelName"] = "A" * 65
@@ -254,8 +250,7 @@ class TestCreateChannel:
         assert "channelName" in json.loads(resp["body"])["error"]
 
     def test_missing_default_agent_id(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         body = _valid_create_body()
         del body["defaultAgentId"]
@@ -264,8 +259,7 @@ class TestCreateChannel:
         assert "defaultAgentId" in json.loads(resp["body"])["error"]
 
     def test_agent_not_in_workspace(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         """Agent exists but belongs to a different workspace."""
         mock_agents_table.get_item.return_value = {
@@ -277,8 +271,7 @@ class TestCreateChannel:
         assert "does not exist" in json.loads(resp["body"])["error"]
 
     def test_missing_platform_config_app_id(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         agent_id = "agent123"
         mock_agents_table.get_item.return_value = {
@@ -291,8 +284,7 @@ class TestCreateChannel:
         assert "appId" in json.loads(resp["body"])["error"]
 
     def test_missing_app_secret(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         agent_id = "agent123"
         mock_agents_table.get_item.return_value = {
@@ -305,8 +297,7 @@ class TestCreateChannel:
         assert "appSecret" in json.loads(resp["body"])["error"]
 
     def test_invalid_max_history_turns(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         agent_id = "agent123"
         mock_agents_table.get_item.return_value = {
@@ -319,8 +310,7 @@ class TestCreateChannel:
         assert "maxHistoryTurns" in json.loads(resp["body"])["error"]
 
     def test_invalid_language(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         agent_id = "agent123"
         mock_agents_table.get_item.return_value = {
@@ -333,8 +323,7 @@ class TestCreateChannel:
         assert "language" in json.loads(resp["body"])["error"]
 
     def test_viewer_cannot_create(
-        self, workspace_id, mock_jwt, _mock_viewer,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_viewer, mock_channels_table, mock_agents_table, mock_secrets
     ):
         """Viewers don't have editor role, so creation is forbidden."""
         body = _valid_create_body()
@@ -342,8 +331,7 @@ class TestCreateChannel:
         assert resp["statusCode"] == 403
 
     def test_secret_creation_failure_returns_500(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         """If Secrets Manager fails, return 500 and don't write DDB."""
         from botocore.exceptions import ClientError
@@ -363,8 +351,7 @@ class TestCreateChannel:
         mock_channels_table.put_item.assert_not_called()
 
     def test_ddb_failure_cleans_up_secret(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         """If DDB put_item fails, the secret should be cleaned up."""
         from botocore.exceptions import ClientError
@@ -385,8 +372,7 @@ class TestCreateChannel:
         mock_secrets.delete_secret.assert_called_once()
 
     def test_platform_config_not_dict(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         agent_id = "agent123"
         mock_agents_table.get_item.return_value = {
@@ -424,8 +410,7 @@ class TestUpdateChannel:
         }
 
     def test_partial_update_channel_name(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -445,8 +430,7 @@ class TestUpdateChannel:
         mock_channels_table.update_item.assert_called_once()
 
     def test_update_trigger_mode(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -461,8 +445,7 @@ class TestUpdateChannel:
         assert resp["statusCode"] == 200
 
     def test_update_invalid_trigger_mode(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -474,8 +457,7 @@ class TestUpdateChannel:
         assert "triggerMode" in json.loads(resp["body"])["error"]
 
     def test_update_channel_not_found(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         mock_channels_table.get_item.return_value = {"Item": None}
@@ -484,21 +466,20 @@ class TestUpdateChannel:
         resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body=body))
         assert resp["statusCode"] == 404
 
-    def test_update_empty_body(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
-    ):
+    def test_update_empty_body(self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
         mock_channels_table.get_item.return_value = {"Item": existing}
 
         resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/channels/{ch_id}", body={}))
         assert resp["statusCode"] == 400
-        assert "body" in json.loads(resp["body"])["error"].lower() or "no update" in json.loads(resp["body"])["error"].lower()
+        assert (
+            "body" in json.loads(resp["body"])["error"].lower()
+            or "no update" in json.loads(resp["body"])["error"].lower()
+        )
 
     def test_update_no_updateable_fields(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         """Body contains keys not in the updatable set (and no appSecret)."""
         ch_id = "ch_abc12345678901234"
@@ -511,8 +492,7 @@ class TestUpdateChannel:
         assert "no updateable fields" in json.loads(resp["body"])["error"].lower()
 
     def test_update_app_secret_only(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         """When only appSecret is changed, secret is updated and current record returned."""
         ch_id = "ch_abc12345678901234"
@@ -527,8 +507,7 @@ class TestUpdateChannel:
         mock_channels_table.update_item.assert_not_called()
 
     def test_update_app_secret_recreates_on_not_found(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         """If secret was previously deleted, update recreates it."""
         from botocore.exceptions import ClientError
@@ -548,8 +527,7 @@ class TestUpdateChannel:
         mock_secrets.create_secret.assert_called_once()
 
     def test_update_routing_mode(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -564,8 +542,7 @@ class TestUpdateChannel:
         assert resp["statusCode"] == 200
 
     def test_update_invalid_routing_mode(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -576,10 +553,7 @@ class TestUpdateChannel:
         assert resp["statusCode"] == 400
         assert "routingMode" in json.loads(resp["body"])["error"]
 
-    def test_update_status(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
-    ):
+    def test_update_status(self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
         mock_channels_table.get_item.return_value = {"Item": existing}
@@ -593,8 +567,7 @@ class TestUpdateChannel:
         assert resp["statusCode"] == 200
 
     def test_update_invalid_status(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -605,8 +578,7 @@ class TestUpdateChannel:
         assert resp["statusCode"] == 400
 
     def test_update_default_agent_validates_workspace(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         """Changing defaultAgentId requires agent to exist in this workspace."""
         ch_id = "ch_abc12345678901234"
@@ -624,8 +596,7 @@ class TestUpdateChannel:
         assert "does not exist" in json.loads(resp["body"])["error"]
 
     def test_viewer_cannot_update(
-        self, workspace_id, mock_jwt, _mock_viewer,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_viewer, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         body = {"channelName": "New"}
@@ -633,8 +604,7 @@ class TestUpdateChannel:
         assert resp["statusCode"] == 403
 
     def test_update_max_history_turns_out_of_range(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -646,8 +616,7 @@ class TestUpdateChannel:
         assert "maxHistoryTurns" in json.loads(resp["body"])["error"]
 
     def test_update_channel_name_empty(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -674,10 +643,7 @@ class TestDeleteChannel:
             "status": "active",
         }
 
-    def test_delete_success(
-        self, workspace_id, mock_jwt, _mock_owner,
-        mock_channels_table, mock_secrets
-    ):
+    def test_delete_success(self, workspace_id, mock_jwt, _mock_owner, mock_channels_table, mock_secrets):
         ch_id = "ch_abc12345678901234"
         mock_channels_table.get_item.return_value = {"Item": self._existing_item(workspace_id, ch_id)}
 
@@ -688,10 +654,7 @@ class TestDeleteChannel:
         mock_secrets.delete_secret.assert_called_once()
         mock_channels_table.delete_item.assert_called_once()
 
-    def test_delete_not_found(
-        self, workspace_id, mock_jwt, _mock_owner,
-        mock_channels_table, mock_secrets
-    ):
+    def test_delete_not_found(self, workspace_id, mock_jwt, _mock_owner, mock_channels_table, mock_secrets):
         ch_id = "ch_abc12345678901234"
         mock_channels_table.get_item.return_value = {"Item": None}
 
@@ -699,8 +662,7 @@ class TestDeleteChannel:
         assert resp["statusCode"] == 404
 
     def test_delete_secret_already_gone(
-        self, workspace_id, mock_jwt, _mock_owner,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_owner, mock_channels_table, mock_secrets
     ):
         """Delete succeeds even if secret was already deleted (idempotent)."""
         from botocore.exceptions import ClientError
@@ -718,8 +680,7 @@ class TestDeleteChannel:
         mock_channels_table.delete_item.assert_called_once()
 
     def test_delete_secret_other_error_returns_500(
-        self, workspace_id, mock_jwt, _mock_owner,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_owner, mock_channels_table, mock_secrets
     ):
         """Non-404 secret errors are treated as fatal."""
         from botocore.exceptions import ClientError
@@ -737,8 +698,7 @@ class TestDeleteChannel:
         mock_channels_table.delete_item.assert_not_called()
 
     def test_editor_cannot_delete(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         """Delete requires admin role."""
         ch_id = "ch_abc12345678901234"
@@ -746,8 +706,7 @@ class TestDeleteChannel:
         assert resp["statusCode"] == 403
 
     def test_viewer_cannot_delete(
-        self, workspace_id, mock_jwt, _mock_viewer,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_viewer, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/channels/{ch_id}"))
@@ -760,20 +719,14 @@ class TestDeleteChannel:
 
 
 class TestListChannels:
-    def test_list_empty(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table
-    ):
+    def test_list_empty(self, workspace_id, mock_jwt, _mock_editor, mock_channels_table):
         mock_channels_table.query.return_value = {"Items": []}
         resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/channels"))
         assert resp["statusCode"] == 200
         data = json.loads(resp["body"])
         assert data["channels"] == []
 
-    def test_list_returns_channels(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table
-    ):
+    def test_list_returns_channels(self, workspace_id, mock_jwt, _mock_editor, mock_channels_table):
         items = [
             {
                 "workspaceId": workspace_id,
@@ -809,10 +762,7 @@ class TestListChannels:
         assert data["channels"][0]["channelId"] == "ch_aaa11111111111111111"
         assert data["channels"][1]["channelId"] == "ch_bbb22222222222222222"
 
-    def test_list_filters_group_metadata(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table
-    ):
+    def test_list_filters_group_metadata(self, workspace_id, mock_jwt, _mock_editor, mock_channels_table):
         """Records with '#group#' in sk should be filtered out."""
         items = [
             {
@@ -844,10 +794,7 @@ class TestListChannels:
         assert len(data["channels"]) == 1
         assert data["channels"][0]["channelName"] == "Real Channel"
 
-    def test_list_workspace_scoped(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table
-    ):
+    def test_list_workspace_scoped(self, workspace_id, mock_jwt, _mock_editor, mock_channels_table):
         """Query uses workspace_id in KeyConditionExpression."""
         mock_channels_table.query.return_value = {"Items": []}
         _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/channels"))
@@ -856,10 +803,7 @@ class TestListChannels:
         assert ":wsId" in call_kwargs["ExpressionAttributeValues"]
         assert call_kwargs["ExpressionAttributeValues"][":wsId"] == workspace_id
 
-    def test_list_viewer_allowed(
-        self, workspace_id, mock_jwt, _mock_viewer,
-        mock_channels_table
-    ):
+    def test_list_viewer_allowed(self, workspace_id, mock_jwt, _mock_viewer, mock_channels_table):
         """Viewers can list channels (min_role=viewer for list)."""
         mock_channels_table.query.return_value = {"Items": []}
         resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/channels"))
@@ -875,8 +819,7 @@ class TestListChannels:
 
 class TestGetChannelMessages:
     def test_messages_channel_not_found(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_history_table
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_history_table
     ):
         """Messages endpoint returns 404 if channel doesn't belong to workspace."""
         ch_id = "ch_abc12345678901234"
@@ -886,8 +829,7 @@ class TestGetChannelMessages:
         assert resp["statusCode"] == 404
 
     def test_messages_empty(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_history_table
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_history_table
     ):
         ch_id = "ch_abc12345678901234"
         # Channel exists
@@ -902,8 +844,7 @@ class TestGetChannelMessages:
         assert data["messages"] == []
 
     def test_messages_returns_sorted(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_history_table
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_history_table
     ):
         ch_id = "ch_abc12345678901234"
         mock_channels_table.get_item.return_value = {
@@ -911,9 +852,30 @@ class TestGetChannelMessages:
         }
         mock_history_table.scan.return_value = {
             "Items": [
-                {"pk": f"{ch_id}#user1", "sk": "1700000001", "role": "user", "content": "Hello", "userName": "Alice", "timestamp": 1700000001},
-                {"pk": f"{ch_id}#user1", "sk": "1700000003", "role": "assistant", "content": "Hi!", "userName": "", "timestamp": 1700000003},
-                {"pk": f"{ch_id}#user1", "sk": "1700000002", "role": "user", "content": "How are you?", "userName": "Alice", "timestamp": 1700000002},
+                {
+                    "pk": f"{ch_id}#user1",
+                    "sk": "1700000001",
+                    "role": "user",
+                    "content": "Hello",
+                    "userName": "Alice",
+                    "timestamp": 1700000001,
+                },
+                {
+                    "pk": f"{ch_id}#user1",
+                    "sk": "1700000003",
+                    "role": "assistant",
+                    "content": "Hi!",
+                    "userName": "",
+                    "timestamp": 1700000003,
+                },
+                {
+                    "pk": f"{ch_id}#user1",
+                    "sk": "1700000002",
+                    "role": "user",
+                    "content": "How are you?",
+                    "userName": "Alice",
+                    "timestamp": 1700000002,
+                },
             ]
         }
 
@@ -928,8 +890,7 @@ class TestGetChannelMessages:
         assert messages[2]["content"] == "Hello"
 
     def test_messages_viewer_allowed(
-        self, workspace_id, mock_jwt, _mock_viewer,
-        mock_channels_table, mock_history_table
+        self, workspace_id, mock_jwt, _mock_viewer, mock_channels_table, mock_history_table
     ):
         """Viewers can read messages."""
         ch_id = "ch_abc12345678901234"
@@ -942,8 +903,7 @@ class TestGetChannelMessages:
         assert resp["statusCode"] == 200
 
     def test_messages_cross_workspace_rejected(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_history_table
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_history_table
     ):
         """If the channel doesn't belong to the workspace, reject."""
         ch_id = "ch_abc12345678901234"
@@ -960,20 +920,14 @@ class TestGetChannelMessages:
 
 
 class TestTestChannel:
-    def test_placeholder_response(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table
-    ):
+    def test_placeholder_response(self, workspace_id, mock_jwt, _mock_editor, mock_channels_table):
         ch_id = "ch_abc12345678901234"
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/channels/{ch_id}/test"))
         assert resp["statusCode"] == 200
         data = json.loads(resp["body"])
         assert data["status"] == "ok"
 
-    def test_viewer_cannot_test(
-        self, workspace_id, mock_jwt, _mock_viewer,
-        mock_channels_table
-    ):
+    def test_viewer_cannot_test(self, workspace_id, mock_jwt, _mock_viewer, mock_channels_table):
         ch_id = "ch_abc12345678901234"
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/channels/{ch_id}/test"))
         assert resp["statusCode"] == 403
@@ -1040,8 +994,7 @@ class TestChannelResponse:
 
 class TestSecretPersistence:
     def test_secret_arn_not_stored_in_ddb(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         """Known behavior: the secretArn returned by create_secret is NOT saved
         in the DDB item. The channel relies on convention-based naming
@@ -1067,6 +1020,7 @@ class TestSecretPersistence:
     def test_secret_name_derivation(self):
         """The secret name is derived from channel ID via _secret_name."""
         from crud.channels import _secret_name
+
         assert _secret_name("ch_abc123") == "agent-studio/channels/ch_abc123"
 
 
@@ -1076,17 +1030,13 @@ class TestSecretPersistence:
 
 
 class TestAuthEdgeCases:
-    def test_no_membership_forbidden(
-        self, workspace_id, mock_jwt, _mock_no_membership,
-        mock_channels_table
-    ):
+    def test_no_membership_forbidden(self, workspace_id, mock_jwt, _mock_no_membership, mock_channels_table):
         """Non-members cannot access channels."""
         resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/channels"))
         assert resp["statusCode"] == 403
 
     def test_invalid_channel_id_format(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         """Channel ID with invalid characters is rejected by validate_id."""
         bad_id = "ch_has spaces!"
@@ -1106,6 +1056,7 @@ class TestLazyGetters:
 
     def _reset_globals(self):
         import crud.channels as ch
+
         ch._channels_table = None
         ch._history_table = None
         ch._agents_table = None
@@ -1114,6 +1065,7 @@ class TestLazyGetters:
     def test_get_channels_table(self, monkeypatch):
         self._reset_globals()
         from crud import channels as ch
+
         sentinel = object()
 
         class FakeRes:
@@ -1129,6 +1081,7 @@ class TestLazyGetters:
     def test_get_history_table(self, monkeypatch):
         self._reset_globals()
         from crud import channels as ch
+
         sentinel = object()
 
         class FakeRes:
@@ -1141,6 +1094,7 @@ class TestLazyGetters:
     def test_get_agents_table(self, monkeypatch):
         self._reset_globals()
         from crud import channels as ch
+
         sentinel = object()
 
         class FakeRes:
@@ -1153,6 +1107,7 @@ class TestLazyGetters:
     def test_get_secrets(self, monkeypatch):
         self._reset_globals()
         from crud import channels as ch
+
         sentinel = object()
         monkeypatch.setattr(ch.boto3, "client", lambda *a, **kw: sentinel)
         assert ch._get_secrets() is sentinel
@@ -1165,11 +1120,11 @@ class TestLazyGetters:
 
 class TestCreateChannelErrorPaths:
     def test_validate_agent_clienterror_returns_false(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         """When the agents-table get_item raises ClientError, treat as not-in-workspace."""
         from botocore.exceptions import ClientError
+
         mock_agents_table.get_item.side_effect = ClientError(
             {"Error": {"Code": "InternalError", "Message": "boom"}},
             "GetItem",
@@ -1180,18 +1135,18 @@ class TestCreateChannelErrorPaths:
         assert "does not exist" in json.loads(resp["body"])["error"]
 
     def test_invalid_default_agent_id_format(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         body = _valid_create_body("bad agent id!")
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/channels", body=body))
         assert resp["statusCode"] == 400
-        assert "Invalid" in json.loads(resp["body"])["error"] \
+        assert (
+            "Invalid" in json.loads(resp["body"])["error"]
             or "defaultAgentId" in json.loads(resp["body"])["error"]
+        )
 
     def test_ddb_failure_secret_cleanup_swallows_clienterror(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         """When DDB fails and the secret-cleanup *also* fails, still 500."""
         from botocore.exceptions import ClientError
@@ -1200,10 +1155,12 @@ class TestCreateChannelErrorPaths:
             "Item": {"agentId": "agent123", "workspace_id": workspace_id}
         }
         mock_channels_table.put_item.side_effect = ClientError(
-            {"Error": {"Code": "InternalError", "Message": "boom"}}, "PutItem",
+            {"Error": {"Code": "InternalError", "Message": "boom"}},
+            "PutItem",
         )
         mock_secrets.delete_secret.side_effect = ClientError(
-            {"Error": {"Code": "InternalError", "Message": "cleanup boom"}}, "DeleteSecret",
+            {"Error": {"Code": "InternalError", "Message": "cleanup boom"}},
+            "DeleteSecret",
         )
         body = _valid_create_body("agent123")
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/channels", body=body))
@@ -1211,10 +1168,9 @@ class TestCreateChannelErrorPaths:
 
 
 class TestListChannelsClientError:
-    def test_list_channels_clienterror(
-        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table
-    ):
+    def test_list_channels_clienterror(self, workspace_id, mock_jwt, _mock_editor, mock_channels_table):
         from botocore.exceptions import ClientError
+
         mock_channels_table.query.side_effect = ClientError(
             {"Error": {"Code": "InternalError", "Message": "boom"}},
             "Query",
@@ -1243,10 +1199,10 @@ class TestUpdateChannelMoreCoverage:
         }
 
     def test_update_get_item_clienterror(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         from botocore.exceptions import ClientError
+
         mock_channels_table.get_item.side_effect = ClientError(
             {"Error": {"Code": "InternalError", "Message": "x"}},
             "GetItem",
@@ -1257,8 +1213,7 @@ class TestUpdateChannelMoreCoverage:
         assert resp["statusCode"] == 500
 
     def test_update_default_agent_invalid_id(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -1269,8 +1224,7 @@ class TestUpdateChannelMoreCoverage:
         assert resp["statusCode"] == 400
 
     def test_update_default_agent_empty(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -1282,8 +1236,7 @@ class TestUpdateChannelMoreCoverage:
         assert "defaultAgentId" in json.loads(resp["body"])["error"]
 
     def test_update_default_agent_succeeds(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_agents_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_agents_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -1298,8 +1251,7 @@ class TestUpdateChannelMoreCoverage:
         assert resp["statusCode"] == 200
 
     def test_update_platform_config_not_dict(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -1311,8 +1263,7 @@ class TestUpdateChannelMoreCoverage:
         assert "platformConfig" in json.loads(resp["body"])["error"]
 
     def test_update_platform_config_succeeds(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -1324,8 +1275,7 @@ class TestUpdateChannelMoreCoverage:
         assert resp["statusCode"] == 200
 
     def test_update_routing_rules_not_list(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -1337,8 +1287,7 @@ class TestUpdateChannelMoreCoverage:
         assert "routingRules" in json.loads(resp["body"])["error"]
 
     def test_update_routing_rules_succeeds(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -1350,8 +1299,7 @@ class TestUpdateChannelMoreCoverage:
         assert resp["statusCode"] == 200
 
     def test_update_language_succeeds(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -1363,8 +1311,7 @@ class TestUpdateChannelMoreCoverage:
         assert resp["statusCode"] == 200
 
     def test_update_language_invalid(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -1375,8 +1322,7 @@ class TestUpdateChannelMoreCoverage:
         assert resp["statusCode"] == 400
 
     def test_update_app_secret_empty(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -1388,8 +1334,7 @@ class TestUpdateChannelMoreCoverage:
         assert "appSecret" in json.loads(resp["body"])["error"]
 
     def test_update_app_secret_recreate_also_fails(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         """Secret was deleted; recreate also fails → 500."""
         from botocore.exceptions import ClientError
@@ -1410,8 +1355,7 @@ class TestUpdateChannelMoreCoverage:
         assert resp["statusCode"] == 500
 
     def test_update_app_secret_other_error(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         """Non-NotFound ClientError on put_secret_value → 500."""
         from botocore.exceptions import ClientError
@@ -1428,8 +1372,7 @@ class TestUpdateChannelMoreCoverage:
         assert resp["statusCode"] == 500
 
     def test_update_channel_name_too_long(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -1440,8 +1383,7 @@ class TestUpdateChannelMoreCoverage:
         assert resp["statusCode"] == 400
 
     def test_update_max_history_turns_succeeds(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
@@ -1453,10 +1395,10 @@ class TestUpdateChannelMoreCoverage:
         assert resp["statusCode"] == 200
 
     def test_update_ddb_clienterror(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         from botocore.exceptions import ClientError
+
         ch_id = "ch_abc12345678901234"
         existing = self._existing_item(workspace_id, ch_id)
         mock_channels_table.get_item.return_value = {"Item": existing}
@@ -1469,20 +1411,20 @@ class TestUpdateChannelMoreCoverage:
         assert resp["statusCode"] == 500
 
     def test_update_invalid_channel_id(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         body = {"channelName": "x"}
-        resp = _invoke(_apigw(
-            "PUT",
-            f"/api/workspaces/{workspace_id}/channels/bad id with spaces",
-            body=body,
-        ))
+        resp = _invoke(
+            _apigw(
+                "PUT",
+                f"/api/workspaces/{workspace_id}/channels/bad id with spaces",
+                body=body,
+            )
+        )
         assert resp["statusCode"] == 400
 
     def test_update_empty_request_body(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_secrets
     ):
         """Body is None / no JSON."""
         ch_id = "ch_abc12345678901234"
@@ -1494,20 +1436,20 @@ class TestUpdateChannelMoreCoverage:
 
 
 class TestDeleteChannelMoreCoverage:
-    def test_delete_invalid_id(
-        self, workspace_id, mock_jwt, _mock_owner, mock_channels_table, mock_secrets
-    ):
-        resp = _invoke(_apigw(
-            "DELETE",
-            f"/api/workspaces/{workspace_id}/channels/has space!",
-        ))
+    def test_delete_invalid_id(self, workspace_id, mock_jwt, _mock_owner, mock_channels_table, mock_secrets):
+        resp = _invoke(
+            _apigw(
+                "DELETE",
+                f"/api/workspaces/{workspace_id}/channels/has space!",
+            )
+        )
         assert resp["statusCode"] == 400
 
     def test_delete_get_item_clienterror(
-        self, workspace_id, mock_jwt, _mock_owner,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_owner, mock_channels_table, mock_secrets
     ):
         from botocore.exceptions import ClientError
+
         ch_id = "ch_abc12345678901234"
         mock_channels_table.get_item.side_effect = ClientError(
             {"Error": {"Code": "InternalError", "Message": "x"}},
@@ -1517,14 +1459,12 @@ class TestDeleteChannelMoreCoverage:
         assert resp["statusCode"] == 500
 
     def test_delete_ddb_delete_clienterror(
-        self, workspace_id, mock_jwt, _mock_owner,
-        mock_channels_table, mock_secrets
+        self, workspace_id, mock_jwt, _mock_owner, mock_channels_table, mock_secrets
     ):
         from botocore.exceptions import ClientError
+
         ch_id = "ch_abc12345678901234"
-        mock_channels_table.get_item.return_value = {
-            "Item": {"workspaceId": workspace_id, "sk": ch_id}
-        }
+        mock_channels_table.get_item.return_value = {"Item": {"workspaceId": workspace_id, "sk": ch_id}}
         mock_channels_table.delete_item.side_effect = ClientError(
             {"Error": {"Code": "InternalError", "Message": "x"}},
             "DeleteItem",
@@ -1534,48 +1474,51 @@ class TestDeleteChannelMoreCoverage:
 
 
 class TestTestChannelMoreCoverage:
-    def test_invalid_channel_id(
-        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table
-    ):
-        resp = _invoke(_apigw(
-            "POST",
-            f"/api/workspaces/{workspace_id}/channels/bad id!/test",
-        ))
+    def test_invalid_channel_id(self, workspace_id, mock_jwt, _mock_editor, mock_channels_table):
+        resp = _invoke(
+            _apigw(
+                "POST",
+                f"/api/workspaces/{workspace_id}/channels/bad id!/test",
+            )
+        )
         assert resp["statusCode"] == 400
 
 
 class TestListChannelMessagesMoreCoverage:
     def test_invalid_channel_id(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_history_table
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_history_table
     ):
-        resp = _invoke(_apigw(
-            "GET",
-            f"/api/workspaces/{workspace_id}/channels/bad id!/messages",
-        ))
+        resp = _invoke(
+            _apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/channels/bad id!/messages",
+            )
+        )
         assert resp["statusCode"] == 400
 
     def test_get_item_clienterror(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_history_table
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_history_table
     ):
         from botocore.exceptions import ClientError
+
         ch_id = "ch_abc12345678901234"
         mock_channels_table.get_item.side_effect = ClientError(
             {"Error": {"Code": "InternalError", "Message": "x"}},
             "GetItem",
         )
-        resp = _invoke(_apigw(
-            "GET",
-            f"/api/workspaces/{workspace_id}/channels/{ch_id}/messages",
-        ))
+        resp = _invoke(
+            _apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/channels/{ch_id}/messages",
+            )
+        )
         assert resp["statusCode"] == 500
 
     def test_history_scan_clienterror(
-        self, workspace_id, mock_jwt, _mock_editor,
-        mock_channels_table, mock_history_table
+        self, workspace_id, mock_jwt, _mock_editor, mock_channels_table, mock_history_table
     ):
         from botocore.exceptions import ClientError
+
         ch_id = "ch_abc12345678901234"
         mock_channels_table.get_item.return_value = {
             "Item": {"workspaceId": workspace_id, "sk": ch_id, "channelId": ch_id}
@@ -1584,8 +1527,10 @@ class TestListChannelMessagesMoreCoverage:
             {"Error": {"Code": "InternalError", "Message": "x"}},
             "Scan",
         )
-        resp = _invoke(_apigw(
-            "GET",
-            f"/api/workspaces/{workspace_id}/channels/{ch_id}/messages",
-        ))
+        resp = _invoke(
+            _apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/channels/{ch_id}/messages",
+            )
+        )
         assert resp["statusCode"] == 500

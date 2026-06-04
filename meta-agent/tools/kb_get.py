@@ -42,12 +42,14 @@ def kb_get(kb_id: str) -> str:
     try:
         list_resp = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=s3_prefix, MaxKeys=20)
         for obj in list_resp.get("Contents", []):
-            documents.append({
-                "key": obj["Key"],
-                "filename": obj["Key"].split("/")[-1],
-                "size_bytes": obj["Size"],
-                "last_modified": obj["LastModified"].isoformat(),
-            })
+            documents.append(
+                {
+                    "key": obj["Key"],
+                    "filename": obj["Key"].split("/")[-1],
+                    "size_bytes": obj["Size"],
+                    "last_modified": obj["LastModified"].isoformat(),
+                }
+            )
     except Exception:
         pass
 
@@ -67,7 +69,11 @@ def kb_get(kb_id: str) -> str:
                 knowledgeBaseId=bedrock_kb_id, dataSourceId=data_source_id, ingestionJobId=last_job_id
             )
             job = job_resp["ingestionJob"]
-            ingestion = {"job_id": last_job_id, "status": job["status"], "statistics": job.get("statistics", {})}
+            ingestion = {
+                "job_id": last_job_id,
+                "status": job["status"],
+                "statistics": job.get("statistics", {}),
+            }
         except Exception:
             pass
 

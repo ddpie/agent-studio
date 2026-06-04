@@ -14,6 +14,7 @@ We deliberately do NOT test update_agent's redeploy behavior — that's
 covered by its own tests. Here we just assert it gets called with the
 right args and its return is surfaced.
 """
+
 import json
 import sys
 import types
@@ -111,6 +112,7 @@ class FakeS3:
     def get_object(self, Bucket, Key):
         if Key not in self.store:
             from botocore.exceptions import ClientError
+
             raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
         return {"Body": MagicMock(read=lambda: self.store[Key])}
 
@@ -144,9 +146,7 @@ class FakeS3:
 def _seed_s3(agent_skills, library_id, library_files):
     """Seed S3 with agent metadata + library files + (maybe) old agent copy."""
     data: dict[str, bytes] = {}
-    data[f"agents/{AGENT_ID}/metadata.json"] = json.dumps(
-        _metadata(agent_skills)
-    ).encode("utf-8")
+    data[f"agents/{AGENT_ID}/metadata.json"] = json.dumps(_metadata(agent_skills)).encode("utf-8")
     for rel, content in library_files.items():
         data[f"skills/{library_id}/{rel}"] = content.encode("utf-8")
     # Pre-seed one old file under the attached skill's local prefix so we
@@ -176,6 +176,7 @@ class _FakeDDBTable:
     def query(self, **kwargs):
         # Only supports the workspace-index flow used by _resolve_library_skill.
         from boto3.dynamodb.conditions import Key as _Key  # noqa: F401
+
         # The ConditionExpression is an opaque Key object; we just return all
         # skills whose workspace matches — the tool applies the name filter.
         return {"Items": [s for s in self._skills if s.get("workspace_id") == WS_ID]}
@@ -225,39 +226,47 @@ def _patch_env(s3: FakeS3, skills: list[dict], agents: dict | None = None):
 
 # ── sync_agent_skill tests ───────────────────────────────────────────────
 
+
 def test_sync_happy_path_by_name():
     """Attached skill's sourceSkillId is stale; library has a new version
     under the same name — tool rebinds + refreshes files + redeploys."""
     OLD_SOURCE = "old-deleted-skill-id"
     NEW_SOURCE = "new-library-skill-id"
     LOCAL = "ab12cd34"
-    attached = [{
-        "id": LOCAL,
-        "name": "ppt-generator",
-        "sourceSkillId": OLD_SOURCE,
-        "sourceContentHash": "oldhash01",
-        "contentHash": "oldhash01",
-        "description": "",
-        "files": ["SKILL.md"],
-    }]
-    library = [{
-        "skillId": NEW_SOURCE,
-        "workspace_id": WS_ID,
-        "name": "ppt-generator",
-        "description": "SVG-based PPT generator",
-    }]
+    attached = [
+        {
+            "id": LOCAL,
+            "name": "ppt-generator",
+            "sourceSkillId": OLD_SOURCE,
+            "sourceContentHash": "oldhash01",
+            "contentHash": "oldhash01",
+            "description": "",
+            "files": ["SKILL.md"],
+        }
+    ]
+    library = [
+        {
+            "skillId": NEW_SOURCE,
+            "workspace_id": WS_ID,
+            "name": "ppt-generator",
+            "description": "SVG-based PPT generator",
+        }
+    ]
     s3 = FakeS3(_seed_s3(attached, NEW_SOURCE, _library_files()))
     patches = _patch_env(s3, library)
     fake_redeploy = MagicMock(return_value=json.dumps({"status": "QUEUED"}))
-    patches.append(patch(
-        "tools.sync_agent_skill._update_agent",
-        fake_redeploy,
-    ))
+    patches.append(
+        patch(
+            "tools.sync_agent_skill._update_agent",
+            fake_redeploy,
+        )
+    )
 
     for p in patches:
         p.start()
     try:
         from tools.sync_agent_skill import sync_agent_skill
+
         raw = sync_agent_skill(AGENT_ID, "ppt-generator")
     finally:
         for p in patches:
@@ -273,9 +282,7 @@ def test_sync_happy_path_by_name():
     fake_redeploy.assert_called_once()
 
     # Metadata was written with the new hash and source id.
-    written_meta = json.loads(
-        s3.store[f"agents/{AGENT_ID}/metadata.json"].decode("utf-8")
-    )
+    written_meta = json.loads(s3.store[f"agents/{AGENT_ID}/metadata.json"].decode("utf-8"))
     entry = written_meta["skills"][0]
     assert entry["sourceSkillId"] == NEW_SOURCE
     assert entry["sourceContentHash"] == out["new_content_hash"]
@@ -289,6 +296,7 @@ def test_sync_errors_when_skill_not_attached():
         p.start()
     try:
         from tools.sync_agent_skill import sync_agent_skill
+
         raw = sync_agent_skill(AGENT_ID, "ppt-generator")
     finally:
         for p in patches:
@@ -299,15 +307,17 @@ def test_sync_errors_when_skill_not_attached():
 
 
 def test_sync_errors_when_name_ambiguous():
-    attached = [{
-        "id": "aa11bb22",
-        "name": "ppt-generator",
-        "sourceSkillId": "x",
-        "sourceContentHash": "h1",
-        "contentHash": "h1",
-        "description": "",
-        "files": [],
-    }]
+    attached = [
+        {
+            "id": "aa11bb22",
+            "name": "ppt-generator",
+            "sourceSkillId": "x",
+            "sourceContentHash": "h1",
+            "contentHash": "h1",
+            "description": "",
+            "files": [],
+        }
+    ]
     # Two library entries with the same name.
     library = [
         {"skillId": "lib-a", "workspace_id": WS_ID, "name": "ppt-generator", "description": ""},
@@ -319,6 +329,7 @@ def test_sync_errors_when_name_ambiguous():
         p.start()
     try:
         from tools.sync_agent_skill import sync_agent_skill
+
         raw = sync_agent_skill(AGENT_ID, "ppt-generator")
     finally:
         for p in patches:
@@ -329,31 +340,38 @@ def test_sync_errors_when_name_ambiguous():
 
 
 def test_sync_explicit_new_source_disambiguates():
-    attached = [{
-        "id": "aa11bb22",
-        "name": "ppt-generator",
-        "sourceSkillId": "lib-a",
-        "sourceContentHash": "h1",
-        "contentHash": "h1",
-        "description": "",
-        "files": [],
-    }]
+    attached = [
+        {
+            "id": "aa11bb22",
+            "name": "ppt-generator",
+            "sourceSkillId": "lib-a",
+            "sourceContentHash": "h1",
+            "contentHash": "h1",
+            "description": "",
+            "files": [],
+        }
+    ]
     library = [
         {"skillId": "lib-a", "workspace_id": WS_ID, "name": "ppt-generator", "description": ""},
         {"skillId": "lib-b", "workspace_id": WS_ID, "name": "ppt-generator", "description": "newer"},
     ]
     s3 = FakeS3(_seed_s3(attached, "lib-b", _library_files()))
     patches = _patch_env(s3, library)
-    patches.append(patch(
-        "tools.sync_agent_skill._update_agent",
-        MagicMock(return_value=json.dumps({"status": "QUEUED"})),
-    ))
+    patches.append(
+        patch(
+            "tools.sync_agent_skill._update_agent",
+            MagicMock(return_value=json.dumps({"status": "QUEUED"})),
+        )
+    )
     for p in patches:
         p.start()
     try:
         from tools.sync_agent_skill import sync_agent_skill
+
         raw = sync_agent_skill(
-            AGENT_ID, "ppt-generator", new_source_skill_id="lib-b",
+            AGENT_ID,
+            "ppt-generator",
+            new_source_skill_id="lib-b",
         )
     finally:
         for p in patches:
@@ -364,25 +382,30 @@ def test_sync_explicit_new_source_disambiguates():
 
 
 def test_sync_refuses_empty_library():
-    attached = [{
-        "id": "aa11bb22",
-        "name": "ppt-generator",
-        "sourceSkillId": "lib-empty",
-        "sourceContentHash": "h1",
-        "contentHash": "h1",
-        "description": "",
-        "files": [],
-    }]
+    attached = [
+        {
+            "id": "aa11bb22",
+            "name": "ppt-generator",
+            "sourceSkillId": "lib-empty",
+            "sourceContentHash": "h1",
+            "contentHash": "h1",
+            "description": "",
+            "files": [],
+        }
+    ]
     library = [{"skillId": "lib-empty", "workspace_id": WS_ID, "name": "ppt-generator", "description": ""}]
     # Seed zero files under the library prefix.
-    s3 = FakeS3({
-        f"agents/{AGENT_ID}/metadata.json": json.dumps(_metadata(attached)).encode("utf-8"),
-    })
+    s3 = FakeS3(
+        {
+            f"agents/{AGENT_ID}/metadata.json": json.dumps(_metadata(attached)).encode("utf-8"),
+        }
+    )
     patches = _patch_env(s3, library)
     for p in patches:
         p.start()
     try:
         from tools.sync_agent_skill import sync_agent_skill
+
         raw = sync_agent_skill(AGENT_ID, "ppt-generator")
     finally:
         for p in patches:
@@ -395,16 +418,19 @@ def test_sync_refuses_empty_library():
 def test_sync_noop_when_hash_matches():
     """Pre-seed attached with the exact hash the library produces."""
     from tools.sync_agent_skill import _compute_content_hash
+
     expected_hash = _compute_content_hash(_library_files())
-    attached = [{
-        "id": "aa11bb22",
-        "name": "ppt-generator",
-        "sourceSkillId": "lib-match",
-        "sourceContentHash": expected_hash,
-        "contentHash": expected_hash,
-        "description": "",
-        "files": [],
-    }]
+    attached = [
+        {
+            "id": "aa11bb22",
+            "name": "ppt-generator",
+            "sourceSkillId": "lib-match",
+            "sourceContentHash": expected_hash,
+            "contentHash": expected_hash,
+            "description": "",
+            "files": [],
+        }
+    ]
     library = [{"skillId": "lib-match", "workspace_id": WS_ID, "name": "ppt-generator", "description": ""}]
     s3 = FakeS3(_seed_s3(attached, "lib-match", _library_files()))
     patches = _patch_env(s3, library)
@@ -412,6 +438,7 @@ def test_sync_noop_when_hash_matches():
         p.start()
     try:
         from tools.sync_agent_skill import sync_agent_skill
+
         raw = sync_agent_skill(AGENT_ID, "ppt-generator")
     finally:
         for p in patches:
@@ -421,15 +448,17 @@ def test_sync_noop_when_hash_matches():
 
 
 def test_sync_redeploy_false_skips_update_agent():
-    attached = [{
-        "id": "aa11bb22",
-        "name": "ppt-generator",
-        "sourceSkillId": "lib-new",
-        "sourceContentHash": "oldhash",
-        "contentHash": "oldhash",
-        "description": "",
-        "files": [],
-    }]
+    attached = [
+        {
+            "id": "aa11bb22",
+            "name": "ppt-generator",
+            "sourceSkillId": "lib-new",
+            "sourceContentHash": "oldhash",
+            "contentHash": "oldhash",
+            "description": "",
+            "files": [],
+        }
+    ]
     library = [{"skillId": "lib-new", "workspace_id": WS_ID, "name": "ppt-generator", "description": ""}]
     s3 = FakeS3(_seed_s3(attached, "lib-new", _library_files()))
     patches = _patch_env(s3, library)
@@ -439,6 +468,7 @@ def test_sync_redeploy_false_skips_update_agent():
         p.start()
     try:
         from tools.sync_agent_skill import sync_agent_skill
+
         raw = sync_agent_skill(AGENT_ID, "ppt-generator", redeploy=False)
     finally:
         for p in patches:
@@ -451,6 +481,7 @@ def test_sync_redeploy_false_skips_update_agent():
 
 # ── attach_agent_skill tests ────────────────────────────────────────────
 
+
 def test_attach_happy_path():
     library = [{"skillId": "lib-new", "workspace_id": WS_ID, "name": "ppt-generator", "description": "svg"}]
     s3 = FakeS3(_seed_s3([], "lib-new", _library_files()))
@@ -461,6 +492,7 @@ def test_attach_happy_path():
         p.start()
     try:
         from tools.attach_agent_skill import attach_agent_skill
+
         raw = attach_agent_skill(AGENT_ID, "ppt-generator")
     finally:
         for p in patches:
@@ -472,24 +504,24 @@ def test_attach_happy_path():
     assert out["files_copied"] == 2
     fake_redeploy.assert_called_once()
 
-    written_meta = json.loads(
-        s3.store[f"agents/{AGENT_ID}/metadata.json"].decode("utf-8")
-    )
+    written_meta = json.loads(s3.store[f"agents/{AGENT_ID}/metadata.json"].decode("utf-8"))
     assert len(written_meta["skills"]) == 1
     assert written_meta["skills"][0]["name"] == "ppt-generator"
     assert written_meta["skills"][0]["id"] == out["local_skill_id"]
 
 
 def test_attach_refuses_duplicate_name():
-    attached = [{
-        "id": "aa11bb22",
-        "name": "ppt-generator",
-        "sourceSkillId": "lib-existing",
-        "sourceContentHash": "h1",
-        "contentHash": "h1",
-        "description": "",
-        "files": [],
-    }]
+    attached = [
+        {
+            "id": "aa11bb22",
+            "name": "ppt-generator",
+            "sourceSkillId": "lib-existing",
+            "sourceContentHash": "h1",
+            "contentHash": "h1",
+            "description": "",
+            "files": [],
+        }
+    ]
     library = [{"skillId": "lib-existing", "workspace_id": WS_ID, "name": "ppt-generator", "description": ""}]
     s3 = FakeS3(_seed_s3(attached, "lib-existing", _library_files()))
     patches = _patch_env(s3, library)
@@ -497,6 +529,7 @@ def test_attach_refuses_duplicate_name():
         p.start()
     try:
         from tools.attach_agent_skill import attach_agent_skill
+
         raw = attach_agent_skill(AGENT_ID, "ppt-generator")
     finally:
         for p in patches:
@@ -515,6 +548,7 @@ def test_attach_errors_when_library_missing_name():
         p.start()
     try:
         from tools.attach_agent_skill import attach_agent_skill
+
         raw = attach_agent_skill(AGENT_ID, "ppt-generator")
     finally:
         for p in patches:

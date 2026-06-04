@@ -6,6 +6,7 @@ Coverage focuses on:
   - happy paths for list + read
   - 200KB truncation behavior on large files
 """
+
 import json
 import sys
 import types
@@ -56,10 +57,7 @@ class _FakeS3:
 
         class _P:
             def paginate(self, Bucket, Prefix):
-                contents = [
-                    {"Key": k, "Size": len(v)}
-                    for k, v in files.items() if k.startswith(Prefix)
-                ]
+                contents = [{"Key": k, "Size": len(v)} for k, v in files.items() if k.startswith(Prefix)]
                 yield {"Contents": contents}
 
         return _P()
@@ -80,8 +78,7 @@ class _FakeS3:
         return {"Body": MagicMock(read=lambda: body)}
 
 
-def _patch_module(monkeypatch, *, role="viewer", workspace=WS_ID,
-                  skills_table=None, s3=None):
+def _patch_module(monkeypatch, *, role="viewer", workspace=WS_ID, skills_table=None, s3=None):
     """Wire the module's boto3 + scope helpers to in-memory fakes."""
     from tools import read_skill_file as mod
 
@@ -114,15 +111,18 @@ def _patch_module(monkeypatch, *, role="viewer", workspace=WS_ID,
 def test_list_skill_files_returns_files(monkeypatch):
     from tools import read_skill_file as mod
 
-    table = _FakeSkillsTable({
-        "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": False},
-    })
-    s3 = _FakeS3({
-        "skills/s-1/SKILL.md": b"# body",
-        "skills/s-1/scripts/run.py": b"print('x')",
-    })
-    _patch_module(monkeypatch, role="viewer", workspace=WS_ID,
-                  skills_table=table, s3=s3)
+    table = _FakeSkillsTable(
+        {
+            "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": False},
+        }
+    )
+    s3 = _FakeS3(
+        {
+            "skills/s-1/SKILL.md": b"# body",
+            "skills/s-1/scripts/run.py": b"print('x')",
+        }
+    )
+    _patch_module(monkeypatch, role="viewer", workspace=WS_ID, skills_table=table, s3=s3)
 
     out = json.loads(mod.list_skill_files("s-1"))
     assert out["skill_id"] == "s-1"
@@ -134,12 +134,13 @@ def test_list_skill_files_returns_files(monkeypatch):
 def test_list_skill_files_refuses_cross_workspace(monkeypatch):
     from tools import read_skill_file as mod
 
-    table = _FakeSkillsTable({
-        "s-x": {"skillId": "s-x", "workspace_id": OTHER_WS, "deleted": False},
-    })
+    table = _FakeSkillsTable(
+        {
+            "s-x": {"skillId": "s-x", "workspace_id": OTHER_WS, "deleted": False},
+        }
+    )
     s3 = _FakeS3({"skills/s-x/SKILL.md": b"# body"})
-    _patch_module(monkeypatch, role="viewer", workspace=WS_ID,
-                  skills_table=table, s3=s3)
+    _patch_module(monkeypatch, role="viewer", workspace=WS_ID, skills_table=table, s3=s3)
 
     out = json.loads(mod.list_skill_files("s-x"))
     assert "error" in out
@@ -149,9 +150,11 @@ def test_list_skill_files_refuses_cross_workspace(monkeypatch):
 def test_list_skill_files_refuses_when_deleted(monkeypatch):
     from tools import read_skill_file as mod
 
-    table = _FakeSkillsTable({
-        "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": True},
-    })
+    table = _FakeSkillsTable(
+        {
+            "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": True},
+        }
+    )
     _patch_module(monkeypatch, role="viewer", workspace=WS_ID, skills_table=table)
     out = json.loads(mod.list_skill_files("s-1"))
     assert "error" in out
@@ -168,12 +171,13 @@ def test_list_skill_files_refuses_no_role(monkeypatch):
 def test_list_skill_files_returns_empty_for_no_files(monkeypatch):
     from tools import read_skill_file as mod
 
-    table = _FakeSkillsTable({
-        "s-empty": {"skillId": "s-empty", "workspace_id": WS_ID, "deleted": False},
-    })
+    table = _FakeSkillsTable(
+        {
+            "s-empty": {"skillId": "s-empty", "workspace_id": WS_ID, "deleted": False},
+        }
+    )
     s3 = _FakeS3({})
-    _patch_module(monkeypatch, role="viewer", workspace=WS_ID,
-                  skills_table=table, s3=s3)
+    _patch_module(monkeypatch, role="viewer", workspace=WS_ID, skills_table=table, s3=s3)
 
     out = json.loads(mod.list_skill_files("s-empty"))
     assert out["files"] == []
@@ -182,19 +186,21 @@ def test_list_skill_files_returns_empty_for_no_files(monkeypatch):
 def test_list_skill_files_handles_s3_failure(monkeypatch):
     from tools import read_skill_file as mod
 
-    table = _FakeSkillsTable({
-        "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": False},
-    })
+    table = _FakeSkillsTable(
+        {
+            "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": False},
+        }
+    )
 
     class _BrokenS3:
         def get_paginator(self, _name):
             class _P:
                 def paginate(self, **kw):
                     raise RuntimeError("boom")
+
             return _P()
 
-    _patch_module(monkeypatch, role="viewer", workspace=WS_ID,
-                  skills_table=table, s3=_BrokenS3())
+    _patch_module(monkeypatch, role="viewer", workspace=WS_ID, skills_table=table, s3=_BrokenS3())
     out = json.loads(mod.list_skill_files("s-1"))
     assert "error" in out
     assert "S3 list failed" in out["error"]
@@ -206,12 +212,13 @@ def test_list_skill_files_handles_s3_failure(monkeypatch):
 def test_read_skill_file_returns_content(monkeypatch):
     from tools import read_skill_file as mod
 
-    table = _FakeSkillsTable({
-        "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": False},
-    })
+    table = _FakeSkillsTable(
+        {
+            "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": False},
+        }
+    )
     s3 = _FakeS3({"skills/s-1/SKILL.md": b"# Hello"})
-    _patch_module(monkeypatch, role="viewer", workspace=WS_ID,
-                  skills_table=table, s3=s3)
+    _patch_module(monkeypatch, role="viewer", workspace=WS_ID, skills_table=table, s3=s3)
 
     out = json.loads(mod.read_skill_file("s-1", "SKILL.md"))
     assert out["skill_id"] == "s-1"
@@ -224,9 +231,11 @@ def test_read_skill_file_returns_content(monkeypatch):
 def test_read_skill_file_rejects_path_traversal(monkeypatch):
     from tools import read_skill_file as mod
 
-    table = _FakeSkillsTable({
-        "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": False},
-    })
+    table = _FakeSkillsTable(
+        {
+            "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": False},
+        }
+    )
     _patch_module(monkeypatch, role="viewer", workspace=WS_ID, skills_table=table)
 
     for bad in ("/abs/path", "", "..", "scripts/../escape", "../sibling"):
@@ -238,12 +247,13 @@ def test_read_skill_file_rejects_path_traversal(monkeypatch):
 def test_read_skill_file_returns_not_found_for_missing(monkeypatch):
     from tools import read_skill_file as mod
 
-    table = _FakeSkillsTable({
-        "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": False},
-    })
+    table = _FakeSkillsTable(
+        {
+            "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": False},
+        }
+    )
     s3 = _FakeS3({})
-    _patch_module(monkeypatch, role="viewer", workspace=WS_ID,
-                  skills_table=table, s3=s3)
+    _patch_module(monkeypatch, role="viewer", workspace=WS_ID, skills_table=table, s3=s3)
 
     out = json.loads(mod.read_skill_file("s-1", "nope.md"))
     assert "error" in out
@@ -254,12 +264,13 @@ def test_read_skill_file_truncates_large_files(monkeypatch):
     from tools import read_skill_file as mod
 
     big = b"a" * (mod._MAX_FILE_BYTES + 1000)
-    table = _FakeSkillsTable({
-        "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": False},
-    })
+    table = _FakeSkillsTable(
+        {
+            "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": False},
+        }
+    )
     s3 = _FakeS3({"skills/s-1/big.txt": big})
-    _patch_module(monkeypatch, role="viewer", workspace=WS_ID,
-                  skills_table=table, s3=s3)
+    _patch_module(monkeypatch, role="viewer", workspace=WS_ID, skills_table=table, s3=s3)
 
     out = json.loads(mod.read_skill_file("s-1", "big.txt"))
     assert out["truncated"] is True
@@ -271,12 +282,13 @@ def test_read_skill_file_truncates_large_files(monkeypatch):
 def test_read_skill_file_rejects_binary(monkeypatch):
     from tools import read_skill_file as mod
 
-    table = _FakeSkillsTable({
-        "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": False},
-    })
+    table = _FakeSkillsTable(
+        {
+            "s-1": {"skillId": "s-1", "workspace_id": WS_ID, "deleted": False},
+        }
+    )
     s3 = _FakeS3({"skills/s-1/img.bin": b"\xff\xfe\xfd\xfc"})
-    _patch_module(monkeypatch, role="viewer", workspace=WS_ID,
-                  skills_table=table, s3=s3)
+    _patch_module(monkeypatch, role="viewer", workspace=WS_ID, skills_table=table, s3=s3)
 
     out = json.loads(mod.read_skill_file("s-1", "img.bin"))
     assert "error" in out
@@ -286,12 +298,13 @@ def test_read_skill_file_rejects_binary(monkeypatch):
 def test_read_skill_file_refuses_cross_workspace(monkeypatch):
     from tools import read_skill_file as mod
 
-    table = _FakeSkillsTable({
-        "s-x": {"skillId": "s-x", "workspace_id": OTHER_WS, "deleted": False},
-    })
+    table = _FakeSkillsTable(
+        {
+            "s-x": {"skillId": "s-x", "workspace_id": OTHER_WS, "deleted": False},
+        }
+    )
     s3 = _FakeS3({"skills/s-x/SKILL.md": b"# secret"})
-    _patch_module(monkeypatch, role="viewer", workspace=WS_ID,
-                  skills_table=table, s3=s3)
+    _patch_module(monkeypatch, role="viewer", workspace=WS_ID, skills_table=table, s3=s3)
 
     out = json.loads(mod.read_skill_file("s-x", "SKILL.md"))
     assert "error" in out
@@ -333,6 +346,7 @@ def test_skill_in_workspace_handles_ddb_failure(monkeypatch):
             class _T:
                 def get_item(self, **kw):
                     raise RuntimeError("ddb down")
+
             return _T()
 
     monkeypatch.setattr(mod.boto3, "resource", lambda *a, **kw: _Broken())

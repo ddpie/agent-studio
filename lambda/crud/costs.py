@@ -32,6 +32,7 @@ Pricing table below is kept small + opinionated; `_unit_price()` returns
 
 Insights cap: 10s timeout + 10k rows per query (spec).
 """
+
 import time
 from typing import Any
 
@@ -73,24 +74,24 @@ def _get_agents_table():
 # here for KB retrieval, compute, etc. The UI surfaces that caveat.
 PRICING: dict[str, tuple[float, float]] = {
     # Claude 4.x family (Anthropic Opus/Sonnet/Haiku 4.x on Bedrock)
-    "claude-opus-4-7":    (15.00, 75.00),
-    "claude-sonnet-4-6":  ( 3.00, 15.00),
-    "claude-haiku-4-5":   ( 0.80,  4.00),
+    "claude-opus-4-7": (15.00, 75.00),
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-haiku-4-5": (0.80, 4.00),
     # Claude 4.0 base (sonnet-4-20250514, opus-4-20250514, etc.)
-    "claude-opus-4":      (15.00, 75.00),
-    "claude-sonnet-4":    ( 3.00, 15.00),
-    "claude-haiku-4":     ( 0.80,  4.00),
+    "claude-opus-4": (15.00, 75.00),
+    "claude-sonnet-4": (3.00, 15.00),
+    "claude-haiku-4": (0.80, 4.00),
     # Claude 3.5 family
-    "claude-3-5-sonnet":  ( 3.00, 15.00),
-    "claude-3-5-haiku":   ( 0.80,  4.00),
+    "claude-3-5-sonnet": (3.00, 15.00),
+    "claude-3-5-haiku": (0.80, 4.00),
     # Claude 3 family (legacy)
-    "claude-3-opus":      (15.00, 75.00),
-    "claude-3-sonnet":    ( 3.00, 15.00),
-    "claude-3-haiku":     ( 0.25,  1.25),
+    "claude-3-opus": (15.00, 75.00),
+    "claude-3-sonnet": (3.00, 15.00),
+    "claude-3-haiku": (0.25, 1.25),
     # Amazon Nova
-    "amazon-nova-pro":    ( 0.80,  3.20),
-    "amazon-nova-lite":   ( 0.06,  0.24),
-    "amazon-nova-micro":  ( 0.035, 0.14),
+    "amazon-nova-pro": (0.80, 3.20),
+    "amazon-nova-lite": (0.06, 0.24),
+    "amazon-nova-micro": (0.035, 0.14),
 }
 
 
@@ -155,8 +156,7 @@ QUERY_TIMEOUT_S = 10
 MAX_ROWS = 10_000
 
 
-def _run_query(query: str, start_epoch: int, end_epoch: int,
-               timeout_s: int = QUERY_TIMEOUT_S) -> list:
+def _run_query(query: str, start_epoch: int, end_epoch: int, timeout_s: int = QUERY_TIMEOUT_S) -> list:
     """Start + wait for a Logs Insights query. Returns partial results on
     timeout and [] on hard failure (never raises for callers)."""
     logs = _get_logs()
@@ -169,8 +169,7 @@ def _run_query(query: str, start_epoch: int, end_epoch: int,
             limit=MAX_ROWS,
         )["queryId"]
     except ClientError as e:
-        logger.warning("start_query failed",
-                       extra={"error_code": e.response.get("Error", {}).get("Code")})
+        logger.warning("start_query failed", extra={"error_code": e.response.get("Error", {}).get("Code")})
         return []
 
     deadline = time.time() + timeout_s
@@ -182,8 +181,7 @@ def _run_query(query: str, start_epoch: int, end_epoch: int,
         if status == "Complete":
             return last_results
         if status in ("Failed", "Cancelled"):
-            logger.warning("insights query non-complete",
-                           extra={"query_status": status})
+            logger.warning("insights query non-complete", extra={"query_status": status})
             return last_results
         time.sleep(0.3)
     try:
@@ -216,6 +214,7 @@ def _to_float(v: Any) -> float:
 
 # ── Range helpers ──────────────────────────────────────────────────────────
 
+
 def _parse_range(q: dict | None) -> tuple[int, int, str]:
     """Return (start_epoch, end_epoch, bucket) for ?range=24h|7d|30d.
 
@@ -233,6 +232,7 @@ def _parse_range(q: dict | None) -> tuple[int, int, str]:
 
 # ── Span aggregation ───────────────────────────────────────────────────────
 
+
 def _agent_ids_for_workspace(workspace_id: str) -> list[dict]:
     """Return [{agentId, name, model_id}] for every agent in the workspace."""
     table = _get_agents_table()
@@ -245,12 +245,14 @@ def _agent_ids_for_workspace(workspace_id: str) -> list[dict]:
             KeyConditionExpression=Key("workspace_id").eq(workspace_id),
         )
         for it in resp.get("Items", []):
-            out.append({
-                "agentId": it.get("agentId", ""),
-                "name": it.get("display_name") or it.get("name") or it.get("agentId", ""),
-                "model_id": it.get("model_id") or it.get("default_model_id") or "",
-                "status": it.get("status") or "active",
-            })
+            out.append(
+                {
+                    "agentId": it.get("agentId", ""),
+                    "name": it.get("display_name") or it.get("name") or it.get("agentId", ""),
+                    "model_id": it.get("model_id") or it.get("default_model_id") or "",
+                    "status": it.get("status") or "active",
+                }
+            )
     except ClientError as e:
         code = e.response.get("Error", {}).get("Code")
         if code == "ValidationException":
@@ -260,12 +262,14 @@ def _agent_ids_for_workspace(workspace_id: str) -> list[dict]:
                 FilterExpression=Key("workspace_id").eq(workspace_id),
             )
             for it in resp.get("Items", []):
-                out.append({
-                    "agentId": it.get("agentId", ""),
-                    "name": it.get("display_name") or it.get("name") or it.get("agentId", ""),
-                    "model_id": it.get("model_id") or it.get("default_model_id") or "",
-                    "status": it.get("status") or "active",
-                })
+                out.append(
+                    {
+                        "agentId": it.get("agentId", ""),
+                        "name": it.get("display_name") or it.get("name") or it.get("agentId", ""),
+                        "model_id": it.get("model_id") or it.get("default_model_id") or "",
+                        "status": it.get("status") or "active",
+                    }
+                )
         else:
             raise
     return [a for a in out if a["agentId"]]
@@ -358,6 +362,7 @@ fields @timestamp
 
 # ── Endpoints ──────────────────────────────────────────────────────────────
 
+
 @router.get("/api/workspaces/<wsId>/costs")
 def workspace_costs(wsId: str):
     _user_id, ws_id, _member, err = auth_check(router.current_event, ws_id=wsId)
@@ -371,25 +376,26 @@ def workspace_costs(wsId: str):
     try:
         agents = _agent_ids_for_workspace(ws_id)
     except ClientError as e:
-        logger.exception("agents list failed",
-                         extra={"error_code": e.response.get("Error", {}).get("Code")})
+        logger.exception("agents list failed", extra={"error_code": e.response.get("Error", {}).get("Code")})
         return internal_error()
 
     by_id = {a["agentId"]: a for a in agents}
     if not by_id:
-        return success({
-            "agents": [],
-            "workspace": {
-                "totalCalls": 0,
-                "totalCostUsd": 0.0,
-                "totalInputTokens": 0,
-                "totalOutputTokens": 0,
-                "timeseries": [],
-                "rangeStart": start,
-                "rangeEnd": end,
-                "bucket": bucket,
-            },
-        })
+        return success(
+            {
+                "agents": [],
+                "workspace": {
+                    "totalCalls": 0,
+                    "totalCostUsd": 0.0,
+                    "totalInputTokens": 0,
+                    "totalOutputTokens": 0,
+                    "timeseries": [],
+                    "rangeStart": start,
+                    "rangeEnd": end,
+                    "bucket": bucket,
+                },
+            }
+        )
 
     # Per-agent rollup: tokens from gen_ai chat spans, calls from top-level
     # invoke_agent spans. Two independent queries because Insights can't
@@ -398,15 +404,17 @@ def workspace_costs(wsId: str):
     try:
         rows = _run_query(_per_agent_totals_query(), start, end)
     except ClientError as e:
-        logger.exception("per-agent token query failed",
-                         extra={"error_code": e.response.get("Error", {}).get("Code")})
+        logger.exception(
+            "per-agent token query failed", extra={"error_code": e.response.get("Error", {}).get("Code")}
+        )
         rows = []
 
     try:
         call_rows = _run_query(_per_agent_calls_query(), start, end)
     except ClientError as e:
-        logger.exception("per-agent calls query failed",
-                         extra={"error_code": e.response.get("Error", {}).get("Code")})
+        logger.exception(
+            "per-agent calls query failed", extra={"error_code": e.response.get("Error", {}).get("Code")}
+        )
         call_rows = []
 
     calls_by_id: dict[str, int] = {}
@@ -430,11 +438,18 @@ def workspace_costs(wsId: str):
         cr_tok = _to_int(_field(row, "cacheReadTokens"))
         cw_tok = _to_int(_field(row, "cacheWriteTokens"))
         cost = _compute_cost(in_tok, out_tok, model, cr_tok, cw_tok)
-        acc = per_agent_accum.setdefault(rid, {
-            "inputTokens": 0, "outputTokens": 0,
-            "cacheReadTokens": 0, "cacheWriteTokens": 0,
-            "costUsd": 0.0, "topModel": "", "topModelCost": -1.0,
-        })
+        acc = per_agent_accum.setdefault(
+            rid,
+            {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "costUsd": 0.0,
+                "topModel": "",
+                "topModelCost": -1.0,
+            },
+        )
         acc["inputTokens"] += in_tok
         acc["outputTokens"] += out_tok
         acc["cacheReadTokens"] += cr_tok
@@ -454,16 +469,18 @@ def workspace_costs(wsId: str):
         info = by_id[rid]
         calls = calls_by_id.get(rid, 0)
         model_label = acc["topModel"] or info["model_id"]
-        per_agent.append({
-            "agentId": rid,
-            "name": info["name"],
-            "modelId": model_label,
-            "status": info.get("status", "active"),
-            "calls": calls,
-            "inputTokens": acc["inputTokens"],
-            "outputTokens": acc["outputTokens"],
-            "costUsd": round(acc["costUsd"], 6),
-        })
+        per_agent.append(
+            {
+                "agentId": rid,
+                "name": info["name"],
+                "modelId": model_label,
+                "status": info.get("status", "active"),
+                "calls": calls,
+                "inputTokens": acc["inputTokens"],
+                "outputTokens": acc["outputTokens"],
+                "costUsd": round(acc["costUsd"], 6),
+            }
+        )
         total_calls += calls
         total_in += acc["inputTokens"]
         total_out += acc["outputTokens"]
@@ -474,16 +491,18 @@ def workspace_costs(wsId: str):
     for rid, info in by_id.items():
         if rid in seen:
             continue
-        per_agent.append({
-            "agentId": rid,
-            "name": info["name"],
-            "modelId": info["model_id"],
-            "status": info.get("status", "active"),
-            "calls": 0,
-            "inputTokens": 0,
-            "outputTokens": 0,
-            "costUsd": 0.0,
-        })
+        per_agent.append(
+            {
+                "agentId": rid,
+                "name": info["name"],
+                "modelId": info["model_id"],
+                "status": info.get("status", "active"),
+                "calls": 0,
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "costUsd": 0.0,
+            }
+        )
 
     per_agent.sort(key=lambda a: a["costUsd"], reverse=True)
 
@@ -528,23 +547,24 @@ def workspace_costs(wsId: str):
         slot["calls"] += calls
 
     timeseries = [
-        {"bucket": b, "calls": v["calls"], "costUsd": round(v["cost"], 6)}
-        for b, v in sorted(buckets.items())
+        {"bucket": b, "calls": v["calls"], "costUsd": round(v["cost"], 6)} for b, v in sorted(buckets.items())
     ]
 
-    return success({
-        "agents": per_agent,
-        "workspace": {
-            "totalCalls": total_calls,
-            "totalCostUsd": round(total_cost, 6),
-            "totalInputTokens": total_in,
-            "totalOutputTokens": total_out,
-            "timeseries": timeseries,
-            "rangeStart": start,
-            "rangeEnd": end,
-            "bucket": bucket,
-        },
-    })
+    return success(
+        {
+            "agents": per_agent,
+            "workspace": {
+                "totalCalls": total_calls,
+                "totalCostUsd": round(total_cost, 6),
+                "totalInputTokens": total_in,
+                "totalOutputTokens": total_out,
+                "timeseries": timeseries,
+                "rangeStart": start,
+                "rangeEnd": end,
+                "bucket": bucket,
+            },
+        }
+    )
 
 
 # ── Admin: cross-workspace rollup ──────────────────────────────────────────
@@ -621,7 +641,9 @@ def _all_workspaces_by_id() -> dict:
                 break
             kwargs["ExclusiveStartKey"] = last
     except ClientError as e:
-        logger.warning("scan(workspaces) failed", extra={"error_code": e.response.get("Error", {}).get("Code")})
+        logger.warning(
+            "scan(workspaces) failed", extra={"error_code": e.response.get("Error", {}).get("Code")}
+        )
     _GLOBAL_WORKSPACES_CACHE["data"] = out
     _GLOBAL_WORKSPACES_CACHE["expires"] = now + _GLOBAL_CACHE_TTL
     return out
@@ -655,14 +677,18 @@ def admin_costs():
     try:
         token_rows = _run_query(_per_agent_totals_query(), start, end)
     except ClientError as e:
-        logger.exception("admin per-agent token query failed",
-                         extra={"error_code": e.response.get("Error", {}).get("Code")})
+        logger.exception(
+            "admin per-agent token query failed",
+            extra={"error_code": e.response.get("Error", {}).get("Code")},
+        )
         token_rows = []
     try:
         call_rows = _run_query(_per_agent_calls_query(), start, end)
     except ClientError as e:
-        logger.exception("admin per-agent calls query failed",
-                         extra={"error_code": e.response.get("Error", {}).get("Code")})
+        logger.exception(
+            "admin per-agent calls query failed",
+            extra={"error_code": e.response.get("Error", {}).get("Code")},
+        )
         call_rows = []
 
     calls_by_id: dict[str, int] = {}
@@ -697,11 +723,18 @@ def admin_costs():
         cr_tok = _to_int(_field(row, "cacheReadTokens"))
         cw_tok = _to_int(_field(row, "cacheWriteTokens"))
         cost = _compute_cost(in_tok, out_tok, model, cr_tok, cw_tok)
-        acc = admin_accum.setdefault(rid, {
-            "inputTokens": 0, "outputTokens": 0,
-            "cacheReadTokens": 0, "cacheWriteTokens": 0,
-            "costUsd": 0.0, "topModel": "", "topModelCost": -1.0,
-        })
+        acc = admin_accum.setdefault(
+            rid,
+            {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "cacheReadTokens": 0,
+                "cacheWriteTokens": 0,
+                "costUsd": 0.0,
+                "topModel": "",
+                "topModelCost": -1.0,
+            },
+        )
         acc["inputTokens"] += in_tok
         acc["outputTokens"] += out_tok
         acc["cacheReadTokens"] += cr_tok
@@ -715,17 +748,19 @@ def admin_costs():
         info = agents_by_id[rid]
         calls = calls_by_id.get(rid, 0)
         model_label = acc["topModel"] or info["model_id"]
-        per_agent.append({
-            "agentId": rid,
-            "name": info["name"],
-            "modelId": model_label,
-            "workspaceId": info["workspace_id"],
-            "status": info["status"],
-            "calls": calls,
-            "inputTokens": acc["inputTokens"],
-            "outputTokens": acc["outputTokens"],
-            "costUsd": round(acc["costUsd"], 6),
-        })
+        per_agent.append(
+            {
+                "agentId": rid,
+                "name": info["name"],
+                "modelId": model_label,
+                "workspaceId": info["workspace_id"],
+                "status": info["status"],
+                "calls": calls,
+                "inputTokens": acc["inputTokens"],
+                "outputTokens": acc["outputTokens"],
+                "costUsd": round(acc["costUsd"], 6),
+            }
+        )
         grand_calls += calls
         grand_in += acc["inputTokens"]
         grand_out += acc["outputTokens"]
@@ -778,19 +813,21 @@ def admin_costs():
 
     per_agent.sort(key=lambda a: a["costUsd"], reverse=True)
 
-    return success({
-        "workspaces": ws_list,
-        "agents": per_agent,
-        "totals": {
-            "calls": grand_calls,
-            "inputTokens": grand_in,
-            "outputTokens": grand_out,
-            "costUsd": round(grand_cost, 6),
-        },
-        "rangeStart": start,
-        "rangeEnd": end,
-        "bucket": bucket,
-    })
+    return success(
+        {
+            "workspaces": ws_list,
+            "agents": per_agent,
+            "totals": {
+                "calls": grand_calls,
+                "inputTokens": grand_in,
+                "outputTokens": grand_out,
+                "costUsd": round(grand_cost, 6),
+            },
+            "rangeStart": start,
+            "rangeEnd": end,
+            "bucket": bucket,
+        }
+    )
 
 
 @router.get("/api/workspaces/<wsId>/agents/<agentId>/costs")
@@ -815,8 +852,9 @@ def agent_costs(wsId: str, agentId: str):
     try:
         rows = _run_query(_single_agent_query(agentId), start, end)
     except ClientError as e:
-        logger.exception("single-agent token query failed",
-                         extra={"error_code": e.response.get("Error", {}).get("Code")})
+        logger.exception(
+            "single-agent token query failed", extra={"error_code": e.response.get("Error", {}).get("Code")}
+        )
         rows = []
     try:
         call_rows = _run_query(_single_agent_calls_query(agentId), start, end)
@@ -852,14 +890,16 @@ def agent_costs(wsId: str, agentId: str):
     for row in call_rows:
         calls += _to_int(_field(row, "calls"))
 
-    return success({
-        "agentId": agentId,
-        "name": item.get("display_name") or item.get("name") or agentId,
-        "modelId": model_id,
-        "calls": calls,
-        "inputTokens": in_tok,
-        "outputTokens": out_tok,
-        "costUsd": round(cost, 6),
-        "rangeStart": start,
-        "rangeEnd": end,
-    })
+    return success(
+        {
+            "agentId": agentId,
+            "name": item.get("display_name") or item.get("name") or agentId,
+            "modelId": model_id,
+            "calls": calls,
+            "inputTokens": in_tok,
+            "outputTokens": out_tok,
+            "costUsd": round(cost, 6),
+            "rangeStart": start,
+            "rangeEnd": end,
+        }
+    )

@@ -54,6 +54,7 @@ def _parse(result: str) -> dict:
 
 # ── Name validation ──────────────────────────────────────────────
 
+
 class TestNameValidation:
     def test_empty_name_is_error(self):
         r = _parse(validate_agent(agent_name="", system_prompt="hello", description="d"))
@@ -94,6 +95,7 @@ class TestNameValidation:
 
 # ── Required fields ──────────────────────────────────────────────
 
+
 class TestRequiredFields:
     def test_empty_prompt_is_error(self):
         r = _parse(validate_agent(agent_name="Agent1", system_prompt="", description="d"))
@@ -130,44 +132,70 @@ class TestRequiredFields:
 
 # ── Python syntax check ─────────────────────────────────────────
 
+
 class TestSyntaxCheck:
     def test_valid_tool_code_passes(self):
         code = '@tool\ndef greet(name: str = "") -> str:\n    """Say hi."""\n    return f"Hello {name}"'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use greet to say hi",
-            tool_definitions=code, tool_names="greet", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Use greet to say hi",
+                tool_definitions=code,
+                tool_names="greet",
+                description="d",
+            )
+        )
         assert r["valid"]
 
     def test_syntax_error_is_caught(self):
-        code = '@tool\ndef broken(:\n    pass'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="hello",
-            tool_definitions=code, tool_names="broken", description="d",
-        ))
+        code = "@tool\ndef broken(:\n    pass"
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="hello",
+                tool_definitions=code,
+                tool_names="broken",
+                description="d",
+            )
+        )
         assert not r["valid"]
         assert any("syntax error" in e.lower() for e in r["errors"])
 
     def test_indentation_error_is_caught(self):
         code = '@tool\ndef bad_indent() -> str:\n    """B."""\n  return "oops"'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="hello",
-            tool_definitions=code, tool_names="bad_indent", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="hello",
+                tool_definitions=code,
+                tool_names="bad_indent",
+                description="d",
+            )
+        )
         assert not r["valid"]
 
     def test_empty_tool_definitions_passes(self):
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="hello",
-            tool_definitions="", tool_names="", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="hello",
+                tool_definitions="",
+                tool_names="",
+                description="d",
+            )
+        )
         assert r["valid"]
 
     def test_whitespace_only_tool_definitions_passes(self):
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="hello",
-            tool_definitions="   \n  ", tool_names="", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="hello",
+                tool_definitions="   \n  ",
+                tool_names="",
+                description="d",
+            )
+        )
         assert r["valid"]
 
     def test_multiple_tools_valid_syntax(self):
@@ -175,83 +203,130 @@ class TestSyntaxCheck:
             '@tool\ndef a(x: str = "") -> str:\n    """A."""\n    return x\n\n'
             '@tool\ndef b(y: int = 0) -> str:\n    """B."""\n    return str(y)'
         )
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use a and b",
-            tool_definitions=code, tool_names="a,b", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Use a and b",
+                tool_definitions=code,
+                tool_names="a,b",
+                description="d",
+            )
+        )
         assert r["valid"]
 
 
 # ── tool_names consistency ───────────────────────────────────────
 
+
 class TestToolNamesConsistency:
     def test_declared_but_not_in_code(self):
         code = '@tool\ndef alpha() -> str:\n    """A."""\n    return "a"'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="hello",
-            tool_definitions=code, tool_names="alpha,beta", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="hello",
+                tool_definitions=code,
+                tool_names="alpha,beta",
+                description="d",
+            )
+        )
         assert any("beta" in e for e in r["errors"])
 
     def test_in_code_but_not_declared(self):
         code = '@tool\ndef alpha() -> str:\n    """A."""\n    return "a"\n\n@tool\ndef beta() -> str:\n    """B."""\n    return "b"'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="hello",
-            tool_definitions=code, tool_names="alpha", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="hello",
+                tool_definitions=code,
+                tool_names="alpha",
+                description="d",
+            )
+        )
         assert any("beta" in w for w in r["warnings"])
 
     def test_empty_tool_names_with_code_warns(self):
         code = '@tool\ndef alpha() -> str:\n    """A."""\n    return "a"'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="hello",
-            tool_definitions=code, tool_names="", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="hello",
+                tool_definitions=code,
+                tool_names="",
+                description="d",
+            )
+        )
         assert any("tool_names is empty" in w for w in r["warnings"])
 
     def test_exact_match_no_errors(self):
         code = '@tool\ndef x() -> str:\n    """X."""\n    return ""\n\n@tool\ndef y() -> str:\n    """Y."""\n    return ""'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use x and y",
-            tool_definitions=code, tool_names="x,y", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Use x and y",
+                tool_definitions=code,
+                tool_names="x,y",
+                description="d",
+            )
+        )
         assert r["valid"]
         assert not any("tool_names" in w.lower() for w in r["warnings"])
 
     def test_tool_names_with_extra_whitespace(self):
         code = '@tool\ndef a() -> str:\n    """A."""\n    return ""'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use a",
-            tool_definitions=code, tool_names=" a , ", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Use a",
+                tool_definitions=code,
+                tool_names=" a , ",
+                description="d",
+            )
+        )
         assert r["valid"]
 
     def test_tool_names_only_no_code_warns(self):
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="hello",
-            tool_definitions="", tool_names="mystery_tool", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="hello",
+                tool_definitions="",
+                tool_names="mystery_tool",
+                description="d",
+            )
+        )
         assert any("mystery_tool" in w for w in r["warnings"])
 
 
 # ── Unavailable library detection ────────────────────────────────
 
+
 class TestUnavailableLibs:
     @pytest.mark.parametrize("lib", ["pandas", "numpy", "selenium", "flask", "torch"])
     def test_blocked_import_is_error(self, lib):
         code = f'import {lib}\n\n@tool\ndef foo() -> str:\n    """F."""\n    return ""'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="hello",
-            tool_definitions=code, tool_names="foo", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="hello",
+                tool_definitions=code,
+                tool_names="foo",
+                description="d",
+            )
+        )
         assert any(lib in e for e in r["errors"])
 
     def test_allowed_import_passes(self):
         code = 'import json\nimport re\n\n@tool\ndef foo() -> str:\n    """F."""\n    return json.dumps({})'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use foo",
-            tool_definitions=code, tool_names="foo", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Use foo",
+                tool_definitions=code,
+                tool_names="foo",
+                description="d",
+            )
+        )
         assert r["valid"]
 
 
@@ -264,30 +339,46 @@ class TestUnavailableLibs:
 
 # ── Prompt ↔ tool consistency ────────────────────────────────────
 
+
 class TestPromptToolSync:
     def test_tool_not_mentioned_in_prompt_warns(self):
         code = '@tool\ndef secret_tool() -> str:\n    """S."""\n    return ""'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="You are a helpful agent.",
-            tool_definitions=code, tool_names="secret_tool", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="You are a helpful agent.",
+                tool_definitions=code,
+                tool_names="secret_tool",
+                description="d",
+            )
+        )
         assert any("secret_tool" in w for w in r["warnings"])
 
     def test_tool_mentioned_in_prompt_no_warning(self):
         code = '@tool\ndef search(q: str = "") -> str:\n    """Search."""\n    return q'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use search to find things.",
-            tool_definitions=code, tool_names="search", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Use search to find things.",
+                tool_definitions=code,
+                tool_names="search",
+                description="d",
+            )
+        )
         assert not any("search" in w and "not mentioned" in w for w in r["warnings"])
 
     def test_tool_mentioned_as_readable_name(self):
         # "secret_tool" → "secret tool" should also count as mentioned
         code = '@tool\ndef secret_tool() -> str:\n    """S."""\n    return ""'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use the secret tool for hidden things.",
-            tool_definitions=code, tool_names="secret_tool", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Use the secret tool for hidden things.",
+                tool_definitions=code,
+                tool_names="secret_tool",
+                description="d",
+            )
+        )
         assert not any("secret_tool" in w and "not mentioned" in w for w in r["warnings"])
 
     def test_tool_mentioned_case_insensitive_match(self):
@@ -295,90 +386,149 @@ class TestPromptToolSync:
         # So "MyTool" won't match "mytool" — the check is case-sensitive on func_name side
         # But readable_name "my tool" (from replace("_","")) IS checked against lowered prompt
         code = '@tool\ndef my_tool() -> str:\n    """M."""\n    return ""'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use MY TOOL for things.",
-            tool_definitions=code, tool_names="my_tool", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Use MY TOOL for things.",
+                tool_definitions=code,
+                tool_names="my_tool",
+                description="d",
+            )
+        )
         # "my tool" (readable) matches "my tool" in lowered prompt
         assert not any("my_tool" in w and "not mentioned" in w for w in r["warnings"])
 
     def test_no_warning_when_no_tools(self):
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="You are helpful.",
-            tool_definitions="", tool_names="", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="You are helpful.",
+                tool_definitions="",
+                tool_names="",
+                description="d",
+            )
+        )
         assert not any("not mentioned" in w for w in r["warnings"])
 
 
 # ── Long prompt warning ──────────────────────────────────────────
 
+
 class TestLongPrompt:
     def test_very_long_prompt_warns(self):
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="x" * 10001, description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="x" * 10001,
+                description="d",
+            )
+        )
         assert any("very long" in w.lower() for w in r["warnings"])
 
     def test_exactly_10000_chars_no_warning(self):
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="x" * 10000, description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="x" * 10000,
+                description="d",
+            )
+        )
         assert not any("very long" in w.lower() for w in r["warnings"])
 
 
 # ── Security patterns ────────────────────────────────────────────
 
+
 class TestSecurityPatterns:
     def test_os_system_warns(self):
         code = 'import os\n\n@tool\ndef danger() -> str:\n    """D."""\n    os.system("ls")\n    return ""'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use danger",
-            tool_definitions=code, tool_names="danger", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Use danger",
+                tool_definitions=code,
+                tool_names="danger",
+                description="d",
+            )
+        )
         assert any("os.system" in w or "subprocess" in w for w in r["warnings"])
 
     def test_subprocess_warns(self):
         code = 'import os\nimport subprocess\n\n@tool\ndef danger() -> str:\n    """D."""\n    subprocess.run(["ls"])\n    return ""'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use danger",
-            tool_definitions=code, tool_names="danger", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Use danger",
+                tool_definitions=code,
+                tool_names="danger",
+                description="d",
+            )
+        )
         assert any("os.system" in w or "subprocess" in w for w in r["warnings"])
 
     def test_no_security_warning_without_os_import(self):
         code = '@tool\ndef safe() -> str:\n    """S."""\n    return "safe"'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use safe",
-            tool_definitions=code, tool_names="safe", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Use safe",
+                tool_definitions=code,
+                tool_names="safe",
+                description="d",
+            )
+        )
         assert not any("os.system" in w or "subprocess" in w for w in r["warnings"])
 
 
 # ── _WRITE_RE regex unit tests ───────────────────────────────────
 
+
 class TestWriteRegex:
-    @pytest.mark.parametrize("text", [
-        "put_item", "delete_item", "update_item",
-        "put_object", "delete_object",
-        "create_table", "delete_bucket", "update_function",
-        "INSERT INTO users", "UPDATE users SET", "DELETE FROM logs",
-        "DROP TABLE t", "CREATE TABLE t",
-        ".put(", ".delete(", ".post(",
-        "os.remove", "os.unlink", "shutil.rmtree",
-    ])
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "put_item",
+            "delete_item",
+            "update_item",
+            "put_object",
+            "delete_object",
+            "create_table",
+            "delete_bucket",
+            "update_function",
+            "INSERT INTO users",
+            "UPDATE users SET",
+            "DELETE FROM logs",
+            "DROP TABLE t",
+            "CREATE TABLE t",
+            ".put(",
+            ".delete(",
+            ".post(",
+            "os.remove",
+            "os.unlink",
+            "shutil.rmtree",
+        ],
+    )
     def test_matches_write_pattern(self, text):
         assert _WRITE_RE.search(text), f"Expected match for: {text}"
 
-    @pytest.mark.parametrize("text", [
-        "get_item", "list_objects", "describe_table",
-        "SELECT * FROM users", "query_metrics",
-        ".get(", "os.path.exists",
-    ])
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "get_item",
+            "list_objects",
+            "describe_table",
+            "SELECT * FROM users",
+            "query_metrics",
+            ".get(",
+            "os.path.exists",
+        ],
+    )
     def test_does_not_match_read_pattern(self, text):
         assert not _WRITE_RE.search(text), f"Unexpected match for: {text}"
 
 
 # ── MCP tool name recognition ──────────────────────────────────
+
 
 class TestGetMcpToolNames:
     """Unit tests for _get_mcp_tool_names helper."""
@@ -390,10 +540,12 @@ class TestGetMcpToolNames:
     def test_reads_manifest_from_s3(self, mock_boto):
         mock_s3 = MagicMock()
         mock_boto.return_value = mock_s3
-        manifest = json.dumps([
-            {"name": "get_metric_statistics", "description": "Get metrics"},
-            {"name": "describe_alarms", "description": "Describe alarms"},
-        ]).encode()
+        manifest = json.dumps(
+            [
+                {"name": "get_metric_statistics", "description": "Get metrics"},
+                {"name": "describe_alarms", "description": "Describe alarms"},
+            ]
+        ).encode()
         mock_s3.get_object.return_value = {"Body": MagicMock(read=lambda: manifest)}
 
         result = _get_mcp_tool_names(["cloudwatch"])
@@ -409,9 +561,15 @@ class TestGetMcpToolNames:
             key = kwargs.get("Key", "")
             if "aws-pricing" in key:
                 raise Exception("NoSuchKey")
-            return {"Body": MagicMock(read=lambda: json.dumps([
-                {"name": "get_pricing", "description": "d"},
-            ]).encode())}
+            return {
+                "Body": MagicMock(
+                    read=lambda: json.dumps(
+                        [
+                            {"name": "get_pricing", "description": "d"},
+                        ]
+                    ).encode()
+                )
+            }
 
         mock_s3.get_object.side_effect = side_effect
         result = _get_mcp_tool_names(["aws-pricing"])
@@ -451,19 +609,29 @@ class TestMcpToolValidationIntegration:
     @patch("tools.validate_agent._get_mcp_tool_names", return_value=["generate_image"])
     def test_mcp_tool_in_tool_names_not_flagged(self, _mock):
         code = '@tool\ndef my_tool() -> str:\n    """M."""\n    return ""'
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use my_tool and generate_image",
-            tool_definitions=code, tool_names="my_tool,generate_image", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Use my_tool and generate_image",
+                tool_definitions=code,
+                tool_names="my_tool,generate_image",
+                description="d",
+            )
+        )
         # generate_image is MCP-provided — should NOT appear in errors
         assert not any("generate_image" in e for e in r["errors"])
 
     @patch("tools.validate_agent._get_mcp_tool_names", return_value=["generate_image"])
     def test_mcp_only_no_code_not_flagged(self, _mock):
-        r = _parse(validate_agent(
-            agent_name="Agent1", system_prompt="Use generate_image",
-            tool_definitions="", tool_names="generate_image", description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Use generate_image",
+                tool_definitions="",
+                tool_names="generate_image",
+                description="d",
+            )
+        )
         # No custom code, only MCP tool — should not warn about missing @tool
         assert not any("generate_image" in w for w in r["warnings"])
 
@@ -479,65 +647,68 @@ class TestGhostToolDetection:
     def test_ghost_backtick_tool_reports_error(self):
         """Prompt references `audit_services` (snake_case, in backticks) but
         it's not in tool_names, tool_definitions, skills, or MCP."""
-        r = _parse(validate_agent(
-            agent_name="Agent1",
-            system_prompt="For health checks, call `audit_services` first.",
-            tool_definitions="",
-            tool_names="web_search",
-            description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="For health checks, call `audit_services` first.",
+                tool_definitions="",
+                tool_names="web_search",
+                description="d",
+            )
+        )
         assert any("audit_services" in e for e in r["errors"]), r
 
     @patch("tools.validate_agent._get_mcp_tool_names", return_value=["get_active_alarms"])
     def test_real_mcp_tool_in_backticks_passes(self, _mock):
-        r = _parse(validate_agent(
-            agent_name="Agent1",
-            system_prompt="Call `get_active_alarms` to list alarms.",
-            tool_definitions="",
-            tool_names="",
-            description="d",
-            staging_key="",  # mcp_targets read from params, not S3
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Call `get_active_alarms` to list alarms.",
+                tool_definitions="",
+                tool_names="",
+                description="d",
+                staging_key="",  # mcp_targets read from params, not S3
+            )
+        )
         # get_active_alarms is a real MCP tool — no ghost error
         assert not any("get_active_alarms" in e for e in r["errors"])
 
     def test_english_phrases_in_backticks_not_flagged(self):
         """Backticks around prose / types / env names shouldn't trigger ghost."""
-        r = _parse(validate_agent(
-            agent_name="Agent1",
-            system_prompt="Return `json` output. Use `str` and `list` types.",
-            tool_definitions="",
-            tool_names="web_search",
-            description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Return `json` output. Use `str` and `list` types.",
+                tool_definitions="",
+                tool_names="web_search",
+                description="d",
+            )
+        )
         assert not any("ghost" in e.lower() or "backtick" in e.lower() for e in r["errors"])
 
     def test_builtin_tool_in_backticks_not_flagged(self):
         """Runtime builtins (load_skill etc.) are always available."""
-        r = _parse(validate_agent(
-            agent_name="Agent1",
-            system_prompt="Use `load_skill` to pull the guide, then `run_command` to execute.",
-            tool_definitions="",
-            tool_names="web_search",
-            description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Agent1",
+                system_prompt="Use `load_skill` to pull the guide, then `run_command` to execute.",
+                tool_definitions="",
+                tool_names="web_search",
+                description="d",
+            )
+        )
         assert not any("load_skill" in e or "run_command" in e for e in r["errors"])
 
 
 # ── _extract_tool_blocks helper unit tests ──────────────────────────────
+
 
 class TestExtractToolBlocks:
     def test_no_tools_returns_empty(self):
         assert _extract_tool_blocks("# nothing here\n") == ""
 
     def test_simple_block_extracted(self):
-        src = (
-            "import json\n"
-            "@tool\n"
-            'def foo() -> str:\n'
-            '    """F."""\n'
-            "    return ''\n"
-        )
+        src = 'import json\n@tool\ndef foo() -> str:\n    """F."""\n    return \'\'\n'
         out = _extract_tool_blocks(src)
         assert "@tool" in out
         assert "def foo" in out
@@ -546,11 +717,11 @@ class TestExtractToolBlocks:
     def test_multiple_blocks_separated(self):
         src = (
             "@tool\n"
-            'def a() -> str:\n'
+            "def a() -> str:\n"
             '    """A."""\n'
             "    return ''\n"
             "@tool\n"
-            'def b() -> str:\n'
+            "def b() -> str:\n"
             '    """B."""\n'
             "    return ''\n"
         )
@@ -562,14 +733,14 @@ class TestExtractToolBlocks:
         """Once we leave the tool block and hit @app.* / async def _ — stop."""
         src = (
             "@tool\n"
-            'def a() -> str:\n'
+            "def a() -> str:\n"
             '    """A."""\n'
             "    return ''\n"
             "@app.entrypoint\n"
             "async def _entry():\n"
             "    pass\n"
             "@tool\n"
-            'def never_reached() -> str:\n'
+            "def never_reached() -> str:\n"
             '    """Z."""\n'
             "    return ''\n"
         )
@@ -582,7 +753,7 @@ class TestExtractToolBlocks:
         """If file ends mid-tool-block, it's still emitted via the tail-flush branch."""
         src = (
             "@tool\n"
-            'def open_tool() -> str:\n'
+            "def open_tool() -> str:\n"
             '    """O."""\n'
             "    return ''"  # no trailing newline
         )
@@ -591,28 +762,26 @@ class TestExtractToolBlocks:
 
     def test_no_imports_no_double_newlines(self):
         """When there are no leading imports, output is just blocks joined by \\n\\n."""
-        src = (
-            "@tool\n"
-            'def x() -> str:\n'
-            '    """X."""\n'
-            "    return ''\n"
-        )
+        src = '@tool\ndef x() -> str:\n    """X."""\n    return \'\'\n'
         out = _extract_tool_blocks(src)
         assert out.startswith("@tool")  # no leading newlines
 
 
 # ── _get_builtin_tool_names ─────────────────────────────────────────────
 
+
 class TestGetBuiltinToolNames:
     def test_empty_when_registry_empty(self, monkeypatch):
         # Ensure _ALL_TOOLS is empty regardless of suite-level pollution.
         from tools_library import registry as reg
+
         monkeypatch.setattr(reg, "_ALL_TOOLS", [])
         assert _get_builtin_tool_names() == set()
 
     def test_uses_tool_names_attribute(self, monkeypatch):
         """When registry has modules with TOOL_NAMES, the comma-split names are returned."""
         from tools_library import registry as reg
+
         fake_mod = types.SimpleNamespace(TOOL_NAMES="alpha,beta, gamma ")
         monkeypatch.setattr(reg, "_ALL_TOOLS", [fake_mod])
         names = _get_builtin_tool_names()
@@ -634,6 +803,7 @@ class TestGetBuiltinToolNames:
 
 
 # ── _get_mcp_tool_names additional edge cases ─────────────────────────
+
 
 class TestGetMcpToolNamesEdgeCases:
     @patch("boto3.client")
@@ -664,6 +834,7 @@ class TestGetMcpToolNamesEdgeCases:
 
 # ── staging_key path (validate_agent) ──────────────────────────────────
 
+
 class TestStagingKeyPath:
     @patch("boto3.client")
     def test_staging_key_loads_params_from_s3(self, mock_boto):
@@ -679,9 +850,7 @@ class TestStagingKeyPath:
             "permission_tier": "readonly",
             "mcp_targets": [],
         }
-        s3.get_object.return_value = {
-            "Body": MagicMock(read=lambda: json.dumps(staged).encode())
-        }
+        s3.get_object.return_value = {"Body": MagicMock(read=lambda: json.dumps(staged).encode())}
 
         r = _parse(validate_agent(staging_key="staging/x.json"))
         assert r["valid"]
@@ -725,41 +894,41 @@ class TestStagingKeyPath:
 
 # ── Dry-run exec branches ──────────────────────────────────────────────
 
+
 class TestDryRunExec:
     def test_dry_run_exec_failure_warns(self):
         """Tool code that compiles but raises at import time produces a warning."""
         code = (
-            'X = undefined_name  # NameError when exec runs\n'
+            "X = undefined_name  # NameError when exec runs\n"
             "@tool\n"
-            'def t() -> str:\n'
+            "def t() -> str:\n"
             '    """T."""\n'
             "    return X\n"
         )
-        r = _parse(validate_agent(
-            agent_name="Bot1",
-            system_prompt="Use t",
-            tool_definitions=code,
-            tool_names="t",
-            description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Bot1",
+                system_prompt="Use t",
+                tool_definitions=code,
+                tool_names="t",
+                description="d",
+            )
+        )
         # exec failure is captured as a warning, not error
         assert any("Dry-run" in w for w in r["warnings"])
 
     def test_dry_run_call_failure_warns(self):
         """A @tool that raises on default args triggers a Dry-run call warning."""
-        code = (
-            "@tool\n"
-            'def explode() -> str:\n'
-            '    """E."""\n'
-            "    raise ValueError('boom')\n"
+        code = '@tool\ndef explode() -> str:\n    """E."""\n    raise ValueError(\'boom\')\n'
+        r = _parse(
+            validate_agent(
+                agent_name="Bot1",
+                system_prompt="Use explode",
+                tool_definitions=code,
+                tool_names="explode",
+                description="d",
+            )
         )
-        r = _parse(validate_agent(
-            agent_name="Bot1",
-            system_prompt="Use explode",
-            tool_definitions=code,
-            tool_names="explode",
-            description="d",
-        ))
         assert any("Dry-run" in w and "explode" in w for w in r["warnings"])
 
     def test_dry_run_with_typed_params(self):
@@ -770,36 +939,36 @@ class TestDryRunExec:
             '    """."""\n'
             "    return ''\n"
         )
-        r = _parse(validate_agent(
-            agent_name="Bot1",
-            system_prompt="Use myfunc",
-            tool_definitions=code,
-            tool_names="myfunc",
-            description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Bot1",
+                system_prompt="Use myfunc",
+                tool_definitions=code,
+                tool_names="myfunc",
+                description="d",
+            )
+        )
         # Default values are chosen by type → call succeeds → no Dry-run warning
         assert not any("myfunc" in w and "Dry-run" in w for w in r["warnings"])
 
     def test_dry_run_with_unhinted_param(self):
         """A tool with an annotation we don't recognize falls back to empty string."""
-        code = (
-            "@tool\n"
-            "def myfunc(x: object) -> str:\n"
-            '    """."""\n'
-            "    return ''\n"
+        code = '@tool\ndef myfunc(x: object) -> str:\n    """."""\n    return \'\'\n'
+        r = _parse(
+            validate_agent(
+                agent_name="Bot1",
+                system_prompt="Use myfunc",
+                tool_definitions=code,
+                tool_names="myfunc",
+                description="d",
+            )
         )
-        r = _parse(validate_agent(
-            agent_name="Bot1",
-            system_prompt="Use myfunc",
-            tool_definitions=code,
-            tool_names="myfunc",
-            description="d",
-        ))
         # Should not crash; code path through the unhinted-fallback branch is executed.
         assert isinstance(r, dict)
 
 
 # ── _review_prompt_quality JSON parser ────────────────────────────────
+
 
 class TestReviewPromptQualityParser:
     def test_returns_none_when_no_json_braces(self, monkeypatch):
@@ -888,6 +1057,7 @@ class TestReviewPromptQualityParser:
 
 # ── Prompt-review integration in validate_agent ─────────────────────
 
+
 class TestPromptReviewIntegration:
     @patch("tools.validate_agent._review_prompt_quality")
     def test_low_score_triggers_warnings(self, mock_review):
@@ -897,11 +1067,13 @@ class TestPromptReviewIntegration:
             "overall": 2.0,
             "issues": ["No structure", "No tool guidance"],
         }
-        r = _parse(validate_agent(
-            agent_name="Bot1",
-            system_prompt="just a string",
-            description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Bot1",
+                system_prompt="just a string",
+                description="d",
+            )
+        )
         assert any("Prompt quality score" in w for w in r["warnings"])
         assert any("Prompt review:" in w for w in r["warnings"])
         # Result includes the review's scores block
@@ -916,11 +1088,13 @@ class TestPromptReviewIntegration:
             "overall": 3.5,
             "issues": ["could be tighter"],
         }
-        r = _parse(validate_agent(
-            agent_name="Bot1",
-            system_prompt="hello",
-            description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Bot1",
+                system_prompt="hello",
+                description="d",
+            )
+        )
         # No 'consider optimizing' line at this score
         assert not any("consider optimizing" in w.lower() for w in r["warnings"])
         # But review issue surfaced
@@ -934,11 +1108,13 @@ class TestPromptReviewIntegration:
             "overall": 4.5,
             "issues": ["small nit"],
         }
-        r = _parse(validate_agent(
-            agent_name="Bot1",
-            system_prompt="hello",
-            description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Bot1",
+                system_prompt="hello",
+                description="d",
+            )
+        )
         assert not any("Prompt review:" in w for w in r["warnings"])
         assert not any("Prompt quality score" in w for w in r["warnings"])
 
@@ -946,22 +1122,26 @@ class TestPromptReviewIntegration:
     def test_review_exception_yields_warning(self, mock_review):
         """If the review helper raises, the agent gets a 'review skipped' warning."""
         mock_review.side_effect = RuntimeError("LLM down")
-        r = _parse(validate_agent(
-            agent_name="Bot1",
-            system_prompt="hello",
-            description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Bot1",
+                system_prompt="hello",
+                description="d",
+            )
+        )
         assert any("Prompt quality review skipped" in w for w in r["warnings"])
         assert "prompt_overall" not in r
 
     @patch("tools.validate_agent._review_prompt_quality")
     def test_review_returns_none_no_extra_keys(self, mock_review):
         mock_review.return_value = None
-        r = _parse(validate_agent(
-            agent_name="Bot1",
-            system_prompt="hello",
-            description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="Bot1",
+                system_prompt="hello",
+                description="d",
+            )
+        )
         assert "prompt_overall" not in r
         assert "prompt_scores" not in r
 
@@ -969,26 +1149,31 @@ class TestPromptReviewIntegration:
     def test_review_skipped_when_errors_present(self, mock_review):
         """No prompt review is performed when validation already failed."""
         # No agent_name — error → review must be skipped
-        r = _parse(validate_agent(
-            agent_name="",
-            system_prompt="hello",
-            description="d",
-        ))
+        r = _parse(
+            validate_agent(
+                agent_name="",
+                system_prompt="hello",
+                description="d",
+            )
+        )
         assert not r["valid"]
         mock_review.assert_not_called()
 
     @patch("tools.validate_agent._review_prompt_quality")
     def test_review_skipped_when_prompt_blank(self, mock_review):
-        _parse(validate_agent(
-            agent_name="Bot1",
-            system_prompt="",
-            description="d",
-        ))
+        _parse(
+            validate_agent(
+                agent_name="Bot1",
+                system_prompt="",
+                description="d",
+            )
+        )
         # Blank prompt is itself an error so review skipped.
         mock_review.assert_not_called()
 
 
 # ── Skill conflict detection (staging) ────────────────────────────────
+
 
 class TestSkillConflictDetection:
     @patch("boto3.client")
@@ -1138,20 +1323,17 @@ class TestSkillConflictDetection:
 
 # ── MCP IAM permission check ─────────────────────────────────────────
 
+
 class TestMCPIAMCheck:
     def test_iam_check_no_workspace_role_errors(self, monkeypatch):
         """Target has IAM policy but no workspace role → error with action list."""
         # Inject a fake list_mcp_servers helpers
         fake_mod = types.ModuleType("tools.list_mcp_servers")
         fake_mod._load_registry_iam_policies = lambda: {
-            "danger": {
-                "Statement": [{"Action": ["s3:*", "iam:GetRole"], "Effect": "Allow"}]
-            }
+            "danger": {"Statement": [{"Action": ["s3:*", "iam:GetRole"], "Effect": "Allow"}]}
         }
         fake_mod._get_workspace_role_arn = lambda ws: None
-        fake_mod._check_iam_permissions = lambda role, policy: {
-            "granted": False, "missing_actions": []
-        }
+        fake_mod._check_iam_permissions = lambda role, policy: {"granted": False, "missing_actions": []}
         sys.modules["tools.list_mcp_servers"] = fake_mod
 
         # current_workspace can be empty — branch covers both paths
@@ -1159,15 +1341,18 @@ class TestMCPIAMCheck:
         # We can't easily replace tools._scope.current_workspace mid-import,
         # so monkeypatch it:
         from tools import _scope as scope_mod
+
         monkeypatch.setattr(scope_mod, "current_workspace", lambda: "ws-1")
 
-        _parse(validate_agent(
-            agent_name="Bot1",
-            system_prompt="hi",
-            description="d",
-            tool_names="",
-            staging_key="",
-        ))
+        _parse(
+            validate_agent(
+                agent_name="Bot1",
+                system_prompt="hi",
+                description="d",
+                tool_names="",
+                staging_key="",
+            )
+        )
         # mcp_targets_raw was an empty list — no IAM check fires. Use the parameterized form below:
         # pass mcp via staging_key flow instead.
 
@@ -1182,30 +1367,25 @@ class TestMCPIAMCheck:
             "description": "d",
             "mcp_targets": ["s3-tool"],
         }
-        s3.get_object.return_value = {
-            "Body": MagicMock(read=lambda: json.dumps(staged).encode())
-        }
+        s3.get_object.return_value = {"Body": MagicMock(read=lambda: json.dumps(staged).encode())}
 
         fake_mod = types.ModuleType("tools.list_mcp_servers")
         fake_mod._load_registry_iam_policies = lambda: {
-            "s3-tool": {
-                "Statement": [{"Action": ["s3:GetObject"], "Effect": "Allow"}]
-            }
+            "s3-tool": {"Statement": [{"Action": ["s3:GetObject"], "Effect": "Allow"}]}
         }
         fake_mod._get_workspace_role_arn = lambda ws: "arn:aws:iam::000:role/myrole"
         fake_mod._check_iam_permissions = lambda role, policy: {
-            "granted": False, "missing_actions": ["s3:GetObject"]
+            "granted": False,
+            "missing_actions": ["s3:GetObject"],
         }
         sys.modules["tools.list_mcp_servers"] = fake_mod
 
         from tools import _scope as scope_mod
+
         monkeypatch.setattr(scope_mod, "current_workspace", lambda: "ws-1")
 
         r = _parse(validate_agent(staging_key="staging/x.json"))
-        assert any(
-            "s3-tool" in e and "missing" in e.lower() and "myrole" in e
-            for e in r["errors"]
-        )
+        assert any("s3-tool" in e and "missing" in e.lower() and "myrole" in e for e in r["errors"])
 
     @patch("boto3.client")
     def test_iam_check_no_role_for_target_errors(self, mock_boto, monkeypatch):
@@ -1218,28 +1398,22 @@ class TestMCPIAMCheck:
             "description": "d",
             "mcp_targets": ["needsperm"],
         }
-        s3.get_object.return_value = {
-            "Body": MagicMock(read=lambda: json.dumps(staged).encode())
-        }
+        s3.get_object.return_value = {"Body": MagicMock(read=lambda: json.dumps(staged).encode())}
 
         fake_mod = types.ModuleType("tools.list_mcp_servers")
         fake_mod._load_registry_iam_policies = lambda: {
-            "needsperm": {
-                "Statement": [{"Action": "iam:ListRoles", "Effect": "Allow"}]
-            }
+            "needsperm": {"Statement": [{"Action": "iam:ListRoles", "Effect": "Allow"}]}
         }
         fake_mod._get_workspace_role_arn = lambda ws: None
         fake_mod._check_iam_permissions = lambda role, policy: {"granted": True}
         sys.modules["tools.list_mcp_servers"] = fake_mod
 
         from tools import _scope as scope_mod
+
         monkeypatch.setattr(scope_mod, "current_workspace", lambda: "ws-1")
 
         r = _parse(validate_agent(staging_key="staging/x.json"))
-        assert any(
-            "needsperm" in e and "no" in e.lower() and "iam role" in e.lower()
-            for e in r["errors"]
-        )
+        assert any("needsperm" in e and "no" in e.lower() and "iam role" in e.lower() for e in r["errors"])
 
     @patch("boto3.client")
     def test_iam_check_platform_target_skipped(self, mock_boto, monkeypatch):
@@ -1252,9 +1426,7 @@ class TestMCPIAMCheck:
             "description": "d",
             "mcp_targets": ["platform-tool"],
         }
-        s3.get_object.return_value = {
-            "Body": MagicMock(read=lambda: json.dumps(staged).encode())
-        }
+        s3.get_object.return_value = {"Body": MagicMock(read=lambda: json.dumps(staged).encode())}
 
         fake_mod = types.ModuleType("tools.list_mcp_servers")
         fake_mod._load_registry_iam_policies = dict  # no policy
@@ -1263,6 +1435,7 @@ class TestMCPIAMCheck:
         sys.modules["tools.list_mcp_servers"] = fake_mod
 
         from tools import _scope as scope_mod
+
         monkeypatch.setattr(scope_mod, "current_workspace", lambda: "ws-1")
 
         r = _parse(validate_agent(staging_key="staging/x.json"))
@@ -1279,9 +1452,7 @@ class TestMCPIAMCheck:
             "description": "d",
             "mcp_targets": ["whatever"],
         }
-        s3.get_object.return_value = {
-            "Body": MagicMock(read=lambda: json.dumps(staged).encode())
-        }
+        s3.get_object.return_value = {"Body": MagicMock(read=lambda: json.dumps(staged).encode())}
 
         bad_mod = types.ModuleType("tools.list_mcp_servers")
 
@@ -1307,9 +1478,7 @@ class TestMCPIAMCheck:
             "description": "d",
             "mcp_targets": ["x"],
         }
-        s3.get_object.return_value = {
-            "Body": MagicMock(read=lambda: json.dumps(staged).encode())
-        }
+        s3.get_object.return_value = {"Body": MagicMock(read=lambda: json.dumps(staged).encode())}
         fake_mod = types.ModuleType("tools.list_mcp_servers")
         fake_mod._load_registry_iam_policies = lambda: {
             "x": {"Statement": [{"Action": "s3:Get*"}]}  # string, not list
@@ -1319,6 +1488,7 @@ class TestMCPIAMCheck:
         sys.modules["tools.list_mcp_servers"] = fake_mod
 
         from tools import _scope as scope_mod
+
         monkeypatch.setattr(scope_mod, "current_workspace", lambda: "ws-1")
 
         r = _parse(validate_agent(staging_key="staging/x.json"))
@@ -1327,6 +1497,7 @@ class TestMCPIAMCheck:
 
 
 # ── Ghost-tool detection: skill scripts scan ────────────────────────
+
 
 class TestGhostToolSkillScan:
     @patch("boto3.client")

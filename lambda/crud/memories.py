@@ -1,4 +1,5 @@
 """End-user memory management endpoints (GET + DELETE single record)."""
+
 import asyncio
 import re
 
@@ -35,7 +36,8 @@ def _get_workspaces_table():
 
 def _get_workspace_memory_id(workspace_id: str) -> str | None:
     resp = _get_workspaces_table().get_item(
-        Key={"workspaceId": workspace_id, "sk": "META"}, ConsistentRead=False)
+        Key={"workspaceId": workspace_id, "sk": "META"}, ConsistentRead=False
+    )
     item = resp.get("Item")
     if not item:
         return None
@@ -44,9 +46,9 @@ def _get_workspace_memory_id(workspace_id: str) -> str | None:
 
 _STRATEGY_PLURAL_TO_KEY = {
     "preferences": "userPreference",
-    "facts":       "semantic",
-    "summaries":   "summary",
-    "episodes":    "episodic",
+    "facts": "semantic",
+    "summaries": "summary",
+    "episodes": "episodic",
 }
 _INITIAL_PAGE_SIZE = 20
 _MAX_PAGE_SIZE = 100
@@ -59,8 +61,7 @@ def _namespace_for(strategy_plural: str, actor_id: str) -> str:
     return STRATEGY_NAMESPACE_PREFIX[key].replace("{actor_id}", actor_id)
 
 
-def _list_one_section(memory_id: str, namespace: str, max_results: int,
-                      next_token: str | None) -> dict:
+def _list_one_section(memory_id: str, namespace: str, max_results: int, next_token: str | None) -> dict:
     kwargs = {"memoryId": memory_id, "namespace": namespace, "maxResults": max_results}
     if next_token:
         kwargs["nextToken"] = next_token
@@ -69,18 +70,29 @@ def _list_one_section(memory_id: str, namespace: str, max_results: int,
     except Exception as e:
         logger.warning("list_memory_records failed ns=%s: %s", namespace, e)
         return {"records": [], "nextToken": None}
-    records = [{
-        "id": r.get("memoryRecordId"),
-        "content": r.get("content"),
-        "createdAt": r.get("createdAt").isoformat() if hasattr(r.get("createdAt"), "isoformat") else r.get("createdAt"),
-        "namespace": r.get("namespace"),
-    } for r in resp.get("memoryRecordSummaries", [])]
+    records = [
+        {
+            "id": r.get("memoryRecordId"),
+            "content": r.get("content"),
+            "createdAt": r.get("createdAt").isoformat()
+            if hasattr(r.get("createdAt"), "isoformat")
+            else r.get("createdAt"),
+            "namespace": r.get("namespace"),
+        }
+        for r in resp.get("memoryRecordSummaries", [])
+    ]
     return {"records": records, "nextToken": resp.get("nextToken") or None}
 
 
-def _list_my_memories_impl(*, workspace_id: str, agent_id: str, caller_id: str,
-                           strategy: str | None, next_token: str | None,
-                           max_results: int = _INITIAL_PAGE_SIZE) -> dict:
+def _list_my_memories_impl(
+    *,
+    workspace_id: str,
+    agent_id: str,
+    caller_id: str,
+    strategy: str | None,
+    next_token: str | None,
+    max_results: int = _INITIAL_PAGE_SIZE,
+) -> dict:
     memory_id = _get_workspace_memory_id(workspace_id)
     if not memory_id:
         return {}
@@ -94,13 +106,16 @@ def _list_my_memories_impl(*, workspace_id: str, agent_id: str, caller_id: str,
 
     loop = asyncio.new_event_loop()
     try:
+
         async def _fetch_all():
             tasks = []
             for s in ("preferences", "facts", "summaries", "episodes"):
                 ns = _namespace_for(s, actor_id)
-                tasks.append(loop.run_in_executor(
-                    None, _list_one_section, memory_id, ns, _INITIAL_PAGE_SIZE, None))
+                tasks.append(
+                    loop.run_in_executor(None, _list_one_section, memory_id, ns, _INITIAL_PAGE_SIZE, None)
+                )
             return await asyncio.gather(*tasks)
+
         prefs, facts, sums, eps = loop.run_until_complete(_fetch_all())
     finally:
         loop.close()
@@ -131,8 +146,13 @@ def list_my_memories(wsId: str, agentId: str):
 
     try:
         result = _list_my_memories_impl(
-            workspace_id=wsId, agent_id=agentId, caller_id=user_id,
-            strategy=strategy, next_token=next_token, max_results=max_results)
+            workspace_id=wsId,
+            agent_id=agentId,
+            caller_id=user_id,
+            strategy=strategy,
+            next_token=next_token,
+            max_results=max_results,
+        )
     except ValueError as e:
         return bad_request(str(e))
 
@@ -144,6 +164,7 @@ def list_my_memories(wsId: str, agentId: str):
 # ---------------------------------------------------------------------------
 # DELETE /my-memories/<recordId>
 # ---------------------------------------------------------------------------
+
 
 class MemoryForbidden(Exception):
     """Caller does not own the memory record."""
@@ -159,8 +180,9 @@ def _extract_actor_id_from_namespace(namespace: str) -> str:
     return m.group(1)
 
 
-def _delete_record_impl(*, workspace_id: str, agent_id: str, caller_id: str,
-                        record_id: str, strategy: str | None = None) -> None:
+def _delete_record_impl(
+    *, workspace_id: str, agent_id: str, caller_id: str, record_id: str, strategy: str | None = None
+) -> None:
     """Idempotent delete. If the record isn't in the caller's namespace
     (either cross-user attempt or already deleted + stale list cache),
     return success — "delete X" and "X isn't there" have the same
@@ -192,8 +214,7 @@ def _delete_record_impl(*, workspace_id: str, agent_id: str, caller_id: str,
             except Exception as e:
                 logger.warning("ownership list failed ns=%s: %s", ns, e)
                 break
-            if any(r.get("memoryRecordId") == record_id
-                   for r in resp.get("memoryRecordSummaries", [])):
+            if any(r.get("memoryRecordId") == record_id for r in resp.get("memoryRecordSummaries", [])):
                 found = True
                 break
             next_tok = resp.get("nextToken")
@@ -228,9 +249,9 @@ def delete_my_memory(wsId: str, agentId: str, recordId: str):
         return bad_request(f"unknown strategy: {strategy}")
 
     try:
-        _delete_record_impl(workspace_id=wsId, agent_id=agentId,
-                            caller_id=user_id, record_id=recordId,
-                            strategy=strategy)
+        _delete_record_impl(
+            workspace_id=wsId, agent_id=agentId, caller_id=user_id, record_id=recordId, strategy=strategy
+        )
     except MemoryForbidden as e:
         logger.warning("cross-user delete blocked: %s", e)
         return forbidden()
@@ -284,12 +305,10 @@ def _forget_all_impl(*, workspace_id: str, agent_id: str, caller_id: str) -> dic
                     partial = True
                     break
                 try:
-                    data.delete_memory_record(
-                        memoryId=memory_id, memoryRecordId=r["memoryRecordId"])
+                    data.delete_memory_record(memoryId=memory_id, memoryRecordId=r["memoryRecordId"])
                     deleted += 1
                 except Exception as e:
-                    logger.warning("forget_all delete failed %s: %s",
-                                   r["memoryRecordId"], e)
+                    logger.warning("forget_all delete failed %s: %s", r["memoryRecordId"], e)
 
             next_token = resp.get("nextToken")
             if not next_token:

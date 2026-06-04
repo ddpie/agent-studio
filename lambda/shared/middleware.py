@@ -10,6 +10,7 @@ Usage in route files:
             return err
         ...
 """
+
 from aws_lambda_powertools import Logger
 
 from shared.auth import check_permission, get_membership, is_platform_admin, verify_jwt
@@ -47,7 +48,13 @@ def auth_check(event, min_role: str = "viewer", require_ws: bool = True, ws_id: 
         return None, None, None, forbidden()
     member = get_membership(ws_id, user_id)
     if not check_permission(member, min_role):
-        logger.warning("auth_check: permission denied user=%s ws=%s role=%s min=%s", user_id, ws_id, member.get("role") if member else None, min_role)
+        logger.warning(
+            "auth_check: permission denied user=%s ws=%s role=%s min=%s",
+            user_id,
+            ws_id,
+            member.get("role") if member else None,
+            min_role,
+        )
         return None, None, None, forbidden()
     return user_id, ws_id, member, None
 

@@ -70,7 +70,7 @@ async def _stream_with_tools(agent, input_data):
             yield event["data"]
 '''
 
-_BUILD_INPUT_CODE = '''
+_BUILD_INPUT_CODE = """
 def _build_input(payload):
     prompt = payload.get("prompt", "Hello!")
     history = payload.get("history") or []
@@ -120,9 +120,10 @@ def _build_input(payload):
             except Exception:
                 pass
     return blocks
-'''
+"""
 
-AGENT_CODE_TEMPLATE = '''\
+AGENT_CODE_TEMPLATE = (
+    """\
 from strands import Agent, tool
 from strands.models import BedrockModel
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -133,7 +134,10 @@ MODEL_ID = "{model_id}"
 SYSTEM_PROMPT = {system_prompt_repr}
 
 {tool_definitions}
-''' + _STREAM_HANDLER_CODE + _BUILD_INPUT_CODE + '''
+"""
+    + _STREAM_HANDLER_CODE
+    + _BUILD_INPUT_CODE
+    + """
 @app.entrypoint
 async def invoke(payload, context):
     model_id = payload.get("model_id", MODEL_ID)
@@ -147,9 +151,11 @@ async def invoke(payload, context):
 
 if __name__ == "__main__":
     app.run()
-'''
+"""
+)
 
-AGENT_CODE_WITH_MCP_TEMPLATE = '''\
+AGENT_CODE_WITH_MCP_TEMPLATE = (
+    """\
 from strands import Agent, tool
 from strands.models import BedrockModel
 from strands.tools.mcp import MCPClient
@@ -192,7 +198,10 @@ mcp_client = MCPClient(lambda: streamablehttp_client(
 ))
 
 {tool_definitions}
-''' + _STREAM_HANDLER_CODE + _BUILD_INPUT_CODE + '''
+"""
+    + _STREAM_HANDLER_CODE
+    + _BUILD_INPUT_CODE
+    + """
 @app.entrypoint
 async def invoke(payload, context):
     model_id = payload.get("model_id", MODEL_ID)
@@ -208,4 +217,5 @@ async def invoke(payload, context):
 
 if __name__ == "__main__":
     app.run()
-'''
+"""
+)

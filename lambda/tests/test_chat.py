@@ -1,4 +1,5 @@
 """Tests for lambda/crud/chat.py."""
+
 import json
 import uuid
 from unittest.mock import MagicMock, patch
@@ -34,6 +35,7 @@ def _stable_ids():
 
 def test_put_session_persists_under_caller_path():
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
     sess_id = uuid.uuid4().hex
@@ -43,13 +45,15 @@ def test_put_session_persists_under_caller_path():
         "PUT",
         f"/chat/agents/agt1/sessions/{sess_id}",
         path_params={"agentKey": "agt1", "sessionId": sess_id},
-        body={"id": sess_id, "agentKey": "agt1", "title": "hi", "messages": [
-            {"role": "user", "content": "hello", "timestamp": 1}
-        ]},
+        body={
+            "id": sess_id,
+            "agentKey": "agt1",
+            "title": "hi",
+            "messages": [{"role": "user", "content": "hello", "timestamp": 1}],
+        },
     )
 
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         resp = app.resolve(event, MagicMock())
 
@@ -63,6 +67,7 @@ def test_put_session_persists_under_caller_path():
 def test_put_session_ignores_tampered_identity_fields():
     """Caller cannot poison id/agentKey by putting foreign values in the body."""
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
     sess_id = uuid.uuid4().hex
@@ -80,8 +85,7 @@ def test_put_session_ignores_tampered_identity_fields():
         },
     )
 
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         resp = app.resolve(event, MagicMock())
 
@@ -96,6 +100,7 @@ def test_put_session_ignores_tampered_identity_fields():
 
 def test_get_session_404_when_missing():
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
     fake.get_object.side_effect = fake.exceptions.NoSuchKey("not here")
@@ -107,8 +112,7 @@ def test_get_session_404_when_missing():
         f"/chat/agents/agt1/sessions/{sess_id}",
         path_params={"agentKey": "agt1", "sessionId": sess_id},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(event, MagicMock())
 
@@ -117,13 +121,17 @@ def test_get_session_404_when_missing():
 
 def test_get_session_returns_body():
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
     sess_id = uuid.uuid4().hex
     session_body = {
-        "id": sess_id, "agentKey": "agt1", "title": "hi",
+        "id": sess_id,
+        "agentKey": "agt1",
+        "title": "hi",
         "messages": [{"role": "user", "content": "hello", "timestamp": 1}],
-        "createdAt": 1000, "updatedAt": 1001,
+        "createdAt": 1000,
+        "updatedAt": 1001,
     }
     fake.get_object.return_value = {
         "Body": MagicMock(read=MagicMock(return_value=json.dumps(session_body).encode("utf-8"))),
@@ -135,8 +143,7 @@ def test_get_session_returns_body():
         f"/chat/agents/agt1/sessions/{sess_id}",
         path_params={"agentKey": "agt1", "sessionId": sess_id},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(event, MagicMock())
 
@@ -148,22 +155,35 @@ def test_get_session_returns_body():
 
 def test_list_sessions_sorted_and_summarised():
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
 
     older = {
-        "id": "s1", "agentKey": "agt1", "title": "old", "createdAt": 1, "updatedAt": 1,
+        "id": "s1",
+        "agentKey": "agt1",
+        "title": "old",
+        "createdAt": 1,
+        "updatedAt": 1,
         "messages": [{"role": "user", "content": "first message", "timestamp": 1}],
     }
     newer = {
-        "id": "s2", "agentKey": "agt1", "title": "new", "createdAt": 2, "updatedAt": 2,
+        "id": "s2",
+        "agentKey": "agt1",
+        "title": "new",
+        "createdAt": 2,
+        "updatedAt": 2,
         "messages": [{"role": "user", "content": "second", "timestamp": 2}],
     }
     paginator = MagicMock()
-    paginator.paginate.return_value = [{"Contents": [
-        {"Key": f"chat/{workspace_id}/{user_id}/agt1/sessions/s1.json"},
-        {"Key": f"chat/{workspace_id}/{user_id}/agt1/sessions/s2.json"},
-    ]}]
+    paginator.paginate.return_value = [
+        {
+            "Contents": [
+                {"Key": f"chat/{workspace_id}/{user_id}/agt1/sessions/s1.json"},
+                {"Key": f"chat/{workspace_id}/{user_id}/agt1/sessions/s2.json"},
+            ]
+        }
+    ]
     fake.get_paginator.return_value = paginator
 
     def _get(Bucket, Key):
@@ -178,8 +198,7 @@ def test_list_sessions_sorted_and_summarised():
         "/chat/agents/agt1/sessions",
         path_params={"agentKey": "agt1"},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(event, MagicMock())
 
@@ -192,6 +211,7 @@ def test_list_sessions_sorted_and_summarised():
 
 def test_delete_session_calls_delete_object():
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
     sess_id = uuid.uuid4().hex
@@ -202,8 +222,7 @@ def test_delete_session_calls_delete_object():
         f"/chat/agents/agt1/sessions/{sess_id}",
         path_params={"agentKey": "agt1", "sessionId": sess_id},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         resp = app.resolve(event, MagicMock())
 
@@ -215,6 +234,7 @@ def test_delete_session_calls_delete_object():
 def test_non_member_gets_forbidden():
     """Non-members are short-circuited by auth_check before S3 is touched."""
     from crud.handler import app
+
     fake = _fake_s3_client()
     workspace_id = str(uuid.uuid4())
 
@@ -224,9 +244,9 @@ def test_non_member_gets_forbidden():
         "/chat/agents/agt1/sessions",
         path_params={"agentKey": "agt1"},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         from shared.response import forbidden
+
         auth.return_value = (None, None, None, forbidden())
         resp = app.resolve(event, MagicMock())
 
@@ -237,6 +257,7 @@ def test_non_member_gets_forbidden():
 def test_viewer_cannot_write():
     """auth_check is invoked with min_role='editor' on PUT — simulate its rejection."""
     from crud.handler import app
+
     fake = _fake_s3_client()
     workspace_id = str(uuid.uuid4())
     sess_id = uuid.uuid4().hex
@@ -248,8 +269,7 @@ def test_viewer_cannot_write():
         path_params={"agentKey": "agt1", "sessionId": sess_id},
         body={"messages": []},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         from shared.response import forbidden
 
         def _auth(event, min_role="viewer", ws_id=""):
@@ -266,6 +286,7 @@ def test_viewer_cannot_write():
 
 def test_put_rejects_oversized_body():
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
     sess_id = uuid.uuid4().hex
@@ -278,8 +299,7 @@ def test_put_rejects_oversized_body():
         path_params={"agentKey": "agt1", "sessionId": sess_id},
         body={"messages": [{"role": "user", "content": huge_content, "timestamp": 1}]},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         resp = app.resolve(event, MagicMock())
 
@@ -295,6 +315,7 @@ def test_put_rejects_oversized_body():
 def test_get_s3_lazy_initializes(monkeypatch):
     """Cover the `if _s3 is None: _s3 = boto3.client(...)` path."""
     import crud.chat as chat_mod
+
     chat_mod._s3 = None
     sentinel = object()
     monkeypatch.setattr(chat_mod.boto3, "client", lambda *a, **kw: sentinel)
@@ -311,6 +332,7 @@ def test_get_s3_lazy_initializes(monkeypatch):
 
 def test_list_invalid_agent_key():
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
 
@@ -320,8 +342,7 @@ def test_list_invalid_agent_key():
         "/chat/agents/bad agent!/sessions",
         path_params={"agentKey": "bad agent!"},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(event, MagicMock())
     assert resp["statusCode"] == 400
@@ -330,6 +351,7 @@ def test_list_invalid_agent_key():
 def test_list_paginator_exception_returns_500():
     """An exception during paginator iteration → 500."""
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
     fake.get_paginator.side_effect = Exception("boom")
@@ -340,8 +362,7 @@ def test_list_paginator_exception_returns_500():
         "/chat/agents/agt1/sessions",
         path_params={"agentKey": "agt1"},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(event, MagicMock())
     assert resp["statusCode"] == 500
@@ -350,24 +371,35 @@ def test_list_paginator_exception_returns_500():
 def test_list_skips_unreadable_session():
     """When one session in S3 is unreadable, list keeps going."""
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
 
     paginator = MagicMock()
-    paginator.paginate.return_value = [{"Contents": [
-        {"Key": f"chat/{workspace_id}/{user_id}/agt1/sessions/good.json"},
-        {"Key": f"chat/{workspace_id}/{user_id}/agt1/sessions/bad.json"},
-    ]}]
+    paginator.paginate.return_value = [
+        {
+            "Contents": [
+                {"Key": f"chat/{workspace_id}/{user_id}/agt1/sessions/good.json"},
+                {"Key": f"chat/{workspace_id}/{user_id}/agt1/sessions/bad.json"},
+            ]
+        }
+    ]
     fake.get_paginator.return_value = paginator
 
     good = {
-        "id": "good", "agentKey": "agt1", "title": "g", "createdAt": 1,
-        "updatedAt": 2, "messages": [{"role": "user", "content": "ok"}],
+        "id": "good",
+        "agentKey": "agt1",
+        "title": "g",
+        "createdAt": 1,
+        "updatedAt": 2,
+        "messages": [{"role": "user", "content": "ok"}],
     }
+
     def _get(Bucket, Key):
         if Key.endswith("good.json"):
             return {"Body": MagicMock(read=MagicMock(return_value=json.dumps(good).encode()))}
         raise Exception("unreadable")
+
     fake.get_object.side_effect = _get
 
     event = _event(
@@ -376,8 +408,7 @@ def test_list_skips_unreadable_session():
         "/chat/agents/agt1/sessions",
         path_params={"agentKey": "agt1"},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(event, MagicMock())
     assert resp["statusCode"] == 200
@@ -388,6 +419,7 @@ def test_list_skips_unreadable_session():
 
 def test_get_session_invalid_agent_key():
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
 
@@ -397,8 +429,7 @@ def test_get_session_invalid_agent_key():
         "/chat/agents/bad key!/sessions/sess1",
         path_params={"agentKey": "bad key!", "sessionId": "sess1"},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(event, MagicMock())
     assert resp["statusCode"] == 400
@@ -406,6 +437,7 @@ def test_get_session_invalid_agent_key():
 
 def test_get_session_other_exception():
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
     fake.get_object.side_effect = Exception("network")
@@ -416,8 +448,7 @@ def test_get_session_other_exception():
         "/chat/agents/agt1/sessions/sess1",
         path_params={"agentKey": "agt1", "sessionId": "sess1"},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         resp = app.resolve(event, MagicMock())
     assert resp["statusCode"] == 500
@@ -425,6 +456,7 @@ def test_get_session_other_exception():
 
 def test_put_session_invalid_id():
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
 
@@ -435,8 +467,7 @@ def test_put_session_invalid_id():
         path_params={"agentKey": "bad!", "sessionId": "sess1"},
         body={"messages": []},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         resp = app.resolve(event, MagicMock())
     assert resp["statusCode"] == 400
@@ -444,6 +475,7 @@ def test_put_session_invalid_id():
 
 def test_put_session_body_not_object():
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
     sess_id = uuid.uuid4().hex
@@ -457,8 +489,7 @@ def test_put_session_body_not_object():
     )
     event["body"] = json.dumps(["array", "not", "object"])
 
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         resp = app.resolve(event, MagicMock())
     assert resp["statusCode"] == 400
@@ -467,6 +498,7 @@ def test_put_session_body_not_object():
 
 def test_put_session_messages_not_array():
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
     sess_id = uuid.uuid4().hex
@@ -478,8 +510,7 @@ def test_put_session_messages_not_array():
         path_params={"agentKey": "agt1", "sessionId": sess_id},
         body={"messages": "not-an-array"},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         resp = app.resolve(event, MagicMock())
     assert resp["statusCode"] == 400
@@ -488,6 +519,7 @@ def test_put_session_messages_not_array():
 
 def test_put_session_s3_failure():
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
     fake.put_object.side_effect = Exception("boom")
@@ -500,8 +532,7 @@ def test_put_session_s3_failure():
         path_params={"agentKey": "agt1", "sessionId": sess_id},
         body={"messages": [{"role": "user", "content": "x"}]},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         resp = app.resolve(event, MagicMock())
     assert resp["statusCode"] == 500
@@ -509,6 +540,7 @@ def test_put_session_s3_failure():
 
 def test_delete_session_invalid_agent_key():
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
     sess_id = uuid.uuid4().hex
@@ -519,8 +551,7 @@ def test_delete_session_invalid_agent_key():
         f"/chat/agents/bad!/sessions/{sess_id}",
         path_params={"agentKey": "bad!", "sessionId": sess_id},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         resp = app.resolve(event, MagicMock())
     assert resp["statusCode"] == 400
@@ -528,6 +559,7 @@ def test_delete_session_invalid_agent_key():
 
 def test_delete_session_s3_failure():
     from crud.handler import app
+
     user_id, workspace_id = _stable_ids()
     fake = _fake_s3_client()
     fake.delete_object.side_effect = Exception("boom")
@@ -539,8 +571,7 @@ def test_delete_session_s3_failure():
         f"/chat/agents/agt1/sessions/{sess_id}",
         path_params={"agentKey": "agt1", "sessionId": sess_id},
     )
-    with patch("crud.chat._get_s3", return_value=fake), \
-         patch("crud.chat.auth_check") as auth:
+    with patch("crud.chat._get_s3", return_value=fake), patch("crud.chat.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         resp = app.resolve(event, MagicMock())
     assert resp["statusCode"] == 500
@@ -549,6 +580,7 @@ def test_delete_session_s3_failure():
 def test_summary_uses_first_non_empty_message():
     """_summary should pick the first non-empty content as preview."""
     from crud.chat import _summary
+
     sess = {
         "id": "s1",
         "agentKey": "a",

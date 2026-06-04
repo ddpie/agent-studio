@@ -5,6 +5,7 @@ its source is appended to BUILTIN_TOOLS_CODE in agent_template_v2.py
 at zip-assembly time. Keep imports limited to stdlib + boto3 + strands
 (which the deployed Agent already has).
 """
+
 import asyncio
 import json
 import logging
@@ -22,6 +23,7 @@ def _get_memory_client():
     global _MEMORY_CLIENT
     if _MEMORY_CLIENT is None:
         import os
+
         region = os.environ.get("AWS_REGION", "us-east-1")
         _MEMORY_CLIENT = boto3.client("bedrock-agentcore", region_name=region)
     return _MEMORY_CLIENT
@@ -34,8 +36,7 @@ class MemoryContext:
     agent turn. Failures return empty results and log warnings.
     """
 
-    def __init__(self, memory_id: str, actor_id: str, session_id: str,
-                 strategies: list[str]):
+    def __init__(self, memory_id: str, actor_id: str, session_id: str, strategies: list[str]):
         self._memory_id = memory_id
         self._actor_id = actor_id
         self._session_id = session_id
@@ -83,12 +84,14 @@ class MemoryContext:
                     actorId=self._actor_id,
                     sessionId=self._session_id,
                     eventTimestamp=int(time.time()),
-                    payload=[{
-                        "conversational": {
-                            "role": "USER",
-                            "content": {"text": text},
-                        },
-                    }],
+                    payload=[
+                        {
+                            "conversational": {
+                                "role": "USER",
+                                "content": {"text": text},
+                            },
+                        }
+                    ],
                 ),
             )
         except Exception as e:
@@ -104,12 +107,14 @@ class MemoryContext:
                     actorId=self._actor_id,
                     sessionId=self._session_id,
                     eventTimestamp=int(time.time()),
-                    payload=[{
-                        "conversational": {
-                            "role": "ASSISTANT",
-                            "content": {"text": text},
-                        },
-                    }],
+                    payload=[
+                        {
+                            "conversational": {
+                                "role": "ASSISTANT",
+                                "content": {"text": text},
+                            },
+                        }
+                    ],
                 ),
             )
         except Exception as e:
@@ -138,9 +143,7 @@ class MemoryContext:
                     namespace=ns,
                     searchCriteria={"searchQuery": query, "topK": 5},
                 )
-                return json.dumps([
-                    r.get("content") for r in resp.get("memoryRecordSummaries", [])
-                ])
+                return json.dumps([r.get("content") for r in resp.get("memoryRecordSummaries", [])])
             except Exception as e:
                 _log.warning("recall_facts failed: %s", e)
                 return "[]"
@@ -170,9 +173,7 @@ class MemoryContext:
                     namespace=ns,
                     searchCriteria={"searchQuery": query, "topK": 3},
                 )
-                return json.dumps([
-                    r.get("content") for r in resp.get("memoryRecordSummaries", [])
-                ])
+                return json.dumps([r.get("content") for r in resp.get("memoryRecordSummaries", [])])
             except Exception as e:
                 _log.warning("recall_episodes failed: %s", e)
                 return "[]"
@@ -211,7 +212,7 @@ def _format_memory_block(prefs: list, sums: list) -> str:
     # TODO(memory-tone): make this builder-configurable
     lines.append(
         'Use this context silently — never say "according to my memory". '
-        'Call recall_facts(query) or recall_episodes(query) if you need '
+        "Call recall_facts(query) or recall_episodes(query) if you need "
         "specific information you don't see above."
     )
     return "\n".join(lines)

@@ -88,7 +88,10 @@ def _log_session_model(resp: dict, kind: str) -> None:
                 model_ids.append(m)
     log.warning(
         "acp %s: current_model=%r models_count=%d models=%s",
-        kind, current, len(model_ids), model_ids[:10],
+        kind,
+        current,
+        len(model_ids),
+        model_ids[:10],
     )
 
 
@@ -179,9 +182,8 @@ class KiroACPClient:
         # would also work, but a file lets us drain the buffer without
         # racing a reader task during shutdown.
         import tempfile as _tempfile
-        self._stderr_file = _tempfile.NamedTemporaryFile(
-            mode="wb+", prefix="kiro-cli-stderr-", delete=False
-        )
+
+        self._stderr_file = _tempfile.NamedTemporaryFile(mode="wb+", prefix="kiro-cli-stderr-", delete=False)
         self._proc = await asyncio.create_subprocess_exec(
             *args,
             stdin=asyncio.subprocess.PIPE,
@@ -190,9 +192,7 @@ class KiroACPClient:
             env=env,
         )
 
-        self._reader_task = asyncio.create_task(
-            self._reader(), name="kiro-acp-reader"
-        )
+        self._reader_task = asyncio.create_task(self._reader(), name="kiro-acp-reader")
 
         # Handshake. Protocol version 1 matches what we observed from
         # the 2.0.0 probe — a 1:1 server.
@@ -244,6 +244,7 @@ class KiroACPClient:
             try:
                 sf.close()
                 import os as _os_mod
+
                 with open(sf.name, "rb") as f:
                     data = f.read()
                 if data:
@@ -262,6 +263,7 @@ class KiroACPClient:
         # or empty files.
         import glob as _glob
         import os as _os_mod
+
         try:
             for path in sorted(_glob.glob("/tmp/mcp-stdio-*.log")):
                 try:
@@ -275,7 +277,6 @@ class KiroACPClient:
                     log.warning("failed to tail %s: %s", path, e)
         except Exception:
             pass
-
 
     # ---- verbs ------------------------------------------------------------
 
@@ -335,9 +336,7 @@ class KiroACPClient:
         session just to read the list and discard the session id — the
         frontend only needs model ids + labels, not a live conversation.
         """
-        resp = await self._request(
-            "session/new", {"cwd": cwd, "mcpServers": []}
-        )
+        resp = await self._request("session/new", {"cwd": cwd, "mcpServers": []})
         result = resp.get("result") or {}
         models = result.get("models") or []
         return models if isinstance(models, list) else []
@@ -364,9 +363,7 @@ class KiroACPClient:
         self._drain_events()
 
         req_id = self._alloc_id()
-        fut: asyncio.Future[dict[str, Any]] = (
-            asyncio.get_running_loop().create_future()
-        )
+        fut: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
         self._pending[req_id] = fut
 
         send_task = asyncio.create_task(
@@ -400,24 +397,23 @@ class KiroACPClient:
                     remaining = deadline - now
                     if remaining <= 0:
                         fut.cancel()
-                        raise asyncio.TimeoutError(
-                            f"session/prompt exceeded {timeout_s}s"
-                        )
+                        raise asyncio.TimeoutError(f"session/prompt exceeded {timeout_s}s")
                     # Tick log every 5s of quiet.
                     if now - _last_tick >= 5.0:
                         log.warning(
                             "acp prompt tick: elapsed=%.1fs events_qsize=%d "
                             "events_seen=%d fut_done=%s remaining=%.1fs",
-                            now - _iter_start, self._events.qsize(),
-                            _events_seen, fut.done(), remaining,
+                            now - _iter_start,
+                            self._events.qsize(),
+                            _events_seen,
+                            fut.done(),
+                            remaining,
                         )
                         _last_tick = now
                     # Short wait so we periodically re-check fut.done(); the
                     # final response might land between events.
                     try:
-                        event = await asyncio.wait_for(
-                            self._events.get(), timeout=min(0.5, remaining)
-                        )
+                        event = await asyncio.wait_for(self._events.get(), timeout=min(0.5, remaining))
                     except asyncio.TimeoutError:
                         continue
                     _events_seen += 1
@@ -425,7 +421,8 @@ class KiroACPClient:
                 log.warning(
                     "acp prompt done: elapsed=%.1fs events_seen=%d fut_done=%s",
                     asyncio.get_running_loop().time() - _iter_start,
-                    _events_seen, fut.done(),
+                    _events_seen,
+                    fut.done(),
                 )
             finally:
                 self._pending.pop(req_id, None)
@@ -471,9 +468,7 @@ class KiroACPClient:
         timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S,
     ) -> dict[str, Any]:
         req_id = self._alloc_id()
-        fut: asyncio.Future[dict[str, Any]] = (
-            asyncio.get_running_loop().create_future()
-        )
+        fut: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
         self._pending[req_id] = fut
         try:
             await self._write(

@@ -11,6 +11,7 @@ Agents invoke MCP servers by resolving Runtime invoke URLs directly
 (agent_template_v2._resolve_runtime_url), so the Gateway plays no role in
 the Agent runtime path either.
 """
+
 import json
 import time
 
@@ -58,6 +59,7 @@ def _load_registry():
         return _registry_cache["data"]
     try:
         import yaml
+
         s3 = boto3.client("s3", region_name=REGION)
         resp = s3.get_object(Bucket=S3_BUCKET, Key="mcp-runtime/mcp-registry.yaml")
         data = yaml.safe_load(resp["Body"].read().decode())
@@ -162,14 +164,16 @@ def _build_target_list():
             continue
         if not _is_available_in_region(t):
             continue
-        out.append({
-            "name": t["name"],
-            "description": t.get("description", ""),
-            "category": t.get("category", "general"),
-            "sensitivity": t.get("sensitivity", "low"),
-            "type": "remote",
-            "status": "READY",
-        })
+        out.append(
+            {
+                "name": t["name"],
+                "description": t.get("description", ""),
+                "category": t.get("category", "general"),
+                "sensitivity": t.get("sensitivity", "low"),
+                "type": "remote",
+                "status": "READY",
+            }
+        )
 
     for t in registry.get("runtime_targets", []):
         if not t.get("enabled"):
@@ -181,14 +185,16 @@ def _build_target_list():
         candidates = _runtime_name_candidates(t["name"])
         live = next((deployed[n] for n in candidates if n in deployed), None)
         status = (live or {}).get("status", "unavailable")
-        out.append({
-            "name": t["name"],
-            "description": t.get("description", ""),
-            "category": t.get("category", "general"),
-            "sensitivity": t.get("sensitivity", "low"),
-            "type": "runtime",
-            "status": status,
-        })
+        out.append(
+            {
+                "name": t["name"],
+                "description": t.get("description", ""),
+                "category": t.get("category", "general"),
+                "sensitivity": t.get("sensitivity", "low"),
+                "type": "runtime",
+                "status": status,
+            }
+        )
     return out
 
 
@@ -230,6 +236,7 @@ def update_mcp_policy(wsId: str):
 
     try:
         from datetime import datetime
+
         table = _get_ws_table()
         now = datetime.utcnow().isoformat() + "Z"
 
@@ -327,9 +334,11 @@ def get_target_tools(wsId: str, targetName: str):
     # actionable hint.
     _tool_manifests[targetName] = []
     _tool_manifests_ttl[targetName] = now
-    return success({
-        "tools": [],
-        "hint": "Tool manifest not yet generated. Run "
-                "scripts/deploy-mcp.sh for this target to populate "
-                "mcp/target-tools/<name>.json in S3.",
-    })
+    return success(
+        {
+            "tools": [],
+            "hint": "Tool manifest not yet generated. Run "
+            "scripts/deploy-mcp.sh for this target to populate "
+            "mcp/target-tools/<name>.json in S3.",
+        }
+    )

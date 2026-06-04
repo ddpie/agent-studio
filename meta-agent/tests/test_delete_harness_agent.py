@@ -1,4 +1,5 @@
 """Tests for delete_harness_agent tool."""
+
 import json
 import sys
 import types
@@ -43,6 +44,7 @@ def _existing(**overrides):
 
 def test_delete_harness_agent_calls_cp_and_archives_ddb(monkeypatch):
     from tools import delete_harness_agent as mod
+
     fake_ddb = MagicMock()
     fake_ddb.get_item.return_value = {"Item": _existing()}
     monkeypatch.setattr(mod, "_get_agents_table", lambda: fake_ddb)
@@ -60,6 +62,7 @@ def test_delete_harness_agent_calls_cp_and_archives_ddb(monkeypatch):
 
 def test_delete_harness_agent_rejects_non_harness(monkeypatch):
     from tools import delete_harness_agent as mod
+
     fake_ddb = MagicMock()
     fake_ddb.get_item.return_value = {"Item": _existing(runtime_type="zip")}
     monkeypatch.setattr(mod, "_get_agents_table", lambda: fake_ddb)
@@ -71,6 +74,7 @@ def test_delete_harness_agent_rejects_non_harness(monkeypatch):
 def test_delete_harness_agent_continues_on_already_deleted_harness(monkeypatch):
     """ResourceNotFound from control-plane means harness is gone; still soft-delete DDB."""
     from tools import delete_harness_agent as mod
+
     fake_ddb = MagicMock()
     fake_ddb.get_item.return_value = {"Item": _existing()}
     monkeypatch.setattr(mod, "_get_agents_table", lambda: fake_ddb)
@@ -91,6 +95,7 @@ def test_delete_harness_agent_continues_on_already_deleted_harness(monkeypatch):
 def test_delete_harness_agent_returns_error_when_agent_not_found(monkeypatch):
     """get_item returns no Item → "agent not found"."""
     from tools import delete_harness_agent as mod
+
     fake_ddb = MagicMock()
     fake_ddb.get_item.return_value = {}
     monkeypatch.setattr(mod, "_get_agents_table", lambda: fake_ddb)
@@ -103,6 +108,7 @@ def test_delete_harness_agent_returns_error_when_agent_not_found(monkeypatch):
 def test_delete_harness_agent_wraps_unexpected_errors(monkeypatch):
     """Outer try/except converts unexpected errors into JSON."""
     from tools import delete_harness_agent as mod
+
     fake_ddb = MagicMock()
     fake_ddb.get_item.side_effect = Exception("ddb 5xx")
     monkeypatch.setattr(mod, "_get_agents_table", lambda: fake_ddb)
@@ -115,6 +121,7 @@ def test_delete_harness_agent_wraps_unexpected_errors(monkeypatch):
 def test_delete_harness_agent_factories_use_boto3(monkeypatch):
     """Cover _get_control_client / _get_agents_table thin wrappers."""
     from tools import delete_harness_agent as mod
+
     captured = {"clients": [], "resources": []}
 
     def fake_client(svc, region_name=None):

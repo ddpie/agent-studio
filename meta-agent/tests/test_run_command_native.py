@@ -1,4 +1,5 @@
 """Test run_command routes to invoke_code_interpreter."""
+
 import sys
 import types
 from unittest.mock import MagicMock, patch
@@ -26,6 +27,7 @@ sys.modules["config"] = _mock_config
 
 def _exec_builtin(monkeypatch):
     from templates.agent_template_v2 import BUILTIN_TOOLS_CODE
+
     # Provide a minimal namespace where the BUILTIN_TOOLS_CODE string executes.
     ns: dict = {"__name__": "builtin_tools_test"}
     exec(BUILTIN_TOOLS_CODE, ns)
@@ -39,7 +41,9 @@ def test_run_command_python_via_code_interpreter(monkeypatch):
     data_mock = MagicMock()
     data_mock.start_code_interpreter_session.return_value = {"sessionId": "sess-1"}
     data_mock.invoke_code_interpreter.return_value = {
-        "stream": [{"result": {"structuredContent": {"stdout": "2\n", "stderr": "", "exitCode": 0}, "content": []}}]
+        "stream": [
+            {"result": {"structuredContent": {"stdout": "2\n", "stderr": "", "exitCode": 0}, "content": []}}
+        ]
     }
     with patch("boto3.client", return_value=data_mock):
         ns = _exec_builtin(monkeypatch)
@@ -57,7 +61,9 @@ def test_run_command_returns_error_on_nonzero_exit(monkeypatch):
     data_mock = MagicMock()
     data_mock.start_code_interpreter_session.return_value = {"sessionId": "sess-1"}
     data_mock.invoke_code_interpreter.return_value = {
-        "stream": [{"result": {"structuredContent": {"stdout": "", "stderr": "boom", "exitCode": 1}, "content": []}}]
+        "stream": [
+            {"result": {"structuredContent": {"stdout": "", "stderr": "boom", "exitCode": 1}, "content": []}}
+        ]
     }
     with patch("boto3.client", return_value=data_mock):
         ns = _exec_builtin(monkeypatch)

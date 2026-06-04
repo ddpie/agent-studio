@@ -1,4 +1,5 @@
 """Lambda config — reads from env vars set by CDK."""
+
 import os
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")

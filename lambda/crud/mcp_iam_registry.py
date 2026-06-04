@@ -5,7 +5,6 @@ Regenerate:     python scripts/sync-mcp-iam-policies.py
 """
 # SYNC_HASH: b94a3684665b
 
-
 MCP_IAM_POLICIES: dict[str, dict | None] = {
     "cloudtrail": {
         "Statement": [
@@ -16,10 +15,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "cloudtrail:Describe*",
                     "cloudtrail:Get*",
                     "cloudtrail:List*",
-                    "cloudtrail:StartQuery"
+                    "cloudtrail:StartQuery",
                 ],
                 "Resource": "*",
-                "Sid": "Cloudtrail"
+                "Sid": "Cloudtrail",
             }
         ]
     },
@@ -38,10 +37,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "logs:StopQuery",
                     "logs:FilterLogEvents",
                     "application-signals:Get*",
-                    "application-signals:List*"
+                    "application-signals:List*",
                 ],
                 "Resource": "*",
-                "Sid": "Cloudwatch"
+                "Sid": "Cloudwatch",
             }
         ]
     },
@@ -59,10 +58,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "application-signals:ListServiceDependents",
                     "cloudwatch:DescribeAlarms",
                     "cloudwatch:GetMetricData",
-                    "cloudwatch:GetMetricStatistics"
+                    "cloudwatch:GetMetricStatistics",
                 ],
                 "Resource": "*",
-                "Sid": "CloudwatchApplicationsignals"
+                "Sid": "CloudwatchApplicationsignals",
             }
         ]
     },
@@ -76,10 +75,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "aps:GetMetricMetadata",
                     "aps:GetSeries",
                     "aps:ListWorkspaces",
-                    "aps:DescribeWorkspace"
+                    "aps:DescribeWorkspace",
                 ],
                 "Resource": "*",
-                "Sid": "Prometheus"
+                "Sid": "Prometheus",
             }
         ]
     },
@@ -88,12 +87,8 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "Acm",
                 "Effect": "Allow",
-                "Action": [
-                    "acm:Describe*",
-                    "acm:List*",
-                    "acm:GetCertificate"
-                ],
-                "Resource": "*"
+                "Action": ["acm:Describe*", "acm:List*", "acm:GetCertificate"],
+                "Resource": "*",
             }
         ]
     },
@@ -102,11 +97,8 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "Cognito",
                 "Effect": "Allow",
-                "Action": [
-                    "cognito-idp:Describe*",
-                    "cognito-idp:List*"
-                ],
-                "Resource": "*"
+                "Action": ["cognito-idp:Describe*", "cognito-idp:List*"],
+                "Resource": "*",
             }
         ]
     },
@@ -115,12 +107,8 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "Config",
                 "Effect": "Allow",
-                "Action": [
-                    "config:Describe*",
-                    "config:Get*",
-                    "config:List*"
-                ],
-                "Resource": "*"
+                "Action": ["config:Describe*", "config:Get*", "config:List*"],
+                "Resource": "*",
             }
         ]
     },
@@ -129,11 +117,8 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "GuardDuty",
                 "Effect": "Allow",
-                "Action": [
-                    "guardduty:Get*",
-                    "guardduty:List*"
-                ],
-                "Resource": "*"
+                "Action": ["guardduty:Get*", "guardduty:List*"],
+                "Resource": "*",
             }
         ]
     },
@@ -141,13 +126,9 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
         "Statement": [
             {
                 "Effect": "Allow",
-                "Action": [
-                    "iam:Get*",
-                    "iam:List*",
-                    "iam:Simulate*"
-                ],
+                "Action": ["iam:Get*", "iam:List*", "iam:Simulate*"],
                 "Resource": "*",
-                "Sid": "Iam"
+                "Sid": "Iam",
             }
         ]
     },
@@ -156,12 +137,8 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "Inspector",
                 "Effect": "Allow",
-                "Action": [
-                    "inspector2:Get*",
-                    "inspector2:List*",
-                    "inspector2:BatchGet*"
-                ],
-                "Resource": "*"
+                "Action": ["inspector2:Get*", "inspector2:List*", "inspector2:BatchGet*"],
+                "Resource": "*",
             }
         ]
     },
@@ -170,12 +147,8 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "Kms",
                 "Effect": "Allow",
-                "Action": [
-                    "kms:Describe*",
-                    "kms:List*",
-                    "kms:Get*"
-                ],
-                "Resource": "*"
+                "Action": ["kms:Describe*", "kms:List*", "kms:Get*"],
+                "Resource": "*",
             }
         ]
     },
@@ -184,26 +157,13 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "SecurityHub",
                 "Effect": "Allow",
-                "Action": [
-                    "securityhub:Get*",
-                    "securityhub:List*",
-                    "securityhub:BatchGet*"
-                ],
-                "Resource": "*"
+                "Action": ["securityhub:Get*", "securityhub:List*", "securityhub:BatchGet*"],
+                "Resource": "*",
             }
         ]
     },
     "sts": {
-        "Statement": [
-            {
-                "Sid": "Sts",
-                "Effect": "Allow",
-                "Action": [
-                    "sts:GetCallerIdentity"
-                ],
-                "Resource": "*"
-            }
-        ]
+        "Statement": [{"Sid": "Sts", "Effect": "Allow", "Action": ["sts:GetCallerIdentity"], "Resource": "*"}]
     },
     "well-architected-security": {
         "Statement": [
@@ -216,10 +176,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "wellarchitected:ListWorkloads",
                     "wellarchitected:ListLenses",
                     "wellarchitected:ListLensReviews",
-                    "wellarchitected:ListAnswers"
+                    "wellarchitected:ListAnswers",
                 ],
                 "Resource": "*",
-                "Sid": "WellArchitectedSecurity"
+                "Sid": "WellArchitectedSecurity",
             }
         ]
     },
@@ -232,10 +192,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "ce:GetCostForecast",
                     "ce:DescribeCostCategoryDefinition",
                     "budgets:ViewBudget",
-                    "budgets:DescribeBudget"
+                    "budgets:DescribeBudget",
                 ],
                 "Resource": "*",
-                "Sid": "BillingCostManagement"
+                "Sid": "BillingCostManagement",
             }
         ]
     },
@@ -244,50 +204,24 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "CostExplorer",
                 "Effect": "Allow",
-                "Action": [
-                    "ce:Get*",
-                    "ce:Describe*",
-                    "ce:List*"
-                ],
-                "Resource": "*"
+                "Action": ["ce:Get*", "ce:Describe*", "ce:List*"],
+                "Resource": "*",
             }
         ]
     },
     "autoscaling": {
         "Statement": [
-            {
-                "Sid": "AutoScaling",
-                "Effect": "Allow",
-                "Action": [
-                    "autoscaling:Describe*"
-                ],
-                "Resource": "*"
-            }
+            {"Sid": "AutoScaling", "Effect": "Allow", "Action": ["autoscaling:Describe*"], "Resource": "*"}
         ]
     },
-    "ec2": {
-        "Statement": [
-            {
-                "Sid": "Ec2",
-                "Effect": "Allow",
-                "Action": [
-                    "ec2:Describe*"
-                ],
-                "Resource": "*"
-            }
-        ]
-    },
+    "ec2": {"Statement": [{"Sid": "Ec2", "Effect": "Allow", "Action": ["ec2:Describe*"], "Resource": "*"}]},
     "ecr": {
         "Statement": [
             {
                 "Sid": "Ecr",
                 "Effect": "Allow",
-                "Action": [
-                    "ecr:Describe*",
-                    "ecr:List*",
-                    "ecr:BatchGetImage"
-                ],
-                "Resource": "*"
+                "Action": ["ecr:Describe*", "ecr:List*", "ecr:BatchGetImage"],
+                "Resource": "*",
             }
         ]
     },
@@ -304,10 +238,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "ecs:ListClusters",
                     "ecs:ListServices",
                     "ecs:ListTasks",
-                    "ecs:ListTaskDefinitions"
+                    "ecs:ListTaskDefinitions",
                 ],
                 "Resource": "*",
-                "Sid": "Ecs"
+                "Sid": "Ecs",
             }
         ]
     },
@@ -323,10 +257,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "eks:ListClusters",
                     "eks:ListNodegroups",
                     "eks:ListFargateProfiles",
-                    "eks:ListAddons"
+                    "eks:ListAddons",
                 ],
                 "Resource": "*",
-                "Sid": "Eks"
+                "Sid": "Eks",
             }
         ]
     },
@@ -340,10 +274,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "lambda:GetPolicy",
                     "logs:DescribeLogGroups",
                     "logs:GetLogEvents",
-                    "logs:FilterLogEvents"
+                    "logs:FilterLogEvents",
                 ],
                 "Resource": "*",
-                "Sid": "LambdaTool"
+                "Sid": "LambdaTool",
             }
         ]
     },
@@ -355,23 +289,16 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "states:DescribeStateMachine",
                     "states:ListStateMachines",
                     "states:DescribeExecution",
-                    "states:ListExecutions"
+                    "states:ListExecutions",
                 ],
                 "Resource": "*",
-                "Sid": "StepfunctionsTool"
+                "Sid": "StepfunctionsTool",
             }
         ]
     },
     "efs": {
         "Statement": [
-            {
-                "Sid": "Efs",
-                "Effect": "Allow",
-                "Action": [
-                    "elasticfilesystem:Describe*"
-                ],
-                "Resource": "*"
-            }
+            {"Sid": "Efs", "Effect": "Allow", "Action": ["elasticfilesystem:Describe*"], "Resource": "*"}
         ]
     },
     "s3-readonly": {
@@ -383,9 +310,9 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "s3:GetBucketLocation",
                     "s3:GetBucketTagging",
                     "s3:ListAllMyBuckets",
-                    "s3:ListBucket"
+                    "s3:ListBucket",
                 ],
-                "Resource": "*"
+                "Resource": "*",
             }
         ]
     },
@@ -393,13 +320,9 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
         "Statement": [
             {
                 "Effect": "Allow",
-                "Action": [
-                    "dsql:DbConnectAdmin",
-                    "dsql:GetCluster",
-                    "dsql:ListClusters"
-                ],
+                "Action": ["dsql:DbConnectAdmin", "dsql:GetCluster", "dsql:ListClusters"],
                 "Resource": "*",
-                "Sid": "AuroraDsql"
+                "Sid": "AuroraDsql",
             }
         ]
     },
@@ -407,12 +330,9 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
         "Statement": [
             {
                 "Effect": "Allow",
-                "Action": [
-                    "rds:DescribeDBClusters",
-                    "rds:DescribeDBInstances"
-                ],
+                "Action": ["rds:DescribeDBClusters", "rds:DescribeDBInstances"],
                 "Resource": "*",
-                "Sid": "Documentdb"
+                "Sid": "Documentdb",
             }
         ]
     },
@@ -426,10 +346,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "dynamodb:Scan",
                     "dynamodb:GetItem",
                     "dynamodb:BatchGetItem",
-                    "dynamodb:ListTables"
+                    "dynamodb:ListTables",
                 ],
                 "Resource": "*",
-                "Sid": "Dynamodb"
+                "Sid": "Dynamodb",
             }
         ]
     },
@@ -438,11 +358,8 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "DynamoDBReadOnly",
                 "Effect": "Allow",
-                "Action": [
-                    "dynamodb:Describe*",
-                    "dynamodb:List*"
-                ],
-                "Resource": "*"
+                "Action": ["dynamodb:Describe*", "dynamodb:List*"],
+                "Resource": "*",
             }
         ]
     },
@@ -453,10 +370,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                 "Action": [
                     "elasticache:DescribeCacheClusters",
                     "elasticache:DescribeReplicationGroups",
-                    "elasticache:ListTagsForResource"
+                    "elasticache:ListTagsForResource",
                 ],
                 "Resource": "*",
-                "Sid": "Elasticache"
+                "Sid": "Elasticache",
             }
         ]
     },
@@ -464,12 +381,9 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
         "Statement": [
             {
                 "Effect": "Allow",
-                "Action": [
-                    "elasticache:DescribeCacheClusters",
-                    "elasticache:ListTagsForResource"
-                ],
+                "Action": ["elasticache:DescribeCacheClusters", "elasticache:ListTagsForResource"],
                 "Resource": "*",
-                "Sid": "Memcached"
+                "Sid": "Memcached",
             }
         ]
     },
@@ -477,13 +391,9 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
         "Statement": [
             {
                 "Effect": "Allow",
-                "Action": [
-                    "rds:DescribeDBInstances",
-                    "rds:DescribeDBClusters",
-                    "rds-db:connect"
-                ],
+                "Action": ["rds:DescribeDBInstances", "rds:DescribeDBClusters", "rds-db:connect"],
                 "Resource": "*",
-                "Sid": "Mysql"
+                "Sid": "Mysql",
             }
         ]
     },
@@ -494,51 +404,31 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                 "Action": [
                     "neptune-db:ReadDataViaQuery",
                     "rds:DescribeDBClusters",
-                    "rds:DescribeDBInstances"
+                    "rds:DescribeDBInstances",
                 ],
                 "Resource": "*",
-                "Sid": "Neptune"
+                "Sid": "Neptune",
             }
         ]
     },
     "opensearch": {
         "Statement": [
-            {
-                "Sid": "OpenSearch",
-                "Effect": "Allow",
-                "Action": [
-                    "es:Describe*",
-                    "es:List*"
-                ],
-                "Resource": "*"
-            }
+            {"Sid": "OpenSearch", "Effect": "Allow", "Action": ["es:Describe*", "es:List*"], "Resource": "*"}
         ]
     },
     "postgres": {
         "Statement": [
             {
                 "Effect": "Allow",
-                "Action": [
-                    "rds:DescribeDBInstances",
-                    "rds:DescribeDBClusters",
-                    "rds-db:connect"
-                ],
+                "Action": ["rds:DescribeDBInstances", "rds:DescribeDBClusters", "rds-db:connect"],
                 "Resource": "*",
-                "Sid": "Postgres"
+                "Sid": "Postgres",
             }
         ]
     },
     "rds": {
         "Statement": [
-            {
-                "Sid": "Rds",
-                "Effect": "Allow",
-                "Action": [
-                    "rds:Describe*",
-                    "rds:List*"
-                ],
-                "Resource": "*"
-            }
+            {"Sid": "Rds", "Effect": "Allow", "Action": ["rds:Describe*", "rds:List*"], "Resource": "*"}
         ]
     },
     "redshift": {
@@ -550,10 +440,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "redshift:GetClusterCredentials",
                     "redshift-data:ExecuteStatement",
                     "redshift-data:DescribeStatement",
-                    "redshift-data:GetStatementResult"
+                    "redshift-data:GetStatementResult",
                 ],
                 "Resource": "*",
-                "Sid": "Redshift"
+                "Sid": "Redshift",
             }
         ]
     },
@@ -568,10 +458,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "s3tables:GetTableBucket",
                     "s3tables:ListTables",
                     "s3tables:ListTableBuckets",
-                    "s3tables:GetTableMetadataLocation"
+                    "s3tables:GetTableMetadataLocation",
                 ],
                 "Resource": "*",
-                "Sid": "S3Tables"
+                "Sid": "S3Tables",
             }
         ]
     },
@@ -585,10 +475,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "timestream:DescribeDatabase",
                     "timestream:DescribeTable",
                     "timestream:ListDatabases",
-                    "timestream:ListTables"
+                    "timestream:ListTables",
                 ],
                 "Resource": "*",
-                "Sid": "TimestreamForInfluxdb"
+                "Sid": "TimestreamForInfluxdb",
             }
         ]
     },
@@ -599,24 +489,15 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                 "Action": [
                     "elasticache:DescribeReplicationGroups",
                     "elasticache:DescribeServerlessCaches",
-                    "elasticache:ListTagsForResource"
+                    "elasticache:ListTagsForResource",
                 ],
                 "Resource": "*",
-                "Sid": "Valkey"
+                "Sid": "Valkey",
             }
         ]
     },
     "api-gateway": {
-        "Statement": [
-            {
-                "Sid": "ApiGateway",
-                "Effect": "Allow",
-                "Action": [
-                    "apigateway:GET"
-                ],
-                "Resource": "*"
-            }
-        ]
+        "Statement": [{"Sid": "ApiGateway", "Effect": "Allow", "Action": ["apigateway:GET"], "Resource": "*"}]
     },
     "appsync": {
         "Statement": [
@@ -629,10 +510,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "appsync:ListGraphqlApis",
                     "appsync:ListTypes",
                     "appsync:ListResolvers",
-                    "appsync:ListDataSources"
+                    "appsync:ListDataSources",
                 ],
                 "Resource": "*",
-                "Sid": "Appsync"
+                "Sid": "Appsync",
             }
         ]
     },
@@ -641,24 +522,14 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "CloudFront",
                 "Effect": "Allow",
-                "Action": [
-                    "cloudfront:Get*",
-                    "cloudfront:List*"
-                ],
-                "Resource": "*"
+                "Action": ["cloudfront:Get*", "cloudfront:List*"],
+                "Resource": "*",
             }
         ]
     },
     "elb": {
         "Statement": [
-            {
-                "Sid": "Elb",
-                "Effect": "Allow",
-                "Action": [
-                    "elasticloadbalancing:Describe*"
-                ],
-                "Resource": "*"
-            }
+            {"Sid": "Elb", "Effect": "Allow", "Action": ["elasticloadbalancing:Describe*"], "Resource": "*"}
         ]
     },
     "network": {
@@ -673,10 +544,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "ec2:DescribeNetworkInterfaces",
                     "ec2:DescribeInternetGateways",
                     "ec2:DescribeNatGateways",
-                    "ec2:DescribeVpcPeeringConnections"
+                    "ec2:DescribeVpcPeeringConnections",
                 ],
                 "Resource": "*",
-                "Sid": "Network"
+                "Sid": "Network",
             }
         ]
     },
@@ -685,11 +556,8 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "Route53",
                 "Effect": "Allow",
-                "Action": [
-                    "route53:Get*",
-                    "route53:List*"
-                ],
-                "Resource": "*"
+                "Action": ["route53:Get*", "route53:List*"],
+                "Resource": "*",
             }
         ]
     },
@@ -701,10 +569,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "mq:DescribeBroker",
                     "mq:ListBrokers",
                     "mq:DescribeConfiguration",
-                    "mq:ListConfigurations"
+                    "mq:ListConfigurations",
                 ],
                 "Resource": "*",
-                "Sid": "AmazonMq"
+                "Sid": "AmazonMq",
             }
         ]
     },
@@ -713,11 +581,8 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "EventBridge",
                 "Effect": "Allow",
-                "Action": [
-                    "events:Describe*",
-                    "events:List*"
-                ],
-                "Resource": "*"
+                "Action": ["events:Describe*", "events:List*"],
+                "Resource": "*",
             }
         ]
     },
@@ -732,25 +597,15 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "kafka:ListClustersV2",
                     "kafka:GetBootstrapBrokers",
                     "kafka:ListNodes",
-                    "kafka:DescribeConfiguration"
+                    "kafka:DescribeConfiguration",
                 ],
                 "Resource": "*",
-                "Sid": "Msk"
+                "Sid": "Msk",
             }
         ]
     },
     "sns": {
-        "Statement": [
-            {
-                "Sid": "Sns",
-                "Effect": "Allow",
-                "Action": [
-                    "sns:Get*",
-                    "sns:List*"
-                ],
-                "Resource": "*"
-            }
-        ]
+        "Statement": [{"Sid": "Sns", "Effect": "Allow", "Action": ["sns:Get*", "sns:List*"], "Resource": "*"}]
     },
     "sns-sqs": {
         "Statement": [
@@ -762,38 +617,23 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "sns:ListSubscriptionsByTopic",
                     "sqs:ListQueues",
                     "sqs:GetQueueAttributes",
-                    "sqs:GetQueueUrl"
+                    "sqs:GetQueueUrl",
                 ],
                 "Resource": "*",
-                "Sid": "SnsSqs"
+                "Sid": "SnsSqs",
             }
         ]
     },
     "sqs": {
-        "Statement": [
-            {
-                "Sid": "Sqs",
-                "Effect": "Allow",
-                "Action": [
-                    "sqs:Get*",
-                    "sqs:List*"
-                ],
-                "Resource": "*"
-            }
-        ]
+        "Statement": [{"Sid": "Sqs", "Effect": "Allow", "Action": ["sqs:Get*", "sqs:List*"], "Resource": "*"}]
     },
     "kendra-index": {
         "Statement": [
             {
                 "Effect": "Allow",
-                "Action": [
-                    "kendra:Query",
-                    "kendra:Retrieve",
-                    "kendra:DescribeIndex",
-                    "kendra:ListIndices"
-                ],
+                "Action": ["kendra:Query", "kendra:Retrieve", "kendra:DescribeIndex", "kendra:ListIndices"],
                 "Resource": "*",
-                "Sid": "KendraIndex"
+                "Sid": "KendraIndex",
             }
         ]
     },
@@ -805,10 +645,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "qbusiness:ChatSync",
                     "qbusiness:ListMessages",
                     "qbusiness:ListApplications",
-                    "qbusiness:GetApplication"
+                    "qbusiness:GetApplication",
                 ],
                 "Resource": "*",
-                "Sid": "QbusinessAnonymous"
+                "Sid": "QbusinessAnonymous",
             }
         ]
     },
@@ -820,10 +660,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "qbusiness:ChatSync",
                     "qbusiness:ListMessages",
                     "qbusiness:ListApplications",
-                    "qbusiness:GetApplication"
+                    "qbusiness:GetApplication",
                 ],
                 "Resource": "*",
-                "Sid": "Qindex"
+                "Sid": "Qindex",
             }
         ]
     },
@@ -832,12 +672,8 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "Athena",
                 "Effect": "Allow",
-                "Action": [
-                    "athena:Get*",
-                    "athena:List*",
-                    "athena:BatchGet*"
-                ],
-                "Resource": "*"
+                "Action": ["athena:Get*", "athena:List*", "athena:BatchGet*"],
+                "Resource": "*",
             }
         ]
     },
@@ -846,12 +682,8 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "Glue",
                 "Effect": "Allow",
-                "Action": [
-                    "glue:Get*",
-                    "glue:List*",
-                    "glue:BatchGet*"
-                ],
-                "Resource": "*"
+                "Action": ["glue:Get*", "glue:List*", "glue:BatchGet*"],
+                "Resource": "*",
             }
         ]
     },
@@ -860,12 +692,8 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "Kinesis",
                 "Effect": "Allow",
-                "Action": [
-                    "kinesis:Describe*",
-                    "kinesis:List*",
-                    "kinesis:Get*"
-                ],
-                "Resource": "*"
+                "Action": ["kinesis:Describe*", "kinesis:List*", "kinesis:Get*"],
+                "Resource": "*",
             }
         ]
     },
@@ -883,10 +711,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "glue:GetJobRun",
                     "glue:GetJobRuns",
                     "glue:GetCrawler",
-                    "glue:GetCrawlers"
+                    "glue:GetCrawlers",
                 ],
                 "Resource": "*",
-                "Sid": "Dataprocessing"
+                "Sid": "Dataprocessing",
             }
         ]
     },
@@ -900,23 +728,16 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "bedrock-agentcore:ListGateways",
                     "bedrock-agentcore:GetGateway",
                     "bedrock-agentcore:ListGatewayTargets",
-                    "bedrock-agentcore:GetGatewayTarget"
+                    "bedrock-agentcore:GetGatewayTarget",
                 ],
                 "Resource": "*",
-                "Sid": "BedrockAgentcore"
+                "Sid": "BedrockAgentcore",
             }
         ]
     },
     "bedrock-data-automation": {
         "Statement": [
-            {
-                "Effect": "Allow",
-                "Action": [
-                    "s3:GetObject"
-                ],
-                "Resource": "*",
-                "Sid": "BedrockDataAutomation"
-            }
+            {"Effect": "Allow", "Action": ["s3:GetObject"], "Resource": "*", "Sid": "BedrockDataAutomation"}
         ]
     },
     "bedrock-kb-retrieval": {
@@ -927,10 +748,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "bedrock:Retrieve",
                     "bedrock:RetrieveAndGenerate",
                     "bedrock:ListKnowledgeBases",
-                    "bedrock:GetKnowledgeBase"
+                    "bedrock:GetKnowledgeBase",
                 ],
                 "Resource": "*",
-                "Sid": "BedrockKbRetrieval"
+                "Sid": "BedrockKbRetrieval",
             }
         ]
     },
@@ -939,11 +760,8 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "BedrockReadOnly",
                 "Effect": "Allow",
-                "Action": [
-                    "bedrock:Get*",
-                    "bedrock:List*"
-                ],
-                "Resource": "*"
+                "Action": ["bedrock:Get*", "bedrock:List*"],
+                "Resource": "*",
             }
         ]
     },
@@ -952,11 +770,8 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "SageMaker",
                 "Effect": "Allow",
-                "Action": [
-                    "sagemaker:Describe*",
-                    "sagemaker:List*"
-                ],
-                "Resource": "*"
+                "Action": ["sagemaker:Describe*", "sagemaker:List*"],
+                "Resource": "*",
             }
         ]
     },
@@ -971,10 +786,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "sagemaker:DescribeTrainingJob",
                     "sagemaker:ListEndpoints",
                     "sagemaker:ListModels",
-                    "sagemaker:ListTrainingJobs"
+                    "sagemaker:ListTrainingJobs",
                 ],
                 "Resource": "*",
-                "Sid": "SagemakerAi"
+                "Sid": "SagemakerAi",
             }
         ]
     },
@@ -987,10 +802,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "healthlake:ListFHIRDatastores",
                     "healthlake:ReadResource",
                     "healthlake:SearchWithGet",
-                    "healthlake:SearchWithPost"
+                    "healthlake:SearchWithPost",
                 ],
                 "Resource": "*",
-                "Sid": "Healthlake"
+                "Sid": "Healthlake",
             }
         ]
     },
@@ -1006,10 +821,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "omics:ListRuns",
                     "omics:ListRunTasks",
                     "omics:GetSequenceStore",
-                    "omics:ListSequenceStores"
+                    "omics:ListSequenceStores",
                 ],
                 "Resource": "*",
-                "Sid": "Healthomics"
+                "Sid": "Healthomics",
             }
         ]
     },
@@ -1025,10 +840,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "iotsitewise:GetAssetPropertyValueHistory",
                     "iotsitewise:ListAssets",
                     "iotsitewise:ListAssetModels",
-                    "iotsitewise:BatchGetAssetPropertyValue"
+                    "iotsitewise:BatchGetAssetPropertyValue",
                 ],
                 "Resource": "*",
-                "Sid": "IotSitewise"
+                "Sid": "IotSitewise",
             }
         ]
     },
@@ -1043,10 +858,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "geo:GetPlace",
                     "geo:CalculateRoute",
                     "geo:ListPlaceIndexes",
-                    "geo:ListRouteCalculators"
+                    "geo:ListRouteCalculators",
                 ],
                 "Resource": "*",
-                "Sid": "Location"
+                "Sid": "Location",
             }
         ]
     },
@@ -1059,10 +874,10 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                     "support:DescribeTrustedAdvisorCheckResult",
                     "support:DescribeCases",
                     "support:DescribeServices",
-                    "support:DescribeSeverityLevels"
+                    "support:DescribeSeverityLevels",
                 ],
                 "Resource": "*",
-                "Sid": "Support"
+                "Sid": "Support",
             }
         ]
     },
@@ -1071,12 +886,8 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "Backup",
                 "Effect": "Allow",
-                "Action": [
-                    "backup:Describe*",
-                    "backup:Get*",
-                    "backup:List*"
-                ],
-                "Resource": "*"
+                "Action": ["backup:Describe*", "backup:Get*", "backup:List*"],
+                "Resource": "*",
             }
         ]
     },
@@ -1088,9 +899,9 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
                 "Action": [
                     "cloudformation:Describe*",
                     "cloudformation:List*",
-                    "cloudformation:GetTemplateSummary"
+                    "cloudformation:GetTemplateSummary",
                 ],
-                "Resource": "*"
+                "Resource": "*",
             }
         ]
     },
@@ -1099,35 +910,21 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "ComputeOptimizer",
                 "Effect": "Allow",
-                "Action": [
-                    "compute-optimizer:Get*"
-                ],
-                "Resource": "*"
+                "Action": ["compute-optimizer:Get*"],
+                "Resource": "*",
             }
         ]
     },
     "health": {
-        "Statement": [
-            {
-                "Sid": "Health",
-                "Effect": "Allow",
-                "Action": [
-                    "health:Describe*"
-                ],
-                "Resource": "*"
-            }
-        ]
+        "Statement": [{"Sid": "Health", "Effect": "Allow", "Action": ["health:Describe*"], "Resource": "*"}]
     },
     "service-quotas": {
         "Statement": [
             {
                 "Sid": "ServiceQuotas",
                 "Effect": "Allow",
-                "Action": [
-                    "servicequotas:Get*",
-                    "servicequotas:List*"
-                ],
-                "Resource": "*"
+                "Action": ["servicequotas:Get*", "servicequotas:List*"],
+                "Resource": "*",
             }
         ]
     },
@@ -1136,17 +933,20 @@ MCP_IAM_POLICIES: dict[str, dict | None] = {
             {
                 "Sid": "Ssm",
                 "Effect": "Allow",
-                "Action": [
-                    "ssm:DescribeParameters",
-                    "ssm:GetParameter",
-                    "ssm:GetParameters",
-                    "ssm:List*"
-                ],
-                "Resource": "*"
+                "Action": ["ssm:DescribeParameters", "ssm:GetParameter", "ssm:GetParameters", "ssm:List*"],
+                "Resource": "*",
             }
         ]
     },
 }
 
 # Targets that exist but require no IAM permissions.
-_NO_IAM_TARGETS = {'aws-api', 'aws-knowledge', 'aws-pricing', 'code-doc-gen', 'diagram', 'openapi', 'syntheticdata'}
+_NO_IAM_TARGETS = {
+    "aws-api",
+    "aws-knowledge",
+    "aws-pricing",
+    "code-doc-gen",
+    "diagram",
+    "openapi",
+    "syntheticdata",
+}

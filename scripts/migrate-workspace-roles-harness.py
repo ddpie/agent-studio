@@ -15,6 +15,7 @@ Usage:
     python scripts/migrate-workspace-roles-harness.py              # dry-run
     python scripts/migrate-workspace-roles-harness.py --apply      # actually write
 """
+
 from __future__ import annotations
 
 import argparse

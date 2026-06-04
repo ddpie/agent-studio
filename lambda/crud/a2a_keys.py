@@ -9,6 +9,7 @@ Key format: as_<32-chars base62>. The 'as_' prefix lets tooling
 recognise it as an Agent Studio key at a glance. 'keyPrefix' (first 8
 chars) is stored as plaintext to help users identify which key is which.
 """
+
 import hashlib
 import os
 import uuid
@@ -122,13 +123,15 @@ def list_keys(wsId: str, agentId: str):
     )
     keys = []
     for row in resp.get("Items", []):
-        keys.append({
-            "keyId": row.get("keyId"),
-            "keyPrefix": row.get("keyPrefix"),
-            "createdAt": row.get("createdAt"),
-            "lastUsedAt": row.get("lastUsedAt"),
-            "revoked": bool(row.get("revoked", False)),
-        })
+        keys.append(
+            {
+                "keyId": row.get("keyId"),
+                "keyPrefix": row.get("keyPrefix"),
+                "createdAt": row.get("createdAt"),
+                "lastUsedAt": row.get("lastUsedAt"),
+                "revoked": bool(row.get("revoked", False)),
+            }
+        )
     return success({"keys": keys})
 
 
@@ -176,17 +179,19 @@ def create_meta_key(wsId: str):
     plaintext, key_hash, prefix = _generate_key()
     key_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
-    _get_table().put_item(Item={
-        "apiKeyHash": key_hash,
-        "keyId": key_id,
-        "userAgentKey": f"{user_id}#{_META_SENTINEL}",
-        "keyPrefix": prefix,
-        "userId": user_id,
-        "agentId": _META_SENTINEL,
-        "workspaceId": ws_id,
-        "createdAt": now,
-        "revoked": False,
-    })
+    _get_table().put_item(
+        Item={
+            "apiKeyHash": key_hash,
+            "keyId": key_id,
+            "userAgentKey": f"{user_id}#{_META_SENTINEL}",
+            "keyPrefix": prefix,
+            "userId": user_id,
+            "agentId": _META_SENTINEL,
+            "workspaceId": ws_id,
+            "createdAt": now,
+            "revoked": False,
+        }
+    )
     return success(
         {"keyId": key_id, "apiKey": plaintext, "keyPrefix": prefix, "createdAt": now},
         status_code=201,

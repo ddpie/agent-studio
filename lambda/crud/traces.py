@@ -23,6 +23,7 @@ Span schema (observed from live probe, 2026-04-19):
 Logs Insights accesses dotted attributes with dot notation, e.g.
 `attributes.session.id`. `parentSpanId` may be absent on root spans.
 """
+
 import re
 import time
 from datetime import datetime, timezone
@@ -85,8 +86,7 @@ def _run_query(query: str, hours: int = 24, timeout_s: int = 15) -> list:
         if status == "Complete":
             return resp.get("results", [])
         if status in ("Failed", "Cancelled"):
-            logger.warning("logs query non-complete",
-                           extra={"query_status": status})
+            logger.warning("logs query non-complete", extra={"query_status": status})
             return []
         time.sleep(0.3)
     try:
@@ -168,8 +168,7 @@ fields coalesce(attributes.agent_studio.session_id, attributes.session.id) as si
     try:
         rows = _run_query(list_q, hours=24)
     except ClientError as e:
-        logger.exception("traces query failed",
-                         extra={"error_code": e.response.get("Error", {}).get("Code")})
+        logger.exception("traces query failed", extra={"error_code": e.response.get("Error", {}).get("Code")})
         return internal_error()
 
     try:
@@ -201,16 +200,18 @@ fields coalesce(attributes.agent_studio.session_id, attributes.session.id) as si
         except ValueError:
             count = 0
         meta = meta_by_sid.get(sid, {})
-        sessions.append({
-            "sessionId": sid,
-            "traceId": _field(row, "traceId"),
-            "firstEvent": _as_utc_iso(_field(row, "firstEvent")),
-            "spanCount": count,
-            "model": meta.get("model"),
-            "totalTokens": meta.get("totalTokens"),
-            "durationMs": meta.get("durationMs"),
-            "status": meta.get("status") or "OK",
-        })
+        sessions.append(
+            {
+                "sessionId": sid,
+                "traceId": _field(row, "traceId"),
+                "firstEvent": _as_utc_iso(_field(row, "firstEvent")),
+                "spanCount": count,
+                "model": meta.get("model"),
+                "totalTokens": meta.get("totalTokens"),
+                "durationMs": meta.get("durationMs"),
+                "status": meta.get("status") or "OK",
+            }
+        )
     return success({"sessions": sessions})
 
 
@@ -247,8 +248,9 @@ fields spanId, parentSpanId, name, startTimeUnixNano, endTimeUnixNano, status.co
     try:
         rows = _run_query(q, hours=24)
     except ClientError as e:
-        logger.exception("session trace query failed",
-                         extra={"error_code": e.response.get("Error", {}).get("Code")})
+        logger.exception(
+            "session trace query failed", extra={"error_code": e.response.get("Error", {}).get("Code")}
+        )
         return internal_error()
 
     if not rows:
@@ -384,8 +386,9 @@ fields resource.attributes.service.name as svc, name as spanName, kind, status.c
     try:
         summary_rows = _run_query(summary_q, hours=cfg["hours"], timeout_s=_STATS_QUERY_TIMEOUT_S)
     except ClientError as e:
-        logger.exception("trace stats summary query failed",
-                         extra={"error_code": e.response.get("Error", {}).get("Code")})
+        logger.exception(
+            "trace stats summary query failed", extra={"error_code": e.response.get("Error", {}).get("Code")}
+        )
         return internal_error()
 
     count = 0
@@ -412,7 +415,7 @@ fields @timestamp, resource.attributes.service.name as svc, name as spanName, st
 | fields (statusCode = "ERROR") as isError
 | stats count(*) as c,
         sum(isError) as e,
-        pct(durMs, 95) as p95 by bin({cfg['bin']}) as bucket
+        pct(durMs, 95) as p95 by bin({cfg["bin"]}) as bucket
 | sort bucket asc
 """.strip()
 
@@ -438,19 +441,23 @@ fields @timestamp, resource.attributes.service.name as svc, name as spanName, st
                 iso = dt.isoformat().replace("+00:00", "Z")
             except ValueError:
                 iso = bucket_raw
-        timeseries.append({
-            "bucket": iso,
-            "count": _to_int(_field(row, "c")),
-            "errors": _to_int(_field(row, "e")),
-            "p95Ms": _round_ms(_field(row, "p95")),
-        })
+        timeseries.append(
+            {
+                "bucket": iso,
+                "count": _to_int(_field(row, "c")),
+                "errors": _to_int(_field(row, "e")),
+                "p95Ms": _round_ms(_field(row, "p95")),
+            }
+        )
 
-    return success({
-        "range": range_key,
-        "count": count,
-        "errorCount": error_count,
-        "errorRate": round(error_rate, 4),
-        "latencyMs": latency,
-        "timeseries": timeseries,
-        "bucketSeconds": cfg["bucket_s"],
-    })
+    return success(
+        {
+            "range": range_key,
+            "count": count,
+            "errorCount": error_count,
+            "errorRate": round(error_rate, 4),
+            "latencyMs": latency,
+            "timeseries": timeseries,
+            "bucketSeconds": cfg["bucket_s"],
+        }
+    )

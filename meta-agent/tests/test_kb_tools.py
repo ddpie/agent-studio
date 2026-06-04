@@ -7,6 +7,7 @@ Each tool is a Strands @tool that returns a JSON string. We verify both the
 happy path (DDB shape, downstream calls) and the never-raise contract for
 validation / dependency failures.
 """
+
 import json
 import sys
 import types
@@ -44,6 +45,7 @@ sys.modules["config"] = _mock_config
 @pytest.fixture(autouse=True)
 def _scope(monkeypatch):
     from tools import _scope
+
     monkeypatch.setattr(_scope, "_caller_id", "user-1", raising=False)
     monkeypatch.setattr(_scope, "_workspace_id", "ws-1", raising=False)
 
@@ -85,9 +87,11 @@ def _kb_item(**overrides):
 
 # ── kb_create ─────────────────────────────────────────────────────────────
 
+
 class TestKbCreate:
     def test_no_workspace(self, monkeypatch):
         from tools import _scope, kb_create as mod
+
         monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
 
         out = json.loads(mod.kb_create("My KB"))
@@ -95,6 +99,7 @@ class TestKbCreate:
 
     def test_unsupported_region(self, monkeypatch):
         from tools import kb_create as mod
+
         monkeypatch.setattr(mod, "REGION", "ap-northeast-1")
 
         out = json.loads(mod.kb_create("My KB"))
@@ -196,7 +201,8 @@ class TestKbCreate:
 
         def client_factory(svc, **kw):
             return {
-                "s3vectors": fake_s3v, "bedrock-agent": fake_bedrock,
+                "s3vectors": fake_s3v,
+                "bedrock-agent": fake_bedrock,
                 "dynamodb": fake_ddb,
             }.get(svc, MagicMock())
 
@@ -210,9 +216,11 @@ class TestKbCreate:
 
 # ── kb_delete ─────────────────────────────────────────────────────────────
 
+
 class TestKbDelete:
     def test_no_workspace(self, monkeypatch):
         from tools import _scope, kb_delete as mod
+
         monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
 
         out = json.loads(mod.kb_delete("kb-x"))
@@ -269,7 +277,8 @@ class TestKbDelete:
 
         def client_factory(svc, **kw):
             return {
-                "dynamodb": fake_ddb, "s3": fake_s3,
+                "dynamodb": fake_ddb,
+                "s3": fake_s3,
                 "bedrock-agent": fake_bedrock,
             }.get(svc, MagicMock())
 
@@ -301,8 +310,10 @@ class TestKbDelete:
 
         def client_factory(svc, **kw):
             return {
-                "dynamodb": fake_ddb, "s3": fake_s3,
-                "bedrock-agent": fake_bedrock, "s3vectors": fake_s3v,
+                "dynamodb": fake_ddb,
+                "s3": fake_s3,
+                "bedrock-agent": fake_bedrock,
+                "s3vectors": fake_s3v,
             }.get(svc, MagicMock())
 
         with patch("boto3.client", side_effect=client_factory):
@@ -316,9 +327,11 @@ class TestKbDelete:
 
 # ── kb_upload_document ────────────────────────────────────────────────────
 
+
 class TestKbUpload:
     def test_unsupported_format(self, monkeypatch):
         from tools import kb_upload_document as mod
+
         out = json.loads(mod.kb_upload_document("kb-1", "stage/x.exe", "x.exe"))
         assert out["error"] == "unsupported_format"
 
@@ -382,14 +395,19 @@ class TestKbUpload:
 
         def client_factory(svc, **kw):
             return {
-                "s3": fake_s3, "dynamodb": fake_ddb,
+                "s3": fake_s3,
+                "dynamodb": fake_ddb,
                 "bedrock-agent": fake_bedrock,
             }.get(svc, MagicMock())
 
         with patch("boto3.client", side_effect=client_factory):
-            out = json.loads(mod.kb_upload_document(
-                "kb-123", "staging/abc.pdf", "Hello World.pdf",
-            ))
+            out = json.loads(
+                mod.kb_upload_document(
+                    "kb-123",
+                    "staging/abc.pdf",
+                    "Hello World.pdf",
+                )
+            )
 
         assert out["status"] == "IN_PROGRESS"
         assert out["ingestion_job_id"] == "JOB-NEW"
@@ -400,6 +418,7 @@ class TestKbUpload:
 
 def test_safe_filename():
     from tools.kb_upload_document import _safe_filename
+
     assert _safe_filename("My File!.pdf") == "My_File_.pdf"
     # Truncation to 100 chars
     assert len(_safe_filename("a" * 200)) == 100
@@ -407,9 +426,11 @@ def test_safe_filename():
 
 # ── kb_attach (attach + detach) ───────────────────────────────────────────
 
+
 class TestKbAttach:
     def test_no_workspace(self, monkeypatch):
         from tools import _scope, kb_attach as mod
+
         monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
         out = json.loads(mod.kb_attach_to_agent("kb-1", "a-1"))
         assert out["error"] == "no_workspace"
@@ -449,6 +470,7 @@ class TestKbAttach:
 
     def test_attach_happy_path(self, monkeypatch):
         from tools import kb_attach as mod
+
         _grant_agent(monkeypatch, role="editor")
 
         fake_ddb = MagicMock()
@@ -464,6 +486,7 @@ class TestKbAttach:
 
     def test_detach_blocks_when_kb_missing(self, monkeypatch):
         from tools import kb_attach as mod
+
         _grant_agent(monkeypatch, role="editor")
 
         fake_ddb = MagicMock()
@@ -474,6 +497,7 @@ class TestKbAttach:
 
     def test_detach_happy_path(self, monkeypatch):
         from tools import kb_attach as mod
+
         _grant_agent(monkeypatch, role="editor")
 
         fake_ddb = MagicMock()
@@ -488,15 +512,18 @@ class TestKbAttach:
 
 # ── kb_get ────────────────────────────────────────────────────────────────
 
+
 class TestKbGet:
     def test_no_workspace(self, monkeypatch):
         from tools import _scope, kb_get as mod
+
         monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
         out = json.loads(mod.kb_get("kb-x"))
         assert out["error"] == "no_workspace"
 
     def test_not_found(self, monkeypatch):
         from tools import kb_get as mod
+
         fake_ddb = MagicMock()
         fake_ddb.get_item.return_value = {}
 
@@ -517,11 +544,13 @@ class TestKbGet:
 
         fake_s3 = MagicMock()
         fake_s3.list_objects_v2.return_value = {
-            "Contents": [{
-                "Key": "kb/ws-1/kb-123/documents/a.pdf",
-                "Size": 100,
-                "LastModified": datetime(2024, 1, 1, tzinfo=timezone.utc),
-            }],
+            "Contents": [
+                {
+                    "Key": "kb/ws-1/kb-123/documents/a.pdf",
+                    "Size": 100,
+                    "LastModified": datetime(2024, 1, 1, tzinfo=timezone.utc),
+                }
+            ],
         }
 
         fake_bedrock = MagicMock()
@@ -534,7 +563,8 @@ class TestKbGet:
 
         def client_factory(svc, **kw):
             return {
-                "dynamodb": fake_ddb, "s3": fake_s3,
+                "dynamodb": fake_ddb,
+                "s3": fake_s3,
                 "bedrock-agent": fake_bedrock,
             }.get(svc, MagicMock())
 
@@ -549,15 +579,18 @@ class TestKbGet:
 
 # ── kb_list ───────────────────────────────────────────────────────────────
 
+
 class TestKbList:
     def test_no_workspace(self, monkeypatch):
         from tools import _scope, kb_list as mod
+
         monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
         out = json.loads(mod.kb_list())
         assert out["error"] == "no_workspace"
 
     def test_query_failure(self, monkeypatch):
         from tools import kb_list as mod
+
         fake_ddb = MagicMock()
         fake_ddb.query.side_effect = Exception("ddb explode")
 
@@ -570,9 +603,15 @@ class TestKbList:
         from tools import kb_list as mod
 
         fake_ddb = MagicMock()
-        fake_ddb.query.return_value = {"Items": [_kb_item(), _kb_item(
-            kb_id={"S": "kb-456"}, name={"S": "Other"},
-        )]}
+        fake_ddb.query.return_value = {
+            "Items": [
+                _kb_item(),
+                _kb_item(
+                    kb_id={"S": "kb-456"},
+                    name={"S": "Other"},
+                ),
+            ]
+        }
 
         fake_s3 = MagicMock()
         fake_s3.list_objects_v2.return_value = {"KeyCount": 3}
@@ -590,15 +629,18 @@ class TestKbList:
 
 # ── kb_check_ingestion ────────────────────────────────────────────────────
 
+
 class TestKbCheckIngestion:
     def test_no_workspace(self, monkeypatch):
         from tools import _scope, kb_check_ingestion as mod
+
         monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
         out = json.loads(mod.kb_check_ingestion("kb-x"))
         assert out["error"] == "no_workspace"
 
     def test_kb_not_found(self, monkeypatch):
         from tools import kb_check_ingestion as mod
+
         fake_ddb = MagicMock()
         fake_ddb.get_item.return_value = {}
         with patch("boto3.client", return_value=fake_ddb):
@@ -607,6 +649,7 @@ class TestKbCheckIngestion:
 
     def test_no_job_yet(self, monkeypatch):
         from tools import kb_check_ingestion as mod
+
         fake_ddb = MagicMock()
         # KB exists but has never had an ingestion
         fake_ddb.get_item.return_value = {"Item": _kb_item()}
@@ -639,7 +682,8 @@ class TestKbCheckIngestion:
 
         def client_factory(svc, **kw):
             return {
-                "dynamodb": fake_ddb, "bedrock-agent": fake_bedrock,
+                "dynamodb": fake_ddb,
+                "bedrock-agent": fake_bedrock,
             }.get(svc, MagicMock())
 
         with patch("boto3.client", side_effect=client_factory):
@@ -673,7 +717,8 @@ class TestKbCheckIngestion:
 
         def client_factory(svc, **kw):
             return {
-                "dynamodb": fake_ddb, "bedrock-agent": fake_bedrock,
+                "dynamodb": fake_ddb,
+                "bedrock-agent": fake_bedrock,
             }.get(svc, MagicMock())
 
         with patch("boto3.client", side_effect=client_factory):
@@ -685,13 +730,16 @@ class TestKbCheckIngestion:
 
 # ── kb_inject helpers (no @tool, but pure helpers) ────────────────────────
 
+
 class TestKbInject:
     def test_build_kb_injection_empty(self):
         from tools.kb_inject import build_kb_injection
+
         assert build_kb_injection([]) == ""
 
     def test_build_kb_injection_includes_records_and_tool_code(self):
         from tools.kb_inject import build_kb_injection
+
         records = [{"kb_id": "kb-1", "bedrock_kb_id": "BK1", "name": "n"}]
         out = build_kb_injection(records)
         assert "BOUND_KBS" in out
@@ -700,6 +748,7 @@ class TestKbInject:
 
     def test_resolve_kb_bindings_empty(self):
         from tools.kb_inject import resolve_kb_bindings
+
         assert resolve_kb_bindings("ws-1", []) == []
 
     def test_resolve_kb_bindings_skips_missing(self):
@@ -707,8 +756,7 @@ class TestKbInject:
 
         fake_ddb = MagicMock()
         fake_ddb.get_item.side_effect = [
-            {"Item": {"kb_id": {"S": "kb-1"}, "bedrock_kb_id": {"S": "BK1"},
-                      "name": {"S": "alpha"}}},
+            {"Item": {"kb_id": {"S": "kb-1"}, "bedrock_kb_id": {"S": "BK1"}, "name": {"S": "alpha"}}},
             {},  # second one missing
         ]
 
@@ -732,15 +780,18 @@ class TestKbInject:
 
 # ── kb_delete_document ────────────────────────────────────────────────────
 
+
 class TestKbDeleteDocument:
     def test_no_workspace(self, monkeypatch):
         from tools import _scope, kb_delete_document as mod
+
         monkeypatch.setattr(_scope, "_workspace_id", "", raising=False)
         out = json.loads(mod.kb_delete_document("kb-x", "k/foo.pdf"))
         assert out["error"] == "no_workspace"
 
     def test_kb_not_found(self, monkeypatch):
         from tools import kb_delete_document as mod
+
         fake_ddb = MagicMock()
         fake_ddb.get_item.return_value = {}
         with patch("boto3.client", return_value=fake_ddb):
@@ -750,6 +801,7 @@ class TestKbDeleteDocument:
     def test_invalid_document_key(self, monkeypatch):
         """Document key must start with the KB's s3_prefix."""
         from tools import kb_delete_document as mod
+
         fake_ddb = MagicMock()
         fake_ddb.get_item.return_value = {"Item": _kb_item()}
 
@@ -771,7 +823,8 @@ class TestKbDeleteDocument:
 
         def client_factory(svc, **kw):
             return {
-                "dynamodb": fake_ddb, "s3": fake_s3,
+                "dynamodb": fake_ddb,
+                "s3": fake_s3,
                 "bedrock-agent": fake_bedrock,
             }.get(svc, MagicMock())
 
@@ -795,9 +848,12 @@ class TestKbDeleteDocument:
             return {"dynamodb": fake_ddb, "s3": fake_s3}.get(svc, MagicMock())
 
         with patch("boto3.client", side_effect=client_factory):
-            out = json.loads(mod.kb_delete_document(
-                "kb-123", "kb/ws-1/kb-123/documents/x.pdf",
-            ))
+            out = json.loads(
+                mod.kb_delete_document(
+                    "kb-123",
+                    "kb/ws-1/kb-123/documents/x.pdf",
+                )
+            )
 
         assert out["error"] == "delete_failed"
 
@@ -813,14 +869,18 @@ class TestKbDeleteDocument:
 
         def client_factory(svc, **kw):
             return {
-                "dynamodb": fake_ddb, "s3": fake_s3,
+                "dynamodb": fake_ddb,
+                "s3": fake_s3,
                 "bedrock-agent": fake_bedrock,
             }.get(svc, MagicMock())
 
         with patch("boto3.client", side_effect=client_factory):
-            out = json.loads(mod.kb_delete_document(
-                "kb-123", "kb/ws-1/kb-123/documents/x.pdf",
-            ))
+            out = json.loads(
+                mod.kb_delete_document(
+                    "kb-123",
+                    "kb/ws-1/kb-123/documents/x.pdf",
+                )
+            )
 
         assert out["deleted"] is True
         assert out["ingestion_job_id"] is None

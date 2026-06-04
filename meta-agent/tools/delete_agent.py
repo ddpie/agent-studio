@@ -38,8 +38,12 @@ def delete_agent(agent_id: str) -> str:
         delete_runtime(agent_id)
     except Exception as e:
         msg = str(e)
-        benign = ("AccessDeniedException" in msg or "ResourceNotFoundException" in msg
-                  or "not authorized" in msg.lower() or "not found" in msg.lower())
+        benign = (
+            "AccessDeniedException" in msg
+            or "ResourceNotFoundException" in msg
+            or "not authorized" in msg.lower()
+            or "not found" in msg.lower()
+        )
         if not benign:
             return json.dumps({"error": f"Failed to delete runtime: {e}"})
         runtime_note = "runtime was never deployed (or already deleted); archived DDB record only"
@@ -122,13 +126,15 @@ def restore_agent(agent_id: str) -> str:
     record["status"] = "active"
     table.put_item(Item=record)
 
-    return json.dumps({
-        "old_agent_id": agent_id,
-        "new_agent_id": new_agent_id,
-        "agent_name": agent_name,
-        "action": "restored",
-        "status": status,
-    })
+    return json.dumps(
+        {
+            "old_agent_id": agent_id,
+            "new_agent_id": new_agent_id,
+            "agent_name": agent_name,
+            "action": "restored",
+            "status": status,
+        }
+    )
 
 
 @tool

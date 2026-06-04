@@ -1,4 +1,5 @@
 """Tests for crud.secrets — agent secrets via AWS Secrets Manager."""
+
 import json
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
@@ -15,9 +16,7 @@ def stub_env(monkeypatch):
 def mock_sm():
     with patch("crud.secrets._get_sm") as g:
         s = MagicMock()
-        s.exceptions.ResourceNotFoundException = type(
-            "ResourceNotFoundException", (Exception,), {}
-        )
+        s.exceptions.ResourceNotFoundException = type("ResourceNotFoundException", (Exception,), {})
         g.return_value = s
         yield s
 
@@ -79,6 +78,7 @@ def _apigw(method, path, body=None):
 
 def _invoke(event):
     from crud.handler import lambda_handler
+
     return lambda_handler(event, MagicMock())
 
 
@@ -90,28 +90,29 @@ def _invoke(event):
 class TestPureHelpers:
     def test_secret_path_with_key(self):
         from crud.secrets import _secret_path
+
         assert _secret_path("ws1", "agt1", "API_KEY") == "agent-studio/ws1/agt1/API_KEY"
 
     def test_secret_path_without_key(self):
         from crud.secrets import _secret_path
+
         assert _secret_path("ws1", "agt1") == "agent-studio/ws1/agt1"
 
     def test_verify_agent_ownership_match(self, mock_agents_table):
         from crud.secrets import _verify_agent_ownership
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": "ws1"}
-        }
+
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": "ws1"}}
         assert _verify_agent_ownership("agt1", "ws1") is True
 
     def test_verify_agent_ownership_wrong_workspace(self, mock_agents_table):
         from crud.secrets import _verify_agent_ownership
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": "other-ws"}
-        }
+
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": "other-ws"}}
         assert _verify_agent_ownership("agt1", "ws1") is False
 
     def test_verify_agent_ownership_no_item(self, mock_agents_table):
         from crud.secrets import _verify_agent_ownership
+
         mock_agents_table.get_item.return_value = {}
         assert _verify_agent_ownership("agt1", "ws1") is False
 
@@ -124,6 +125,7 @@ class TestPureHelpers:
 class TestLazyInit:
     def test_get_sm_caches(self):
         import crud.secrets as mod
+
         mod._sm = None
         sentinel = MagicMock()
         with patch("boto3.client", return_value=sentinel) as bc:
@@ -134,6 +136,7 @@ class TestLazyInit:
 
     def test_get_agents_table_caches(self):
         import crud.secrets as mod
+
         mod._agents_table = None
         sentinel = MagicMock()
         sentinel_table = MagicMock()
@@ -152,9 +155,7 @@ class TestLazyInit:
 
 class TestListSecrets:
     def test_list_empty(self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table):
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": workspace_id}
-        }
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": workspace_id}}
         # Paginator: a single page with no secrets
         paginator = MagicMock()
         paginator.paginate.return_value = [{"SecretList": []}]
@@ -164,29 +165,27 @@ class TestListSecrets:
         assert resp["statusCode"] == 200
         assert json.loads(resp["body"])["items"] == []
 
-    def test_list_returns_keys(
-        self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table
-    ):
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": workspace_id}
-        }
+    def test_list_returns_keys(self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table):
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": workspace_id}}
         ts = datetime(2026, 4, 25, 12, 0, 0, tzinfo=timezone.utc)
         prefix = f"agent-studio/{workspace_id}/agt1/"
         paginator = MagicMock()
-        paginator.paginate.return_value = [{
-            "SecretList": [
-                {
-                    "Name": f"{prefix}API_KEY",
-                    "CreatedDate": ts,
-                    "LastChangedDate": ts,
-                },
-                {
-                    "Name": f"{prefix}DB_PASSWORD",
-                    "CreatedDate": ts,
-                    "LastChangedDate": ts,
-                },
-            ],
-        }]
+        paginator.paginate.return_value = [
+            {
+                "SecretList": [
+                    {
+                        "Name": f"{prefix}API_KEY",
+                        "CreatedDate": ts,
+                        "LastChangedDate": ts,
+                    },
+                    {
+                        "Name": f"{prefix}DB_PASSWORD",
+                        "CreatedDate": ts,
+                        "LastChangedDate": ts,
+                    },
+                ],
+            }
+        ]
         mock_sm.get_paginator.return_value = paginator
 
         resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/agents/agt1/secrets"))
@@ -200,18 +199,18 @@ class TestListSecrets:
     def test_list_skips_empty_key_suffix(
         self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table
     ):
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": workspace_id}
-        }
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": workspace_id}}
         prefix = f"agent-studio/{workspace_id}/agt1/"
         paginator = MagicMock()
-        paginator.paginate.return_value = [{
-            "SecretList": [
-                # One with empty suffix - should be skipped
-                {"Name": f"{prefix}", "CreatedDate": "", "LastChangedDate": ""},
-                {"Name": f"{prefix}KEY1", "CreatedDate": "", "LastChangedDate": ""},
-            ],
-        }]
+        paginator.paginate.return_value = [
+            {
+                "SecretList": [
+                    # One with empty suffix - should be skipped
+                    {"Name": f"{prefix}", "CreatedDate": "", "LastChangedDate": ""},
+                    {"Name": f"{prefix}KEY1", "CreatedDate": "", "LastChangedDate": ""},
+                ],
+            }
+        ]
         mock_sm.get_paginator.return_value = paginator
 
         resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/agents/agt1/secrets"))
@@ -225,9 +224,7 @@ class TestListSecrets:
     def test_list_handles_paginator_failure(
         self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table
     ):
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": workspace_id}
-        }
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": workspace_id}}
         mock_sm.get_paginator.side_effect = Exception("AWS down")
         resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/agents/agt1/secrets"))
         # Errors are logged + empty list returned, so still 200
@@ -241,22 +238,16 @@ class TestListSecrets:
     def test_list_agent_not_in_workspace(
         self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table
     ):
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": "other-ws"}
-        }
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": "other-ws"}}
         resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/agents/agt1/secrets"))
         assert resp["statusCode"] == 403
 
-    def test_list_agent_not_found(
-        self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table
-    ):
+    def test_list_agent_not_found(self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table):
         mock_agents_table.get_item.return_value = {}
         resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/agents/agt1/secrets"))
         assert resp["statusCode"] == 403
 
-    def test_list_editor_forbidden(
-        self, workspace_id, mock_jwt, _mock_editor, mock_sm
-    ):
+    def test_list_editor_forbidden(self, workspace_id, mock_jwt, _mock_editor, mock_sm):
         # admin required
         resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/agents/agt1/secrets"))
         assert resp["statusCode"] == 403
@@ -271,9 +262,7 @@ class TestSetSecret:
     def test_set_creates_when_not_exists(
         self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table
     ):
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": workspace_id}
-        }
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": workspace_id}}
         mock_sm.put_secret_value.side_effect = mock_sm.exceptions.ResourceNotFoundException()
         body = {"key": "API_KEY", "value": "secret-val"}
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/agents/agt1/secrets", body=body))
@@ -282,12 +271,8 @@ class TestSetSecret:
         assert data == {"key": "API_KEY", "set": True}
         mock_sm.create_secret.assert_called_once()
 
-    def test_set_updates_existing(
-        self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table
-    ):
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": workspace_id}
-        }
+    def test_set_updates_existing(self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table):
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": workspace_id}}
         mock_sm.put_secret_value.return_value = {}
         body = {"key": "API_KEY", "value": "v"}
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/agents/agt1/secrets", body=body))
@@ -295,41 +280,27 @@ class TestSetSecret:
         mock_sm.put_secret_value.assert_called_once()
         mock_sm.create_secret.assert_not_called()
 
-    def test_set_missing_key(
-        self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table
-    ):
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": workspace_id}
-        }
+    def test_set_missing_key(self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table):
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": workspace_id}}
         body = {"value": "v"}
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/agents/agt1/secrets", body=body))
         assert resp["statusCode"] == 400
         assert "key" in json.loads(resp["body"])["error"]
 
-    def test_set_missing_value(
-        self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table
-    ):
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": workspace_id}
-        }
+    def test_set_missing_value(self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table):
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": workspace_id}}
         body = {"key": "API_KEY"}
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/agents/agt1/secrets", body=body))
         assert resp["statusCode"] == 400
         assert "value" in json.loads(resp["body"])["error"]
 
-    def test_set_invalid_key_chars(
-        self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table
-    ):
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": workspace_id}
-        }
+    def test_set_invalid_key_chars(self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table):
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": workspace_id}}
         body = {"key": "BAD KEY!", "value": "v"}
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/agents/agt1/secrets", body=body))
         assert resp["statusCode"] == 400
 
-    def test_set_invalid_agent_id(
-        self, workspace_id, mock_jwt, _mock_admin, mock_sm
-    ):
+    def test_set_invalid_agent_id(self, workspace_id, mock_jwt, _mock_admin, mock_sm):
         body = {"key": "K", "value": "v"}
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/agents/bad agent/secrets", body=body))
         assert resp["statusCode"] == 400
@@ -337,16 +308,12 @@ class TestSetSecret:
     def test_set_agent_not_in_workspace(
         self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table
     ):
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": "other-ws"}
-        }
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": "other-ws"}}
         body = {"key": "K", "value": "v"}
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/agents/agt1/secrets", body=body))
         assert resp["statusCode"] == 403
 
-    def test_set_editor_forbidden(
-        self, workspace_id, mock_jwt, _mock_editor, mock_sm
-    ):
+    def test_set_editor_forbidden(self, workspace_id, mock_jwt, _mock_editor, mock_sm):
         body = {"key": "K", "value": "v"}
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/agents/agt1/secrets", body=body))
         assert resp["statusCode"] == 403
@@ -358,12 +325,8 @@ class TestSetSecret:
 
 
 class TestDeleteSecret:
-    def test_delete_success(
-        self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table
-    ):
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": workspace_id}
-        }
+    def test_delete_success(self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table):
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": workspace_id}}
         mock_sm.delete_secret.return_value = {}
         resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/agents/agt1/secrets/API_KEY"))
         assert resp["statusCode"] == 200
@@ -371,25 +334,17 @@ class TestDeleteSecret:
         assert data == {"key": "API_KEY", "deleted": True}
         mock_sm.delete_secret.assert_called_once()
 
-    def test_delete_not_found(
-        self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table
-    ):
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": workspace_id}
-        }
+    def test_delete_not_found(self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table):
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": workspace_id}}
         mock_sm.delete_secret.side_effect = mock_sm.exceptions.ResourceNotFoundException()
         resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/agents/agt1/secrets/API_KEY"))
         assert resp["statusCode"] == 404
 
-    def test_delete_invalid_agent_id(
-        self, workspace_id, mock_jwt, _mock_admin, mock_sm
-    ):
+    def test_delete_invalid_agent_id(self, workspace_id, mock_jwt, _mock_admin, mock_sm):
         resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/agents/bad agent/secrets/K"))
         assert resp["statusCode"] == 400
 
-    def test_delete_invalid_secret_key(
-        self, workspace_id, mock_jwt, _mock_admin, mock_sm
-    ):
+    def test_delete_invalid_secret_key(self, workspace_id, mock_jwt, _mock_admin, mock_sm):
         # secret key contains invalid chars
         resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/agents/agt1/secrets/bad key"))
         assert resp["statusCode"] == 400
@@ -397,14 +352,10 @@ class TestDeleteSecret:
     def test_delete_agent_not_in_workspace(
         self, workspace_id, mock_jwt, _mock_admin, mock_sm, mock_agents_table
     ):
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt1", "workspace_id": "other-ws"}
-        }
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt1", "workspace_id": "other-ws"}}
         resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/agents/agt1/secrets/API_KEY"))
         assert resp["statusCode"] == 403
 
-    def test_delete_editor_forbidden(
-        self, workspace_id, mock_jwt, _mock_editor, mock_sm
-    ):
+    def test_delete_editor_forbidden(self, workspace_id, mock_jwt, _mock_editor, mock_sm):
         resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/agents/agt1/secrets/API_KEY"))
         assert resp["statusCode"] == 403

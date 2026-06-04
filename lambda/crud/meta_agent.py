@@ -10,6 +10,7 @@ runtime metadata (GetAgentRuntime) + hard-coded capability description
 of the Meta-Agent itself. The shape matches a2a.types.AgentCard so any
 external A2A client can consume it.
 """
+
 from urllib.parse import quote
 
 import boto3
@@ -41,10 +42,7 @@ def _extract_runtime_id(arn: str) -> str:
 
 
 def _build_invocation_url(arn: str, region: str) -> str:
-    return (
-        f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/"
-        f"{quote(arn, safe='')}/invocations"
-    )
+    return f"https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{quote(arn, safe='')}/invocations"
 
 
 # Skills are hard-coded: the Meta-Agent's capabilities are known at build
@@ -98,10 +96,12 @@ def get_meta_agent_status(wsId: str):
         return internal_error()
 
     last_updated = info.get("lastUpdatedAt") or info.get("createdAt")
-    return success({
-        "status": info.get("status") or "UNKNOWN",
-        "lastUpdated": last_updated.isoformat() if last_updated else None,
-    })
+    return success(
+        {
+            "status": info.get("status") or "UNKNOWN",
+            "lastUpdated": last_updated.isoformat() if last_updated else None,
+        }
+    )
 
 
 @router.get("/api/workspaces/<wsId>/meta-agent/agent-card")

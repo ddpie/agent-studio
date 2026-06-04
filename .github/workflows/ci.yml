@@ -134,11 +134,10 @@ jobs:
                       boto3 aws-lambda-powertools \
                       strands-agents bedrock-agentcore \
                       pyyaml
-      - name: pytest -m integration
+      - name: pytest integration
         working-directory: lambda
         run: |
           PYTHONPATH=. python -m pytest tests/integration/ \
-            -m integration \
             --tb=short -v
 
   # ─────────────────────────────────────────────────────────
@@ -178,10 +177,11 @@ jobs:
 
       - run: npm ci
 
-      - name: Create stub base zip (not in repo, needed for CDK synth)
+      - name: Create stub base zips (not in repo, needed for CDK synth)
         run: |
           mkdir -p ../base
           echo "stub" | zip -q ../base/deployment.zip -
+          echo "stub" | zip -q ../base/sub-agent-deployment.zip -
 
       - name: TypeScript typecheck
         run: npx tsc --noEmit

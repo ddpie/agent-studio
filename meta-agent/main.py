@@ -53,7 +53,7 @@ def _log_phase(label: str) -> None:
     # Python logging rather than print() — AgentCore's log pipeline hooks
     # the root logger via the OTEL distro, and print() to stderr was
     # observed to be dropped during cold start.
-    _boot_log.info(f"[init+{_time.monotonic()-_t_boot_start:5.2f}s] {label}")
+    _boot_log.info(f"[init+{_time.monotonic() - _t_boot_start:5.2f}s] {label}")
 
 
 _log_phase("boot start")
@@ -63,6 +63,7 @@ if _os.environ.get("AGENT_OBSERVABILITY_ENABLED", "").lower() == "true":
         from opentelemetry.instrumentation.auto_instrumentation import (
             initialize as _otel_init,  # type: ignore
         )
+
         _otel_init()
     except Exception as _e:
         _boot_log.warning(f"OTEL auto-instrumentation disabled: {_e}")
@@ -98,6 +99,7 @@ _log_phase("create_agent imported")
 # catalog is consumed by agents, not the Meta-Agent itself).
 try:
     from tools_library.registry import upload_tool_catalog
+
     _catalog_count = upload_tool_catalog()
     _boot_log.info(f"Tool catalog published: {_catalog_count} tools")
 except Exception as _e:
@@ -169,6 +171,7 @@ _log_phase("kiro_adapter imported")
 try:
     import platform as _platform
     import subprocess as _subprocess_diag
+
     _os_release = ""
     try:
         with open("/etc/os-release") as _f:
@@ -176,9 +179,7 @@ try:
     except Exception:
         pass
     try:
-        _r = _subprocess_diag.run(
-            ["ldd", "--version"], capture_output=True, text=True, timeout=3
-        )
+        _r = _subprocess_diag.run(["ldd", "--version"], capture_output=True, text=True, timeout=3)
         _ldd_v = ((_r.stdout or _r.stderr or "").splitlines() or [""])[0]
     except Exception as _e:
         _ldd_v = f"(ldd failed: {_e})"
@@ -329,10 +330,9 @@ def _ensure_kiro_binary_ready() -> None:
             _os.chmod(_KIRO_BINARY, st.st_mode | 0o111)
             _boot_log.info("kiro binary: chmod +x succeeded in place")
         except (PermissionError, OSError) as e:
-            _boot_log.info(
-                f"kiro binary: in-place chmod failed ({e}); copying to /tmp"
-            )
+            _boot_log.info(f"kiro binary: in-place chmod failed ({e}); copying to /tmp")
             import shutil as _shutil
+
             dst = "/tmp/kiro-cli-chat"
             _shutil.copyfile(_KIRO_BINARY, dst)
             _os.chmod(dst, 0o755)
@@ -429,7 +429,8 @@ _USAGE_RE_OVERAGE = __import__("re").compile(
     __import__("re").IGNORECASE,
 )
 _USAGE_RE_OVERUSED = __import__("re").compile(
-    r"Credits\s*used:\s*([\d.]+)", __import__("re").IGNORECASE,
+    r"Credits\s*used:\s*([\d.]+)",
+    __import__("re").IGNORECASE,
 )
 
 
@@ -473,7 +474,11 @@ async def _get_usage(api_key: str, region: str):
 
     try:
         proc = await asyncio.create_subprocess_exec(
-            _KIRO_BINARY, "chat", "--no-interactive", "--trust-all-tools", "/usage",
+            _KIRO_BINARY,
+            "chat",
+            "--no-interactive",
+            "--trust-all-tools",
+            "/usage",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
@@ -495,10 +500,12 @@ async def _get_usage(api_key: str, region: str):
     err = stderr_b.decode("utf-8", errors="replace")
     if proc.returncode != 0:
         log.warning("kiro-cli /usage rc=%s stderr=%s", proc.returncode, err[:400])
-        yield json.dumps({
-            "__error": "usage_cli_failed",
-            "detail": f"rc={proc.returncode}",
-        })
+        yield json.dumps(
+            {
+                "__error": "usage_cli_failed",
+                "detail": f"rc={proc.returncode}",
+            }
+        )
         return
 
     # Kiro's TUI writes the `/usage` report to stderr when stdout isn't a
@@ -543,18 +550,21 @@ async def _get_usage(api_key: str, region: str):
         except ValueError:
             overage_used = 0.0
 
-    yield json.dumps({
-        "__usage": {
-            "currentUsage": current,
-            "usageLimit": limit,
-            "resetsOn": reset_on,
-            "tier": tier,
-            "overagesEnabled": overages_enabled,
-            "overageRate": overage_rate,
-            "overageUsed": overage_used,
-            "currency": "USD",
-        }
-    }, ensure_ascii=False)
+    yield json.dumps(
+        {
+            "__usage": {
+                "currentUsage": current,
+                "usageLimit": limit,
+                "resetsOn": reset_on,
+                "tier": tier,
+                "overagesEnabled": overages_enabled,
+                "overageRate": overage_rate,
+                "overageUsed": overage_used,
+                "currency": "USD",
+            }
+        },
+        ensure_ascii=False,
+    )
 
 
 async def _list_models(api_key: str):
@@ -592,7 +602,10 @@ async def _list_models(api_key: str):
     cli_stdout = ""
     try:
         proc = await asyncio.create_subprocess_exec(
-            _KIRO_BINARY, "chat", "--list-models", "--no-interactive",
+            _KIRO_BINARY,
+            "chat",
+            "--list-models",
+            "--no-interactive",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
@@ -622,8 +635,7 @@ async def _list_models(api_key: str):
                 label = credits_re.sub("", label).strip() or model_id
                 models.append({"id": model_id, "name": label})
         else:
-            log.warning("kiro-cli --list-models rc=%s stderr=%s",
-                        proc.returncode, cli_stderr[:400])
+            log.warning("kiro-cli --list-models rc=%s stderr=%s", proc.returncode, cli_stderr[:400])
     except asyncio.TimeoutError:
         log.warning("kiro-cli --list-models timed out; falling back to ACP")
     except Exception:
@@ -650,10 +662,12 @@ async def _list_models(api_key: str):
                 raw_models = await client.list_models(cwd=_KIRO_HOME)
                 for m in raw_models:
                     if isinstance(m, dict) and m.get("id"):
-                        models.append({
-                            "id": str(m["id"]),
-                            "name": str(m.get("name") or m.get("displayName") or m["id"]),
-                        })
+                        models.append(
+                            {
+                                "id": str(m["id"]),
+                                "name": str(m.get("name") or m.get("displayName") or m["id"]),
+                            }
+                        )
                     elif isinstance(m, str):
                         models.append({"id": m, "name": m})
             finally:
@@ -709,7 +723,10 @@ async def invoke(payload, context):
         return
     log.warning(
         "invoke: payload_keys=%s mode=%r model_id=%r -> agent=%r",
-        sorted(payload.keys()), mode, model_id, agent_name,
+        sorted(payload.keys()),
+        mode,
+        model_id,
+        agent_name,
     )
 
     if images:
@@ -785,13 +802,9 @@ async def invoke(payload, context):
         # Save the uuid on the first turn, or re-pin defensively if
         # session/load somehow returned a different id.
         if is_new or (saved_uuid and session_id != saved_uuid):
-            save_kiro_session_uuid(
-                session_id, persist_root=_KIRO_PERSIST, agent_name=agent_name
-            )
+            save_kiro_session_uuid(session_id, persist_root=_KIRO_PERSIST, agent_name=agent_name)
 
-        user_text = _compose_user_text(
-            prompt, _format_history(history), is_new
-        )
+        user_text = _compose_user_text(prompt, _format_history(history), is_new)
 
         # Auto-continue supervisor. When the model ends a turn without
         # the [[TASK_COMPLETE]] marker AND it actually ran tools
@@ -815,7 +828,9 @@ async def invoke(payload, context):
                 # always logged 0.
                 log.warning(
                     "auto-continue round %d/%d (prev_tool_events=%d)",
-                    round_idx, _AUTO_CONTINUE_MAX_ROUNDS, prev_tool_events,
+                    round_idx,
+                    _AUTO_CONTINUE_MAX_ROUNDS,
+                    prev_tool_events,
                 )
                 # Surface to frontend so the UI can show a badge.
                 yield json.dumps(
@@ -850,16 +865,14 @@ async def invoke(payload, context):
                 # forgot to emit it on a trivial chit-chat turn, and
                 # auto-continuing an already-finished answer would
                 # just produce noise.
-                log.warning(
-                    "turn ended without marker but no tool events — "
-                    "skipping auto-continue"
-                )
+                log.warning("turn ended without marker but no tool events — skipping auto-continue")
                 break
             if round_idx == _AUTO_CONTINUE_MAX_ROUNDS:
                 log.warning(
                     "auto-continue budget exhausted (%d rounds, "
                     "last tool_events=%d); surfacing partial response",
-                    _AUTO_CONTINUE_MAX_ROUNDS, state.tool_events_seen,
+                    _AUTO_CONTINUE_MAX_ROUNDS,
+                    state.tool_events_seen,
                 )
                 break
             current_prompt = continue_prompt
@@ -870,7 +883,10 @@ async def invoke(payload, context):
         # refusal, overflow, etc.); the data blob is the only clue to which.
         log.error(
             "ACP error: method=%s code=%s message=%r data=%r",
-            e.method, e.code, e.message, e.data,
+            e.method,
+            e.code,
+            e.message,
+            e.data,
         )
         if "Session not found" in (e.message or ""):
             clear_kiro_session(persist_root=_KIRO_PERSIST, agent_name=agent_name)
@@ -1112,14 +1128,14 @@ async def _stream_with_keepalive(
     try:
         while True:
             try:
-                event = await asyncio.wait_for(
-                    queue.get(), timeout=_KEEPALIVE_INTERVAL_S
-                )
+                event = await asyncio.wait_for(queue.get(), timeout=_KEEPALIVE_INTERVAL_S)
             except asyncio.TimeoutError:
                 keepalive_count += 1
                 log.warning(
                     "keepalive #%d emitted at +%.1fs (frames_out=%d)",
-                    keepalive_count, loop.time() - t0, state.frames_out,
+                    keepalive_count,
+                    loop.time() - t0,
+                    state.frames_out,
                 )
                 yield keepalive()
                 continue
@@ -1130,10 +1146,12 @@ async def _stream_with_keepalive(
                     yield pending_tail
                 pending_tail = ""
                 log.warning(
-                    "stream ended at +%.1fs (frames_out=%d keepalives=%d "
-                    "tool_events=%d marker_seen=%s)",
-                    loop.time() - t0, state.frames_out, keepalive_count,
-                    state.tool_events_seen, state.marker_seen,
+                    "stream ended at +%.1fs (frames_out=%d keepalives=%d tool_events=%d marker_seen=%s)",
+                    loop.time() - t0,
+                    state.frames_out,
+                    keepalive_count,
+                    state.tool_events_seen,
+                    state.marker_seen,
                 )
                 return
             if isinstance(event, tuple) and len(event) == 2 and event[0] == "__pump_error__":
@@ -1181,9 +1199,9 @@ async def _stream_with_keepalive(
                         state.frames_out += 1
                         yield json.dumps(err_payload, ensure_ascii=False)
                         log.warning(
-                            "fake-tool marker detected (%r) — bailing turn "
-                            "after frames_out=%d",
-                            hit, state.frames_out,
+                            "fake-tool marker detected (%r) — bailing turn after frames_out=%d",
+                            hit,
+                            state.frames_out,
                         )
                         return
                     state.frames_out += 1

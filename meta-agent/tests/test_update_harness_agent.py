@@ -1,4 +1,5 @@
 """Tests for update_harness_agent tool."""
+
 import json
 import sys
 import types
@@ -44,10 +45,14 @@ def _existing(**overrides):
 def test_update_harness_agent_updates_prompt_and_model(monkeypatch):
     from tools import update_harness_agent as mod
 
-    monkeypatch.setattr(mod, "_read_staging", lambda k: {
-        "system_prompt": "You are now grumpy.",
-        "model_id": "us.anthropic.claude-sonnet-4-6-20250929-v1:0",
-    })
+    monkeypatch.setattr(
+        mod,
+        "_read_staging",
+        lambda k: {
+            "system_prompt": "You are now grumpy.",
+            "model_id": "us.anthropic.claude-sonnet-4-6-20250929-v1:0",
+        },
+    )
 
     fake_ddb = MagicMock()
     fake_ddb.get_item.return_value = {"Item": _existing()}
@@ -69,6 +74,7 @@ def test_update_harness_agent_updates_prompt_and_model(monkeypatch):
 
 def test_update_harness_agent_rejects_non_harness(monkeypatch):
     from tools import update_harness_agent as mod
+
     fake_ddb = MagicMock()
     fake_ddb.get_item.return_value = {"Item": _existing(runtime_type="zip")}
     monkeypatch.setattr(mod, "_get_agents_table", lambda: fake_ddb)
@@ -80,6 +86,7 @@ def test_update_harness_agent_rejects_non_harness(monkeypatch):
 
 def test_update_harness_agent_rejects_missing_agent(monkeypatch):
     from tools import update_harness_agent as mod
+
     fake_ddb = MagicMock()
     fake_ddb.get_item.return_value = {}
     monkeypatch.setattr(mod, "_get_agents_table", lambda: fake_ddb)
@@ -92,9 +99,14 @@ def test_update_harness_agent_rejects_missing_agent(monkeypatch):
 def test_update_harness_agent_metadata_only_skip_cp(monkeypatch):
     """If staging has no system_prompt/model_id, only DDB updates (no CP call)."""
     from tools import update_harness_agent as mod
-    monkeypatch.setattr(mod, "_read_staging", lambda k: {
-        "display_name": "new display",
-    })
+
+    monkeypatch.setattr(
+        mod,
+        "_read_staging",
+        lambda k: {
+            "display_name": "new display",
+        },
+    )
     fake_ddb = MagicMock()
     fake_ddb.get_item.return_value = {"Item": _existing()}
     monkeypatch.setattr(mod, "_get_agents_table", lambda: fake_ddb)
@@ -111,6 +123,7 @@ def test_update_harness_agent_metadata_only_skip_cp(monkeypatch):
 def test_update_harness_agent_wraps_unexpected_errors(monkeypatch):
     """Outer try/except converts any error into JSON {"error": ...}."""
     from tools import update_harness_agent as mod
+
     fake_ddb = MagicMock()
     fake_ddb.get_item.side_effect = Exception("ddb 5xx")
     monkeypatch.setattr(mod, "_get_agents_table", lambda: fake_ddb)
@@ -158,10 +171,15 @@ def test_update_harness_agent_helper_factories_use_boto3(monkeypatch):
 def test_update_harness_agent_persists_mcp_targets(monkeypatch):
     """mcp_targets in staging.json is forwarded to DDB even though CP doesn't get them."""
     from tools import update_harness_agent as mod
-    monkeypatch.setattr(mod, "_read_staging", lambda k: {
-        "system_prompt": "still helpful.",
-        "mcp_targets": ["mcp-cloudwatch"],
-    })
+
+    monkeypatch.setattr(
+        mod,
+        "_read_staging",
+        lambda k: {
+            "system_prompt": "still helpful.",
+            "mcp_targets": ["mcp-cloudwatch"],
+        },
+    )
 
     fake_ddb = MagicMock()
     fake_ddb.get_item.return_value = {"Item": _existing()}

@@ -25,6 +25,7 @@ def _load_registry() -> dict:
     """
     try:
         import yaml
+
         s3 = boto3.client("s3", region_name=REGION)
         resp = s3.get_object(Bucket=S3_BUCKET, Key="mcp-runtime/mcp-registry.yaml")
         data = yaml.safe_load(resp["Body"].read().decode()) or {}
@@ -130,7 +131,7 @@ def _check_iam_permissions(role_arn: str, iam_policy: dict) -> dict:
         iam_client = boto3.client("iam", region_name=REGION)
         missing = []
         for i in range(0, len(required_actions), 25):
-            batch = required_actions[i:i + 25]
+            batch = required_actions[i : i + 25]
             resp = iam_client.simulate_principal_policy(
                 PolicySourceArn=role_arn,
                 ActionNames=batch,
@@ -184,7 +185,9 @@ def _enrich_with_permissions(target_name: str, iam_policies: dict, workspace_rol
     return out
 
 
-def _build_targets_from_registry(registry: dict, deployed: dict, iam_policies: dict, workspace_role_arn: str | None) -> list:
+def _build_targets_from_registry(
+    registry: dict, deployed: dict, iam_policies: dict, workspace_role_arn: str | None
+) -> list:
     """Produce the list-of-targets view used by list_mcp_servers.
 
     Reads every ``enabled`` and non-``deprecated`` entry from the registry,
@@ -198,14 +201,16 @@ def _build_targets_from_registry(registry: dict, deployed: dict, iam_policies: d
             continue
         name = t["name"]
         perm = _enrich_with_permissions(name, iam_policies, workspace_role_arn)
-        merged.append({
-            "name": name,
-            "description": t.get("description", ""),
-            "category": t.get("category", "general"),
-            "type": "remote",
-            "status": "READY",
-            **perm,
-        })
+        merged.append(
+            {
+                "name": name,
+                "description": t.get("description", ""),
+                "category": t.get("category", "general"),
+                "type": "remote",
+                "status": "READY",
+                **perm,
+            }
+        )
 
     for t in registry.get("runtime_targets", []):
         if not t.get("enabled") or t.get("deprecated"):
@@ -217,14 +222,16 @@ def _build_targets_from_registry(registry: dict, deployed: dict, iam_policies: d
         )
         status = (live or {}).get("status", "unavailable")
         perm = _enrich_with_permissions(name, iam_policies, workspace_role_arn)
-        merged.append({
-            "name": name,
-            "description": t.get("description", ""),
-            "category": t.get("category", "general"),
-            "type": "runtime",
-            "status": status,
-            **perm,
-        })
+        merged.append(
+            {
+                "name": name,
+                "description": t.get("description", ""),
+                "category": t.get("category", "general"),
+                "type": "runtime",
+                "status": status,
+                **perm,
+            }
+        )
     return merged
 
 
@@ -254,7 +261,10 @@ def list_mcp_servers() -> str:
         workspace_role_arn = _get_workspace_role_arn(ws_id) if ws_id else None
 
         merged = _build_targets_from_registry(
-            registry, deployed, iam_policies, workspace_role_arn,
+            registry,
+            deployed,
+            iam_policies,
+            workspace_role_arn,
         )
 
         # Group by category
@@ -272,10 +282,7 @@ def list_mcp_servers() -> str:
             "denied": denied_count,
             "workspace_role": workspace_role_arn or None,
             "categories": {
-                cat: [
-                    {k: v for k, v in t.items() if k != "category"}
-                    for t in targets_list
-                ]
+                cat: [{k: v for k, v in t.items() if k != "category"} for t in targets_list]
                 for cat, targets_list in sorted(by_category.items())
             },
         }

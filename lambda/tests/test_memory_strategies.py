@@ -1,4 +1,5 @@
 """Tests for the shared Memory strategies config."""
+
 from shared.memory_strategies import DEFAULT_MEMORY_STRATEGIES, STRATEGY_NAMES
 
 
@@ -8,9 +9,7 @@ def test_has_three_strategies():
 
 def test_strategy_names_match_spec():
     # 4 strategies per .claude/specs/2026-04-26-agentcore-memory-design.md §3.3
-    assert sorted(STRATEGY_NAMES) == sorted([
-        "userPreference", "semantic", "summary", "episodic"
-    ])
+    assert sorted(STRATEGY_NAMES) == sorted(["userPreference", "semantic", "summary", "episodic"])
 
 
 def test_user_preference_namespace_uses_actor_only():
@@ -35,6 +34,7 @@ def test_summary_namespace_uses_actor_and_session():
 def test_namespace_prefix_keys_match_strategy_names():
     """Drift guard: the prefix map must have exactly one entry per strategy."""
     from shared.memory_strategies import STRATEGY_NAMES, STRATEGY_NAMESPACE_PREFIX
+
     assert set(STRATEGY_NAMESPACE_PREFIX.keys()) == set(STRATEGY_NAMES)
 
 
@@ -43,6 +43,7 @@ def test_namespace_prefix_drops_session_placeholder():
     list_memory_records with this prefix enumerates records across all sessions
     for the given actor."""
     from shared.memory_strategies import STRATEGY_NAMESPACE_PREFIX
+
     for prefix in STRATEGY_NAMESPACE_PREFIX.values():
         assert "{sessionId}" not in prefix
         assert "{session_id}" not in prefix
@@ -53,6 +54,7 @@ def test_namespace_prefix_uses_python_actor_placeholder():
     AgentCore's server-side {actorId} (camelCase). This is intentional — see
     module docstring."""
     from shared.memory_strategies import STRATEGY_NAMESPACE_PREFIX
+
     for prefix in STRATEGY_NAMESPACE_PREFIX.values():
         assert "{actor_id}" in prefix
         assert "{actorId}" not in prefix

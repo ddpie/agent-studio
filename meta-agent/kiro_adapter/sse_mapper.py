@@ -130,9 +130,7 @@ class ACPToSSEMapper:
             if tool_id not in self._started:
                 name = _clean_tool_name(update.get("title") or update.get("kind") or "tool")
                 self._started[tool_id] = name
-                start_frame = json.dumps(
-                    {"__tool": "start", "name": name}, ensure_ascii=False
-                )
+                start_frame = json.dumps({"__tool": "start", "name": name}, ensure_ascii=False)
             else:
                 name = self._started[tool_id]
                 start_frame = None
@@ -156,9 +154,7 @@ class ACPToSSEMapper:
                 },
                 ensure_ascii=False,
             )
-            end_frame = json.dumps(
-                {"__tool": "end", "name": name}, ensure_ascii=False
-            )
+            end_frame = json.dumps({"__tool": "end", "name": name}, ensure_ascii=False)
             self._started.pop(tool_id, None)
             frames = []
             if start_frame is not None:
@@ -281,10 +277,11 @@ def _clean_tool_name(raw: str) -> str:
     # sse_mapper tests don't want to pull in. At runtime the symbol is
     # already loaded by main.py before any event flows through here.
     from kiro_adapter.mcp_server import MCP_SERVER_NAME
+
     mcp_ns_prefix = f"@{MCP_SERVER_NAME}/"
     s = (raw or "").strip()
     if s.startswith(_RUNNING_PREFIX):
-        s = s[len(_RUNNING_PREFIX):].strip()
+        s = s[len(_RUNNING_PREFIX) :].strip()
     if s.startswith(mcp_ns_prefix):
-        s = s[len(mcp_ns_prefix):]
+        s = s[len(mcp_ns_prefix) :]
     return s or "tool"

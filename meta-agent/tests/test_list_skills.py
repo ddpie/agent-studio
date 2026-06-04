@@ -1,4 +1,5 @@
 """Tests for list_skills — paginated workspace skill enumeration."""
+
 import json
 import sys
 import types
@@ -33,20 +34,24 @@ sys.modules["config"] = _mock_config
 @pytest.fixture(autouse=True)
 def _scope(monkeypatch):
     from tools import _scope
+
     monkeypatch.setattr(_scope, "_caller_id", "user-1", raising=False)
     monkeypatch.setattr(_scope, "_workspace_id", "ws-1", raising=False)
 
 
 def _make_skills(n: int) -> list[dict]:
     return [
-        {"skillId": f"sk-{i:03d}", "name": f"skill_{i:03d}",
-         "description": f"desc {i}", "workspace_id": "ws-1"}
+        {
+            "skillId": f"sk-{i:03d}",
+            "name": f"skill_{i:03d}",
+            "description": f"desc {i}",
+            "workspace_id": "ws-1",
+        }
         for i in range(n)
     ]
 
 
-def _patch_membership_and_table(monkeypatch, skills_items, role="viewer",
-                                 last_evaluated_keys=None):
+def _patch_membership_and_table(monkeypatch, skills_items, role="viewer", last_evaluated_keys=None):
     """Set up workspace membership + skills DDB responses.
 
     skills_items can be a list of items (single page) or a list of pages
@@ -127,8 +132,7 @@ def test_list_skills_skips_deleted(monkeypatch):
 
     items = [
         {"skillId": "alive", "name": "alive", "workspace_id": "ws-1"},
-        {"skillId": "dead", "name": "dead", "workspace_id": "ws-1",
-         "deleted": True},
+        {"skillId": "dead", "name": "dead", "workspace_id": "ws-1", "deleted": True},
     ]
     fake_resource, _ = _patch_membership_and_table(monkeypatch, items)
 

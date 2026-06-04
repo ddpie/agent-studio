@@ -107,7 +107,9 @@ def main() -> None:
     apply_scope(caller_id, workspace_id, language=creator_language)
     log.info(
         "scope applied caller_id=%r workspace_id=%r tools=%d",
-        caller_id, workspace_id, len(_meta_main.ALL_TOOLS),
+        caller_id,
+        workspace_id,
+        len(_meta_main.ALL_TOOLS),
     )
 
     srv = build_mcp_server(_meta_main.ALL_TOOLS)
@@ -122,8 +124,11 @@ def main() -> None:
         lowlevel = getattr(srv, "_mcp_server", None)
         if lowlevel is not None:
             orig_handlers = dict(getattr(lowlevel, "request_handlers", {}))
-            log.info("mcp diag: %d request_handlers registered: %s",
-                     len(orig_handlers), sorted(str(k) for k in orig_handlers))
+            log.info(
+                "mcp diag: %d request_handlers registered: %s",
+                len(orig_handlers),
+                sorted(str(k) for k in orig_handlers),
+            )
 
             def _wrap(name, fn):
                 async def _logged(req):
@@ -135,6 +140,7 @@ def main() -> None:
                         raise
                     log.info("mcp reply   : %s ok", name)
                     return res
+
                 return _logged
 
             for key, fn in list(orig_handlers.items()):

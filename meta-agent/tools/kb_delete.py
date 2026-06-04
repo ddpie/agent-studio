@@ -55,13 +55,20 @@ def kb_delete(kb_id: str, confirm: bool = False) -> str:
         pass
 
     if not confirm:
-        return json.dumps({
-            "requires_confirmation": True,
-            "kb_id": kb_id,
-            "name": item.get("name", {}).get("S", ""),
-            "impact": {"documents": doc_count, "attached_agents": len(attached), "agent_ids": list(attached)},
-            "message": "Call kb_delete again with confirm=True to proceed.",
-        }, ensure_ascii=False)
+        return json.dumps(
+            {
+                "requires_confirmation": True,
+                "kb_id": kb_id,
+                "name": item.get("name", {}).get("S", ""),
+                "impact": {
+                    "documents": doc_count,
+                    "attached_agents": len(attached),
+                    "agent_ids": list(attached),
+                },
+                "message": "Call kb_delete again with confirm=True to proceed.",
+            },
+            ensure_ascii=False,
+        )
 
     last_job = item.get("last_ingestion_job_id", {}).get("S")
     if last_job and data_source_id:
@@ -70,7 +77,12 @@ def kb_delete(kb_id: str, confirm: bool = False) -> str:
                 knowledgeBaseId=bedrock_kb_id, dataSourceId=data_source_id, ingestionJobId=last_job
             )
             if job_resp["ingestionJob"]["status"] == "IN_PROGRESS":
-                return json.dumps({"error": "ingestion_in_progress", "message": "Wait for ingestion to complete before deleting."})
+                return json.dumps(
+                    {
+                        "error": "ingestion_in_progress",
+                        "message": "Wait for ingestion to complete before deleting.",
+                    }
+                )
         except Exception:
             pass
 
@@ -80,7 +92,10 @@ def kb_delete(kb_id: str, confirm: bool = False) -> str:
             Key={"ws_id": {"S": ws_id}, "kb_id": {"S": kb_id}},
             UpdateExpression="SET #s = :s, updated_at = :now",
             ExpressionAttributeNames={"#s": "status"},
-            ExpressionAttributeValues={":s": {"S": "DELETING"}, ":now": {"S": datetime.now(timezone.utc).isoformat()}},
+            ExpressionAttributeValues={
+                ":s": {"S": "DELETING"},
+                ":now": {"S": datetime.now(timezone.utc).isoformat()},
+            },
         )
     except Exception:
         pass
@@ -132,5 +147,7 @@ def kb_delete(kb_id: str, confirm: bool = False) -> str:
         errors.append(f"delete_ddb: {e}")
 
     if errors:
-        return json.dumps({"deleted": True, "warnings": errors, "message": "KB deleted with some cleanup warnings."})
+        return json.dumps(
+            {"deleted": True, "warnings": errors, "message": "KB deleted with some cleanup warnings."}
+        )
     return json.dumps({"deleted": True, "kb_id": kb_id, "message": "Knowledge Base fully deleted."})

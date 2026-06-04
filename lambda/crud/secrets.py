@@ -64,13 +64,19 @@ def list_secrets(wsId: str, agentId: str):
         ):
             for secret in page.get("SecretList", []):
                 name = secret["Name"]
-                key = name[len(prefix):]
+                key = name[len(prefix) :]
                 if key:
-                    keys.append({
-                        "key": key,
-                        "created_at": secret.get("CreatedDate", "").isoformat() if hasattr(secret.get("CreatedDate", ""), "isoformat") else "",
-                        "updated_at": secret.get("LastChangedDate", "").isoformat() if hasattr(secret.get("LastChangedDate", ""), "isoformat") else "",
-                    })
+                    keys.append(
+                        {
+                            "key": key,
+                            "created_at": secret.get("CreatedDate", "").isoformat()
+                            if hasattr(secret.get("CreatedDate", ""), "isoformat")
+                            else "",
+                            "updated_at": secret.get("LastChangedDate", "").isoformat()
+                            if hasattr(secret.get("LastChangedDate", ""), "isoformat")
+                            else "",
+                        }
+                    )
     except Exception:
         logger.exception("Failed to list secrets")
         keys = []

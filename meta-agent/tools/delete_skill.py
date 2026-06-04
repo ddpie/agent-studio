@@ -73,7 +73,10 @@ def delete_skill(skill_id: str) -> str:
     except Exception as e:
         return json.dumps({"error": f"Skill metadata delete failed: {e}"})
 
-    return json.dumps({
-        "skill_id": skill_id,
-        "status": "deleted",
-    }, indent=2)
+    return json.dumps(
+        {
+            "skill_id": skill_id,
+            "status": "deleted",
+        },
+        indent=2,
+    )

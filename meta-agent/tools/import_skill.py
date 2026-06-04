@@ -97,6 +97,7 @@ def _parse_frontmatter(content: str) -> dict | None:
         return None
     try:
         import yaml
+
         meta = yaml.safe_load(parts[1]) or {}
     except Exception:
         return None
@@ -124,10 +125,14 @@ def _http_get(url: str, accept: str = "*/*", binary: bool = False):
     import urllib.request
 
     from url_validation import safe_urlopen
-    req = urllib.request.Request(url, headers={
-        "User-Agent": "AgentStudio/1.0",
-        "Accept": accept,
-    })
+
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "AgentStudio/1.0",
+            "Accept": accept,
+        },
+    )
     with safe_urlopen(req, timeout=30) as resp:
         return resp.read() if binary else resp.read().decode("utf-8")
 
@@ -135,7 +140,7 @@ def _http_get(url: str, accept: str = "*/*", binary: bool = False):
 def _fetch_clawhub(url: str) -> dict[str, str]:
     """Fetch skill files from ClawHub API. Returns {path: content}."""
     # Extract slug from URL: clawhub.ai/{author}/{slug} or claw-hub.net/...
-    match = re.search(r'(?:clawhub\.ai|claw-hub\.net)/([^/?#]+/[^/?#]+)', url)
+    match = re.search(r"(?:clawhub\.ai|claw-hub\.net)/([^/?#]+/[^/?#]+)", url)
     if not match:
         raise ValueError(f"Cannot parse ClawHub slug from URL: {url}")
     slug = match.group(1)
@@ -172,9 +177,7 @@ def _fetch_clawhub(url: str) -> dict[str, str]:
 def _fetch_github_dir(url: str) -> dict[str, str]:
     """Fetch all files from a GitHub directory. Returns {path: content}."""
     # Parse: github.com/{owner}/{repo}/tree/{branch}/{path}
-    match = re.match(
-        r'https?://github\.com/([^/]+)/([^/]+)/tree/([^/]+)(?:/(.*))?', url
-    )
+    match = re.match(r"https?://github\.com/([^/]+)/([^/]+)/tree/([^/]+)(?:/(.*))?", url)
     if not match:
         raise ValueError(f"Cannot parse GitHub directory URL: {url}")
     owner, repo, branch, path = match.groups()
@@ -194,7 +197,7 @@ def _fetch_github_dir_recursive(items: list, files: dict, owner: str, repo: str,
         if item["type"] == "file":
             # Compute relative path from base
             full_path = item["path"]
-            rel_path = full_path[len(base_path):].lstrip("/") if base_path else full_path
+            rel_path = full_path[len(base_path) :].lstrip("/") if base_path else full_path
             if _should_skip_path(rel_path):
                 continue
             try:
@@ -215,9 +218,7 @@ def _fetch_github_dir_recursive(items: list, files: dict, owner: str, repo: str,
 def _fetch_github_file(url: str) -> str:
     """Fetch a single file from GitHub. Converts blob URL to raw."""
     # github.com/{owner}/{repo}/blob/{branch}/{path} → raw.githubusercontent.com
-    match = re.match(
-        r'https?://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.*)', url
-    )
+    match = re.match(r"https?://github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.*)", url)
     if match:
         owner, repo, branch, path = match.groups()
         raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}"
@@ -229,7 +230,7 @@ def _write_skill_files(s3, skill_id: str, files: dict[str, str]) -> list[str]:
     """Write multiple files to S3 under skills/{skill_id}/. Returns file list."""
     written = []
     for path, content in files.items():
-        safe_path = re.sub(r'[^\w./\-]', '_', path)
+        safe_path = re.sub(r"[^\w./\-]", "_", path)
         if ".." in safe_path:
             continue
         key = f"skills/{skill_id}/{safe_path}"
@@ -315,7 +316,9 @@ def import_skill(
                     break
 
         if not skill_md:
-            return json.dumps({"error": "No SKILL.md found in the imported files. A valid skill must contain SKILL.md."})
+            return json.dumps(
+                {"error": "No SKILL.md found in the imported files. A valid skill must contain SKILL.md."}
+            )
 
         meta = _parse_frontmatter(skill_md)
         skill_name = name or (meta.get("name") if meta else None) or "imported-skill"
@@ -334,9 +337,8 @@ def import_skill(
         # If the imported package ships any .py files, treat it as a
         # script skill so it starts out unapproved — safer default for
         # third-party code pulled from ClawHub / GitHub.
-        skill_type = (
-            (meta.get("type") if meta else None)
-            or ("script" if any(p.endswith(".py") for p in files) else "prompt")
+        skill_type = (meta.get("type") if meta else None) or (
+            "script" if any(p.endswith(".py") for p in files) else "prompt"
         )
         try:
             _put_skill_metadata(
@@ -351,16 +353,19 @@ def import_skill(
         except Exception as e:
             return json.dumps({"error": f"Skill metadata write failed: {e}"})
 
-        return json.dumps({
-            "skill_id": skill_id,
-            "name": skill_name,
-            "description": skill_desc,
-            "source": source_type,
-            "files_count": len(files),
-            "files": sorted(files.keys()),
-            "workspace_id": ws_id,
-            "status": "imported",
-        }, indent=2)
+        return json.dumps(
+            {
+                "skill_id": skill_id,
+                "name": skill_name,
+                "description": skill_desc,
+                "source": source_type,
+                "files_count": len(files),
+                "files": sorted(files.keys()),
+                "workspace_id": ws_id,
+                "status": "imported",
+            },
+            indent=2,
+        )
 
     # --- Single-file import (content or single URL) ---
     if not content or not content.strip():
@@ -373,10 +378,12 @@ def import_skill(
         skill_md = content
     else:
         if not name:
-            return json.dumps({
-                "error": "Content has no YAML frontmatter. Provide name and description to auto-generate it.",
-                "hint": "Set name (kebab-case) and description for the skill.",
-            })
+            return json.dumps(
+                {
+                    "error": "Content has no YAML frontmatter. Provide name and description to auto-generate it.",
+                    "hint": "Set name (kebab-case) and description for the skill.",
+                }
+            )
         skill_name = name
         skill_desc = description or f"Imported skill: {name}"
         skill_md = _wrap_with_frontmatter(content, skill_name, skill_desc, source=source_type)
@@ -405,14 +412,17 @@ def import_skill(
     except Exception as e:
         return json.dumps({"error": f"Skill metadata write failed: {e}"})
 
-    return json.dumps({
-        "skill_id": skill_id,
-        "name": skill_name,
-        "description": skill_desc,
-        "source": source_type,
-        "files_count": 1,
-        "files": ["SKILL.md"],
-        "had_frontmatter": meta is not None,
-        "workspace_id": ws_id,
-        "status": "imported",
-    }, indent=2)
+    return json.dumps(
+        {
+            "skill_id": skill_id,
+            "name": skill_name,
+            "description": skill_desc,
+            "source": source_type,
+            "files_count": 1,
+            "files": ["SKILL.md"],
+            "had_frontmatter": meta is not None,
+            "workspace_id": ws_id,
+            "status": "imported",
+        },
+        indent=2,
+    )

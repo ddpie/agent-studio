@@ -1,4 +1,5 @@
 """JWT verification + workspace membership check."""
+
 import json
 import urllib.request
 
@@ -48,7 +49,9 @@ def verify_jwt(token: str) -> dict:
     try:
         key = _get_signing_key(token)
         claims = jwt.decode(
-            token, key, algorithms=["RS256"],
+            token,
+            key,
+            algorithms=["RS256"],
             audience=COGNITO_CLIENT_ID,
             issuer=f"https://cognito-idp.{REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}",
             options={"verify_at_hash": False},

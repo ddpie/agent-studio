@@ -15,9 +15,7 @@ from tools._scope import ROLE_EDITOR, ensure_agent_in_workspace
 # service for a target"). agent-studio-schedule-runner is provisioned
 # by CDK (infra/lib/constructs/scheduler.ts) and invokes the runtime
 # via InvokeAgentRuntime using the caller payload.
-_SCHEDULE_RUNNER_LAMBDA_ARN = (
-    f"arn:aws:lambda:{REGION}:{ACCOUNT_ID}:function:agent-studio-schedule-runner"
-)
+_SCHEDULE_RUNNER_LAMBDA_ARN = f"arn:aws:lambda:{REGION}:{ACCOUNT_ID}:function:agent-studio-schedule-runner"
 
 
 @tool

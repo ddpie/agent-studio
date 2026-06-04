@@ -45,11 +45,13 @@ def list_agents() -> str:
             runtime_status = rt.get("status", runtime_status)
         except Exception:
             pass
-        agents.append({
-            "name": name,
-            "id": agent_id,
-            "status": runtime_status,
-            "description": record.get("description", ""),
-        })
+        agents.append(
+            {
+                "name": name,
+                "id": agent_id,
+                "status": runtime_status,
+                "description": record.get("description", ""),
+            }
+        )
 
     return json.dumps(agents, indent=2, ensure_ascii=False)

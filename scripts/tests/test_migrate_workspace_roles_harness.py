@@ -4,6 +4,7 @@ We don't test AWS calls here — those are exercised via --dry-run against a
 live account. We only exercise the pure functions that decide whether an
 existing policy needs an update.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -28,9 +29,7 @@ SCRIPT_PATH = os.path.join(HERE, "..", "migrate-workspace-roles-harness.py")
 
 
 def _load_migration_module():
-    spec = importlib.util.spec_from_file_location(
-        "migrate_workspace_roles_harness", SCRIPT_PATH
-    )
+    spec = importlib.util.spec_from_file_location("migrate_workspace_roles_harness", SCRIPT_PATH)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -57,9 +56,7 @@ def _old_trust() -> dict:
                 "Condition": {
                     "StringEquals": {"aws:SourceAccount": "123456789012"},
                     "ArnLike": {
-                        "aws:SourceArn": (
-                            "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/*"
-                        ),
+                        "aws:SourceArn": ("arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/*"),
                     },
                 },
             }
@@ -149,11 +146,7 @@ def _new_minimal_ecr_and_sts() -> dict:
                 "Effect": "Allow",
                 "Action": ["sts:GetServiceBearerToken"],
                 "Resource": "*",
-                "Condition": {
-                    "StringEquals": {
-                        "sts:AWSServiceName": "bedrock-agentcore.amazonaws.com"
-                    }
-                },
+                "Condition": {"StringEquals": {"sts:AWSServiceName": "bedrock-agentcore.amazonaws.com"}},
             },
         ],
     }
@@ -161,36 +154,20 @@ def _new_minimal_ecr_and_sts() -> dict:
 
 class TestMinimalPolicyDiff:
     def test_missing_ecr_public_triggers_update(self, mig):
-        assert (
-            mig.policy_needs_update(
-                _old_minimal_ecr_sid(), _new_minimal_ecr_and_sts()
-            )
-            is True
-        )
+        assert mig.policy_needs_update(_old_minimal_ecr_sid(), _new_minimal_ecr_and_sts()) is True
 
     def test_matching_policy_is_noop(self, mig):
-        assert (
-            mig.policy_needs_update(
-                _new_minimal_ecr_and_sts(), _new_minimal_ecr_and_sts()
-            )
-            is False
-        )
+        assert mig.policy_needs_update(_new_minimal_ecr_and_sts(), _new_minimal_ecr_and_sts()) is False
 
     def test_reordered_action_list_is_noop(self, mig):
         current = _new_minimal_ecr_and_sts()
-        current["Statement"][0]["Action"] = list(
-            reversed(current["Statement"][0]["Action"])
-        )
-        assert (
-            mig.policy_needs_update(current, _new_minimal_ecr_and_sts()) is False
-        )
+        current["Statement"][0]["Action"] = list(reversed(current["Statement"][0]["Action"]))
+        assert mig.policy_needs_update(current, _new_minimal_ecr_and_sts()) is False
 
     def test_reordered_statements_is_noop(self, mig):
         current = _new_minimal_ecr_and_sts()
         current["Statement"] = list(reversed(current["Statement"]))
-        assert (
-            mig.policy_needs_update(current, _new_minimal_ecr_and_sts()) is False
-        )
+        assert mig.policy_needs_update(current, _new_minimal_ecr_and_sts()) is False
 
 
 # ──────────────────────────────────────────────────────────
@@ -206,10 +183,7 @@ class TestDiffRobustness:
         assert mig.policy_needs_update({}, _new_trust()) is True
 
     def test_current_missing_statement_returns_true(self, mig):
-        assert (
-            mig.policy_needs_update({"Version": "2012-10-17"}, _new_trust())
-            is True
-        )
+        assert mig.policy_needs_update({"Version": "2012-10-17"}, _new_trust()) is True
 
     def test_extra_unknown_field_still_considered_match(self, mig):
         # If current has all the data target needs (semantically equal normalised),

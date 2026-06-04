@@ -18,6 +18,7 @@ Response:
       "nextCursor": "<opaque>"   # absent when no more pages
     }
 """
+
 import re
 
 import boto3
@@ -60,9 +61,9 @@ _VALID_LEVELS = {"ALL", "ERROR", "WARN", "INFO"}
 #   WARNING: ...            — Python warnings module
 _LEVEL_RE = re.compile(
     r"(?:"
-    r"^\s*\[(ERROR|WARN|WARNING|INFO|DEBUG)\]"       # [LEVEL]
+    r"^\s*\[(ERROR|WARN|WARNING|INFO|DEBUG)\]"  # [LEVEL]
     r"|^\d{4}-\d{2}-\d{2}\s[\d:,]+\s+(ERROR|WARN|WARNING|INFO|DEBUG)\s"  # timestamp LEVEL
-    r"|^(ERROR|WARN|WARNING|INFO|DEBUG):\s"           # LEVEL:
+    r"|^(ERROR|WARN|WARNING|INFO|DEBUG):\s"  # LEVEL:
     r")",
     re.IGNORECASE,
 )
@@ -156,6 +157,7 @@ def get_agent_logs(wsId: str, agentId: str):
 
     # CloudWatch FilterLogEvents uses ms since epoch for start/endTime.
     import time as _time
+
     now_ms = int(_time.time() * 1000)
     start_ms = now_ms - _SINCE_MIN[since] * 60_000
 
@@ -194,12 +196,14 @@ def get_agent_logs(wsId: str, agentId: str):
         msg = ev.get("message", "") or ""
         if post_search and post_search.lower() not in msg.lower():
             continue
-        events.append({
-            "timestamp": ev.get("timestamp", 0),
-            "message": _truncate(msg),
-            "level": _parse_level(msg),
-            "logStream": ev.get("logStreamName", ""),
-        })
+        events.append(
+            {
+                "timestamp": ev.get("timestamp", 0),
+                "message": _truncate(msg),
+                "level": _parse_level(msg),
+                "logStream": ev.get("logStreamName", ""),
+            }
+        )
 
     body: dict = {"events": events}
     next_token = resp.get("nextToken")

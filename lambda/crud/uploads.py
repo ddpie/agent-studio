@@ -1,4 +1,5 @@
 """Upload presigned URL generation and public listing endpoints."""
+
 import json
 import uuid
 from datetime import datetime
@@ -80,8 +81,11 @@ def _resolve_caller_workspace(user_id: str):
 
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"}
 ALLOWED_ATTACHMENT_TYPES = {
-    "application/pdf", "text/plain", "text/markdown",
-    "application/json", "text/csv",
+    "application/pdf",
+    "text/plain",
+    "text/markdown",
+    "application/json",
+    "text/csv",
 }
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
 MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024
@@ -106,7 +110,8 @@ def upload_image(wsId: str):
         return bad_request("filename is required")
 
     import re
-    if not filename or len(filename) > 255 or re.search(r'[/\\\x00]|\.\.', filename):
+
+    if not filename or len(filename) > 255 or re.search(r"[/\\\x00]|\.\.", filename):
         return bad_request("Invalid filename: must not contain / \\ .. or null bytes, max 255 chars")
 
     ext = filename.rsplit(".", 1)[-1] if "." in filename else "png"
@@ -125,12 +130,14 @@ def upload_image(wsId: str):
         ExpiresIn=PRESIGNED_URL_EXPIRY,
     )
 
-    return success({
-        "uploadUrl": presigned["url"],
-        "fields": presigned["fields"],
-        "s3Key": s3_key,
-        "expiresIn": PRESIGNED_URL_EXPIRY,
-    })
+    return success(
+        {
+            "uploadUrl": presigned["url"],
+            "fields": presigned["fields"],
+            "s3Key": s3_key,
+            "expiresIn": PRESIGNED_URL_EXPIRY,
+        }
+    )
 
 
 @router.post("/api/workspaces/<wsId>/uploads/attachments")
@@ -154,9 +161,10 @@ def upload_attachment(wsId: str):
         return bad_request("sessionId is required")
 
     import re
+
     if not re.match(r"^[a-zA-Z0-9_-]+$", session_id):
         return bad_request("Invalid sessionId: must match [a-zA-Z0-9_-]+")
-    if not filename or len(filename) > 255 or re.search(r'[/\\\x00]|\.\.', filename):
+    if not filename or len(filename) > 255 or re.search(r"[/\\\x00]|\.\.", filename):
         return bad_request("Invalid filename: must not contain / \\ .. or null bytes, max 255 chars")
 
     s3_key = f"uploads/attachments/{session_id}/{filename}"
@@ -173,12 +181,14 @@ def upload_attachment(wsId: str):
         ExpiresIn=PRESIGNED_URL_EXPIRY,
     )
 
-    return success({
-        "uploadUrl": presigned["url"],
-        "fields": presigned["fields"],
-        "s3Key": s3_key,
-        "expiresIn": PRESIGNED_URL_EXPIRY,
-    })
+    return success(
+        {
+            "uploadUrl": presigned["url"],
+            "fields": presigned["fields"],
+            "s3Key": s3_key,
+            "expiresIn": PRESIGNED_URL_EXPIRY,
+        }
+    )
 
 
 @router.get("/api/workspaces/<wsId>/downloads")
@@ -203,7 +213,9 @@ def get_download_url(wsId: str):
             if len(parts) >= 2:
                 agent = _get_agents_table().get_item(Key={"agentId": parts[1]}).get("Item")
                 if not agent or agent.get("workspace_id") != ws_id:
-                    logger.warning("Download denied: agent not in workspace", extra={"key": key, "ws_id": ws_id})
+                    logger.warning(
+                        "Download denied: agent not in workspace", extra={"key": key, "ws_id": ws_id}
+                    )
                     return forbidden()
                 if agent.get("status") == "archived":
                     return forbidden()
@@ -212,7 +224,9 @@ def get_download_url(wsId: str):
             if len(parts) >= 2:
                 skill = _get_skills_table().get_item(Key={"skillId": parts[1]}).get("Item")
                 if not skill or skill.get("workspace_id") != ws_id:
-                    logger.warning("Download denied: skill not in workspace", extra={"key": key, "ws_id": ws_id})
+                    logger.warning(
+                        "Download denied: skill not in workspace", extra={"key": key, "ws_id": ws_id}
+                    )
                     return forbidden()
                 if skill.get("deleted"):
                     return forbidden()
@@ -266,6 +280,7 @@ def get_storage(wsId: str):
         obj = s3.get_object(Bucket=ASSETS_BUCKET, Key=s3_key)
         content = obj["Body"].read().decode("utf-8")
         import json as _json
+
         try:
             data = _json.loads(content)
         except Exception:
@@ -302,6 +317,7 @@ def put_storage(wsId: str):
         key = f"{parts[0]}/{user_id}/{parts[1]}"
 
     import json as _json
+
     content = _json.dumps(data)
     if len(content) > MAX_STORAGE_SIZE:
         return bad_request("Content too large (max 1MB)")
@@ -309,7 +325,9 @@ def put_storage(wsId: str):
     s3_key = f"workspaces/{ws_id}/storage/{key}"
     s3 = _get_s3()
     try:
-        s3.put_object(Bucket=ASSETS_BUCKET, Key=s3_key, Body=content.encode("utf-8"), ContentType="application/json")
+        s3.put_object(
+            Bucket=ASSETS_BUCKET, Key=s3_key, Body=content.encode("utf-8"), ContentType="application/json"
+        )
     except Exception:
         logger.exception("Failed to write storage", extra={"key": key, "ws_id": ws_id})
         return internal_error()
@@ -364,6 +382,7 @@ def list_public_agents():
     }
     if cursor:
         import base64
+
         try:
             query_kwargs["ExclusiveStartKey"] = json.loads(base64.b64decode(cursor).decode())
         except Exception:
@@ -372,23 +391,8 @@ def list_public_agents():
     resp = table.query(**query_kwargs)
     items = []
     for item in resp.get("Items", []):
-        items.append({
-            "agentId": item.get("agentId", ""),
-            "name": item.get("name", ""),
-            "description": item.get("description", ""),
-            "model_id": item.get("model_id", ""),
-            "supports_images": item.get("supports_images", False),
-            "welcome_message": item.get("welcome_message", ""),
-            "created_at": item.get("created_at", ""),
-        })
-
-    last_key = resp.get("LastEvaluatedKey")
-    while len(items) < limit and last_key:
-        query_kwargs["ExclusiveStartKey"] = last_key
-        query_kwargs["Limit"] = limit - len(items)
-        resp = table.query(**query_kwargs)
-        for item in resp.get("Items", []):
-            items.append({
+        items.append(
+            {
                 "agentId": item.get("agentId", ""),
                 "name": item.get("name", ""),
                 "description": item.get("description", ""),
@@ -396,12 +400,32 @@ def list_public_agents():
                 "supports_images": item.get("supports_images", False),
                 "welcome_message": item.get("welcome_message", ""),
                 "created_at": item.get("created_at", ""),
-            })
+            }
+        )
+
+    last_key = resp.get("LastEvaluatedKey")
+    while len(items) < limit and last_key:
+        query_kwargs["ExclusiveStartKey"] = last_key
+        query_kwargs["Limit"] = limit - len(items)
+        resp = table.query(**query_kwargs)
+        for item in resp.get("Items", []):
+            items.append(
+                {
+                    "agentId": item.get("agentId", ""),
+                    "name": item.get("name", ""),
+                    "description": item.get("description", ""),
+                    "model_id": item.get("model_id", ""),
+                    "supports_images": item.get("supports_images", False),
+                    "welcome_message": item.get("welcome_message", ""),
+                    "created_at": item.get("created_at", ""),
+                }
+            )
         last_key = resp.get("LastEvaluatedKey")
 
     next_cursor = None
     if last_key:
         import base64
+
         next_cursor = base64.b64encode(json.dumps(last_key).encode()).decode()
 
     result = paginated(items, next_cursor)
@@ -428,6 +452,7 @@ def list_public_skills():
     }
     if cursor:
         import base64
+
         try:
             scan_kwargs["ExclusiveStartKey"] = json.loads(base64.b64decode(cursor).decode())
         except Exception:
@@ -438,14 +463,16 @@ def list_public_skills():
         scan_kwargs["Limit"] = limit - len(items)
         resp = table.scan(**scan_kwargs)
         for item in resp.get("Items", []):
-            items.append({
-                "skillId": item.get("skillId", ""),
-                "name": item.get("name", ""),
-                "description": item.get("description", ""),
-                "type": item.get("type", "prompt"),
-                "tags": item.get("tags", []),
-                "created_at": item.get("created_at", ""),
-            })
+            items.append(
+                {
+                    "skillId": item.get("skillId", ""),
+                    "name": item.get("name", ""),
+                    "description": item.get("description", ""),
+                    "type": item.get("type", "prompt"),
+                    "tags": item.get("tags", []),
+                    "created_at": item.get("created_at", ""),
+                }
+            )
         last_key = resp.get("LastEvaluatedKey")
         if not last_key:
             break
@@ -454,6 +481,7 @@ def list_public_skills():
     next_cursor = None
     if last_key:
         import base64
+
         next_cursor = base64.b64encode(json.dumps(last_key).encode()).decode()
 
     result = paginated(items, next_cursor)
@@ -478,13 +506,12 @@ def list_public_tools():
 
     items = []
     scan_kwargs = {
-        "FilterExpression": (
-            "visibility = :pub AND (attribute_not_exists(deleted) OR deleted = :f)"
-        ),
+        "FilterExpression": ("visibility = :pub AND (attribute_not_exists(deleted) OR deleted = :f)"),
         "ExpressionAttributeValues": {":pub": "public", ":f": False},
     }
     if cursor:
         import base64
+
         try:
             scan_kwargs["ExclusiveStartKey"] = json.loads(base64.b64decode(cursor).decode())
         except Exception:
@@ -496,13 +523,15 @@ def list_public_tools():
         resp = table.scan(**scan_kwargs)
         for item in resp.get("Items", []):
             # Field whitelist: metadata only, never source code
-            items.append({
-                "toolId": item.get("toolId", ""),
-                "name": item.get("name", ""),
-                "description": item.get("description", ""),
-                "category": item.get("category", ""),
-                "created_at": item.get("created_at", ""),
-            })
+            items.append(
+                {
+                    "toolId": item.get("toolId", ""),
+                    "name": item.get("name", ""),
+                    "description": item.get("description", ""),
+                    "category": item.get("category", ""),
+                    "created_at": item.get("created_at", ""),
+                }
+            )
         last_key = resp.get("LastEvaluatedKey")
         if not last_key:
             break
@@ -511,6 +540,7 @@ def list_public_tools():
     next_cursor = None
     if last_key:
         import base64
+
         next_cursor = base64.b64encode(json.dumps(last_key).encode()).decode()
 
     result = paginated(items, next_cursor)
@@ -578,7 +608,9 @@ def clone_public_agent(agentId: str):
         "suggestions": src.get("suggestions", []),
         "tool_names": src.get("tool_names", []),
         "skills": src.get("skills", []),
-        "skill_ids": [s.get("id", "") for s in src.get("skills", []) if isinstance(s, dict)] if src.get("skills") else [],
+        "skill_ids": [s.get("id", "") for s in src.get("skills", []) if isinstance(s, dict)]
+        if src.get("skills")
+        else [],
         "mcp_targets": src.get("mcp_targets", []),
         "status": "active",
         "visibility": "private",
@@ -601,7 +633,7 @@ def clone_public_agent(agentId: str):
                 src_key = obj["Key"]
                 # Skip deployment.zip — clone must be (re-)deployed via Meta-Agent.
                 # Skip assistant-history and staging — session-specific.
-                rel = src_key[len(src_prefix):]
+                rel = src_key[len(src_prefix) :]
                 if rel.startswith(("deployment.zip", "assistant-history", "staging")):
                     continue
                 dst_key = dst_prefix + rel
@@ -611,8 +643,10 @@ def clone_public_agent(agentId: str):
                     Key=dst_key,
                 )
     except Exception as e:
-        logger.warning("S3 artifact copy failed during agent clone (agent record still created)",
-                       extra={"src": agentId, "dst": new_id, "error": str(e)})
+        logger.warning(
+            "S3 artifact copy failed during agent clone (agent record still created)",
+            extra={"src": agentId, "dst": new_id, "error": str(e)},
+        )
 
     return success({"agentId": new_id, "name": new_name, "workspace_id": dst_ws_id}, status_code=201)
 
@@ -665,7 +699,7 @@ def clone_public_skill(skillId: str):
         for page in paginator.paginate(Bucket=ASSETS_BUCKET, Prefix=src_prefix):
             for obj in page.get("Contents", []):
                 src_key = obj["Key"]
-                rel = src_key[len(src_prefix):]
+                rel = src_key[len(src_prefix) :]
                 if not rel:
                     continue
                 s3.copy_object(
@@ -707,7 +741,7 @@ def clone_public_tool(toolId: str):
         "name": src.get("name", ""),
         "description": src.get("description", ""),
         "category": src.get("category", ""),
-        "code": src.get("code", ""),   # source code exposed here (post-clone only)
+        "code": src.get("code", ""),  # source code exposed here (post-clone only)
         "builtin": False,
         "visibility": "private",
         "deleted": False,

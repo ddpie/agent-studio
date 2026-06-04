@@ -9,6 +9,7 @@ These tests inject a pre-cached fake Page into _browser_state to skip the
 BrowserClient + Playwright setup entirely. We test the action dispatch and
 response shaping, not the AWS plumbing.
 """
+
 import json
 import sys
 import types
@@ -63,6 +64,7 @@ def _exec_builtin(monkeypatch, page=None, s3_mock=None):
     monkeypatch.setenv("AGENT_STUDIO_REGION", "us-east-1")
 
     from templates.agent_template_v2 import BUILTIN_TOOLS_CODE
+
     ns: dict = {"__name__": "builtin_tools_test"}
     exec(BUILTIN_TOOLS_CODE, ns)
 
@@ -79,6 +81,7 @@ def _exec_builtin(monkeypatch, page=None, s3_mock=None):
 
 
 # ── Action dispatch ────────────────────────────────────────────────────────────
+
 
 def test_browser_use_navigate(monkeypatch):
     page = _make_page_mock()

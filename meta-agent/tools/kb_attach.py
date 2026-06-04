@@ -67,11 +67,17 @@ def kb_attach_to_agent(kb_id: str, agent_id: str) -> str:
     except Exception as e:
         log.warning("Failed to update KB %s attached_agent_ids: %s", kb_id, e)
 
-    return json.dumps({
-        "attached": True, "kb_id": kb_id, "kb_name": kb_name, "agent_id": agent_id,
-        "needs_redeploy": True,
-        "message": f"KB '{kb_name}' attached to agent. Redeploy the agent (update_agent) for the change to take effect.",
-    }, ensure_ascii=False)
+    return json.dumps(
+        {
+            "attached": True,
+            "kb_id": kb_id,
+            "kb_name": kb_name,
+            "agent_id": agent_id,
+            "needs_redeploy": True,
+            "message": f"KB '{kb_name}' attached to agent. Redeploy the agent (update_agent) for the change to take effect.",
+        },
+        ensure_ascii=False,
+    )
 
 
 @tool
@@ -126,8 +132,12 @@ def kb_detach_from_agent(kb_id: str, agent_id: str) -> str:
     except Exception as e:
         log.warning("Failed to update KB %s attached_agent_ids: %s", kb_id, e)
 
-    return json.dumps({
-        "detached": True, "kb_id": kb_id, "agent_id": agent_id,
-        "needs_redeploy": True,
-        "message": "KB detached. Redeploy the agent to remove the kb_retrieve tool.",
-    })
+    return json.dumps(
+        {
+            "detached": True,
+            "kb_id": kb_id,
+            "agent_id": agent_id,
+            "needs_redeploy": True,
+            "message": "KB detached. Redeploy the agent to remove the kb_retrieve tool.",
+        }
+    )

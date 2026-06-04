@@ -32,10 +32,13 @@ def _default_welcome(agent_name: str, description: str) -> str:
     language from tools._scope.
     """
     from tools._scope import current_creator_language
+
     lang = (current_creator_language() or "").strip().lower()
     if lang.startswith("zh"):
         return f"我是 {agent_name}。{description}" if description else f"我是 {agent_name}。"
     return f"I'm {agent_name}. {description}" if description else f"I'm {agent_name}."
+
+
 from tools_library.registry import get_tool_code_by_func_name as _get_builtin_code
 
 
@@ -82,6 +85,7 @@ def _resolve_mcp_endpoints(target_names: list) -> list:
     try:
         s3 = boto3.client("s3", region_name=REGION)
         import yaml
+
         resp = s3.get_object(Bucket=S3_BUCKET, Key="mcp-runtime/mcp-registry.yaml")
         registry = yaml.safe_load(resp["Body"].read().decode())
         for rt in registry.get("remote_targets", []):
@@ -128,25 +132,30 @@ def _resolve_mcp_endpoints(target_names: list) -> list:
         missing = runtime_names - found
         if missing:
             import sys
+
             print(f"WARNING: MCP runtimes not found: {missing}", file=sys.stderr)
 
     endpoints = []
     for target in target_names:
         if target in remote_map:
-            endpoints.append({
-                "type": "remote",
-                "name": target,
-                "url": remote_map[target]["url"],
-                "auth": remote_map[target]["auth"],
-            })
+            endpoints.append(
+                {
+                    "type": "remote",
+                    "name": target,
+                    "url": remote_map[target]["url"],
+                    "auth": remote_map[target]["auth"],
+                }
+            )
         else:
             runtime_name = target.replace("-", "_")
-            endpoints.append({
-                "type": "runtime",
-                "name": target,
-                "target_name": runtime_name,
-                "auth": "runtime",
-            })
+            endpoints.append(
+                {
+                    "type": "runtime",
+                    "name": target,
+                    "target_name": runtime_name,
+                    "auth": "runtime",
+                }
+            )
 
     return endpoints
 
@@ -231,7 +240,9 @@ def create_agent(
     # Resolve workspace_id early — needed for MCP policy checks and IAM role selection.
     workspace_id = staged.get("workspace_id", "") if staging_key else ""
     if not workspace_id:
-        workspace_id = getattr(__import__('tools.create_agent', fromlist=['_workspace_id']), '_workspace_id', '')
+        workspace_id = getattr(
+            __import__("tools.create_agent", fromlist=["_workspace_id"]), "_workspace_id", ""
+        )
 
     # Conversational skill attachment: `skill_names` is the no-staging
     # alternative to staging_key's `skills: [...]` array. Resolves each
@@ -240,9 +251,11 @@ def create_agent(
     # so the downstream SKILL.md read + file-copy paths work unchanged.
     # Library file copy happens AFTER the runtime is created (we need the
     # real agent_id for the dst prefix) — see the post-runtime block.
-    requested_skill_names = [
-        n.strip() for n in (skill_names or "").split(",") if n.strip()
-    ] if (skill_names and not staging_key) else []
+    requested_skill_names = (
+        [n.strip() for n in (skill_names or "").split(",") if n.strip()]
+        if (skill_names and not staging_key)
+        else []
+    )
     library_skill_resolutions: list[dict] = []  # [{name, library_id, new_local_id, library_files_hash}]
     if requested_skill_names:
         from tools.sync_agent_skill import (
@@ -250,6 +263,7 @@ def create_agent(
             _read_library_skill_files as _read_lib_files,
             _resolve_library_skill as _resolve_lib,
         )
+
         unresolved: list[str] = []
         _lib_s3 = boto3.client("s3", region_name=REGION)
         for skill_name in requested_skill_names:
@@ -267,25 +281,31 @@ def create_agent(
                 continue
             new_local_id = uuid.uuid4().hex[:8]
             content_hash = _lib_content_hash(lib_files)
-            skills_config.append({
-                "id": new_local_id,
-                "name": lib_item.get("name", skill_name),
-                "description": lib_item.get("description", ""),
-                "contentHash": content_hash,
-                "sourceSkillId": lib_skill_id,
-            })
-            library_skill_resolutions.append({
-                "library_id": lib_skill_id,
-                "new_local_id": new_local_id,
-                "files": lib_files,
-            })
+            skills_config.append(
+                {
+                    "id": new_local_id,
+                    "name": lib_item.get("name", skill_name),
+                    "description": lib_item.get("description", ""),
+                    "contentHash": content_hash,
+                    "sourceSkillId": lib_skill_id,
+                }
+            )
+            library_skill_resolutions.append(
+                {
+                    "library_id": lib_skill_id,
+                    "new_local_id": new_local_id,
+                    "files": lib_files,
+                }
+            )
         if unresolved:
-            return json.dumps({
-                "error": "skill_names resolution failed",
-                "unresolved": unresolved,
-                "hint": "Use list_skills to check spelling; skill_names must match "
-                        "workspace library entries exactly.",
-            })
+            return json.dumps(
+                {
+                    "error": "skill_names resolution failed",
+                    "unresolved": unresolved,
+                    "hint": "Use list_skills to check spelling; skill_names must match "
+                    "workspace library entries exactly.",
+                }
+            )
 
     # Parse mcp_targets and validate against workspace policy
     mcp_targets_list = [t.strip() for t in mcp_targets.split(",") if t.strip()] if mcp_targets else []
@@ -327,13 +347,16 @@ def create_agent(
                     skill_md_content = md_obj["Body"].read().decode("utf-8")
                 except Exception as e:
                     import sys
+
                     print(f"WARNING: Failed to read SKILL.md for skill {skill_id}: {e}", file=sys.stderr)
 
-            skills_data.append({
-                "name": skill_entry.get("name", skill_id),
-                "description": skill_entry.get("description", ""),
-                "skill_md_content": skill_md_content,
-            })
+            skills_data.append(
+                {
+                    "name": skill_entry.get("name", skill_id),
+                    "description": skill_entry.get("description", ""),
+                    "skill_md_content": skill_md_content,
+                }
+            )
 
     # Compose the final system prompt. template_id is deliberately ignored
     # here — the pre-canned 5-template scheme used to prepend an English
@@ -344,6 +367,7 @@ def create_agent(
     # agent should follow regardless of domain), picking the zh vs en
     # variant based on the creator's UI language.
     from tools._scope import current_creator_language
+
     final_prompt = system_prompt + "\n" + get_base_guidelines(current_creator_language())
 
     # Build tool_names list
@@ -351,7 +375,9 @@ def create_agent(
 
     # Inject built-in tool code for tools declared in tool_names but not in tool_definitions
     custom_code = tool_definitions or ""
-    defined_funcs = set(re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', custom_code)) if custom_code.strip() else set()
+    defined_funcs = (
+        set(re.findall(r"@tool\s*\ndef\s+(\w+)\s*\(", custom_code)) if custom_code.strip() else set()
+    )
     builtin_code_parts = []
     for tname in tool_names_list:
         if tname not in defined_funcs:
@@ -361,7 +387,9 @@ def create_agent(
 
     # Generate multi-file structure (no more repr() or string template substitution!)
     main_py = MAIN_PY_MCP_TEMPLATE if mcp_endpoints else MAIN_PY_TEMPLATE
-    tools_py = TOOLS_PY_HEADER + "\n\n".join(builtin_code_parts + ([custom_code] if custom_code.strip() else []))
+    tools_py = TOOLS_PY_HEADER + "\n\n".join(
+        builtin_code_parts + ([custom_code] if custom_code.strip() else [])
+    )
 
     # Inject KB retrieval tool if agent has bound knowledge bases
     _kb_ids = []
@@ -369,6 +397,7 @@ def create_agent(
         _kb_ids = staged.get("knowledge_bases", [])
     if _kb_ids and workspace_id:
         from tools.kb_inject import build_kb_injection, resolve_kb_bindings
+
         _kb_records = resolve_kb_bindings(workspace_id, _kb_ids)
         _kb_code = build_kb_injection(_kb_records)
         if _kb_code:
@@ -432,7 +461,7 @@ def create_agent(
                     for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=src_prefix):
                         for obj in page.get("Contents", []):
                             key = obj["Key"]
-                            rel = key[len(src_prefix):]
+                            rel = key[len(src_prefix) :]
                             if not rel:
                                 continue
                             s3_copy.copy_object(
@@ -442,6 +471,7 @@ def create_agent(
                             )
                 except Exception as e:
                     import sys
+
                     print(f"WARNING: Failed to copy skill {sid} files to {agent_id}: {e}", file=sys.stderr)
 
     # Conversational skill_names path: copy library skill files from
@@ -450,6 +480,7 @@ def create_agent(
     # "copy every object under a prefix" helper used by attach/sync.
     if library_skill_resolutions:
         from tools.sync_agent_skill import _copy_prefix as _lib_copy_prefix
+
         _lib_s3_copy = boto3.client("s3", region_name=REGION)
         for resolved in library_skill_resolutions:
             src_prefix = f"skills/{resolved['library_id']}/"
@@ -458,9 +489,9 @@ def create_agent(
                 _lib_copy_prefix(_lib_s3_copy, src_prefix, dst_prefix)
             except Exception as e:
                 import sys
+
                 print(
-                    f"WARNING: Failed to copy library skill "
-                    f"{resolved['library_id']} -> {dst_prefix}: {e}",
+                    f"WARNING: Failed to copy library skill {resolved['library_id']} -> {dst_prefix}: {e}",
                     file=sys.stderr,
                 )
 
@@ -525,7 +556,7 @@ def create_agent(
     table = ddb.Table(AGENTS_TABLE)
     # workspace_id already resolved early (before MCP policy + role selection)
     now = datetime.now(timezone.utc).isoformat()
-    caller = getattr(__import__('tools.create_agent', fromlist=['_caller_id']), '_caller_id', 'unknown')
+    caller = getattr(__import__("tools.create_agent", fromlist=["_caller_id"]), "_caller_id", "unknown")
     item = {
         "agentId": agent_id,
         "agentName": agent_name,
@@ -570,13 +601,12 @@ def create_agent(
                 }
             },
             networkConfiguration={"networkMode": "PUBLIC"},
-            filesystemConfigurations=[{
-                "sessionStorage": {"mountPath": "/mnt/workspace"}
-            }],
+            filesystemConfigurations=[{"sessionStorage": {"mountPath": "/mnt/workspace"}}],
             environmentVariables=_shared_env_vars(agent_id=agent_id),
         )
     except Exception as e:
         import sys
+
         print(f"WARNING: post-create env update failed for {agent_id}: {e}", file=sys.stderr)
 
     result["status"] = status

@@ -94,9 +94,13 @@ def _get_membership(workspace_id: str, user_id: str) -> dict | None:
     if not workspace_id or not user_id:
         return None
     try:
-        return _workspaces_table().get_item(
-            Key={"workspaceId": workspace_id, "sk": f"MEMBER#{user_id}"},
-        ).get("Item")
+        return (
+            _workspaces_table()
+            .get_item(
+                Key={"workspaceId": workspace_id, "sk": f"MEMBER#{user_id}"},
+            )
+            .get("Item")
+        )
     except Exception:
         return None
 
@@ -135,8 +139,7 @@ def ensure_agent_in_workspace(
         have = member.get("role") if member else "(not a member)"
         return None, {
             "error": (
-                f"Permission denied: operation requires '{min_role}' "
-                f"role or higher, you have '{have}'."
+                f"Permission denied: operation requires '{min_role}' role or higher, you have '{have}'."
             )
         }
 
@@ -157,8 +160,7 @@ def require_role(min_role: str) -> dict | None:
         have = member.get("role") if member else "(not a member)"
         return {
             "error": (
-                f"Permission denied: operation requires '{min_role}' "
-                f"role or higher, you have '{have}'."
+                f"Permission denied: operation requires '{min_role}' role or higher, you have '{have}'."
             )
         }
     return None

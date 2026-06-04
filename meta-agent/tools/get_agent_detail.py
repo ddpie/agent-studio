@@ -119,11 +119,13 @@ def _compact_tool_definitions(src: str) -> dict | list:
             signature = f"{node.name}({args_str}) -> {returns_str}"
         except Exception:
             signature = f"{node.name}(...)"
-        out.append({
-            "name": node.name,
-            "signature": signature,
-            "summary": _summarize_docstring(ast.get_docstring(node)),
-        })
+        out.append(
+            {
+                "name": node.name,
+                "signature": signature,
+                "summary": _summarize_docstring(ast.get_docstring(node)),
+            }
+        )
     return out
 
 
@@ -155,9 +157,7 @@ def _slim_metadata(metadata: dict) -> dict:
         slimmed["skills"] = [_slim_skill(s) for s in skills]
 
     if "tool_definitions" in metadata:
-        slimmed["tool_definitions"] = _compact_tool_definitions(
-            metadata.get("tool_definitions") or ""
-        )
+        slimmed["tool_definitions"] = _compact_tool_definitions(metadata.get("tool_definitions") or "")
 
     return slimmed
 
@@ -209,7 +209,9 @@ def get_agent_detail(agent_id: str) -> str:
         result["metadata"] = _slim_metadata(metadata)
     except Exception:
         result["metadata"] = None
-        result["metadata_note"] = "No metadata.json found (agent may have been created before metadata support)"
+        result["metadata_note"] = (
+            "No metadata.json found (agent may have been created before metadata support)"
+        )
 
     # DDB-only fields not present in metadata.json
     try:

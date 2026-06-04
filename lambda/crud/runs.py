@@ -1,4 +1,5 @@
 """Runs — scheduled/manual execution history endpoints."""
+
 import os
 import re
 from datetime import datetime, timezone
@@ -133,6 +134,7 @@ def list_runs(wsId: str, agentId: str):
         kwargs["ExpressionAttributeValues"][":sid"] = schedule_id
     if next_token:
         import json as _json
+
         try:
             kwargs["ExclusiveStartKey"] = _json.loads(next_token)
         except (ValueError, TypeError):
@@ -148,6 +150,7 @@ def list_runs(wsId: str, agentId: str):
     result = {"runs": runs}
     if resp.get("LastEvaluatedKey"):
         import json as _json
+
         result["nextToken"] = _json.dumps(resp["LastEvaluatedKey"])
 
     return success(result)
@@ -199,23 +202,25 @@ def get_run(wsId: str, agentId: str, runId: str):
     refs = item.get("artifactRefs") or []
     artifact_list = [{"key": k, "filename": _extract_filename(k)} for k in refs]
 
-    return success({
-        "runId": item.get("runId"),
-        "trigger": item.get("trigger"),
-        "scheduleId": item.get("scheduleId"),
-        "sessionId": item.get("sessionId"),
-        "status": status,
-        "input": item.get("input", ""),
-        "outputUrl": output_url,
-        "artifactRefs": artifact_list,
-        "usage": {
-            "promptTokens": item.get("promptTokens"),
-            "completionTokens": item.get("completionTokens"),
-            "totalTokens": item.get("totalTokens"),
-        },
-        "durationMs": item.get("durationMs"),
-        "model": item.get("model"),
-        "error": item.get("error"),
-        "startedAt": item.get("startedAt"),
-        "completedAt": item.get("completedAt"),
-    })
+    return success(
+        {
+            "runId": item.get("runId"),
+            "trigger": item.get("trigger"),
+            "scheduleId": item.get("scheduleId"),
+            "sessionId": item.get("sessionId"),
+            "status": status,
+            "input": item.get("input", ""),
+            "outputUrl": output_url,
+            "artifactRefs": artifact_list,
+            "usage": {
+                "promptTokens": item.get("promptTokens"),
+                "completionTokens": item.get("completionTokens"),
+                "totalTokens": item.get("totalTokens"),
+            },
+            "durationMs": item.get("durationMs"),
+            "model": item.get("model"),
+            "error": item.get("error"),
+            "startedAt": item.get("startedAt"),
+            "completedAt": item.get("completedAt"),
+        }
+    )

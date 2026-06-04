@@ -62,6 +62,7 @@ _LINK_MARKER_END = "<!-- linked-agents:end -->"
 _WORKSPACES_TABLE = os.getenv("AGENT_STUDIO_WORKSPACES_TABLE", "agent-studio-workspaces")
 try:
     from tools._scope import ROLE_ADMIN, ROLE_EDITOR, ROLE_OWNER, ROLE_VIEWER
+
     _ROLE_LEVEL = {ROLE_VIEWER: 0, ROLE_EDITOR: 1, ROLE_ADMIN: 2, ROLE_OWNER: 3}
 except ImportError:  # pragma: no cover
     ROLE_VIEWER, ROLE_EDITOR, ROLE_ADMIN, ROLE_OWNER = "viewer", "editor", "admin", "owner"
@@ -133,18 +134,20 @@ def _mint_a2a_key(user_id: str, agent_id: str, workspace_id: str) -> tuple[str, 
 
     ddb = boto3.resource("dynamodb", region_name=REGION)
     table = ddb.Table(_A2A_KEYS_TABLE)
-    table.put_item(Item={
-        "apiKeyHash": key_hash,
-        "keyId": key_id,
-        "userAgentKey": f"{user_id}#{agent_id}",
-        "keyPrefix": prefix,
-        "userId": user_id,
-        "agentId": agent_id,
-        "workspaceId": workspace_id,
-        "createdAt": now,
-        "revoked": False,
-        "source": "meta-agent.link_agent",
-    })
+    table.put_item(
+        Item={
+            "apiKeyHash": key_hash,
+            "keyId": key_id,
+            "userAgentKey": f"{user_id}#{agent_id}",
+            "keyPrefix": prefix,
+            "userId": user_id,
+            "agentId": agent_id,
+            "workspaceId": workspace_id,
+            "createdAt": now,
+            "revoked": False,
+            "source": "meta-agent.link_agent",
+        }
+    )
     return key_id, plaintext
 
 
@@ -173,9 +176,7 @@ def _linked_keys_secret_path(workspace_id: str, source_agent_id: str) -> str:
 
 def _read_linked_keys_map(sm, workspace_id: str, source_agent_id: str) -> dict:
     try:
-        existing = sm.get_secret_value(
-            SecretId=_linked_keys_secret_path(workspace_id, source_agent_id)
-        )
+        existing = sm.get_secret_value(SecretId=_linked_keys_secret_path(workspace_id, source_agent_id))
     except sm.exceptions.ResourceNotFoundException:
         return {}
     except Exception:
@@ -254,7 +255,9 @@ def _build_link_section(linked: list[dict]) -> str:
     ]
     for entry in linked:
         desc = entry.get("description") or "(no description provided)"
-        lines.append(f"- `{entry['agent_id']}` — **{entry.get('display_name') or entry['agent_id']}**: {desc}")
+        lines.append(
+            f"- `{entry['agent_id']}` — **{entry.get('display_name') or entry['agent_id']}**: {desc}"
+        )
     lines.append(_LINK_MARKER_END)
     return "\n".join(lines) + "\n"
 
@@ -327,31 +330,37 @@ def _redeploy_source(source_id: str, meta: dict) -> str:
         try:
             s3 = boto3.client("s3", region_name=REGION)
             cfg = json.loads(
-                s3.get_object(Bucket=S3_BUCKET, Key=f"agents/{source_id}/config.json")["Body"].read().decode("utf-8")
+                s3.get_object(Bucket=S3_BUCKET, Key=f"agents/{source_id}/config.json")["Body"]
+                .read()
+                .decode("utf-8")
             )
             mcp_endpoints = cfg.get("mcp_endpoints", [])
         except Exception:
             mcp_endpoints = []
 
     main_py = MAIN_PY_MCP_TEMPLATE if mcp_endpoints else MAIN_PY_TEMPLATE
-    tools_py = TOOLS_PY_HEADER + "\n\n".join(
-        builtin_parts + ([custom_code] if custom_code.strip() else [])
-    )
+    tools_py = TOOLS_PY_HEADER + "\n\n".join(builtin_parts + ([custom_code] if custom_code.strip() else []))
 
     # Inject KB retrieval tool if agent has bound knowledge bases
     _ws_id = meta.get("workspace_id", "")
     _kb_ids = []
     if not _kb_ids:
         try:
-            _agent_item = boto3.client("dynamodb", region_name=REGION).get_item(
-                TableName=AGENTS_TABLE, Key={"agentId": {"S": source_id}},
-                ProjectionExpression="knowledge_bases",
-            ).get("Item", {})
+            _agent_item = (
+                boto3.client("dynamodb", region_name=REGION)
+                .get_item(
+                    TableName=AGENTS_TABLE,
+                    Key={"agentId": {"S": source_id}},
+                    ProjectionExpression="knowledge_bases",
+                )
+                .get("Item", {})
+            )
             _kb_ids = _agent_item.get("knowledge_bases", {}).get("SS", [])
         except Exception:
             pass
     if _kb_ids and _ws_id:
         from tools.kb_inject import build_kb_injection, resolve_kb_bindings
+
         _kb_records = resolve_kb_bindings(_ws_id, _kb_ids)
         _kb_code = build_kb_injection(_kb_records)
         if _kb_code:
@@ -431,24 +440,30 @@ def link_agent(source_agent_id: str, target_agent_id: str) -> str:
     if not src_ws or not tgt_ws:
         return json.dumps({"error": "Both agents must belong to a workspace"})
     if src_ws != tgt_ws:
-        return json.dumps({
-            "error": "Cross-workspace linking is not allowed",
-            "source_workspace": src_ws,
-            "target_workspace": tgt_ws,
-        })
+        return json.dumps(
+            {
+                "error": "Cross-workspace linking is not allowed",
+                "source_workspace": src_ws,
+                "target_workspace": tgt_ws,
+            }
+        )
 
     # Editor+ role required: linking mutates secrets and redeploys source.
     member = _get_workspace_membership(src_ws, caller)
     if not _has_min_role(member, ROLE_EDITOR):
-        return json.dumps({
-            "error": "Permission denied: editor role or higher required to link agents",
-            "workspace_id": src_ws,
-            "caller_role": (member or {}).get("role", "none"),
-        })
+        return json.dumps(
+            {
+                "error": "Permission denied: editor role or higher required to link agents",
+                "workspace_id": src_ws,
+                "caller_role": (member or {}).get("role", "none"),
+            }
+        )
 
     invoke_base = _public_base_url()
     if not invoke_base:
-        return json.dumps({"error": "A2A invoke base URL not configured (AGENT_STUDIO_CLOUDFRONT_DOMAIN missing)"})
+        return json.dumps(
+            {"error": "A2A invoke base URL not configured (AGENT_STUDIO_CLOUDFRONT_DOMAIN missing)"}
+        )
 
     # 1. Mint the key.
     key_id, plaintext = _mint_a2a_key(
@@ -461,7 +476,10 @@ def link_agent(source_agent_id: str, target_agent_id: str) -> str:
     #    (which is the same as src_ws by construction since cross-workspace
     #    linking was rejected above).
     keys_blob, keys_map = _update_linked_keys_secret(
-        source_agent_id, target_agent_id, plaintext, src_ws,
+        source_agent_id,
+        target_agent_id,
+        plaintext,
+        src_ws,
     )
 
     # 3. Update source metadata — tools, prompt fragment, linked_agents list, env vars.
@@ -490,18 +508,22 @@ def link_agent(source_agent_id: str, target_agent_id: str) -> str:
                 tool_defs,
                 count=1,
             ).rstrip()
-        tool_defs = (tool_defs.rstrip() + "\n\n" + call_code.strip()) if tool_defs.strip() else call_code.strip()
+        tool_defs = (
+            (tool_defs.rstrip() + "\n\n" + call_code.strip()) if tool_defs.strip() else call_code.strip()
+        )
         meta["tool_definitions"] = tool_defs
 
     linked = meta.get("linked_agents") or []
     linked = [l for l in linked if l.get("agent_id") != target_agent_id]
-    linked.append({
-        "agent_id": target_agent_id,
-        "display_name": tgt.get("display_name") or tgt.get("name") or target_agent_id,
-        "description": tgt.get("description") or "",
-        "key_id": key_id,
-        "linked_at": datetime.now(timezone.utc).isoformat(),
-    })
+    linked.append(
+        {
+            "agent_id": target_agent_id,
+            "display_name": tgt.get("display_name") or tgt.get("name") or target_agent_id,
+            "description": tgt.get("description") or "",
+            "key_id": key_id,
+            "linked_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
     meta["linked_agents"] = linked
 
     base_prompt = _strip_link_section(meta.get("system_prompt") or "")
@@ -549,14 +571,17 @@ def link_agent(source_agent_id: str, target_agent_id: str) -> str:
     except Exception:
         pass
 
-    return json.dumps({
-        "status": status,
-        "source_agent_id": source_agent_id,
-        "target_agent_id": target_agent_id,
-        "workspace_id": src_ws,
-        "key_id": key_id,
-        "linked_agents": [l["agent_id"] for l in linked],
-    }, indent=2)
+    return json.dumps(
+        {
+            "status": status,
+            "source_agent_id": source_agent_id,
+            "target_agent_id": target_agent_id,
+            "workspace_id": src_ws,
+            "key_id": key_id,
+            "linked_agents": [l["agent_id"] for l in linked],
+        },
+        indent=2,
+    )
 
 
 @tool
@@ -586,11 +611,13 @@ def unlink_agent(source_agent_id: str, target_agent_id: str) -> str:
 
     member = _get_workspace_membership(src_ws, caller)
     if not _has_min_role(member, ROLE_EDITOR):
-        return json.dumps({
-            "error": "Permission denied: editor role or higher required to unlink agents",
-            "workspace_id": src_ws,
-            "caller_role": (member or {}).get("role", "none"),
-        })
+        return json.dumps(
+            {
+                "error": "Permission denied: editor role or higher required to unlink agents",
+                "workspace_id": src_ws,
+                "caller_role": (member or {}).get("role", "none"),
+            }
+        )
 
     meta = _load_metadata(source_agent_id)
     linked = [l for l in (meta.get("linked_agents") or []) if l.get("agent_id") == target_agent_id]
@@ -603,7 +630,9 @@ def unlink_agent(source_agent_id: str, target_agent_id: str) -> str:
     # makes the key effectively unusable to the source).
     # If the link entry recorded an apiKeyHash we'd revoke it here.
     remaining_blob, remaining_map = _remove_linked_key_from_secret(
-        source_agent_id, target_agent_id, src_ws,
+        source_agent_id,
+        target_agent_id,
+        src_ws,
     )
 
     remaining_linked = [l for l in (meta.get("linked_agents") or []) if l.get("agent_id") != target_agent_id]
@@ -671,9 +700,12 @@ def unlink_agent(source_agent_id: str, target_agent_id: str) -> str:
     except Exception:
         pass
 
-    return json.dumps({
-        "status": status,
-        "source_agent_id": source_agent_id,
-        "target_agent_id": target_agent_id,
-        "remaining_linked_agents": [l["agent_id"] for l in remaining_linked],
-    }, indent=2)
+    return json.dumps(
+        {
+            "status": status,
+            "source_agent_id": source_agent_id,
+            "target_agent_id": target_agent_id,
+            "remaining_linked_agents": [l["agent_id"] for l in remaining_linked],
+        },
+        indent=2,
+    )

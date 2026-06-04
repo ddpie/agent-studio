@@ -92,11 +92,13 @@ def list_skills(name_pattern: str = "", limit: int = _DEFAULT_LIMIT, offset: int
             for item in resp.get("Items", []):
                 if item.get("deleted"):
                     continue
-                all_items.append({
-                    "id": item.get("skillId", ""),
-                    "name": item.get("name", ""),
-                    "description": item.get("description", ""),
-                })
+                all_items.append(
+                    {
+                        "id": item.get("skillId", ""),
+                        "name": item.get("name", ""),
+                        "description": item.get("description", ""),
+                    }
+                )
             last_key = resp.get("LastEvaluatedKey")
             if not last_key:
                 break
@@ -141,8 +143,7 @@ def list_skills(name_pattern: str = "", limit: int = _DEFAULT_LIMIT, offset: int
     elif offset_n > 0 and returned == 0 and filtered_count > 0:
         # offset past the end — surface it so the model can back off
         envelope["hint"] = (
-            f"offset={offset_n} is beyond the last item (filtered={filtered_count}). "
-            "Pass a smaller offset."
+            f"offset={offset_n} is beyond the last item (filtered={filtered_count}). Pass a smaller offset."
         )
 
     return json.dumps(envelope, indent=2, ensure_ascii=False)

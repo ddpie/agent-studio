@@ -84,13 +84,15 @@ def attach_agent_skill(
 
     skills_list = metadata.get("skills", []) or []
     if any(s.get("name") == skill_name for s in skills_list):
-        return json.dumps({
-            "error": (
-                f"Agent {agent_id} already has a skill named '{skill_name}'. "
-                "Use sync_agent_skill to refresh it from the library, or "
-                "rename/remove the existing one first."
-            ),
-        })
+        return json.dumps(
+            {
+                "error": (
+                    f"Agent {agent_id} already has a skill named '{skill_name}'. "
+                    "Use sync_agent_skill to refresh it from the library, or "
+                    "rename/remove the existing one first."
+                ),
+            }
+        )
 
     # 2. Resolve library source.
     library_item, resolve_err = _resolve_library_skill(skill_name, new_source_skill_id)
@@ -102,9 +104,11 @@ def attach_agent_skill(
     # 3. Read library files + compute hash.
     library_files = _read_library_skill_files(s3, library_skill_id)
     if not library_files:
-        return json.dumps({
-            "error": f"Library skill {library_skill_id} has no files — nothing to attach.",
-        })
+        return json.dumps(
+            {
+                "error": f"Library skill {library_skill_id} has no files — nothing to attach.",
+            }
+        )
     content_hash = _compute_content_hash(library_files)
 
     # 4. Allocate a fresh local id and copy. Match the frontend convention
@@ -168,7 +172,7 @@ def attach_agent_skill(
         result["redeploy"] = {
             "skipped": True,
             "note": "Manifest and files are live; system prompt won't mention "
-                    "the new skill until the next deploy.",
+            "the new skill until the next deploy.",
         }
 
     return json.dumps(result, indent=2, ensure_ascii=False)

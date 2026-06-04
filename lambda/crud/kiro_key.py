@@ -14,6 +14,7 @@ subscription tier. We shell out to the Meta-Agent runtime's embedded
 runtime parses the TUI output and returns structured JSON. Cached
 in-process for 60s to avoid hammering Kiro on every page visit.
 """
+
 import json
 import time
 from datetime import datetime, timezone
@@ -88,7 +89,8 @@ def _resolve_user_label(user_id: str) -> str:
         return cached
     try:
         resp = _get_cognito().admin_get_user(
-            UserPoolId=COGNITO_USER_POOL_ID, Username=user_id,
+            UserPoolId=COGNITO_USER_POOL_ID,
+            Username=user_id,
         )
         attrs = {a["Name"]: a["Value"] for a in resp.get("UserAttributes", [])}
         name = attrs.get("name") or ""
@@ -98,8 +100,7 @@ def _resolve_user_label(user_id: str) -> str:
         else:
             label = name or email or user_id
     except Exception as e:
-        logger.warning("cognito admin_get_user failed",
-                       extra={"userId": user_id, "error": str(e)})
+        logger.warning("cognito admin_get_user failed", extra={"userId": user_id, "error": str(e)})
         label = user_id
     _identity_cache[user_id] = label
     return label
@@ -142,22 +143,26 @@ def get_kiro_key(wsId: str):
         return internal_error()
 
     if not info:
-        return success({
-            "configured": False,
-            "lastUpdated": None,
-            "updatedBy": None,
-            "region": _DEFAULT_REGION,
-        })
+        return success(
+            {
+                "configured": False,
+                "lastUpdated": None,
+                "updatedBy": None,
+                "region": _DEFAULT_REGION,
+            }
+        )
 
     tags = {t["Key"]: t["Value"] for t in info.get("Tags", [])}
     last_changed = info.get("LastChangedDate") or info.get("CreatedDate")
     raw_sub = tags.get("updatedBy")
-    return success({
-        "configured": True,
-        "lastUpdated": last_changed.isoformat() if last_changed else None,
-        "updatedBy": _resolve_user_label(raw_sub) if raw_sub else None,
-        "region": _region_from_describe(info),
-    })
+    return success(
+        {
+            "configured": True,
+            "lastUpdated": last_changed.isoformat() if last_changed else None,
+            "updatedBy": _resolve_user_label(raw_sub) if raw_sub else None,
+            "region": _region_from_describe(info),
+        }
+    )
 
 
 @router.put("/api/workspaces/<wsId>/kiro-key")
@@ -191,11 +196,14 @@ def put_kiro_key(wsId: str):
         sm.put_secret_value(SecretId=name, SecretString=api_key)
         # Refresh the updatedBy tag on overwrite so Describe reflects the
         # caller who just rotated the key, not whoever set it originally.
-        sm.tag_resource(SecretId=name, Tags=[
-            {"Key": "updatedBy", "Value": user_id},
-            {"Key": "updatedAt", "Value": now},
-            {"Key": "kiroRegion", "Value": region},
-        ])
+        sm.tag_resource(
+            SecretId=name,
+            Tags=[
+                {"Key": "updatedBy", "Value": user_id},
+                {"Key": "updatedAt", "Value": now},
+                {"Key": "kiroRegion", "Value": region},
+            ],
+        )
 
     try:
         _put_and_tag()
@@ -225,12 +233,14 @@ def put_kiro_key(wsId: str):
     # Kiro fresh so admins see their new subscription plan immediately.
     _usage_cache.pop(ws_id, None)
 
-    return success({
-        "configured": True,
-        "lastUpdated": now,
-        "updatedBy": _resolve_user_label(user_id),
-        "region": region,
-    })
+    return success(
+        {
+            "configured": True,
+            "lastUpdated": now,
+            "updatedBy": _resolve_user_label(user_id),
+            "region": region,
+        }
+    )
 
 
 @router.delete("/api/workspaces/<wsId>/kiro-key")
@@ -321,7 +331,7 @@ def _invoke_runtime_for_usage(api_key: str, region: str) -> dict:
         line = line.strip()
         if not line.startswith("data:"):
             continue
-        payload = line[len("data:"):].strip()
+        payload = line[len("data:") :].strip()
         if not payload:
             continue
         try:
@@ -340,9 +350,7 @@ def _invoke_runtime_for_usage(api_key: str, region: str) -> dict:
             except json.JSONDecodeError:
                 continue
     if last_obj is None:
-        raise RuntimeError(
-            f"unparseable runtime response: {(raw or '')[:200]!r}"
-        )
+        raise RuntimeError(f"unparseable runtime response: {(raw or '')[:200]!r}")
     return last_obj
 
 
@@ -406,19 +414,23 @@ def get_kiro_usage(wsId: str):
         # Soft-error: return 200 so the UI shows a warning banner
         # instead of a crash screen. Admin can retry, or refresh the
         # key if auth has drifted.
-        return success({
-            "configured": True,
-            "region": region,
-            "error": "runtime_invoke_failed",
-            "detail": str(e)[:200],
-        })
+        return success(
+            {
+                "configured": True,
+                "region": region,
+                "error": "runtime_invoke_failed",
+                "detail": str(e)[:200],
+            }
+        )
 
     if "__error" in frame:
-        return success({
-            "configured": True,
-            "region": region,
-            "error": frame.get("__error"),
-        })
+        return success(
+            {
+                "configured": True,
+                "region": region,
+                "error": frame.get("__error"),
+            }
+        )
 
     data = frame.get("__usage") or {}
     body = {

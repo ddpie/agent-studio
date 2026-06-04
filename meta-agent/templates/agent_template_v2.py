@@ -14,9 +14,8 @@ Instead of assembling everything into a single main.py, we now generate:
 # main.py simply calls _builtin._hydrate_secrets_from_arns() at startup
 # after its OTEL bootstrap.
 
-
 # ── main.py template (no MCP) ──────────────────────────────────────────────
-MAIN_PY_TEMPLATE = '''\
+MAIN_PY_TEMPLATE = """\
 # OTEL bootstrap must run before strands / boto3 imports so that
 # aws-opentelemetry-distro's auto-instrumentation can hook them.
 import os as _os
@@ -155,7 +154,7 @@ async def invoke(payload, context):
 
 if __name__ == "__main__":
     app.run()
-'''
+"""
 
 # ── main.py template (with MCP) ───────────────────────────────────────────
 MAIN_PY_MCP_TEMPLATE = '''\

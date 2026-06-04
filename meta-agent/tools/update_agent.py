@@ -29,10 +29,13 @@ def _default_welcome(agent_name: str, description: str) -> str:
     imports to save 4 lines isn't worth the coupling.
     """
     from tools._scope import current_creator_language
+
     lang = (current_creator_language() or "").strip().lower()
     if lang.startswith("zh"):
         return f"我是 {agent_name}。{description}" if description else f"我是 {agent_name}。"
     return f"I'm {agent_name}. {description}" if description else f"I'm {agent_name}."
+
+
 from tools.create_agent import _check_mcp_policy, _get_workspace_mcp_policy, _resolve_mcp_endpoints
 from tools_library.registry import get_tool_code_by_func_name as _get_builtin_code
 
@@ -51,10 +54,25 @@ def _clean_tool_definitions(defs: str) -> str:
             result.append(line)
             continue
         if in_tool:
-            if stripped and line[0:1] not in (" ", "\t") and not stripped.startswith("def ") and not stripped.startswith("#") and not stripped.startswith("@"):
+            if (
+                stripped
+                and line[0:1] not in (" ", "\t")
+                and not stripped.startswith("def ")
+                and not stripped.startswith("#")
+                and not stripped.startswith("@")
+            ):
                 in_tool = False
-                if stripped.startswith(("async def _", "def _", "@app.", "import json as _json",
-                                        "import base64 as _b64", "if __name__", "app.run()")):
+                if stripped.startswith(
+                    (
+                        "async def _",
+                        "def _",
+                        "@app.",
+                        "import json as _json",
+                        "import base64 as _b64",
+                        "if __name__",
+                        "app.run()",
+                    )
+                ):
                     continue
                 if stripped.startswith(("import ", "from ")):
                     result.append(line)
@@ -63,9 +81,19 @@ def _clean_tool_definitions(defs: str) -> str:
                 result.append(line)
                 continue
         else:
-            if stripped.startswith(("async def _", "def _", "@app.", "import json as _json",
-                                    "import base64 as _b64", "if __name__", "app.run()",
-                                    "yield chunk", "yield event")):
+            if stripped.startswith(
+                (
+                    "async def _",
+                    "def _",
+                    "@app.",
+                    "import json as _json",
+                    "import base64 as _b64",
+                    "if __name__",
+                    "app.run()",
+                    "yield chunk",
+                    "yield event",
+                )
+            ):
                 continue
             if stripped.startswith(("import ", "from ")) or not stripped:
                 if not stripped.startswith("import json as _json"):
@@ -160,7 +188,9 @@ def update_agent(
     # Resolve workspace_id early — needed for MCP policy checks and IAM role selection.
     workspace_id = staged.get("workspace_id", "") if staging_key else ""
     if not workspace_id:
-        workspace_id = getattr(__import__('tools.create_agent', fromlist=['_workspace_id']), '_workspace_id', '')
+        workspace_id = getattr(
+            __import__("tools.create_agent", fromlist=["_workspace_id"]), "_workspace_id", ""
+        )
 
     # Parse mcp_targets and validate against workspace policy
     mcp_targets_list = [t.strip() for t in mcp_targets.split(",") if t.strip()] if mcp_targets else []
@@ -202,19 +232,23 @@ def update_agent(
             skill_md_content = md_obj["Body"].read().decode("utf-8")
         except Exception as e:
             import sys
+
             print(f"WARNING: Failed to read SKILL.md for skill {skill_id}: {e}", file=sys.stderr)
 
-        skills_data.append({
-            "name": skill_entry.get("name", skill_id),
-            "description": skill_entry.get("description", ""),
-            "skill_md_content": skill_md_content,
-        })
+        skills_data.append(
+            {
+                "name": skill_entry.get("name", skill_id),
+                "description": skill_entry.get("description", ""),
+                "skill_md_content": skill_md_content,
+            }
+        )
 
     # Scope to the caller's workspace and require editor-or-higher role.
     # (The old comment here claimed CRUD Lambda would enforce this, but
     # Meta-Agent calls update_agent via Strands tools — NOT through the
     # CRUD HTTP API — so this is the only enforcement point.)
     from tools._scope import ROLE_EDITOR, ensure_agent_in_workspace
+
     record, err = ensure_agent_in_workspace(agent_id, min_role=ROLE_EDITOR)
     if err:
         return json.dumps(err)
@@ -238,7 +272,11 @@ def update_agent(
     # agent's tools.py and tool_definitions. Any subsequent A2A call from
     # that agent silently no-oped.
     final_prompt = system_prompt or existing_metadata.get("system_prompt", "You are a helpful assistant.")
-    final_tools_def = _clean_tool_definitions(tool_definitions) if tool_definitions else (existing_metadata.get("tool_definitions") or "")
+    final_tools_def = (
+        _clean_tool_definitions(tool_definitions)
+        if tool_definitions
+        else (existing_metadata.get("tool_definitions") or "")
+    )
     # existing metadata stores tools as a list; accept both list and comma-string forms.
     _existing_tool_names = existing_metadata.get("tool_names")
     if _existing_tool_names is None:
@@ -279,6 +317,7 @@ def update_agent(
     # (pre-bilingual split) already have the English variant embedded,
     # the containment check keeps them stable.
     from tools._scope import current_creator_language
+
     guidelines = get_base_guidelines(current_creator_language())
     if guidelines not in final_prompt:
         final_prompt = final_prompt + "\n" + guidelines
@@ -289,7 +328,9 @@ def update_agent(
     # already defined in tool_definitions (e.g. the user added a
     # built-in tool via the picker without editing the code).
     custom_code = final_tools_def or ""
-    defined_funcs = set(re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', custom_code)) if custom_code.strip() else set()
+    defined_funcs = (
+        set(re.findall(r"@tool\s*\ndef\s+(\w+)\s*\(", custom_code)) if custom_code.strip() else set()
+    )
     builtin_code_parts = []
     for tname in tool_names_list:
         if tname not in defined_funcs:
@@ -298,7 +339,9 @@ def update_agent(
                 builtin_code_parts.append(code.strip())
 
     main_py = MAIN_PY_MCP_TEMPLATE if mcp_endpoints else MAIN_PY_TEMPLATE
-    tools_py = TOOLS_PY_HEADER + "\n\n".join(builtin_code_parts + ([custom_code] if custom_code.strip() else []))
+    tools_py = TOOLS_PY_HEADER + "\n\n".join(
+        builtin_code_parts + ([custom_code] if custom_code.strip() else [])
+    )
 
     # Inject KB retrieval tool if agent has bound knowledge bases
     _kb_ids = []
@@ -307,15 +350,21 @@ def update_agent(
     if not _kb_ids:
         # Check DDB for existing agent metadata
         try:
-            _agent_item = boto3.client("dynamodb", region_name=REGION).get_item(
-                TableName=AGENTS_TABLE, Key={"agentId": {"S": agent_id}},
-                ProjectionExpression="knowledge_bases",
-            ).get("Item", {})
+            _agent_item = (
+                boto3.client("dynamodb", region_name=REGION)
+                .get_item(
+                    TableName=AGENTS_TABLE,
+                    Key={"agentId": {"S": agent_id}},
+                    ProjectionExpression="knowledge_bases",
+                )
+                .get("Item", {})
+            )
             _kb_ids = _agent_item.get("knowledge_bases", {}).get("SS", [])
         except Exception:
             pass
     if _kb_ids and workspace_id:
         from tools.kb_inject import build_kb_injection, resolve_kb_bindings
+
         _kb_records = resolve_kb_bindings(workspace_id, _kb_ids)
         _kb_code = build_kb_injection(_kb_records)
         if _kb_code:
@@ -356,9 +405,7 @@ def update_agent(
             }
         },
         networkConfiguration={"networkMode": "PUBLIC"},
-        filesystemConfigurations=[{
-            "sessionStorage": {"mountPath": "/mnt/workspace"}
-        }],
+        filesystemConfigurations=[{"sessionStorage": {"mountPath": "/mnt/workspace"}}],
         environmentVariables=_shared_env_vars(agent_id=agent_id),
     )
 
@@ -373,9 +420,7 @@ def update_agent(
     # runtime.
     if skills_config:
         final_skills = skills_config
-        deployed_skill_hashes = {
-            s["id"]: s.get("contentHash", "") for s in skills_config
-        }
+        deployed_skill_hashes = {s["id"]: s.get("contentHash", "") for s in skills_config}
     else:
         final_skills = existing_metadata.get("skills", [])
         deployed_skill_hashes = existing_metadata.get("deployedSkillHashes", {})
@@ -464,15 +509,18 @@ def update_agent(
         ExpressionAttributeValues=expr_values,
     )
 
-    return json.dumps({
-        "agent_id": agent_id,
-        "agent_name": agent_name,
-        "status": "UPDATING",
-        "action": "redeployed",
-        "hint": (
-            "Redeploy accepted. Runtime status is now UPDATING and will "
-            "return to READY once the new container rolls out (typically "
-            f"under 2 minutes). Poll get_agent_detail(agent_id='{agent_id}') "
-            "every ~20s if you need to confirm READY before invoking."
-        ),
-    }, indent=2)
+    return json.dumps(
+        {
+            "agent_id": agent_id,
+            "agent_name": agent_name,
+            "status": "UPDATING",
+            "action": "redeployed",
+            "hint": (
+                "Redeploy accepted. Runtime status is now UPDATING and will "
+                "return to READY once the new container rolls out (typically "
+                f"under 2 minutes). Poll get_agent_detail(agent_id='{agent_id}') "
+                "every ~20s if you need to confirm READY before invoking."
+            ),
+        },
+        indent=2,
+    )

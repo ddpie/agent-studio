@@ -1,4 +1,5 @@
 """Knowledge Base CRUD endpoints."""
+
 import uuid
 from datetime import datetime
 
@@ -113,6 +114,7 @@ def list_knowledge_bases(wsId: str):
 
     table = _get_table()
     from boto3.dynamodb.conditions import Key
+
     resp = table.query(
         KeyConditionExpression=Key("ws_id").eq(ws_id),
     )
@@ -145,12 +147,14 @@ def get_knowledge_base(wsId: str, kbId: str):
         try:
             list_resp = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix, MaxKeys=50)
             for obj in list_resp.get("Contents", []):
-                documents.append({
-                    "key": obj["Key"],
-                    "filename": obj["Key"].split("/")[-1],
-                    "sizeBytes": obj["Size"],
-                    "lastModified": obj["LastModified"].isoformat(),
-                })
+                documents.append(
+                    {
+                        "key": obj["Key"],
+                        "filename": obj["Key"].split("/")[-1],
+                        "sizeBytes": obj["Size"],
+                        "lastModified": obj["LastModified"].isoformat(),
+                    }
+                )
         except Exception:
             pass
     kb["documents"] = documents
@@ -174,7 +178,8 @@ def get_knowledge_base(wsId: str, kbId: str):
                 "jobId": last_job,
                 "status": job["status"],
                 "documentsScanned": scanned,
-                "documentsIndexed": stats.get("numberOfNewDocumentsIndexed", 0) + stats.get("numberOfModifiedDocumentsIndexed", 0),
+                "documentsIndexed": stats.get("numberOfNewDocumentsIndexed", 0)
+                + stats.get("numberOfModifiedDocumentsIndexed", 0),
                 "documentsFailed": failed,
                 "processedSuccessfully": scanned - failed,
                 "failureReasons": job.get("failureReasons", []),
@@ -443,7 +448,9 @@ def upload_document(wsId: str, kbId: str):
     # Validate extension
     ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
     if ext not in ALLOWED_EXTENSIONS:
-        return bad_request(f"File type '.{ext}' not allowed. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}")
+        return bad_request(
+            f"File type '.{ext}' not allowed. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+        )
 
     # Verify KB exists and belongs to workspace
     table = _get_table()
@@ -508,12 +515,15 @@ def upload_document(wsId: str, kbId: str):
     except Exception:
         pass
 
-    return success({
-        "kbId": kbId,
-        "fileName": file_name,
-        "destKey": dest_key,
-        "ingestionJobId": ingestion_job_id,
-    }, status_code=201)
+    return success(
+        {
+            "kbId": kbId,
+            "fileName": file_name,
+            "destKey": dest_key,
+            "ingestionJobId": ingestion_job_id,
+        },
+        status_code=201,
+    )
 
 
 # ── Delete Document ──
@@ -545,7 +555,7 @@ def delete_document(wsId: str, kbId: str):
         return bad_request("Document key does not belong to this knowledge base")
     # If only documentKey was given, derive file_name from it for the response.
     if not file_name:
-        file_name = doc_key[len(s3_prefix):] if doc_key.startswith(s3_prefix) else doc_key
+        file_name = doc_key[len(s3_prefix) :] if doc_key.startswith(s3_prefix) else doc_key
 
     # Delete from S3
     s3 = _get_s3()
@@ -611,13 +621,15 @@ def get_ingestion_status(wsId: str, kbId: str):
         )
         jobs = []
         for job in list_resp.get("ingestionJobSummaries", []):
-            jobs.append({
-                "ingestionJobId": job.get("ingestionJobId", ""),
-                "status": job.get("status", ""),
-                "startedAt": job.get("startedAt", "").isoformat() if job.get("startedAt") else "",
-                "updatedAt": job.get("updatedAt", "").isoformat() if job.get("updatedAt") else "",
-                "statistics": job.get("statistics", {}),
-            })
+            jobs.append(
+                {
+                    "ingestionJobId": job.get("ingestionJobId", ""),
+                    "status": job.get("status", ""),
+                    "startedAt": job.get("startedAt", "").isoformat() if job.get("startedAt") else "",
+                    "updatedAt": job.get("updatedAt", "").isoformat() if job.get("updatedAt") else "",
+                    "statistics": job.get("statistics", {}),
+                }
+            )
         return success({"jobs": jobs})
     except Exception:
         logger.exception("Failed to list ingestion jobs for KB %s", kbId)

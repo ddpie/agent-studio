@@ -4,6 +4,7 @@ Separated from agents.py because these read-only handlers talk to
 bedrock-agentcore-control, not DynamoDB. Keeps agents.py focused on
 DDB CRUD.
 """
+
 import boto3
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler.api_gateway import Router
@@ -61,6 +62,7 @@ def _to_json_safe(value):
     JS `new Date()` on the other side interprets as UTC, not local.
     """
     import datetime as _dt
+
     if isinstance(value, _dt.datetime):
         if value.tzinfo is None:
             value = value.replace(tzinfo=_dt.timezone.utc)
@@ -79,11 +81,7 @@ def _to_json_safe(value):
 
 
 def _strip_sensitive(d: dict) -> dict:
-    return {
-        k: _to_json_safe(v)
-        for k, v in d.items()
-        if k not in _SENSITIVE_RUNTIME_FIELDS
-    }
+    return {k: _to_json_safe(v) for k, v in d.items() if k not in _SENSITIVE_RUNTIME_FIELDS}
 
 
 @router.get("/api/workspaces/<wsId>/agents/<agentId>/runtime")
@@ -257,7 +255,9 @@ def update_endpoint(wsId: str, agentId: str, endpointName: str):
             return not_found()
         if code in ("ValidationException", "ConflictException"):
             return bad_request(e.response.get("Error", {}).get("Message", code))
-        logger.exception("update_agent_runtime_endpoint failed", extra={"agentId": agentId, "endpointName": endpointName})
+        logger.exception(
+            "update_agent_runtime_endpoint failed", extra={"agentId": agentId, "endpointName": endpointName}
+        )
         return internal_error()
     return success(_strip_sensitive(resp), status_code=202)
 
@@ -281,6 +281,8 @@ def delete_endpoint(wsId: str, agentId: str, endpointName: str):
         code = e.response.get("Error", {}).get("Code")
         if code == "ResourceNotFoundException":
             return not_found()
-        logger.exception("delete_agent_runtime_endpoint failed", extra={"agentId": agentId, "endpointName": endpointName})
+        logger.exception(
+            "delete_agent_runtime_endpoint failed", extra={"agentId": agentId, "endpointName": endpointName}
+        )
         return internal_error()
     return success({"deleted": endpointName})

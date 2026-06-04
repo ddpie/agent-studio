@@ -5,6 +5,7 @@ call now triggers a full repackage + update_agent_runtime. This test
 verifies that a description-only change still succeeds (it exercises the
 full redeploy path, not a metadata-only fallback).
 """
+
 import json
 import sys
 import types
@@ -78,6 +79,7 @@ def test_update_agent_description_only_triggers_full_redeploy():
     class _FakeTable:
         def __init__(self):
             self.update_calls: list[dict] = []
+
         def update_item(self, **kwargs):
             self.update_calls.append(kwargs)
 
@@ -104,30 +106,35 @@ def test_update_agent_description_only_triggers_full_redeploy():
             return fake_control
         return MagicMock()
 
-    with patch("tools.update_agent.boto3.client", side_effect=_boto3_client_with_control), \
-         patch("tools.update_agent.boto3.resource", return_value=ddb_resource), \
-         patch("tools._scope.ensure_agent_in_workspace",
-               return_value=({"agentId": AGENT_ID, "workspace_id": WS_ID, "agentName": "DataAnalyst"}, None)), \
-         patch("tools.update_agent.validate_agent_files",
-               return_value={"valid": True, "errors": []}), \
-         patch("tools.update_agent.build_deployment_package_v2", return_value=b"fake-zip"), \
-         patch("tools.update_agent.upload_deployment", return_value=f"agents/{AGENT_ID}/deployment.zip"), \
-         patch("tools.update_agent._get_agent_role_arn", return_value="arn:aws:iam::000:role/r"), \
-         patch("tools.update_agent.build_skill_prompt_section", return_value=""), \
-         patch("tools.update_agent.get_base_guidelines", return_value=""), \
-         patch("tools._scope.current_creator_language", return_value="en"):
-
-        out = json.loads(_ua_mod.update_agent(
-            agent_id=AGENT_ID,
-            agent_name="DataAnalyst",
-            description="new description",
-        ))
+    with (
+        patch("tools.update_agent.boto3.client", side_effect=_boto3_client_with_control),
+        patch("tools.update_agent.boto3.resource", return_value=ddb_resource),
+        patch(
+            "tools._scope.ensure_agent_in_workspace",
+            return_value=({"agentId": AGENT_ID, "workspace_id": WS_ID, "agentName": "DataAnalyst"}, None),
+        ),
+        patch("tools.update_agent.validate_agent_files", return_value={"valid": True, "errors": []}),
+        patch("tools.update_agent.build_deployment_package_v2", return_value=b"fake-zip"),
+        patch("tools.update_agent.upload_deployment", return_value=f"agents/{AGENT_ID}/deployment.zip"),
+        patch("tools.update_agent._get_agent_role_arn", return_value="arn:aws:iam::000:role/r"),
+        patch("tools.update_agent.build_skill_prompt_section", return_value=""),
+        patch("tools.update_agent.get_base_guidelines", return_value=""),
+        patch("tools._scope.current_creator_language", return_value="en"),
+    ):
+        out = json.loads(
+            _ua_mod.update_agent(
+                agent_id=AGENT_ID,
+                agent_name="DataAnalyst",
+                description="new description",
+            )
+        )
 
     assert "error" not in out, f"unexpected error: {out}"
     assert out.get("action") == "redeployed"
     assert out.get("status") == "UPDATING"
-    assert fake_control.update_agent_runtime.called, \
+    assert fake_control.update_agent_runtime.called, (
         "expected update_agent_runtime to be called synchronously"
+    )
     assert fake_table.update_calls, "expected a DDB update_item call"
     last = fake_table.update_calls[-1]
     assert "description = :desc" in last["UpdateExpression"]

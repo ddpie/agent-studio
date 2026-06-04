@@ -1,4 +1,5 @@
 """Tests for crud/runtime.py — AgentCore Control Plane passthrough."""
+
 import datetime as dt
 import json
 from unittest.mock import MagicMock, patch
@@ -12,9 +13,7 @@ def aws_event_factory(user_id, workspace_id):
         return {
             "httpMethod": method,
             "path": path,
-            "resource": path.replace(
-                workspace_id, "{wsId}"
-            ).replace("agt-test", "{agentId}"),
+            "resource": path.replace(workspace_id, "{wsId}").replace("agt-test", "{agentId}"),
             "pathParameters": path_params or {"wsId": workspace_id, "agentId": "agt-test"},
             "headers": {"Authorization": "Bearer test-token"},
             "requestContext": {"identity": {"sourceIp": "127.0.0.1"}},
@@ -22,15 +21,19 @@ def aws_event_factory(user_id, workspace_id):
             "isBase64Encoded": False,
             "queryStringParameters": None,
         }
+
     return _build
 
 
 def test_get_runtime_returns_filtered_fields(mock_jwt, user_id, workspace_id, aws_event_factory):
     """GET /agents/{id}/runtime strips sensitive fields."""
     from crud.handler import app
-    with patch("crud.runtime._get_control") as mock_control_factory, \
-         patch("crud.runtime._get_agent_item") as mock_get_agent, \
-         patch("crud.runtime.auth_check") as auth_mock:
+
+    with (
+        patch("crud.runtime._get_control") as mock_control_factory,
+        patch("crud.runtime._get_agent_item") as mock_get_agent,
+        patch("crud.runtime.auth_check") as auth_mock,
+    ):
         auth_mock.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         mock_get_agent.return_value = {
             "agentId": "agt-test",
@@ -79,9 +82,12 @@ def test_get_runtime_returns_404_when_runtime_missing(mock_jwt, user_id, workspa
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.runtime._get_control") as mock_control_factory, \
-         patch("crud.runtime._get_agent_item") as mock_get_agent, \
-         patch("crud.runtime.auth_check") as auth_mock:
+
+    with (
+        patch("crud.runtime._get_control") as mock_control_factory,
+        patch("crud.runtime._get_agent_item") as mock_get_agent,
+        patch("crud.runtime.auth_check") as auth_mock,
+    ):
         auth_mock.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         mock_get_agent.return_value = {
             "agentId": "agt-test",
@@ -102,8 +108,11 @@ def test_get_runtime_returns_404_when_runtime_missing(mock_jwt, user_id, workspa
 
 def test_get_runtime_denies_cross_workspace(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_agent_item") as mock_get_agent, \
-         patch("crud.runtime.auth_check") as auth_mock:
+
+    with (
+        patch("crud.runtime._get_agent_item") as mock_get_agent,
+        patch("crud.runtime.auth_check") as auth_mock,
+    ):
         auth_mock.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         mock_get_agent.return_value = {
             "agentId": "agt-test",
@@ -118,9 +127,12 @@ def test_get_runtime_denies_cross_workspace(mock_jwt, user_id, workspace_id, aws
 
 def test_list_versions_returns_sorted(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_control") as mock_control_factory, \
-         patch("crud.runtime._get_agent_item") as mock_get_agent, \
-         patch("crud.runtime.auth_check") as auth_mock:
+
+    with (
+        patch("crud.runtime._get_control") as mock_control_factory,
+        patch("crud.runtime._get_agent_item") as mock_get_agent,
+        patch("crud.runtime.auth_check") as auth_mock,
+    ):
         auth_mock.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         mock_get_agent.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -143,18 +155,32 @@ def test_list_versions_returns_sorted(mock_jwt, user_id, workspace_id, aws_event
 
 def test_list_endpoints(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
         control.list_agent_runtime_endpoints.return_value = {
             "runtimeEndpoints": [
-                {"name": "DEFAULT", "liveVersion": "4", "status": "READY",
-                 "createdAt": "2026-04-01", "lastUpdatedAt": "2026-04-18"},
-                {"name": "staging", "liveVersion": "3", "targetVersion": None, "status": "READY",
-                 "createdAt": "2026-04-10", "lastUpdatedAt": "2026-04-10"},
+                {
+                    "name": "DEFAULT",
+                    "liveVersion": "4",
+                    "status": "READY",
+                    "createdAt": "2026-04-01",
+                    "lastUpdatedAt": "2026-04-18",
+                },
+                {
+                    "name": "staging",
+                    "liveVersion": "3",
+                    "targetVersion": None,
+                    "status": "READY",
+                    "createdAt": "2026-04-10",
+                    "lastUpdatedAt": "2026-04-10",
+                },
             ]
         }
         f.return_value = control
@@ -170,6 +196,7 @@ def test_list_endpoints(mock_jwt, user_id, workspace_id, aws_event_factory):
 def test_create_endpoint_requires_editor(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.runtime.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         event = aws_event_factory(
@@ -185,9 +212,12 @@ def test_update_endpoint_not_found_version(mock_jwt, user_id, workspace_id, aws_
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -213,6 +243,7 @@ def test_update_endpoint_not_found_version(mock_jwt, user_id, workspace_id, aws_
 
 def test_get_control_lazy_init():
     import crud.runtime as _rt
+
     _rt._control = None
     with patch("crud.runtime.boto3.client") as mock_b:
         mock_b.return_value = MagicMock()
@@ -224,6 +255,7 @@ def test_get_control_lazy_init():
 
 def test_get_agents_table_lazy_init():
     import crud.runtime as _rt
+
     _rt._agents_table = None
     with patch("crud.runtime.boto3.resource") as mock_r:
         mock_r.return_value.Table.return_value = MagicMock()
@@ -234,6 +266,7 @@ def test_get_agents_table_lazy_init():
 
 def test_get_agent_item_returns_item():
     import crud.runtime as _rt
+
     fake = MagicMock()
     fake.get_item.return_value = {"Item": {"agentId": "a"}}
     with patch("crud.runtime._get_agents_table", return_value=fake):
@@ -243,6 +276,7 @@ def test_get_agent_item_returns_item():
 
 def test_get_agent_item_missing_returns_none():
     import crud.runtime as _rt
+
     fake = MagicMock()
     fake.get_item.return_value = {}
     with patch("crud.runtime._get_agents_table", return_value=fake):
@@ -251,24 +285,28 @@ def test_get_agent_item_missing_returns_none():
 
 def test_to_json_safe_aware_datetime_kept():
     import crud.runtime as _rt
+
     aware = dt.datetime(2026, 1, 1, 12, 0, tzinfo=dt.timezone.utc)
     assert _rt._to_json_safe(aware) == "2026-01-01T12:00:00+00:00"
 
 
 def test_to_json_safe_naive_datetime_treated_as_utc():
     import crud.runtime as _rt
+
     naive = dt.datetime(2026, 1, 1, 12, 0)
     assert _rt._to_json_safe(naive).endswith("+00:00")
 
 
 def test_to_json_safe_date_returns_iso():
     import crud.runtime as _rt
+
     d = dt.date(2026, 1, 1)
     assert _rt._to_json_safe(d) == "2026-01-01"
 
 
 def test_to_json_safe_bytes_decoded():
     import crud.runtime as _rt
+
     assert _rt._to_json_safe(b"hi") == "hi"
     # Bytes with invalid utf-8 use replace
     assert _rt._to_json_safe(b"\xff\xfe") is not None
@@ -276,6 +314,7 @@ def test_to_json_safe_bytes_decoded():
 
 def test_to_json_safe_recurses_dict_list_tuple():
     import crud.runtime as _rt
+
     inp = {
         "d": dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc),
         "l": [dt.date(2026, 1, 1), b"abc"],
@@ -289,6 +328,7 @@ def test_to_json_safe_recurses_dict_list_tuple():
 
 def test_to_json_safe_passthrough_primitives():
     import crud.runtime as _rt
+
     assert _rt._to_json_safe("hello") == "hello"
     assert _rt._to_json_safe(123) == 123
     assert _rt._to_json_safe(None) is None
@@ -296,6 +336,7 @@ def test_to_json_safe_passthrough_primitives():
 
 def test_strip_sensitive_filters_known_fields():
     import crud.runtime as _rt
+
     raw = {
         "status": "READY",
         "agentRuntimeArn": "arn:secret",
@@ -312,9 +353,14 @@ def test_strip_sensitive_filters_known_fields():
     assert "status" in out
     assert "agentRuntimeId" in out
     for f in [
-        "agentRuntimeArn", "executionRoleArn", "agentRuntimeArtifact",
-        "networkConfiguration", "protocolConfiguration", "filesystemConfigurations",
-        "roleArn", "ResponseMetadata",
+        "agentRuntimeArn",
+        "executionRoleArn",
+        "agentRuntimeArtifact",
+        "networkConfiguration",
+        "protocolConfiguration",
+        "filesystemConfigurations",
+        "roleArn",
+        "ResponseMetadata",
     ]:
         assert f not in out
 
@@ -327,6 +373,7 @@ def test_strip_sensitive_filters_known_fields():
 def test_get_runtime_auth_err(mock_jwt, workspace_id, aws_event_factory):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.runtime.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         event = aws_event_factory(f"/api/workspaces/{workspace_id}/agents/agt-test/runtime")
@@ -336,6 +383,7 @@ def test_get_runtime_auth_err(mock_jwt, workspace_id, aws_event_factory):
 
 def test_get_runtime_invalid_agent_id_400(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
+
     with patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         event = aws_event_factory(
@@ -348,8 +396,8 @@ def test_get_runtime_invalid_agent_id_400(mock_jwt, user_id, workspace_id, aws_e
 
 def test_get_runtime_agent_missing_returns_403(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_agent_item", return_value=None), \
-         patch("crud.runtime.auth_check") as auth:
+
+    with patch("crud.runtime._get_agent_item", return_value=None), patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         event = aws_event_factory(f"/api/workspaces/{workspace_id}/agents/agt-test/runtime")
         resp = app.resolve(event, MagicMock())
@@ -359,9 +407,12 @@ def test_get_runtime_agent_missing_returns_403(mock_jwt, user_id, workspace_id, 
 def test_get_runtime_harness_branch(mock_jwt, user_id, workspace_id, aws_event_factory):
     """For runtime_type=harness, response is mapped to harness shape."""
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {
             "agentId": "agt-test",
@@ -393,9 +444,12 @@ def test_get_runtime_other_clienterror_500(mock_jwt, user_id, workspace_id, aws_
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -417,6 +471,7 @@ def test_get_runtime_other_clienterror_500(mock_jwt, user_id, workspace_id, aws_
 def test_list_versions_auth_err(mock_jwt, workspace_id, aws_event_factory):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.runtime.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         event = aws_event_factory(f"/api/workspaces/{workspace_id}/agents/agt-test/versions")
@@ -426,6 +481,7 @@ def test_list_versions_auth_err(mock_jwt, workspace_id, aws_event_factory):
 
 def test_list_versions_invalid_agent_id_400(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
+
     with patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         event = aws_event_factory(
@@ -438,8 +494,8 @@ def test_list_versions_invalid_agent_id_400(mock_jwt, user_id, workspace_id, aws
 
 def test_list_versions_cross_workspace_403(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with patch("crud.runtime._get_agent_item") as ga, patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": "other"}
         event = aws_event_factory(f"/api/workspaces/{workspace_id}/agents/agt-test/versions")
@@ -451,9 +507,12 @@ def test_list_versions_runtime_not_found_404(mock_jwt, user_id, workspace_id, aw
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -471,9 +530,12 @@ def test_list_versions_other_clienterror_500(mock_jwt, user_id, workspace_id, aw
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -490,9 +552,12 @@ def test_list_versions_other_clienterror_500(mock_jwt, user_id, workspace_id, aw
 def test_list_versions_unparseable_version_falls_to_zero(mock_jwt, user_id, workspace_id, aws_event_factory):
     """Versions that don't parse as int sort as 0 (no exception)."""
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -520,6 +585,7 @@ def test_list_versions_unparseable_version_falls_to_zero(mock_jwt, user_id, work
 def test_list_endpoints_auth_err(mock_jwt, workspace_id, aws_event_factory):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.runtime.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         event = aws_event_factory(f"/api/workspaces/{workspace_id}/agents/agt-test/endpoints")
@@ -529,6 +595,7 @@ def test_list_endpoints_auth_err(mock_jwt, workspace_id, aws_event_factory):
 
 def test_list_endpoints_invalid_id(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
+
     with patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         event = aws_event_factory(
@@ -541,8 +608,8 @@ def test_list_endpoints_invalid_id(mock_jwt, user_id, workspace_id, aws_event_fa
 
 def test_list_endpoints_cross_workspace(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with patch("crud.runtime._get_agent_item") as ga, patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": "other"}
         event = aws_event_factory(f"/api/workspaces/{workspace_id}/agents/agt-test/endpoints")
@@ -554,9 +621,12 @@ def test_list_endpoints_runtime_not_found_404(mock_jwt, user_id, workspace_id, a
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -574,9 +644,12 @@ def test_list_endpoints_other_clienterror_500(mock_jwt, user_id, workspace_id, a
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "viewer"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -597,6 +670,7 @@ def test_list_endpoints_other_clienterror_500(mock_jwt, user_id, workspace_id, a
 
 def test_create_endpoint_invalid_id(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
+
     with patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         event = aws_event_factory(
@@ -611,8 +685,8 @@ def test_create_endpoint_invalid_id(mock_jwt, user_id, workspace_id, aws_event_f
 
 def test_create_endpoint_cross_workspace(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with patch("crud.runtime._get_agent_item") as ga, patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": "other"}
         event = aws_event_factory(
@@ -626,8 +700,8 @@ def test_create_endpoint_cross_workspace(mock_jwt, user_id, workspace_id, aws_ev
 
 def test_create_endpoint_missing_name_400(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with patch("crud.runtime._get_agent_item") as ga, patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         event = aws_event_factory(
@@ -641,8 +715,8 @@ def test_create_endpoint_missing_name_400(mock_jwt, user_id, workspace_id, aws_e
 
 def test_create_endpoint_missing_version_400(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with patch("crud.runtime._get_agent_item") as ga, patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         event = aws_event_factory(
@@ -656,8 +730,8 @@ def test_create_endpoint_missing_version_400(mock_jwt, user_id, workspace_id, aw
 
 def test_create_endpoint_default_name_rejected(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with patch("crud.runtime._get_agent_item") as ga, patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         event = aws_event_factory(
@@ -671,9 +745,12 @@ def test_create_endpoint_default_name_rejected(mock_jwt, user_id, workspace_id, 
 
 def test_create_endpoint_succeeds_202(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -699,9 +776,12 @@ def test_create_endpoint_validation_clienterror_400(mock_jwt, user_id, workspace
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -723,9 +803,12 @@ def test_create_endpoint_conflict_400(mock_jwt, user_id, workspace_id, aws_event
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -747,9 +830,12 @@ def test_create_endpoint_runtime_not_found_404(mock_jwt, user_id, workspace_id, 
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -771,9 +857,12 @@ def test_create_endpoint_other_clienterror_500(mock_jwt, user_id, workspace_id, 
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -799,6 +888,7 @@ def test_create_endpoint_other_clienterror_500(mock_jwt, user_id, workspace_id, 
 def test_update_endpoint_auth_err(mock_jwt, workspace_id, aws_event_factory):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.runtime.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         event = aws_event_factory(
@@ -813,6 +903,7 @@ def test_update_endpoint_auth_err(mock_jwt, workspace_id, aws_event_factory):
 
 def test_update_endpoint_invalid_id(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
+
     with patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         event = aws_event_factory(
@@ -827,8 +918,8 @@ def test_update_endpoint_invalid_id(mock_jwt, user_id, workspace_id, aws_event_f
 
 def test_update_endpoint_cross_workspace(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with patch("crud.runtime._get_agent_item") as ga, patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": "other"}
         event = aws_event_factory(
@@ -843,8 +934,8 @@ def test_update_endpoint_cross_workspace(mock_jwt, user_id, workspace_id, aws_ev
 
 def test_update_endpoint_missing_version_400(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with patch("crud.runtime._get_agent_item") as ga, patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         event = aws_event_factory(
@@ -859,9 +950,12 @@ def test_update_endpoint_missing_version_400(mock_jwt, user_id, workspace_id, aw
 
 def test_update_endpoint_succeeds_202(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -884,9 +978,12 @@ def test_update_endpoint_validation_clienterror_400(mock_jwt, user_id, workspace
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -909,9 +1006,12 @@ def test_update_endpoint_other_clienterror_500(mock_jwt, user_id, workspace_id, 
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -938,6 +1038,7 @@ def test_update_endpoint_other_clienterror_500(mock_jwt, user_id, workspace_id, 
 def test_delete_endpoint_auth_err(mock_jwt, workspace_id, aws_event_factory):
     from crud.handler import app
     from shared.response import forbidden
+
     with patch("crud.runtime.auth_check") as auth:
         auth.return_value = (None, None, None, forbidden())
         event = aws_event_factory(
@@ -951,6 +1052,7 @@ def test_delete_endpoint_auth_err(mock_jwt, workspace_id, aws_event_factory):
 
 def test_delete_endpoint_invalid_id(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
+
     with patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         event = aws_event_factory(
@@ -964,6 +1066,7 @@ def test_delete_endpoint_invalid_id(mock_jwt, user_id, workspace_id, aws_event_f
 
 def test_delete_endpoint_default_name_rejected(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
+
     with patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         event = aws_event_factory(
@@ -977,8 +1080,8 @@ def test_delete_endpoint_default_name_rejected(mock_jwt, user_id, workspace_id, 
 
 def test_delete_endpoint_cross_workspace(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with patch("crud.runtime._get_agent_item") as ga, patch("crud.runtime.auth_check") as auth:
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": "other"}
         event = aws_event_factory(
@@ -992,9 +1095,12 @@ def test_delete_endpoint_cross_workspace(mock_jwt, user_id, workspace_id, aws_ev
 
 def test_delete_endpoint_succeeds(mock_jwt, user_id, workspace_id, aws_event_factory):
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -1014,9 +1120,12 @@ def test_delete_endpoint_not_found_404(mock_jwt, user_id, workspace_id, aws_even
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()
@@ -1038,9 +1147,12 @@ def test_delete_endpoint_other_clienterror_500(mock_jwt, user_id, workspace_id, 
     from botocore.exceptions import ClientError
 
     from crud.handler import app
-    with patch("crud.runtime._get_control") as f, \
-         patch("crud.runtime._get_agent_item") as ga, \
-         patch("crud.runtime.auth_check") as auth:
+
+    with (
+        patch("crud.runtime._get_control") as f,
+        patch("crud.runtime._get_agent_item") as ga,
+        patch("crud.runtime.auth_check") as auth,
+    ):
         auth.return_value = (user_id, workspace_id, {"role": "editor"}, None)
         ga.return_value = {"agentId": "agt-test", "workspace_id": workspace_id}
         control = MagicMock()

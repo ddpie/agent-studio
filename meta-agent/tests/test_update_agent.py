@@ -80,10 +80,12 @@ sys.modules["tools_library.registry"] = _mock_registry
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(autouse=True)
 def _scope(monkeypatch):
     """Set Meta-Agent scope variables as main.py does at each invoke."""
     from tools import _scope
+
     monkeypatch.setattr(_scope, "_caller_id", "user-1", raising=False)
     monkeypatch.setattr(_scope, "_workspace_id", "ws-test", raising=False)
     monkeypatch.setattr(_scope, "_creator_language", "en", raising=False)
@@ -118,10 +120,8 @@ def _patch_deploy_chain(monkeypatch, mod):
     """Patch all heavy deploy helpers so the call returns synchronously."""
     monkeypatch.setattr(mod, "build_deployment_package_v2", lambda *a, **kw: b"fake-zip")
     monkeypatch.setattr(mod, "upload_deployment", lambda *a, **kw: "agents/rt/deploy.zip")
-    monkeypatch.setattr(mod, "validate_agent_files",
-                        lambda *a, **kw: {"valid": True, "errors": []})
-    monkeypatch.setattr(mod, "build_skill_prompt_section",
-                        lambda data: "\n## Skills\n" if data else "")
+    monkeypatch.setattr(mod, "validate_agent_files", lambda *a, **kw: {"valid": True, "errors": []})
+    monkeypatch.setattr(mod, "build_skill_prompt_section", lambda data: "\n## Skills\n" if data else "")
     monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:aws:iam::000:role/r")
     monkeypatch.setattr(mod, "get_base_guidelines", lambda lang: "")
 
@@ -154,17 +154,22 @@ def _make_s3(meta_dict, staging_dict=None, *, fail_skill_md=False):
     return s3
 
 
-def _patch_boto(meta_dict, staging_dict=None, *, fail_skill_md=False, control=None,
-                fake_table=None, dynamodb_get_item=None):
+def _patch_boto(
+    meta_dict,
+    staging_dict=None,
+    *,
+    fail_skill_md=False,
+    control=None,
+    fake_table=None,
+    dynamodb_get_item=None,
+):
     """Build a context manager that patches boto3.client + boto3.resource for update_agent."""
     s3 = _make_s3(meta_dict, staging_dict, fail_skill_md=fail_skill_md)
     ctrl = control if control is not None else MagicMock()
     ddb_low = MagicMock()
     # Default to empty Item so the KB-injection path stays inactive unless
     # the test explicitly opts in via dynamodb_get_item.
-    ddb_low.get_item.return_value = (
-        dynamodb_get_item if dynamodb_get_item is not None else {"Item": {}}
-    )
+    ddb_low.get_item.return_value = dynamodb_get_item if dynamodb_get_item is not None else {"Item": {}}
 
     def client_factory(service, **kw):
         if service == "s3":
@@ -184,19 +189,23 @@ def _patch_boto(meta_dict, staging_dict=None, *, fail_skill_md=False, control=No
 
 # ── 1. _clean_tool_definitions helper ─────────────────────────────────────────
 
+
 class TestCleanToolDefinitions:
     def test_empty_input_returns_empty(self):
         from tools.update_agent import _clean_tool_definitions
+
         assert _clean_tool_definitions("") == ""
 
     def test_no_tool_decorator_returns_unchanged(self):
         from tools.update_agent import _clean_tool_definitions
+
         defs = "def foo():\n    pass"
         assert _clean_tool_definitions(defs) == defs
 
     def test_strips_internal_helpers_outside_tool(self):
         """Lines like async def _x() / @app. / if __name__ outside @tool blocks are dropped."""
         from tools.update_agent import _clean_tool_definitions
+
         # Place noise BEFORE the @tool block so the in_tool branch never sees them.
         defs = (
             "async def _hidden_helper():\n"
@@ -205,7 +214,7 @@ class TestCleanToolDefinitions:
             "    app.run()\n"
             "import json\n"
             "@tool\n"
-            'def foo() -> str:\n'
+            "def foo() -> str:\n"
             '    """F."""\n'
             "    return ''\n"
         )
@@ -219,13 +228,9 @@ class TestCleanToolDefinitions:
 
     def test_keeps_imports_outside_tool(self):
         from tools.update_agent import _clean_tool_definitions
+
         defs = (
-            "import json\n"
-            "from typing import Any\n"
-            "@tool\n"
-            'def bar() -> str:\n'
-            '    """B."""\n'
-            "    return ''\n"
+            'import json\nfrom typing import Any\n@tool\ndef bar() -> str:\n    """B."""\n    return \'\'\n'
         )
         result = _clean_tool_definitions(defs)
         assert "import json" in result
@@ -234,21 +239,19 @@ class TestCleanToolDefinitions:
 
     def test_keeps_tool_when_decorator_above_def(self):
         from tools.update_agent import _clean_tool_definitions
-        defs = (
-            "@tool\n"
-            'def alpha(x: str = "") -> str:\n'
-            '    """A."""\n'
-            "    return x\n"
-        )
+
+        defs = '@tool\ndef alpha(x: str = "") -> str:\n    """A."""\n    return x\n'
         assert "def alpha" in _clean_tool_definitions(defs)
 
 
 # ── 2. _default_welcome (en + zh) ─────────────────────────────────────────────
 
+
 class TestDefaultWelcome:
     def test_default_welcome_en(self, monkeypatch):
         from tools import _scope
         from tools.update_agent import _default_welcome
+
         monkeypatch.setattr(_scope, "_creator_language", "en", raising=False)
         result = _default_welcome("Bot", "An assistant")
         assert "I'm Bot" in result
@@ -257,6 +260,7 @@ class TestDefaultWelcome:
     def test_default_welcome_en_no_description(self, monkeypatch):
         from tools import _scope
         from tools.update_agent import _default_welcome
+
         monkeypatch.setattr(_scope, "_creator_language", "en", raising=False)
         result = _default_welcome("Bot", "")
         assert result == "I'm Bot."
@@ -264,6 +268,7 @@ class TestDefaultWelcome:
     def test_default_welcome_zh(self, monkeypatch):
         from tools import _scope
         from tools.update_agent import _default_welcome
+
         monkeypatch.setattr(_scope, "_creator_language", "zh-CN", raising=False)
         result = _default_welcome("机器人", "数据分析师")
         assert "我是 机器人" in result
@@ -272,12 +277,14 @@ class TestDefaultWelcome:
     def test_default_welcome_zh_no_description(self, monkeypatch):
         from tools import _scope
         from tools.update_agent import _default_welcome
+
         monkeypatch.setattr(_scope, "_creator_language", "zh", raising=False)
         result = _default_welcome("机器人", "")
         assert result == "我是 机器人。"
 
 
 # ── 3. Staging-key happy path ─────────────────────────────────────────────────
+
 
 class TestStagingKeyMerge:
     def test_staging_overrides_args(self, monkeypatch):
@@ -301,29 +308,39 @@ class TestStagingKeyMerge:
 
         _patch_deploy_chain(monkeypatch, mod)
         monkeypatch.setattr(mod, "_get_workspace_mcp_policy", lambda ws: {"mode": "all"})
-        monkeypatch.setattr(mod, "_resolve_mcp_endpoints",
-                            lambda targets: [{"type": "runtime", "name": t,
-                                              "target_name": t, "auth": "runtime"}
-                                             for t in targets])
+        monkeypatch.setattr(
+            mod,
+            "_resolve_mcp_endpoints",
+            lambda targets: [
+                {"type": "runtime", "name": t, "target_name": t, "auth": "runtime"} for t in targets
+            ],
+        )
 
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, staged)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing", "workspace_id": "ws-test"}, None)):
-
-            result = json.loads(mod.update_agent(
-                agent_id="rt-existing",
-                staging_key="staging/x.json",
-            ))
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch(
+                "tools._scope.ensure_agent_in_workspace",
+                return_value=({"agentId": "rt-existing", "workspace_id": "ws-test"}, None),
+            ),
+        ):
+            result = json.loads(
+                mod.update_agent(
+                    agent_id="rt-existing",
+                    staging_key="staging/x.json",
+                )
+            )
 
         assert result["status"] == "UPDATING"
         assert result["action"] == "redeployed"
         ctrl.update_agent_runtime.assert_called_once()
         # description in DDB pulls from explicit arg first, but here it's empty
         # so it falls back to existing — the put_object holds the merged metadata
-        put_calls = [c for c in s3.put_object.call_args_list if c.kwargs.get("Key", "").endswith("metadata.json")]
+        put_calls = [
+            c for c in s3.put_object.call_args_list if c.kwargs.get("Key", "").endswith("metadata.json")
+        ]
         assert put_calls
         body = json.loads(put_calls[0].kwargs["Body"].decode())
         assert body["description"] == "from staging"
@@ -338,12 +355,13 @@ class TestStagingKeyMerge:
         s3 = MagicMock()
         s3.get_object.side_effect = Exception("staging missing")
 
-        with patch("boto3.client", return_value=s3), \
-             patch("boto3.resource"):
-            result = json.loads(mod.update_agent(
-                agent_id="rt-1",
-                staging_key="staging/missing.json",
-            ))
+        with patch("boto3.client", return_value=s3), patch("boto3.resource"):
+            result = json.loads(
+                mod.update_agent(
+                    agent_id="rt-1",
+                    staging_key="staging/missing.json",
+                )
+            )
 
         assert "error" in result
         assert "staging" in result["error"].lower()
@@ -361,15 +379,16 @@ class TestStagingKeyMerge:
 
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, staged)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
             mod.update_agent(agent_id="rt-existing", staging_key="staging/x.json")
 
-        meta_calls = [c for c in s3.put_object.call_args_list
-                      if c.kwargs.get("Key", "").endswith("metadata.json")]
+        meta_calls = [
+            c for c in s3.put_object.call_args_list if c.kwargs.get("Key", "").endswith("metadata.json")
+        ]
         body = json.loads(meta_calls[0].kwargs["Body"].decode())
         assert body["suggestions"] == ["one", "two", "three"]
 
@@ -385,26 +404,31 @@ class TestStagingKeyMerge:
 
         _patch_deploy_chain(monkeypatch, mod)
         monkeypatch.setattr(mod, "_get_workspace_mcp_policy", lambda ws: {"mode": "all"})
-        monkeypatch.setattr(mod, "_resolve_mcp_endpoints",
-                            lambda t: [{"type": "runtime", "name": x,
-                                        "target_name": x, "auth": "runtime"} for x in t])
+        monkeypatch.setattr(
+            mod,
+            "_resolve_mcp_endpoints",
+            lambda t: [{"type": "runtime", "name": x, "target_name": x, "auth": "runtime"} for x in t],
+        )
 
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, staged)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
             mod.update_agent(agent_id="rt-existing", staging_key="staging/x.json")
 
         # both targets ended up in mcp_targets (list-form)
-        meta_calls = [c for c in s3.put_object.call_args_list
-                      if c.kwargs.get("Key", "").endswith("metadata.json")]
+        meta_calls = [
+            c for c in s3.put_object.call_args_list if c.kwargs.get("Key", "").endswith("metadata.json")
+        ]
         body = json.loads(meta_calls[0].kwargs["Body"].decode())
         assert body["mcp_targets"] == ["cloudwatch", "iam"]
 
 
 # ── 4. MCP policy enforcement ─────────────────────────────────────────────────
+
 
 class TestMCPPolicyEnforcement:
     def test_denied_targets_abort(self, monkeypatch):
@@ -412,23 +436,26 @@ class TestMCPPolicyEnforcement:
 
         _patch_deploy_chain(monkeypatch, mod)
         monkeypatch.setattr(
-            mod, "_get_workspace_mcp_policy",
+            mod,
+            "_get_workspace_mcp_policy",
             lambda ws: {"mode": "allowlist", "allowedTargets": ["good"]},
         )
 
         meta = _existing_metadata()
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, None)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-1"}, None)):
-
-            result = json.loads(mod.update_agent(
-                agent_id="rt-1",
-                agent_name="MyAgent",
-                mcp_targets="bad-one",
-            ))
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-1"}, None)),
+        ):
+            result = json.loads(
+                mod.update_agent(
+                    agent_id="rt-1",
+                    agent_name="MyAgent",
+                    mcp_targets="bad-one",
+                )
+            )
 
         assert "error" in result
         assert "bad-one" in result["error"]
@@ -438,6 +465,7 @@ class TestMCPPolicyEnforcement:
 
 
 # ── 5. Role gating: editor required ──────────────────────────────────────────
+
 
 class TestRoleGating:
     def test_viewer_blocked(self, monkeypatch):
@@ -449,21 +477,27 @@ class TestRoleGating:
         meta = _existing_metadata()
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, None)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=(None, {"error": "viewer cannot update"})):
-
-            result = json.loads(mod.update_agent(
-                agent_id="rt-1",
-                agent_name="MyAgent",
-            ))
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch(
+                "tools._scope.ensure_agent_in_workspace",
+                return_value=(None, {"error": "viewer cannot update"}),
+            ),
+        ):
+            result = json.loads(
+                mod.update_agent(
+                    agent_id="rt-1",
+                    agent_name="MyAgent",
+                )
+            )
 
         assert "error" in result
         ctrl.update_agent_runtime.assert_not_called()
 
 
 # ── 6. Field updates ──────────────────────────────────────────────────────────
+
 
 class TestFieldUpdates:
     def test_explicit_fields_override_existing_metadata(self, monkeypatch):
@@ -475,27 +509,30 @@ class TestFieldUpdates:
         meta = _existing_metadata()
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, None)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
-            result = json.loads(mod.update_agent(
-                agent_id="rt-existing",
-                agent_name="MyAgent",
-                description="brand new",
-                display_name="Pretty",
-                system_prompt="NEW PROMPT",
-                tool_names="hello,world",
-                tool_definitions='@tool\ndef hello() -> str:\n    """."""\n    return ""',
-                welcome_message="welcome!",
-                suggestions="A|B|C",
-                supports_images=True,
-            ))
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
+            result = json.loads(
+                mod.update_agent(
+                    agent_id="rt-existing",
+                    agent_name="MyAgent",
+                    description="brand new",
+                    display_name="Pretty",
+                    system_prompt="NEW PROMPT",
+                    tool_names="hello,world",
+                    tool_definitions='@tool\ndef hello() -> str:\n    """."""\n    return ""',
+                    welcome_message="welcome!",
+                    suggestions="A|B|C",
+                    supports_images=True,
+                )
+            )
 
         assert result["status"] == "UPDATING"
-        meta_calls = [c for c in s3.put_object.call_args_list
-                      if c.kwargs.get("Key", "").endswith("metadata.json")]
+        meta_calls = [
+            c for c in s3.put_object.call_args_list if c.kwargs.get("Key", "").endswith("metadata.json")
+        ]
         body = json.loads(meta_calls[0].kwargs["Body"].decode())
         assert body["description"] == "brand new"
         assert body["display_name"] == "Pretty"
@@ -524,15 +561,16 @@ class TestFieldUpdates:
         )
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, None)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
             mod.update_agent(agent_id="rt-existing", agent_name="MyAgent")
 
-        meta_calls = [c for c in s3.put_object.call_args_list
-                      if c.kwargs.get("Key", "").endswith("metadata.json")]
+        meta_calls = [
+            c for c in s3.put_object.call_args_list if c.kwargs.get("Key", "").endswith("metadata.json")
+        ]
         body = json.loads(meta_calls[0].kwargs["Body"].decode())
         # All fall back to existing
         assert body["description"] == "old desc"
@@ -553,20 +591,22 @@ class TestFieldUpdates:
         meta = _existing_metadata(welcome_message="", description="A bot")
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, None)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
             mod.update_agent(agent_id="rt-existing", agent_name="MyAgent")
 
-        meta_calls = [c for c in s3.put_object.call_args_list
-                      if c.kwargs.get("Key", "").endswith("metadata.json")]
+        meta_calls = [
+            c for c in s3.put_object.call_args_list if c.kwargs.get("Key", "").endswith("metadata.json")
+        ]
         body = json.loads(meta_calls[0].kwargs["Body"].decode())
         assert "I'm MyAgent" in body["welcome_message"]
 
 
 # ── 7. Skills handling ────────────────────────────────────────────────────────
+
 
 class TestSkills:
     def test_staging_skills_md_fetched_from_s3(self, monkeypatch):
@@ -575,10 +615,8 @@ class TestSkills:
         meta = _existing_metadata()
         staged = {
             "skills": [
-                {"id": "skill-1", "name": "Skill1", "description": "first",
-                 "contentHash": "h1"},
-                {"id": "skill-2", "name": "Skill2", "description": "second",
-                 "contentHash": "h2"},
+                {"id": "skill-1", "name": "Skill1", "description": "first", "contentHash": "h1"},
+                {"id": "skill-2", "name": "Skill2", "description": "second", "contentHash": "h2"},
             ],
             "workspace_id": "ws-test",
         }
@@ -596,15 +634,17 @@ class TestSkills:
 
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, staged)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
-            result = json.loads(mod.update_agent(
-                agent_id="rt-existing",
-                staging_key="staging/x.json",
-            ))
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
+            result = json.loads(
+                mod.update_agent(
+                    agent_id="rt-existing",
+                    staging_key="staging/x.json",
+                )
+            )
 
         assert result["status"] == "UPDATING"
         # build_skill_prompt_section was called with both skills + their fetched content
@@ -620,8 +660,7 @@ class TestSkills:
 
         meta = _existing_metadata()
         staged = {
-            "skills": [{"id": "broken", "name": "B", "description": "d",
-                        "contentHash": "h"}],
+            "skills": [{"id": "broken", "name": "B", "description": "d", "contentHash": "h"}],
             "workspace_id": "ws-test",
         }
 
@@ -630,15 +669,17 @@ class TestSkills:
 
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, staged, fail_skill_md=True)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
-            result = json.loads(mod.update_agent(
-                agent_id="rt-existing",
-                staging_key="staging/x.json",
-            ))
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
+            result = json.loads(
+                mod.update_agent(
+                    agent_id="rt-existing",
+                    staging_key="staging/x.json",
+                )
+            )
 
         assert result["status"] == "UPDATING"
         captured = capsys.readouterr()
@@ -649,25 +690,27 @@ class TestSkills:
         """When no staging is given and metadata has skills, keep them and rebuild prompt."""
         from tools import update_agent as mod
 
-        meta = _existing_metadata(skills=[
-            {"id": "kept", "name": "Kept", "description": "stays",
-             "contentHash": "h"},
-        ])
+        meta = _existing_metadata(
+            skills=[
+                {"id": "kept", "name": "Kept", "description": "stays", "contentHash": "h"},
+            ]
+        )
 
         _patch_deploy_chain(monkeypatch, mod)
         monkeypatch.setattr(mod, "_get_workspace_mcp_policy", lambda ws: {"mode": "all"})
 
         captured = []
-        monkeypatch.setattr(mod, "build_skill_prompt_section",
-                            lambda data: (captured.append(data), "")[1] or "")
+        monkeypatch.setattr(
+            mod, "build_skill_prompt_section", lambda data: (captured.append(data), "")[1] or ""
+        )
 
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, None)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
             mod.update_agent(agent_id="rt-existing", agent_name="MyAgent")
 
         # captured[-1] is the data passed to build_skill_prompt_section
@@ -675,13 +718,15 @@ class TestSkills:
         assert captured[0][0]["name"] == "Kept"
 
         # Skills are preserved in the new metadata
-        meta_calls = [c for c in s3.put_object.call_args_list
-                      if c.kwargs.get("Key", "").endswith("metadata.json")]
+        meta_calls = [
+            c for c in s3.put_object.call_args_list if c.kwargs.get("Key", "").endswith("metadata.json")
+        ]
         body = json.loads(meta_calls[0].kwargs["Body"].decode())
         assert body["skills"][0]["name"] == "Kept"
 
 
 # ── 8. Builtin tool injection ─────────────────────────────────────────────────
+
 
 class TestBuiltinInjection:
     def test_builtin_tool_injected_when_missing_from_definitions(self, monkeypatch):
@@ -692,9 +737,13 @@ class TestBuiltinInjection:
         _patch_deploy_chain(monkeypatch, mod)
         monkeypatch.setattr(mod, "_get_workspace_mcp_policy", lambda ws: {"mode": "all"})
         monkeypatch.setattr(
-            mod, "_get_builtin_code",
-            lambda name: '@tool\ndef web_search() -> str:\n    """."""\n    return ""'
-            if name == "web_search" else None,
+            mod,
+            "_get_builtin_code",
+            lambda name: (
+                '@tool\ndef web_search() -> str:\n    """."""\n    return ""'
+                if name == "web_search"
+                else None
+            ),
         )
 
         captured = {}
@@ -707,11 +756,11 @@ class TestBuiltinInjection:
 
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, None)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
             mod.update_agent(
                 agent_id="rt-existing",
                 agent_name="MyAgent",
@@ -722,6 +771,7 @@ class TestBuiltinInjection:
 
 
 # ── 9. KB injection ──────────────────────────────────────────────────────────
+
 
 class TestKBInjection:
     def test_kb_injected_from_staging(self, monkeypatch):
@@ -736,8 +786,8 @@ class TestKBInjection:
         # Replace tools.kb_inject so resolve_kb_bindings/build_kb_injection are deterministic
         kb_mod = types.ModuleType("tools.kb_inject")
         kb_mod.resolve_kb_bindings = lambda ws, ids: [{"id": "kb-1", "name": "KB"}]
-        kb_mod.build_kb_injection = (
-            lambda recs: '@tool\ndef kb_retrieve(q: str = "") -> str:\n    """."""\n    return ""'
+        kb_mod.build_kb_injection = lambda recs: (
+            '@tool\ndef kb_retrieve(q: str = "") -> str:\n    """."""\n    return ""'
         )
         sys.modules["tools.kb_inject"] = kb_mod
 
@@ -752,11 +802,11 @@ class TestKBInjection:
 
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, staged)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
             mod.update_agent(agent_id="rt-existing", staging_key="staging/x.json")
 
         assert "kb_retrieve" in captured["tools_py"]
@@ -774,8 +824,8 @@ class TestKBInjection:
 
         kb_mod = types.ModuleType("tools.kb_inject")
         kb_mod.resolve_kb_bindings = lambda ws, ids: [{"id": "kb-1", "name": "KB"}]
-        kb_mod.build_kb_injection = (
-            lambda recs: '@tool\ndef kb_retrieve(q: str = "") -> str:\n    """."""\n    return ""'
+        kb_mod.build_kb_injection = lambda recs: (
+            '@tool\ndef kb_retrieve(q: str = "") -> str:\n    """."""\n    return ""'
         )
         sys.modules["tools.kb_inject"] = kb_mod
 
@@ -792,21 +842,23 @@ class TestKBInjection:
         monkeypatch.setattr(mod, "_workspace_id", "ws-test", raising=False)
         # update_agent reads via __import__('tools.create_agent', fromlist=['_workspace_id'])
         from tools import create_agent as ca_mod
+
         monkeypatch.setattr(ca_mod, "_workspace_id", "ws-test", raising=False)
 
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, None, dynamodb_get_item=ddb_get)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
             mod.update_agent(agent_id="rt-existing", agent_name="MyAgent")
 
         assert "kb_retrieve" in captured["tools_py"]
 
 
 # ── 10. Validation failure ───────────────────────────────────────────────────
+
 
 class TestValidationFailure:
     def test_validate_files_failure_returns_error(self, monkeypatch):
@@ -815,22 +867,24 @@ class TestValidationFailure:
         meta = _existing_metadata()
         _patch_deploy_chain(monkeypatch, mod)
         monkeypatch.setattr(mod, "_get_workspace_mcp_policy", lambda ws: {"mode": "all"})
-        monkeypatch.setattr(mod, "validate_agent_files",
-                            lambda *a, **kw: {"valid": False,
-                                              "errors": ["Python syntax error"]})
+        monkeypatch.setattr(
+            mod, "validate_agent_files", lambda *a, **kw: {"valid": False, "errors": ["Python syntax error"]}
+        )
 
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, None)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
-            result = json.loads(mod.update_agent(
-                agent_id="rt-existing",
-                agent_name="MyAgent",
-                system_prompt="NEW",
-            ))
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
+            result = json.loads(
+                mod.update_agent(
+                    agent_id="rt-existing",
+                    agent_name="MyAgent",
+                    system_prompt="NEW",
+                )
+            )
 
         assert "error" in result
         assert "validation" in result["error"].lower()
@@ -838,6 +892,7 @@ class TestValidationFailure:
 
 
 # ── 11. Existing config preservation ─────────────────────────────────────────
+
 
 class TestExistingConfigPreservation:
     def test_existing_mcp_config_preserved_when_targets_empty(self, monkeypatch):
@@ -849,15 +904,18 @@ class TestExistingConfigPreservation:
         _patch_deploy_chain(monkeypatch, mod)
         monkeypatch.setattr(mod, "_get_workspace_mcp_policy", lambda ws: {"mode": "all"})
         monkeypatch.setattr(
-            mod, "_resolve_mcp_endpoints",
-            lambda t: [{"type": "runtime", "name": x,
-                        "target_name": x, "auth": "runtime"} for x in t],
+            mod,
+            "_resolve_mcp_endpoints",
+            lambda t: [{"type": "runtime", "name": x, "target_name": x, "auth": "runtime"} for x in t],
         )
 
         # Build s3 mock that returns an existing config.json with mcp settings
-        cfg = {"mcp_targets": ["from-config"], "mcp_endpoints": [
-            {"type": "runtime", "name": "from-config", "target_name": "from-config", "auth": "runtime"}
-        ]}
+        cfg = {
+            "mcp_targets": ["from-config"],
+            "mcp_endpoints": [
+                {"type": "runtime", "name": "from-config", "target_name": "from-config", "auth": "runtime"}
+            ],
+        }
 
         s3 = MagicMock()
 
@@ -892,11 +950,11 @@ class TestExistingConfigPreservation:
 
         monkeypatch.setattr(mod, "validate_agent_files", fake_validate)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
             mod.update_agent(agent_id="rt-existing", agent_name="MyAgent")
 
         # mcp_targets came from config.json, not metadata
@@ -904,6 +962,7 @@ class TestExistingConfigPreservation:
 
 
 # ── 12. Workspace fallback (no staging) ──────────────────────────────────────
+
 
 class TestWorkspaceFallback:
     def test_no_staging_uses_module_workspace(self, monkeypatch):
@@ -926,11 +985,11 @@ class TestWorkspaceFallback:
 
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, None)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
             mod.update_agent(agent_id="rt-existing", agent_name="MyAgent")
 
         # Workspace from create_agent module attr was used for the role lookup
@@ -938,6 +997,7 @@ class TestWorkspaceFallback:
 
 
 # ── 13. Result shape & DDB update ─────────────────────────────────────────────
+
 
 class TestDDBUpdate:
     def test_ddb_update_item_called_with_expected_fields(self, monkeypatch):
@@ -950,11 +1010,11 @@ class TestDDBUpdate:
         ctrl = MagicMock()
         s3, _, table, _, cf, rf = _patch_boto(meta, None, control=ctrl)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
             mod.update_agent(
                 agent_id="rt-existing",
                 agent_name="MyAgent",
@@ -987,11 +1047,11 @@ class TestDDBUpdate:
 
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, None)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
             mod.update_agent(agent_id="rt-existing", agent_name="MyAgent")
 
         kwargs = table.update_item.call_args.kwargs
@@ -999,6 +1059,7 @@ class TestDDBUpdate:
 
 
 # ── 14. Mirror system_prompt.txt and tool_definitions.py ─────────────────────
+
 
 class TestMirrorFiles:
     def test_system_prompt_and_tools_files_mirrored(self, monkeypatch):
@@ -1010,11 +1071,11 @@ class TestMirrorFiles:
 
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, None)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
             mod.update_agent(
                 agent_id="rt-existing",
                 agent_name="MyAgent",
@@ -1028,16 +1089,19 @@ class TestMirrorFiles:
         assert any(k.endswith("system_prompt.txt") for k in keys_written)
         assert any(k.endswith("tool_definitions.py") for k in keys_written)
 
-        sp_call = next(c for c in s3.put_object.call_args_list
-                   if c.kwargs.get("Key", "").endswith("system_prompt.txt"))
+        sp_call = next(
+            c for c in s3.put_object.call_args_list if c.kwargs.get("Key", "").endswith("system_prompt.txt")
+        )
         assert b"MY NEW PROMPT" in sp_call.kwargs["Body"]
 
-        tools_call = next(c for c in s3.put_object.call_args_list
-                      if c.kwargs.get("Key", "").endswith("tool_definitions.py"))
+        tools_call = next(
+            c for c in s3.put_object.call_args_list if c.kwargs.get("Key", "").endswith("tool_definitions.py")
+        )
         assert b"def thing" in tools_call.kwargs["Body"]
 
 
 # ── 15. Never-raise contract ─────────────────────────────────────────────────
+
 
 class TestNeverRaise:
     def test_unexpected_exception_during_deploy_propagates_or_returns_json(self, monkeypatch):
@@ -1060,11 +1124,11 @@ class TestNeverRaise:
 
         s3, ctrl, table, ddb_low, cf, rf = _patch_boto(meta, None)
 
-        with patch("boto3.client", side_effect=cf), \
-             patch("boto3.resource", return_value=rf), \
-             patch("tools._scope.ensure_agent_in_workspace",
-                   return_value=({"agentId": "rt-existing"}, None)):
-
+        with (
+            patch("boto3.client", side_effect=cf),
+            patch("boto3.resource", return_value=rf),
+            patch("tools._scope.ensure_agent_in_workspace", return_value=({"agentId": "rt-existing"}, None)),
+        ):
             try:
                 result = mod.update_agent(agent_id="rt-existing", agent_name="MyAgent")
             except RuntimeError:

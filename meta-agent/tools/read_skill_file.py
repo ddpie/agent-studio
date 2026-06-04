@@ -65,7 +65,7 @@ def list_skill_files(skill_id: str) -> str:
         paginator = s3.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
             for obj in page.get("Contents", []) or []:
-                rel = obj["Key"][len(prefix):]
+                rel = obj["Key"][len(prefix) :]
                 if not rel:
                     continue
                 out.append({"path": rel, "size": obj.get("Size", 0)})
@@ -130,14 +130,20 @@ def read_skill_file(skill_id: str, path: str) -> str:
     try:
         content = body.decode("utf-8")
     except UnicodeDecodeError:
-        return json.dumps({
-            "error": f"File is not UTF-8 text ({size} bytes binary): {path}",
-        })
+        return json.dumps(
+            {
+                "error": f"File is not UTF-8 text ({size} bytes binary): {path}",
+            }
+        )
 
-    return json.dumps({
-        "skill_id": skill_id,
-        "path": path,
-        "content": content,
-        "truncated": truncated,
-        "size": size,
-    }, indent=2, ensure_ascii=False)
+    return json.dumps(
+        {
+            "skill_id": skill_id,
+            "path": path,
+            "content": content,
+            "truncated": truncated,
+            "size": size,
+        },
+        indent=2,
+        ensure_ascii=False,
+    )

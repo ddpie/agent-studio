@@ -1,4 +1,5 @@
 """Test run_skill_script — skill staging + execution flow."""
+
 import sys
 import types
 from unittest.mock import MagicMock, patch
@@ -24,6 +25,7 @@ sys.modules["config"] = _mock_config
 
 def _exec_builtin(agent_id: str = "test-agent"):
     from templates.agent_template_v2 import BUILTIN_TOOLS_CODE
+
     ns: dict = {"__name__": "builtin_tools_test"}
     exec(BUILTIN_TOOLS_CODE, ns)
     ns["_AGENT_ID"] = agent_id
@@ -51,7 +53,9 @@ def test_run_skill_script_rejects_unknown_skill(monkeypatch, tmp_path):
     ci = MagicMock()
     ci.start_code_interpreter_session.return_value = {"sessionId": "sess-1"}
     ci.invoke_code_interpreter.return_value = {
-        "stream": [{"result": {"structuredContent": {"stdout": "", "stderr": "", "exitCode": 0}, "content": []}}]
+        "stream": [
+            {"result": {"structuredContent": {"stdout": "", "stderr": "", "exitCode": 0}, "content": []}}
+        ]
     }
 
     with patch("boto3.client", return_value=ci):
@@ -78,7 +82,16 @@ def test_run_skill_script_stages_then_executes(monkeypatch, tmp_path):
         calls.append(kwargs)
         if kwargs.get("name") == "writeFiles":
             return {"stream": [{"result": {"content": []}}]}
-        return {"stream": [{"result": {"structuredContent": {"stdout": "rendered\n", "stderr": "", "exitCode": 0}, "content": []}}]}
+        return {
+            "stream": [
+                {
+                    "result": {
+                        "structuredContent": {"stdout": "rendered\n", "stderr": "", "exitCode": 0},
+                        "content": [],
+                    }
+                }
+            ]
+        }
 
     ci.invoke_code_interpreter.side_effect = fake_invoke
 
@@ -114,7 +127,16 @@ def test_run_skill_script_caches_staging_per_session(monkeypatch, tmp_path):
         calls.append(kwargs["name"])
         if kwargs["name"] == "writeFiles":
             return {"stream": [{"result": {"content": []}}]}
-        return {"stream": [{"result": {"structuredContent": {"stdout": "ok\n", "stderr": "", "exitCode": 0}, "content": []}}]}
+        return {
+            "stream": [
+                {
+                    "result": {
+                        "structuredContent": {"stdout": "ok\n", "stderr": "", "exitCode": 0},
+                        "content": [],
+                    }
+                }
+            ]
+        }
 
     ci.invoke_code_interpreter.side_effect = fake_invoke
 
@@ -152,11 +174,30 @@ def test_run_skill_script_uses_absolute_path_resistant_to_cwd_drift(monkeypatch,
         # anchor probe returns the sandbox root
         code = kwargs.get("arguments", {}).get("code", "")
         if "__CI_ANCHOR__" in code:
-            return {"stream": [{"result": {"structuredContent": {
-                "stdout": f"__CI_ANCHOR__{SANDBOX_ROOT}__CI_ANCHOR_END__",
-                "stderr": "", "exitCode": 0,
-            }, "content": []}}]}
-        return {"stream": [{"result": {"structuredContent": {"stdout": "ok\n", "stderr": "", "exitCode": 0}, "content": []}}]}
+            return {
+                "stream": [
+                    {
+                        "result": {
+                            "structuredContent": {
+                                "stdout": f"__CI_ANCHOR__{SANDBOX_ROOT}__CI_ANCHOR_END__",
+                                "stderr": "",
+                                "exitCode": 0,
+                            },
+                            "content": [],
+                        }
+                    }
+                ]
+            }
+        return {
+            "stream": [
+                {
+                    "result": {
+                        "structuredContent": {"stdout": "ok\n", "stderr": "", "exitCode": 0},
+                        "content": [],
+                    }
+                }
+            ]
+        }
 
     ci.invoke_code_interpreter.side_effect = fake_invoke
 
@@ -171,7 +212,11 @@ def test_run_skill_script_uses_absolute_path_resistant_to_cwd_drift(monkeypatch,
     # Both exec calls should embed the SAME absolute path (no drift/doubling).
     # The emitted code uses run_module (package-aware branch) or run_path —
     # either way the skill absolute path appears in the generated code.
-    exec_codes = [c["arguments"]["code"] for c in calls if c["name"] == "executeCode" and "runpy" in c.get("arguments", {}).get("code", "")]
+    exec_codes = [
+        c["arguments"]["code"]
+        for c in calls
+        if c["name"] == "executeCode" and "runpy" in c.get("arguments", {}).get("code", "")
+    ]
     expected_abs = f"{SANDBOX_ROOT}/skills/ppt-generator"
     assert exec_codes, "no runpy exec captured"
     for code in exec_codes:
@@ -196,11 +241,30 @@ def test_run_skill_script_passes_argv_and_handles_packages(monkeypatch, tmp_path
         if name == "writeFiles":
             return {"stream": [{"result": {"content": []}}]}
         if "__CI_ANCHOR__" in kwargs.get("arguments", {}).get("code", ""):
-            return {"stream": [{"result": {"structuredContent": {
-                "stdout": "__CI_ANCHOR__/sandbox__CI_ANCHOR_END__",
-                "stderr": "", "exitCode": 0,
-            }, "content": []}}]}
-        return {"stream": [{"result": {"structuredContent": {"stdout": "ok\n", "stderr": "", "exitCode": 0}, "content": []}}]}
+            return {
+                "stream": [
+                    {
+                        "result": {
+                            "structuredContent": {
+                                "stdout": "__CI_ANCHOR__/sandbox__CI_ANCHOR_END__",
+                                "stderr": "",
+                                "exitCode": 0,
+                            },
+                            "content": [],
+                        }
+                    }
+                ]
+            }
+        return {
+            "stream": [
+                {
+                    "result": {
+                        "structuredContent": {"stdout": "ok\n", "stderr": "", "exitCode": 0},
+                        "content": [],
+                    }
+                }
+            ]
+        }
 
     ci.invoke_code_interpreter.side_effect = fake_invoke
 
@@ -215,7 +279,9 @@ def test_run_skill_script_passes_argv_and_handles_packages(monkeypatch, tmp_path
             args="--output out.pptx --theme dark_warm",
         )
 
-    exec_calls = [c for c in calls if c["name"] == "executeCode" and "runpy" in c.get("arguments", {}).get("code", "")]
+    exec_calls = [
+        c for c in calls if c["name"] == "executeCode" and "runpy" in c.get("arguments", {}).get("code", "")
+    ]
     assert exec_calls, "no runpy exec call recorded"
     code = exec_calls[-1]["arguments"]["code"]
     # argv must be wired into the script
@@ -244,7 +310,16 @@ def test_run_skill_script_cwd_default_preserves_user_cwd(monkeypatch, tmp_path):
         calls.append(kwargs)
         if kwargs["name"] == "writeFiles":
             return {"stream": [{"result": {"content": []}}]}
-        return {"stream": [{"result": {"structuredContent": {"stdout": "ok\n", "stderr": "", "exitCode": 0}, "content": []}}]}
+        return {
+            "stream": [
+                {
+                    "result": {
+                        "structuredContent": {"stdout": "ok\n", "stderr": "", "exitCode": 0},
+                        "content": [],
+                    }
+                }
+            ]
+        }
 
     ci.invoke_code_interpreter.side_effect = fake_invoke
 
@@ -256,7 +331,9 @@ def test_run_skill_script_cwd_default_preserves_user_cwd(monkeypatch, tmp_path):
         # Default cwd — script should run without chdir into skill dir
         ns["run_skill_script"]("ppt-generator", "scripts/render.py")
 
-    exec_calls = [c for c in calls if c["name"] == "executeCode" and "runpy" in c.get("arguments", {}).get("code", "")]
+    exec_calls = [
+        c for c in calls if c["name"] == "executeCode" and "runpy" in c.get("arguments", {}).get("code", "")
+    ]
     assert exec_calls
     code = exec_calls[-1]["arguments"]["code"]
     # _cwd_override is None (no override), and os.chdir is guarded by that
@@ -278,7 +355,16 @@ def test_run_skill_script_cwd_skill_keyword(monkeypatch, tmp_path):
         calls.append(kwargs)
         if kwargs["name"] == "writeFiles":
             return {"stream": [{"result": {"content": []}}]}
-        return {"stream": [{"result": {"structuredContent": {"stdout": "ok\n", "stderr": "", "exitCode": 0}, "content": []}}]}
+        return {
+            "stream": [
+                {
+                    "result": {
+                        "structuredContent": {"stdout": "ok\n", "stderr": "", "exitCode": 0},
+                        "content": [],
+                    }
+                }
+            ]
+        }
 
     ci.invoke_code_interpreter.side_effect = fake_invoke
 
@@ -289,7 +375,9 @@ def test_run_skill_script_cwd_skill_keyword(monkeypatch, tmp_path):
         ns["_CACHED_SKILLS"].add("s-1")
         ns["run_skill_script"]("ppt-generator", "scripts/render.py", cwd="skill")
 
-    exec_calls = [c for c in calls if c["name"] == "executeCode" and "runpy" in c.get("arguments", {}).get("code", "")]
+    exec_calls = [
+        c for c in calls if c["name"] == "executeCode" and "runpy" in c.get("arguments", {}).get("code", "")
+    ]
     assert exec_calls
     code = exec_calls[-1]["arguments"]["code"]
     # "skill" resolves to the skill's absolute staging dir
@@ -304,7 +392,9 @@ def test_run_skill_script_cwd_rejects_relative(monkeypatch, tmp_path):
     ci = MagicMock()
     ci.start_code_interpreter_session.return_value = {"sessionId": "sess-bad"}
     ci.invoke_code_interpreter.return_value = {
-        "stream": [{"result": {"structuredContent": {"stdout": "", "stderr": "", "exitCode": 0}, "content": []}}]
+        "stream": [
+            {"result": {"structuredContent": {"stdout": "", "stderr": "", "exitCode": 0}, "content": []}}
+        ]
     }
 
     with patch("boto3.client", return_value=ci):
@@ -312,9 +402,7 @@ def test_run_skill_script_cwd_rejects_relative(monkeypatch, tmp_path):
         ns["_CACHE_ROOT"] = tmp_path
         _install_manifest(ns, [{"id": "s-1", "name": "ppt-generator"}])
         ns["_CACHED_SKILLS"].add("s-1")
-        result = ns["run_skill_script"](
-            "ppt-generator", "scripts/render.py", cwd="some/relative/dir"
-        )
+        result = ns["run_skill_script"]("ppt-generator", "scripts/render.py", cwd="some/relative/dir")
 
     assert isinstance(result, dict) and result["status"] == "error"
     assert "absolute path" in result["content"][0]["text"]

@@ -10,18 +10,24 @@ while STRATEGY_NAMES + STRATEGY_NAMESPACE_PREFIX include all 4.
 """
 
 DEFAULT_MEMORY_STRATEGIES = [
-    {"userPreferenceMemoryStrategy": {
-        "name": "UserPreferences",
-        "namespaceTemplates": ["/users/{actorId}/preferences/"],
-    }},
-    {"semanticMemoryStrategy": {
-        "name": "Semantic",
-        "namespaceTemplates": ["/users/{actorId}/facts/"],
-    }},
-    {"summaryMemoryStrategy": {
-        "name": "Summary",
-        "namespaceTemplates": ["/users/{actorId}/summaries/{sessionId}/"],
-    }},
+    {
+        "userPreferenceMemoryStrategy": {
+            "name": "UserPreferences",
+            "namespaceTemplates": ["/users/{actorId}/preferences/"],
+        }
+    },
+    {
+        "semanticMemoryStrategy": {
+            "name": "Semantic",
+            "namespaceTemplates": ["/users/{actorId}/facts/"],
+        }
+    },
+    {
+        "summaryMemoryStrategy": {
+            "name": "Summary",
+            "namespaceTemplates": ["/users/{actorId}/summaries/{sessionId}/"],
+        }
+    },
 ]
 
 # All strategy names visible to the read path (/my-memories). Includes
@@ -30,7 +36,7 @@ STRATEGY_NAMES = ["userPreference", "semantic", "summary", "episodic"]
 
 STRATEGY_NAMESPACE_PREFIX = {
     "userPreference": "/users/{actor_id}/preferences/",
-    "semantic":       "/users/{actor_id}/facts/",
-    "summary":        "/users/{actor_id}/summaries/",
-    "episodic":       "/users/{actor_id}/episodes/",
+    "semantic": "/users/{actor_id}/facts/",
+    "summary": "/users/{actor_id}/summaries/",
+    "episodic": "/users/{actor_id}/episodes/",
 }

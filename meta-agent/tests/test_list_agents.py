@@ -1,4 +1,5 @@
 """Tests for list_agents — workspace-scoped agent enumeration."""
+
 import json
 import sys
 import types
@@ -33,6 +34,7 @@ sys.modules["config"] = _mock_config
 @pytest.fixture(autouse=True)
 def _scope(monkeypatch):
     from tools import _scope
+
     monkeypatch.setattr(_scope, "_caller_id", "user-1", raising=False)
     monkeypatch.setattr(_scope, "_workspace_id", "ws-1", raising=False)
 
@@ -73,10 +75,20 @@ def test_list_agents_happy_path(monkeypatch):
     agents_table = MagicMock()
     agents_table.query.return_value = {
         "Items": [
-            {"agentId": "a-1", "name": "Alpha", "description": "first",
-             "status": "active", "workspace_id": "ws-1"},
-            {"agentId": "a-2", "agentName": "Beta", "description": "second",
-             "status": "active", "workspace_id": "ws-1"},
+            {
+                "agentId": "a-1",
+                "name": "Alpha",
+                "description": "first",
+                "status": "active",
+                "workspace_id": "ws-1",
+            },
+            {
+                "agentId": "a-2",
+                "agentName": "Beta",
+                "description": "second",
+                "status": "active",
+                "workspace_id": "ws-1",
+            },
         ],
     }
     monkeypatch.setattr(_scope, "_agents_table", lambda: agents_table)
@@ -131,10 +143,8 @@ def test_list_agents_filters_archived_by_default(monkeypatch):
     agents_table = MagicMock()
     agents_table.query.return_value = {
         "Items": [
-            {"agentId": "live-1", "name": "L", "status": "active",
-             "workspace_id": "ws-1"},
-            {"agentId": "archived-1", "name": "A", "status": "archived",
-             "workspace_id": "ws-1"},
+            {"agentId": "live-1", "name": "L", "status": "active", "workspace_id": "ws-1"},
+            {"agentId": "archived-1", "name": "A", "status": "archived", "workspace_id": "ws-1"},
         ],
     }
     monkeypatch.setattr(_scope, "_agents_table", lambda: agents_table)

@@ -13,6 +13,7 @@ To run:
 Marker is also auto-applied via the marker selection in pyproject.toml so
 running the unit suite (`pytest tests/`) still skips integration by default.
 """
+
 import pytest
 
 pytestmark = pytest.mark.integration
@@ -56,9 +57,7 @@ def ddb_workspaces_table(aws_credentials):
             BillingMode="PAY_PER_REQUEST",
         )
         client.get_waiter("table_exists").wait(TableName="agent-studio-workspaces")
-        yield boto3.resource("dynamodb", region_name="us-east-1").Table(
-            "agent-studio-workspaces"
-        )
+        yield boto3.resource("dynamodb", region_name="us-east-1").Table("agent-studio-workspaces")
 
 
 @pytest.fixture
@@ -99,9 +98,7 @@ def ddb_agents_table(aws_credentials):
             BillingMode="PAY_PER_REQUEST",
         )
         client.get_waiter("table_exists").wait(TableName="agent-studio-agents")
-        yield boto3.resource("dynamodb", region_name="us-east-1").Table(
-            "agent-studio-agents"
-        )
+        yield boto3.resource("dynamodb", region_name="us-east-1").Table("agent-studio-agents")
 
 
 @pytest.fixture

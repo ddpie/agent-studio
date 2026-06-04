@@ -1,4 +1,5 @@
 """Test check_capabilities() builtin — the preflight probe."""
+
 import json
 import sys
 import types
@@ -31,6 +32,7 @@ def _exec_builtin(agent_id: str = "test-agent"):
     We mutate after-exec so the envirement of other tests isn't polluted.
     """
     from templates.agent_template_v2 import BUILTIN_TOOLS_CODE
+
     ns: dict = {"__name__": "builtin_tools_test"}
     exec(BUILTIN_TOOLS_CODE, ns)
     ns["_AGENT_ID"] = agent_id
@@ -127,16 +129,28 @@ def test_check_capabilities_lists_skills_from_manifest(monkeypatch):
     def _paginate(Bucket, Prefix):
         # Simulate per-skill object listings
         if Prefix == "agents/test-agent/skills/214bb180/":
-            return iter([{"Contents": [
-                {"Key": "agents/test-agent/skills/214bb180/SKILL.md"},
-                {"Key": "agents/test-agent/skills/214bb180/scripts/clean.py"},
-            ]}])
+            return iter(
+                [
+                    {
+                        "Contents": [
+                            {"Key": "agents/test-agent/skills/214bb180/SKILL.md"},
+                            {"Key": "agents/test-agent/skills/214bb180/scripts/clean.py"},
+                        ]
+                    }
+                ]
+            )
         if Prefix == "agents/test-agent/skills/7ab37a90/":
-            return iter([{"Contents": [
-                {"Key": "agents/test-agent/skills/7ab37a90/SKILL.md"},
-                {"Key": "agents/test-agent/skills/7ab37a90/ppt-master-assets/a.md"},
-                {"Key": "agents/test-agent/skills/7ab37a90/ppt-master-assets/b.md"},
-            ]}])
+            return iter(
+                [
+                    {
+                        "Contents": [
+                            {"Key": "agents/test-agent/skills/7ab37a90/SKILL.md"},
+                            {"Key": "agents/test-agent/skills/7ab37a90/ppt-master-assets/a.md"},
+                            {"Key": "agents/test-agent/skills/7ab37a90/ppt-master-assets/b.md"},
+                        ]
+                    }
+                ]
+            )
         return iter([{"Contents": []}])
 
     paginator = MagicMock()
@@ -229,7 +243,14 @@ def test_check_capabilities_probes_ci_when_session_exists(monkeypatch):
     probe_out = json.dumps({"python": "3.10.12", "cwd": "/opt/amazon/genesis1p-tools/var"})
     ci = MagicMock()
     ci.invoke_code_interpreter.return_value = {
-        "stream": [{"result": {"structuredContent": {"stdout": probe_out, "stderr": "", "exitCode": 0}, "content": []}}]
+        "stream": [
+            {
+                "result": {
+                    "structuredContent": {"stdout": probe_out, "stderr": "", "exitCode": 0},
+                    "content": [],
+                }
+            }
+        ]
     }
 
     with patch("boto3.client", return_value=ci):

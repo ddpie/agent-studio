@@ -68,9 +68,12 @@ def list_mcp_target_tools(target_name: str) -> str:
     # Pass 3: fuzzy contains — but prefer the shortest candidate so
     # "cloudwatch" doesn't silently match "cloudwatch-applicationsignals".
     if not matched_key:
-        candidates = [(name, key) for name, key in manifests.items()
-                      if needle in name.lower().replace("-", "").replace("_", "")
-                      or name.lower().replace("-", "").replace("_", "") in needle]
+        candidates = [
+            (name, key)
+            for name, key in manifests.items()
+            if needle in name.lower().replace("-", "").replace("_", "")
+            or name.lower().replace("-", "").replace("_", "") in needle
+        ]
         candidates.sort(key=lambda kv: len(kv[0]))
         if candidates:
             matched_key = candidates[0][1]
@@ -79,21 +82,29 @@ def list_mcp_target_tools(target_name: str) -> str:
         try:
             resp = s3.get_object(Bucket=S3_BUCKET, Key=matched_key)
             tools = json.loads(resp["Body"].read().decode("utf-8"))
-            return json.dumps({
-                "target": target_name,
-                "manifest_key": matched_key.split("/")[-1],
-                "tool_count": len(tools),
-                "tools": tools,
-            }, indent=2, ensure_ascii=False)
+            return json.dumps(
+                {
+                    "target": target_name,
+                    "manifest_key": matched_key.split("/")[-1],
+                    "tool_count": len(tools),
+                    "tools": tools,
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
         except Exception:
             pass
 
     # No match — return available targets as hint
     available = sorted(manifests.keys())
-    return json.dumps({
-        "target": target_name,
-        "tool_count": 0,
-        "tools": [],
-        "available_targets": available,
-        "hint": f"No manifest matched '{target_name}'. Available: {', '.join(available[:10])}...",
-    }, indent=2, ensure_ascii=False)
+    return json.dumps(
+        {
+            "target": target_name,
+            "tool_count": 0,
+            "tools": [],
+            "available_targets": available,
+            "hint": f"No manifest matched '{target_name}'. Available: {', '.join(available[:10])}...",
+        },
+        indent=2,
+        ensure_ascii=False,
+    )

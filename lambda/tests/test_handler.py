@@ -7,6 +7,7 @@ all other test modules at their import time — that caused 95 test failures
 across test_mcp.py / test_workspaces.py / etc. Patching the constant keeps
 the existing app + routers intact.
 """
+
 import json
 from unittest.mock import MagicMock, patch
 

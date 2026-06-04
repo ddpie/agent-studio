@@ -76,10 +76,12 @@ sys.modules["tools_library.registry"] = _mock_registry
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(autouse=True)
 def _scope(monkeypatch):
     """Set Meta-Agent scope variables as main.py does at each invoke."""
     from tools import _scope
+
     monkeypatch.setattr(_scope, "_caller_id", "user-1", raising=False)
     monkeypatch.setattr(_scope, "_workspace_id", "ws-test", raising=False)
     monkeypatch.setattr(_scope, "_creator_language", "en", raising=False)
@@ -121,9 +123,7 @@ def _staging_body(staged: dict) -> bytes:
 def _mock_s3_get_staging(staged: dict):
     """Create a mock S3 client that returns the staging JSON."""
     mock_s3 = MagicMock()
-    mock_s3.get_object.return_value = {
-        "Body": MagicMock(read=lambda: _staging_body(staged))
-    }
+    mock_s3.get_object.return_value = {"Body": MagicMock(read=lambda: _staging_body(staged))}
     mock_s3.put_object.return_value = {}
     mock_s3.get_paginator.return_value.paginate.return_value = []
     return mock_s3
@@ -131,35 +131,38 @@ def _mock_s3_get_staging(staged: dict):
 
 # ── 1. RBAC: viewer role should be rejected ────────────────────────────────────
 
+
 class TestRBAC:
     @pytest.mark.xfail(
         reason="create_agent does not currently enforce RBAC — viewer callers can create agents. "
-               "This documents the expected behavior that should be implemented.",
+        "This documents the expected behavior that should be implemented.",
         strict=True,
     )
     def test_viewer_role_rejected(self, monkeypatch):
         """A caller with viewer role should NOT be able to create agents."""
         from tools import _scope
+
         monkeypatch.setattr(_scope, "_caller_id", "viewer-user", raising=False)
         monkeypatch.setattr(_scope, "_workspace_id", "ws-test", raising=False)
 
         # Mock the workspace membership lookup to return viewer role
         mock_ws_table = MagicMock()
-        mock_ws_table.get_item.return_value = {
-            "Item": {"role": "viewer"}
-        }
+        mock_ws_table.get_item.return_value = {"Item": {"role": "viewer"}}
 
         from tools import create_agent as mod
+
         staged = _make_staging()
 
-        with patch("boto3.client") as mock_boto_client, \
-             patch("boto3.resource"):
+        with patch("boto3.client") as mock_boto_client, patch("boto3.resource"):
             mock_s3 = _mock_s3_get_staging(staged)
             mock_boto_client.return_value = mock_s3
 
-            result = json.loads(mod.create_agent(
-                agent_name="", staging_key="staging/test.json",
-            ))
+            result = json.loads(
+                mod.create_agent(
+                    agent_name="",
+                    staging_key="staging/test.json",
+                )
+            )
 
         # Expected: should reject with permission error
         assert "error" in result
@@ -167,6 +170,7 @@ class TestRBAC:
 
 
 # ── 2. Staging workspace_id override ──────────────────────────────────────────
+
 
 class TestStagingWorkspaceOverride:
     def test_staging_workspace_id_used_for_role_lookup(self, monkeypatch):
@@ -187,23 +191,25 @@ class TestStagingWorkspaceOverride:
         monkeypatch.setattr(mod, "_get_agent_role_arn", mock_get_agent_role_arn)
         monkeypatch.setattr(mod, "build_deployment_package_v2", lambda *a, **kw: b"fake-zip")
         monkeypatch.setattr(mod, "upload_deployment", lambda *a, **kw: "agents/testBot/deployment.zip")
-        monkeypatch.setattr(mod, "create_runtime", lambda *a, **kw: {
-            "agent_id": "rt-123",
-            "agent_arn": "arn:aws:bedrock-agentcore:us-east-1:123:runtime/rt-123",
-            "_s3_key": "agents/testBot/deployment.zip",
-            "_role_arn": "arn:aws:iam::123456789012:role/AgentStudioSubAgent-basic-us-east-1",
-        })
+        monkeypatch.setattr(
+            mod,
+            "create_runtime",
+            lambda *a, **kw: {
+                "agent_id": "rt-123",
+                "agent_arn": "arn:aws:bedrock-agentcore:us-east-1:123:runtime/rt-123",
+                "_s3_key": "agents/testBot/deployment.zip",
+                "_role_arn": "arn:aws:iam::123456789012:role/AgentStudioSubAgent-basic-us-east-1",
+            },
+        )
         monkeypatch.setattr(mod, "wait_for_ready", lambda *a, **kw: "READY")
-        monkeypatch.setattr(mod, "validate_agent_files",
-                            lambda *a, **kw: {"valid": True, "errors": [], "warnings": []})
+        monkeypatch.setattr(
+            mod, "validate_agent_files", lambda *a, **kw: {"valid": True, "errors": [], "warnings": []}
+        )
         monkeypatch.setattr(mod, "build_skill_prompt_section", lambda *a, **kw: "")
 
-        with patch("boto3.client") as mock_boto_client, \
-             patch("boto3.resource") as mock_boto_resource:
+        with patch("boto3.client") as mock_boto_client, patch("boto3.resource") as mock_boto_resource:
             mock_s3 = MagicMock()
-            mock_s3.get_object.return_value = {
-                "Body": MagicMock(read=lambda: _staging_body(staged))
-            }
+            mock_s3.get_object.return_value = {"Body": MagicMock(read=lambda: _staging_body(staged))}
             mock_s3.put_object.return_value = {}
             mock_boto_client.return_value = mock_s3
 
@@ -211,17 +217,20 @@ class TestStagingWorkspaceOverride:
             mock_ddb.Table.return_value = MagicMock()
             mock_boto_resource.return_value = mock_ddb
 
-            json.loads(mod.create_agent(
-                agent_name="", staging_key="staging/test.json",
-            ))
+            json.loads(
+                mod.create_agent(
+                    agent_name="",
+                    staging_key="staging/test.json",
+                )
+            )
 
         # Current behavior: workspace_id from staging is used
         assert captured_ws_id == ["ws-other"]
 
     @pytest.mark.xfail(
         reason="Security gap: staging JSON workspace_id is trusted without verifying "
-               "that the caller actually belongs to that workspace. A malicious caller "
-               "could supply a different workspace_id to get a different IAM role.",
+        "that the caller actually belongs to that workspace. A malicious caller "
+        "could supply a different workspace_id to get a different IAM role.",
         strict=True,
     )
     def test_staging_workspace_id_cross_workspace_rejected(self, monkeypatch):
@@ -238,15 +247,19 @@ class TestStagingWorkspaceOverride:
             mock_s3 = _mock_s3_get_staging(staged)
             mock_boto_client.return_value = mock_s3
 
-            result = json.loads(mod.create_agent(
-                agent_name="", staging_key="staging/test.json",
-            ))
+            result = json.loads(
+                mod.create_agent(
+                    agent_name="",
+                    staging_key="staging/test.json",
+                )
+            )
 
         assert "error" in result
         assert "workspace" in result["error"].lower()
 
 
 # ── 3. Happy path ─────────────────────────────────────────────────────────────
+
 
 class TestHappyPath:
     def test_staging_key_creates_agent_successfully(self, monkeypatch):
@@ -255,8 +268,7 @@ class TestHappyPath:
 
         staged = _make_staging()
 
-        monkeypatch.setattr(mod, "_get_agent_role_arn",
-                            lambda ws: "arn:aws:iam::123:role/ws-role")
+        monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:aws:iam::123:role/ws-role")
 
         # Track deploy calls
         deploy_calls = {}
@@ -276,7 +288,10 @@ class TestHappyPath:
 
         def mock_create_runtime(name, desc, s3_key, role_arn):
             deploy_calls["create_runtime"] = {
-                "name": name, "desc": desc, "s3_key": s3_key, "role_arn": role_arn,
+                "name": name,
+                "desc": desc,
+                "s3_key": s3_key,
+                "role_arn": role_arn,
             }
             return {
                 "agent_id": "rt-abc123",
@@ -289,22 +304,20 @@ class TestHappyPath:
         monkeypatch.setattr(mod, "upload_deployment", mock_upload)
         monkeypatch.setattr(mod, "create_runtime", mock_create_runtime)
         monkeypatch.setattr(mod, "wait_for_ready", lambda *a, **kw: "READY")
-        monkeypatch.setattr(mod, "validate_agent_files",
-                            lambda *a, **kw: {"valid": True, "errors": [], "warnings": []})
+        monkeypatch.setattr(
+            mod, "validate_agent_files", lambda *a, **kw: {"valid": True, "errors": [], "warnings": []}
+        )
         monkeypatch.setattr(mod, "build_skill_prompt_section", lambda *a, **kw: "")
 
         mock_ddb_table = MagicMock()
         mock_control = MagicMock()
 
-        with patch("boto3.client") as mock_boto_client, \
-             patch("boto3.resource") as mock_boto_resource:
+        with patch("boto3.client") as mock_boto_client, patch("boto3.resource") as mock_boto_resource:
 
             def client_factory(service, **kwargs):
                 if service == "s3":
                     s3 = MagicMock()
-                    s3.get_object.return_value = {
-                        "Body": MagicMock(read=lambda: _staging_body(staged))
-                    }
+                    s3.get_object.return_value = {"Body": MagicMock(read=lambda: _staging_body(staged))}
                     s3.put_object.return_value = {}
                     return s3
                 if service == "bedrock-agentcore-control":
@@ -321,9 +334,12 @@ class TestHappyPath:
 
             mock_boto_resource.side_effect = resource_factory
 
-            result = json.loads(mod.create_agent(
-                agent_name="", staging_key="staging/config.json",
-            ))
+            result = json.loads(
+                mod.create_agent(
+                    agent_name="",
+                    staging_key="staging/config.json",
+                )
+            )
 
         # Verify success
         assert result.get("agent_id") == "rt-abc123"
@@ -351,17 +367,23 @@ class TestHappyPath:
 
         staged = _make_staging(welcome_message="", description="A data analyst")
 
-        monkeypatch.setattr(mod, "_get_agent_role_arn",
-                            lambda ws: "arn:aws:iam::123:role/ws-role")
+        monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:aws:iam::123:role/ws-role")
         monkeypatch.setattr(mod, "build_deployment_package_v2", lambda *a, **kw: b"zip")
         monkeypatch.setattr(mod, "upload_deployment", lambda *a, **kw: "agents/x/d.zip")
-        monkeypatch.setattr(mod, "create_runtime", lambda *a, **kw: {
-            "agent_id": "rt-1", "agent_arn": "arn:x",
-            "_s3_key": "k", "_role_arn": "r",
-        })
+        monkeypatch.setattr(
+            mod,
+            "create_runtime",
+            lambda *a, **kw: {
+                "agent_id": "rt-1",
+                "agent_arn": "arn:x",
+                "_s3_key": "k",
+                "_role_arn": "r",
+            },
+        )
         monkeypatch.setattr(mod, "wait_for_ready", lambda *a, **kw: "READY")
-        monkeypatch.setattr(mod, "validate_agent_files",
-                            lambda *a, **kw: {"valid": True, "errors": [], "warnings": []})
+        monkeypatch.setattr(
+            mod, "validate_agent_files", lambda *a, **kw: {"valid": True, "errors": [], "warnings": []}
+        )
         monkeypatch.setattr(mod, "build_skill_prompt_section", lambda *a, **kw: "")
 
         with patch("boto3.client") as mc, patch("boto3.resource") as mr:
@@ -383,11 +405,12 @@ class TestHappyPath:
 
 # ── 4. Partial failure cleanup ─────────────────────────────────────────────────
 
+
 class TestPartialFailureCleanup:
     @pytest.mark.xfail(
         reason="create_agent does not clean up orphaned runtimes when post-create "
-               "steps (DDB write, wait_for_ready) fail. The runtime remains in "
-               "AgentCore with no DDB record pointing to it.",
+        "steps (DDB write, wait_for_ready) fail. The runtime remains in "
+        "AgentCore with no DDB record pointing to it.",
         strict=True,
     )
     def test_runtime_cleaned_up_on_ddb_failure(self, monkeypatch):
@@ -396,17 +419,22 @@ class TestPartialFailureCleanup:
 
         staged = _make_staging()
 
-        monkeypatch.setattr(mod, "_get_agent_role_arn",
-                            lambda ws: "arn:aws:iam::123:role/ws-role")
+        monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:aws:iam::123:role/ws-role")
         monkeypatch.setattr("deploy.build_deployment_package_v2", lambda *a: b"zip")
         monkeypatch.setattr("deploy.upload_deployment", lambda *a: "agents/x/d.zip")
-        monkeypatch.setattr("deploy.create_runtime", lambda *a, **kw: {
-            "agent_id": "rt-orphan", "agent_arn": "arn:x",
-            "_s3_key": "k", "_role_arn": "r",
-        })
+        monkeypatch.setattr(
+            "deploy.create_runtime",
+            lambda *a, **kw: {
+                "agent_id": "rt-orphan",
+                "agent_arn": "arn:x",
+                "_s3_key": "k",
+                "_role_arn": "r",
+            },
+        )
         monkeypatch.setattr("deploy.wait_for_ready", lambda *a: "READY")
-        monkeypatch.setattr("deploy.validate_agent_files",
-                            lambda *a: {"valid": True, "errors": [], "warnings": []})
+        monkeypatch.setattr(
+            "deploy.validate_agent_files", lambda *a: {"valid": True, "errors": [], "warnings": []}
+        )
         monkeypatch.setattr("deploy.build_skill_prompt_section", lambda *a: "")
 
         mock_control = MagicMock()
@@ -414,6 +442,7 @@ class TestPartialFailureCleanup:
         mock_ddb_table.put_item.side_effect = Exception("DDB write failed")
 
         with patch("boto3.client") as mc, patch("boto3.resource") as mr:
+
             def client_factory(svc, **kw):
                 if svc == "s3":
                     s3 = MagicMock()
@@ -427,18 +456,20 @@ class TestPartialFailureCleanup:
             mc.side_effect = client_factory
             mr.return_value.Table.return_value = mock_ddb_table
 
-            result = json.loads(mod.create_agent(
-                agent_name="", staging_key="staging/test.json",
-            ))
+            result = json.loads(
+                mod.create_agent(
+                    agent_name="",
+                    staging_key="staging/test.json",
+                )
+            )
 
         # Expected: should have called delete_agent_runtime to clean up
-        mock_control.delete_agent_runtime.assert_called_once_with(
-            agentRuntimeId="rt-orphan"
-        )
+        mock_control.delete_agent_runtime.assert_called_once_with(agentRuntimeId="rt-orphan")
         assert "error" in result
 
 
 # ── 5. @tool detection regex ───────────────────────────────────────────────────
+
 
 class TestToolDetectionRegex:
     """Tests for the regex that finds @tool-decorated functions in custom code."""
@@ -447,7 +478,7 @@ class TestToolDetectionRegex:
         """Standard @tool\\ndef pattern is found."""
         code = '@tool\ndef my_func(x: str = "") -> str:\n    """Hi."""\n    return x'
         # This is the exact regex from create_agent.py line 347
-        matches = set(re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', code))
+        matches = set(re.findall(r"@tool\s*\ndef\s+(\w+)\s*\(", code))
         assert matches == {"my_func"}
 
     def test_multiple_tools_detected(self):
@@ -455,25 +486,25 @@ class TestToolDetectionRegex:
             '@tool\ndef alpha(x: str = "") -> str:\n    """A."""\n    return x\n\n'
             '@tool\ndef beta(y: int = 0) -> str:\n    """B."""\n    return str(y)'
         )
-        matches = set(re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', code))
+        matches = set(re.findall(r"@tool\s*\ndef\s+(\w+)\s*\(", code))
         assert matches == {"alpha", "beta"}
 
     def test_tool_with_blank_line_before_def_detected(self):
         """@tool followed by newline then def is found."""
         code = '@tool\ndef spaced(x: str = "") -> str:\n    """S."""\n    return x'
-        matches = set(re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', code))
+        matches = set(re.findall(r"@tool\s*\ndef\s+(\w+)\s*\(", code))
         assert matches == {"spaced"}
 
     @pytest.mark.xfail(
         reason="Known regex gap: @tool(...) parametrized decorator form is NOT detected. "
-               "The regex `@tool\\s*\\ndef` requires nothing between @tool and the newline, "
-               "so @tool(name='custom') or @tool(description='...') won't match.",
+        "The regex `@tool\\s*\\ndef` requires nothing between @tool and the newline, "
+        "so @tool(name='custom') or @tool(description='...') won't match.",
         strict=True,
     )
     def test_parametrized_tool_decorator_detected(self):
         """@tool(name='custom_name') should also be detected."""
         code = '@tool(name="custom")\ndef my_func(x: str = "") -> str:\n    """Hi."""\n    return x'
-        matches = set(re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', code))
+        matches = set(re.findall(r"@tool\s*\ndef\s+(\w+)\s*\(", code))
         assert "my_func" in matches
 
     @pytest.mark.xfail(
@@ -483,23 +514,24 @@ class TestToolDetectionRegex:
     def test_empty_parens_tool_decorator_detected(self):
         """@tool() — empty-arg invocation — should also be detected."""
         code = '@tool()\ndef my_func(x: str = "") -> str:\n    """Hi."""\n    return x'
-        matches = set(re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', code))
+        matches = set(re.findall(r"@tool\s*\ndef\s+(\w+)\s*\(", code))
         assert "my_func" in matches
 
     def test_non_tool_decorator_not_matched(self):
         """Other decorators should not be confused for @tool."""
         code = '@lru_cache\ndef cached() -> str:\n    return "cached"'
-        matches = set(re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', code))
+        matches = set(re.findall(r"@tool\s*\ndef\s+(\w+)\s*\(", code))
         assert matches == set()
 
     def test_tool_in_comment_not_matched(self):
         """# @tool in a comment should not match."""
-        code = '# @tool\n# def fake():\npass'
-        matches = set(re.findall(r'@tool\s*\ndef\s+(\w+)\s*\(', code))
+        code = "# @tool\n# def fake():\npass"
+        matches = set(re.findall(r"@tool\s*\ndef\s+(\w+)\s*\(", code))
         assert matches == set()
 
 
 # ── 6. Zip assembly ────────────────────────────────────────────────────────────
+
 
 class TestZipAssembly:
     """Tests for build_deployment_package_v2 — flat structure, correct overlay."""
@@ -512,9 +544,7 @@ class TestZipAssembly:
 
         with patch("boto3.client") as mc:
             mock_s3 = MagicMock()
-            mock_s3.get_object.return_value = {
-                "Body": MagicMock(read=lambda: base_zip)
-            }
+            mock_s3.get_object.return_value = {"Body": MagicMock(read=lambda: base_zip)}
             # NoSuchKey needs to be an exception class on the mock
             mock_s3.exceptions = MagicMock()
             mock_s3.exceptions.NoSuchKey = type("NoSuchKey", (Exception,), {})
@@ -552,9 +582,7 @@ class TestZipAssembly:
 
         with patch("boto3.client") as mc:
             mock_s3 = MagicMock()
-            mock_s3.get_object.return_value = {
-                "Body": MagicMock(read=lambda: base_zip)
-            }
+            mock_s3.get_object.return_value = {"Body": MagicMock(read=lambda: base_zip)}
             mock_s3.exceptions = MagicMock()
             mock_s3.exceptions.NoSuchKey = type("NoSuchKey", (Exception,), {})
             mc.return_value = mock_s3
@@ -587,9 +615,7 @@ class TestZipAssembly:
 
         with patch("boto3.client") as mc:
             mock_s3 = MagicMock()
-            mock_s3.get_object.return_value = {
-                "Body": MagicMock(read=lambda: base_zip)
-            }
+            mock_s3.get_object.return_value = {"Body": MagicMock(read=lambda: base_zip)}
             mock_s3.exceptions = MagicMock()
             mock_s3.exceptions.NoSuchKey = type("NoSuchKey", (Exception,), {})
             mc.return_value = mock_s3
@@ -613,6 +639,7 @@ class TestZipAssembly:
 
 # ── 7. Required fields validation ─────────────────────────────────────────────
 
+
 class TestRequiredFieldsValidation:
     def test_validation_failure_returns_error(self, monkeypatch):
         """If validate_agent_files reports errors, create_agent stops early."""
@@ -622,13 +649,16 @@ class TestRequiredFieldsValidation:
             tool_definitions="def broken(:\n    pass",  # syntax error
         )
 
-        monkeypatch.setattr(mod, "_get_agent_role_arn",
-                            lambda ws: "arn:aws:iam::123:role/r")
-        monkeypatch.setattr(mod, "validate_agent_files", lambda *a, **kw: {
-            "valid": False,
-            "errors": ["tools.py SyntaxError: invalid syntax (line 1)"],
-            "warnings": [],
-        })
+        monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:aws:iam::123:role/r")
+        monkeypatch.setattr(
+            mod,
+            "validate_agent_files",
+            lambda *a, **kw: {
+                "valid": False,
+                "errors": ["tools.py SyntaxError: invalid syntax (line 1)"],
+                "warnings": [],
+            },
+        )
         monkeypatch.setattr(mod, "build_skill_prompt_section", lambda *a, **kw: "")
 
         with patch("boto3.client") as mc, patch("boto3.resource") as mr:
@@ -637,9 +667,12 @@ class TestRequiredFieldsValidation:
             mc.return_value = s3
             mr.return_value.Table.return_value = MagicMock()
 
-            result = json.loads(mod.create_agent(
-                agent_name="", staging_key="staging/test.json",
-            ))
+            result = json.loads(
+                mod.create_agent(
+                    agent_name="",
+                    staging_key="staging/test.json",
+                )
+            )
 
         assert "error" in result
         assert "validation" in result["error"].lower() or "SyntaxError" in str(result.get("details", ""))
@@ -653,15 +686,19 @@ class TestRequiredFieldsValidation:
             s3.get_object.side_effect = Exception("NoSuchKey: staging/missing.json")
             mc.return_value = s3
 
-            result = json.loads(mod.create_agent(
-                agent_name="", staging_key="staging/missing.json",
-            ))
+            result = json.loads(
+                mod.create_agent(
+                    agent_name="",
+                    staging_key="staging/missing.json",
+                )
+            )
 
         assert "error" in result
         assert "staging" in result["error"].lower()
 
 
 # ── 8. MCP policy check integration ───────────────────────────────────────────
+
 
 class TestMCPPolicyCheck:
     def test_check_mcp_policy_mode_all_allows_everything(self):
@@ -699,7 +736,8 @@ class TestMCPPolicyCheck:
         staged = _make_staging(mcp_targets="blocked-target")
 
         monkeypatch.setattr(
-            mod, "_get_workspace_mcp_policy",
+            mod,
+            "_get_workspace_mcp_policy",
             lambda ws: {"mode": "allowlist", "allowedTargets": ["allowed-only"]},
         )
 
@@ -709,9 +747,12 @@ class TestMCPPolicyCheck:
             mc.return_value = s3
             mr.return_value.Table.return_value = MagicMock()
 
-            result = json.loads(mod.create_agent(
-                agent_name="", staging_key="staging/test.json",
-            ))
+            result = json.loads(
+                mod.create_agent(
+                    agent_name="",
+                    staging_key="staging/test.json",
+                )
+            )
 
         assert "error" in result
         assert "blocked-target" in result["error"]
@@ -759,6 +800,7 @@ class TestMCPPolicyCheck:
 
 # ── Additional edge cases ──────────────────────────────────────────────────────
 
+
 class TestEdgeCases:
     def test_suggestions_list_in_staging_joined(self, monkeypatch):
         """Staging JSON with suggestions as list is joined with |."""
@@ -769,13 +811,20 @@ class TestEdgeCases:
         monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:role")
         monkeypatch.setattr(mod, "build_deployment_package_v2", lambda *a, **kw: b"z")
         monkeypatch.setattr(mod, "upload_deployment", lambda *a, **kw: "k")
-        monkeypatch.setattr(mod, "create_runtime", lambda *a, **kw: {
-            "agent_id": "rt-1", "agent_arn": "arn:x",
-            "_s3_key": "k", "_role_arn": "r",
-        })
+        monkeypatch.setattr(
+            mod,
+            "create_runtime",
+            lambda *a, **kw: {
+                "agent_id": "rt-1",
+                "agent_arn": "arn:x",
+                "_s3_key": "k",
+                "_role_arn": "r",
+            },
+        )
         monkeypatch.setattr(mod, "wait_for_ready", lambda *a, **kw: "READY")
-        monkeypatch.setattr(mod, "validate_agent_files",
-                            lambda *a, **kw: {"valid": True, "errors": [], "warnings": []})
+        monkeypatch.setattr(
+            mod, "validate_agent_files", lambda *a, **kw: {"valid": True, "errors": [], "warnings": []}
+        )
         monkeypatch.setattr(mod, "build_skill_prompt_section", lambda *a, **kw: "")
 
         with patch("boto3.client") as mc, patch("boto3.resource") as mr:
@@ -801,19 +850,29 @@ class TestEdgeCases:
 
         monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:role")
         monkeypatch.setattr(mod, "_get_workspace_mcp_policy", lambda ws: {"mode": "all"})
-        monkeypatch.setattr(mod, "_resolve_mcp_endpoints", lambda targets: [
-            {"type": "runtime", "name": t, "target_name": t, "auth": "runtime"}
-            for t in targets
-        ])
+        monkeypatch.setattr(
+            mod,
+            "_resolve_mcp_endpoints",
+            lambda targets: [
+                {"type": "runtime", "name": t, "target_name": t, "auth": "runtime"} for t in targets
+            ],
+        )
         monkeypatch.setattr(mod, "build_deployment_package_v2", lambda *a, **kw: b"z")
         monkeypatch.setattr(mod, "upload_deployment", lambda *a, **kw: "k")
-        monkeypatch.setattr(mod, "create_runtime", lambda *a, **kw: {
-            "agent_id": "rt-1", "agent_arn": "arn:x",
-            "_s3_key": "k", "_role_arn": "r",
-        })
+        monkeypatch.setattr(
+            mod,
+            "create_runtime",
+            lambda *a, **kw: {
+                "agent_id": "rt-1",
+                "agent_arn": "arn:x",
+                "_s3_key": "k",
+                "_role_arn": "r",
+            },
+        )
         monkeypatch.setattr(mod, "wait_for_ready", lambda *a, **kw: "READY")
-        monkeypatch.setattr(mod, "validate_agent_files",
-                            lambda *a, **kw: {"valid": True, "errors": [], "warnings": []})
+        monkeypatch.setattr(
+            mod, "validate_agent_files", lambda *a, **kw: {"valid": True, "errors": [], "warnings": []}
+        )
         monkeypatch.setattr(mod, "build_skill_prompt_section", lambda *a, **kw: "")
 
         with patch("boto3.client") as mc, patch("boto3.resource") as mr:
@@ -842,8 +901,13 @@ class TestEdgeCases:
 
         # Mock the builtin tool registry to return code for web_search
         monkeypatch.setattr(
-            mod, "_get_builtin_code",
-            lambda name: '@tool\ndef web_search(query: str = "") -> str:\n    """Search the web."""\n    return ""' if name == "web_search" else None,
+            mod,
+            "_get_builtin_code",
+            lambda name: (
+                '@tool\ndef web_search(query: str = "") -> str:\n    """Search the web."""\n    return ""'
+                if name == "web_search"
+                else None
+            ),
         )
         monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:role")
         monkeypatch.setattr(mod, "_get_workspace_mcp_policy", lambda ws: {"mode": "all"})
@@ -857,10 +921,16 @@ class TestEdgeCases:
         monkeypatch.setattr(mod, "validate_agent_files", mock_validate)
         monkeypatch.setattr(mod, "build_deployment_package_v2", lambda *a, **kw: b"z")
         monkeypatch.setattr(mod, "upload_deployment", lambda *a, **kw: "k")
-        monkeypatch.setattr(mod, "create_runtime", lambda *a, **kw: {
-            "agent_id": "rt-1", "agent_arn": "arn:x",
-            "_s3_key": "k", "_role_arn": "r",
-        })
+        monkeypatch.setattr(
+            mod,
+            "create_runtime",
+            lambda *a, **kw: {
+                "agent_id": "rt-1",
+                "agent_arn": "arn:x",
+                "_s3_key": "k",
+                "_role_arn": "r",
+            },
+        )
         monkeypatch.setattr(mod, "wait_for_ready", lambda *a, **kw: "READY")
         monkeypatch.setattr(mod, "build_skill_prompt_section", lambda *a, **kw: "")
 
@@ -879,6 +949,7 @@ class TestEdgeCases:
 
 
 # ── 9. _resolve_mcp_endpoints helper ─────────────────────────────────────────
+
 
 class TestResolveMcpEndpoints:
     def test_remote_target_from_registry(self, monkeypatch):
@@ -937,6 +1008,7 @@ class TestResolveMcpEndpoints:
         with patch("boto3.client") as mc:
             s3 = MagicMock()
             s3.get_object.return_value = {"Body": MagicMock(read=lambda: registry_yaml.encode())}
+
             # No bedrock-agentcore-control needed because runtime targets list is empty
             def factory(svc, **kw):
                 if svc == "s3":
@@ -944,6 +1016,7 @@ class TestResolveMcpEndpoints:
                 ctrl = MagicMock()
                 ctrl.list_agent_runtimes.return_value = {"agentRuntimes": []}
                 return ctrl
+
             mc.side_effect = factory
             endpoints = mod._resolve_mcp_endpoints(["legacy"])
 
@@ -965,12 +1038,14 @@ class TestResolveMcpEndpoints:
         with patch("boto3.client") as mc:
             s3 = MagicMock()
             s3.get_object.return_value = {"Body": MagicMock(read=lambda: registry_yaml.encode())}
+
             def factory(svc, **kw):
                 if svc == "s3":
                     return s3
                 ctrl = MagicMock()
                 ctrl.list_agent_runtimes.return_value = {"agentRuntimes": []}
                 return ctrl
+
             mc.side_effect = factory
             endpoints = mod._resolve_mcp_endpoints(["only-west"])
 
@@ -984,12 +1059,14 @@ class TestResolveMcpEndpoints:
         with patch("boto3.client") as mc:
             s3 = MagicMock()
             s3.get_object.side_effect = Exception("registry missing")
+
             def factory(svc, **kw):
                 if svc == "s3":
                     return s3
                 ctrl = MagicMock()
                 ctrl.list_agent_runtimes.return_value = {"agentRuntimes": []}
                 return ctrl
+
             mc.side_effect = factory
             endpoints = mod._resolve_mcp_endpoints(["aws-knowledge"])
 
@@ -1004,9 +1081,7 @@ class TestResolveMcpEndpoints:
             s3 = MagicMock()
             s3.get_object.side_effect = Exception("no registry")
             ctrl = MagicMock()
-            ctrl.list_agent_runtimes.return_value = {
-                "agentRuntimes": [{"agentRuntimeName": "my_runtime"}]
-            }
+            ctrl.list_agent_runtimes.return_value = {"agentRuntimes": [{"agentRuntimeName": "my_runtime"}]}
             mc.side_effect = lambda svc, **kw: s3 if svc == "s3" else ctrl
 
             endpoints = mod._resolve_mcp_endpoints(["my-runtime"])
@@ -1055,6 +1130,7 @@ class TestResolveMcpEndpoints:
 
 # ── 10. Library-skill conversational path (skill_names) ───────────────────────
 
+
 class TestSkillNamesPath:
     def test_skill_names_resolution_failure_aborts(self, monkeypatch):
         """If skill_names contains an unresolvable name, return error."""
@@ -1064,6 +1140,7 @@ class TestSkillNamesPath:
 
         def _fake_resolve(name, explicit):
             return None, "not_found"
+
         monkeypatch.setattr(sas, "_resolve_library_skill", _fake_resolve)
         monkeypatch.setattr(sas, "_read_library_skill_files", lambda s3, sid: {})
         monkeypatch.setattr(sas, "_compute_content_hash", lambda f: "abc12345")
@@ -1073,12 +1150,14 @@ class TestSkillNamesPath:
             mc.return_value = s3
             mr.return_value.Table.return_value = MagicMock()
 
-            result = json.loads(mod.create_agent(
-                agent_name="MyBot",
-                description="d",
-                system_prompt="hello",
-                skill_names="ghost-skill",
-            ))
+            result = json.loads(
+                mod.create_agent(
+                    agent_name="MyBot",
+                    description="d",
+                    system_prompt="hello",
+                    skill_names="ghost-skill",
+                )
+            )
 
         assert "error" in result
         assert "ghost-skill" in str(result.get("unresolved", []))
@@ -1088,10 +1167,14 @@ class TestSkillNamesPath:
         import tools.sync_agent_skill as sas
         from tools import create_agent as mod
 
-        monkeypatch.setattr(sas, "_resolve_library_skill",
-                            lambda name, expl: ({"skillId": "s-1", "name": name, "description": "d"}, None))
-        monkeypatch.setattr(sas, "_read_library_skill_files",
-                            lambda s3, sid: {"other.txt": "x"})  # no SKILL.md
+        monkeypatch.setattr(
+            sas,
+            "_resolve_library_skill",
+            lambda name, expl: ({"skillId": "s-1", "name": name, "description": "d"}, None),
+        )
+        monkeypatch.setattr(
+            sas, "_read_library_skill_files", lambda s3, sid: {"other.txt": "x"}
+        )  # no SKILL.md
         monkeypatch.setattr(sas, "_compute_content_hash", lambda f: "abc12345")
 
         with patch("boto3.client") as mc, patch("boto3.resource") as mr:
@@ -1099,12 +1182,14 @@ class TestSkillNamesPath:
             mc.return_value = s3
             mr.return_value.Table.return_value = MagicMock()
 
-            result = json.loads(mod.create_agent(
-                agent_name="MyBot",
-                description="d",
-                system_prompt="hello",
-                skill_names="empty-skill",
-            ))
+            result = json.loads(
+                mod.create_agent(
+                    agent_name="MyBot",
+                    description="d",
+                    system_prompt="hello",
+                    skill_names="empty-skill",
+                )
+            )
 
         assert "error" in result
         assert "no SKILL.md" in str(result.get("unresolved", []))
@@ -1114,11 +1199,16 @@ class TestSkillNamesPath:
         import tools.sync_agent_skill as sas
         from tools import create_agent as mod
 
-        monkeypatch.setattr(sas, "_resolve_library_skill",
-                            lambda name, expl: ({"skillId": "lib-skill-1",
-                                                  "name": name, "description": "good"}, None))
-        monkeypatch.setattr(sas, "_read_library_skill_files",
-                            lambda s3, sid: {"SKILL.md": "# Body", "scripts/foo.py": "print(1)"})
+        monkeypatch.setattr(
+            sas,
+            "_resolve_library_skill",
+            lambda name, expl: ({"skillId": "lib-skill-1", "name": name, "description": "good"}, None),
+        )
+        monkeypatch.setattr(
+            sas,
+            "_read_library_skill_files",
+            lambda s3, sid: {"SKILL.md": "# Body", "scripts/foo.py": "print(1)"},
+        )
         monkeypatch.setattr(sas, "_compute_content_hash", lambda f: "deadbeef")
 
         copy_calls = []
@@ -1132,13 +1222,20 @@ class TestSkillNamesPath:
         monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:aws:iam::123:role/r")
         monkeypatch.setattr(mod, "build_deployment_package_v2", lambda *a, **kw: b"zip")
         monkeypatch.setattr(mod, "upload_deployment", lambda *a, **kw: "k")
-        monkeypatch.setattr(mod, "create_runtime", lambda *a, **kw: {
-            "agent_id": "rt-skill", "agent_arn": "arn:x",
-            "_s3_key": "k", "_role_arn": "r",
-        })
+        monkeypatch.setattr(
+            mod,
+            "create_runtime",
+            lambda *a, **kw: {
+                "agent_id": "rt-skill",
+                "agent_arn": "arn:x",
+                "_s3_key": "k",
+                "_role_arn": "r",
+            },
+        )
         monkeypatch.setattr(mod, "wait_for_ready", lambda *a, **kw: "READY")
-        monkeypatch.setattr(mod, "validate_agent_files",
-                            lambda *a, **kw: {"valid": True, "errors": [], "warnings": []})
+        monkeypatch.setattr(
+            mod, "validate_agent_files", lambda *a, **kw: {"valid": True, "errors": [], "warnings": []}
+        )
         monkeypatch.setattr(mod, "build_skill_prompt_section", lambda *a, **kw: "\n## Skills\n")
 
         with patch("boto3.client") as mc, patch("boto3.resource") as mr:
@@ -1147,12 +1244,14 @@ class TestSkillNamesPath:
             mc.side_effect = lambda svc, **kw: s3 if svc == "s3" else MagicMock()
             mr.return_value.Table.return_value = MagicMock()
 
-            result = json.loads(mod.create_agent(
-                agent_name="SkillyBot",
-                description="d",
-                system_prompt="hello",
-                skill_names="great-skill",
-            ))
+            result = json.loads(
+                mod.create_agent(
+                    agent_name="SkillyBot",
+                    description="d",
+                    system_prompt="hello",
+                    skill_names="great-skill",
+                )
+            )
 
         assert result.get("agent_id") == "rt-skill"
         # _copy_prefix called once with library prefix → agent prefix
@@ -1165,27 +1264,36 @@ class TestSkillNamesPath:
         import tools.sync_agent_skill as sas
         from tools import create_agent as mod
 
-        monkeypatch.setattr(sas, "_resolve_library_skill",
-                            lambda name, expl: ({"skillId": "lib-1",
-                                                  "name": name, "description": "d"}, None))
-        monkeypatch.setattr(sas, "_read_library_skill_files",
-                            lambda s3, sid: {"SKILL.md": "# Body"})
+        monkeypatch.setattr(
+            sas,
+            "_resolve_library_skill",
+            lambda name, expl: ({"skillId": "lib-1", "name": name, "description": "d"}, None),
+        )
+        monkeypatch.setattr(sas, "_read_library_skill_files", lambda s3, sid: {"SKILL.md": "# Body"})
         monkeypatch.setattr(sas, "_compute_content_hash", lambda f: "abc")
 
         def boom(s3, src, dst):
             raise Exception("copy denied")
+
         monkeypatch.setattr(sas, "_copy_prefix", boom)
 
         monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn")
         monkeypatch.setattr(mod, "build_deployment_package_v2", lambda *a, **kw: b"z")
         monkeypatch.setattr(mod, "upload_deployment", lambda *a, **kw: "k")
-        monkeypatch.setattr(mod, "create_runtime", lambda *a, **kw: {
-            "agent_id": "rt-1", "agent_arn": "arn:x",
-            "_s3_key": "k", "_role_arn": "r",
-        })
+        monkeypatch.setattr(
+            mod,
+            "create_runtime",
+            lambda *a, **kw: {
+                "agent_id": "rt-1",
+                "agent_arn": "arn:x",
+                "_s3_key": "k",
+                "_role_arn": "r",
+            },
+        )
         monkeypatch.setattr(mod, "wait_for_ready", lambda *a, **kw: "READY")
-        monkeypatch.setattr(mod, "validate_agent_files",
-                            lambda *a, **kw: {"valid": True, "errors": [], "warnings": []})
+        monkeypatch.setattr(
+            mod, "validate_agent_files", lambda *a, **kw: {"valid": True, "errors": [], "warnings": []}
+        )
         monkeypatch.setattr(mod, "build_skill_prompt_section", lambda *a, **kw: "")
 
         with patch("boto3.client") as mc, patch("boto3.resource") as mr:
@@ -1194,12 +1302,14 @@ class TestSkillNamesPath:
             mc.side_effect = lambda svc, **kw: s3 if svc == "s3" else MagicMock()
             mr.return_value.Table.return_value = MagicMock()
 
-            result = json.loads(mod.create_agent(
-                agent_name="WarnBot",
-                description="d",
-                system_prompt="hello",
-                skill_names="boom-skill",
-            ))
+            result = json.loads(
+                mod.create_agent(
+                    agent_name="WarnBot",
+                    description="d",
+                    system_prompt="hello",
+                    skill_names="boom-skill",
+                )
+            )
 
         assert result.get("agent_id") == "rt-1"
         captured = capsys.readouterr()
@@ -1209,6 +1319,7 @@ class TestSkillNamesPath:
 
 # ── 11. Staging skills with SKILL.md fetch from S3 ────────────────────────────
 
+
 class TestStagingSkillFlow:
     def test_staging_skill_md_read_from_s3(self, monkeypatch):
         """Staging-driven skill triggers SKILL.md S3 fetch + post-create file copy."""
@@ -1216,51 +1327,69 @@ class TestStagingSkillFlow:
 
         staged = _make_staging(
             agent_id="draft-id-xyz",
-            skills=[{
-                "id": "skill-abc",
-                "name": "DataSkill",
-                "description": "Draft skill",
-                "contentHash": "h1",
-            }],
+            skills=[
+                {
+                    "id": "skill-abc",
+                    "name": "DataSkill",
+                    "description": "Draft skill",
+                    "contentHash": "h1",
+                }
+            ],
         )
 
         monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:role")
         monkeypatch.setattr(mod, "build_deployment_package_v2", lambda *a, **kw: b"z")
         monkeypatch.setattr(mod, "upload_deployment", lambda *a, **kw: "k")
-        monkeypatch.setattr(mod, "create_runtime", lambda *a, **kw: {
-            "agent_id": "rt-final", "agent_arn": "arn:x",
-            "_s3_key": "k", "_role_arn": "r",
-        })
+        monkeypatch.setattr(
+            mod,
+            "create_runtime",
+            lambda *a, **kw: {
+                "agent_id": "rt-final",
+                "agent_arn": "arn:x",
+                "_s3_key": "k",
+                "_role_arn": "r",
+            },
+        )
         monkeypatch.setattr(mod, "wait_for_ready", lambda *a, **kw: "READY")
-        monkeypatch.setattr(mod, "validate_agent_files",
-                            lambda *a, **kw: {"valid": True, "errors": [], "warnings": []})
-        monkeypatch.setattr(mod, "build_skill_prompt_section",
-                            lambda data: "\n## Skills section ##\n" if data else "")
+        monkeypatch.setattr(
+            mod, "validate_agent_files", lambda *a, **kw: {"valid": True, "errors": [], "warnings": []}
+        )
+        monkeypatch.setattr(
+            mod, "build_skill_prompt_section", lambda data: "\n## Skills section ##\n" if data else ""
+        )
 
         s3_calls = {"copy": [], "list": []}
 
         def fake_paginator(method):
             assert method == "list_objects_v2"
+
             class Paginator:
                 def paginate(self, **kw):
                     s3_calls["list"].append(kw)
-                    return iter([{
-                        "Contents": [
-                            {"Key": "agents/draft-id-xyz/skills/skill-abc/SKILL.md"},
-                            {"Key": "agents/draft-id-xyz/skills/skill-abc/scripts/foo.py"},
-                            {"Key": "agents/draft-id-xyz/skills/skill-abc/"},  # empty rel
+                    return iter(
+                        [
+                            {
+                                "Contents": [
+                                    {"Key": "agents/draft-id-xyz/skills/skill-abc/SKILL.md"},
+                                    {"Key": "agents/draft-id-xyz/skills/skill-abc/scripts/foo.py"},
+                                    {"Key": "agents/draft-id-xyz/skills/skill-abc/"},  # empty rel
+                                ]
+                            }
                         ]
-                    }])
+                    )
+
             return Paginator()
 
         with patch("boto3.client") as mc, patch("boto3.resource") as mr:
             s3 = MagicMock()
+
             def get_object(Bucket, Key, **kw):
                 if Key == "staging/test.json":
                     return {"Body": MagicMock(read=lambda: _staging_body(staged))}
                 if Key.endswith("SKILL.md"):
                     return {"Body": MagicMock(read=lambda: b"# Skill Body")}
                 return {"Body": MagicMock(read=lambda: b"x")}
+
             s3.get_object.side_effect = get_object
             s3.put_object.return_value = {}
             s3.copy_object.side_effect = lambda **kw: s3_calls["copy"].append(kw)
@@ -1269,9 +1398,12 @@ class TestStagingSkillFlow:
             mc.side_effect = lambda svc, **kw: s3 if svc == "s3" else MagicMock()
             mr.return_value.Table.return_value = MagicMock()
 
-            result = json.loads(mod.create_agent(
-                agent_name="", staging_key="staging/test.json",
-            ))
+            result = json.loads(
+                mod.create_agent(
+                    agent_name="",
+                    staging_key="staging/test.json",
+                )
+            )
 
         assert result.get("agent_id") == "rt-final"
         # Two non-empty rels were copied (SKILL.md and scripts/foo.py); empty rel skipped
@@ -1292,13 +1424,20 @@ class TestStagingSkillFlow:
         monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:role")
         monkeypatch.setattr(mod, "build_deployment_package_v2", lambda *a, **kw: b"z")
         monkeypatch.setattr(mod, "upload_deployment", lambda *a, **kw: "k")
-        monkeypatch.setattr(mod, "create_runtime", lambda *a, **kw: {
-            "agent_id": "rt-1", "agent_arn": "arn:x",
-            "_s3_key": "k", "_role_arn": "r",
-        })
+        monkeypatch.setattr(
+            mod,
+            "create_runtime",
+            lambda *a, **kw: {
+                "agent_id": "rt-1",
+                "agent_arn": "arn:x",
+                "_s3_key": "k",
+                "_role_arn": "r",
+            },
+        )
         monkeypatch.setattr(mod, "wait_for_ready", lambda *a, **kw: "READY")
-        monkeypatch.setattr(mod, "validate_agent_files",
-                            lambda *a, **kw: {"valid": True, "errors": [], "warnings": []})
+        monkeypatch.setattr(
+            mod, "validate_agent_files", lambda *a, **kw: {"valid": True, "errors": [], "warnings": []}
+        )
         monkeypatch.setattr(mod, "build_skill_prompt_section", lambda *a, **kw: "")
 
         with patch("boto3.client") as mc, patch("boto3.resource") as mr:
@@ -1310,6 +1449,7 @@ class TestStagingSkillFlow:
                 if Key.endswith("SKILL.md"):
                     raise Exception("AccessDenied")
                 return {"Body": MagicMock(read=lambda: b"x")}
+
             s3.get_object.side_effect = get_object
             s3.put_object.return_value = {}
             s3.get_paginator.return_value.paginate.return_value = iter([])
@@ -1317,9 +1457,12 @@ class TestStagingSkillFlow:
             mc.side_effect = lambda svc, **kw: s3 if svc == "s3" else MagicMock()
             mr.return_value.Table.return_value = MagicMock()
 
-            result = json.loads(mod.create_agent(
-                agent_name="", staging_key="staging/test.json",
-            ))
+            result = json.loads(
+                mod.create_agent(
+                    agent_name="",
+                    staging_key="staging/test.json",
+                )
+            )
 
         assert result.get("agent_id") == "rt-1"
         captured = capsys.readouterr()
@@ -1338,13 +1481,20 @@ class TestStagingSkillFlow:
         monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:role")
         monkeypatch.setattr(mod, "build_deployment_package_v2", lambda *a, **kw: b"z")
         monkeypatch.setattr(mod, "upload_deployment", lambda *a, **kw: "k")
-        monkeypatch.setattr(mod, "create_runtime", lambda *a, **kw: {
-            "agent_id": "rt-final", "agent_arn": "arn:x",
-            "_s3_key": "k", "_role_arn": "r",
-        })
+        monkeypatch.setattr(
+            mod,
+            "create_runtime",
+            lambda *a, **kw: {
+                "agent_id": "rt-final",
+                "agent_arn": "arn:x",
+                "_s3_key": "k",
+                "_role_arn": "r",
+            },
+        )
         monkeypatch.setattr(mod, "wait_for_ready", lambda *a, **kw: "READY")
-        monkeypatch.setattr(mod, "validate_agent_files",
-                            lambda *a, **kw: {"valid": True, "errors": [], "warnings": []})
+        monkeypatch.setattr(
+            mod, "validate_agent_files", lambda *a, **kw: {"valid": True, "errors": [], "warnings": []}
+        )
         monkeypatch.setattr(mod, "build_skill_prompt_section", lambda *a, **kw: "")
 
         with patch("boto3.client") as mc, patch("boto3.resource") as mr:
@@ -1356,6 +1506,7 @@ class TestStagingSkillFlow:
                 if Key.endswith("SKILL.md"):
                     return {"Body": MagicMock(read=lambda: b"# md")}
                 return {"Body": MagicMock(read=lambda: b"")}
+
             s3.get_object.side_effect = get_object
             s3.put_object.return_value = {}
 
@@ -1363,15 +1514,20 @@ class TestStagingSkillFlow:
                 class P:
                     def paginate(self, **kw):
                         raise Exception("S3 list permission denied")
+
                 return P()
+
             s3.get_paginator = boom_paginator
 
             mc.side_effect = lambda svc, **kw: s3 if svc == "s3" else MagicMock()
             mr.return_value.Table.return_value = MagicMock()
 
-            result = json.loads(mod.create_agent(
-                agent_name="", staging_key="staging/test.json",
-            ))
+            result = json.loads(
+                mod.create_agent(
+                    agent_name="",
+                    staging_key="staging/test.json",
+                )
+            )
 
         assert result.get("agent_id") == "rt-final"
         captured = capsys.readouterr()
@@ -1389,12 +1545,20 @@ class TestStagingSkillFlow:
         monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn:role")
         monkeypatch.setattr(mod, "build_deployment_package_v2", lambda *a, **kw: b"z")
         monkeypatch.setattr(mod, "upload_deployment", lambda *a, **kw: "k")
-        monkeypatch.setattr(mod, "create_runtime", lambda *a, **kw: {
-            "agent_id": "rt-1", "agent_arn": "arn:x", "_s3_key": "k", "_role_arn": "r",
-        })
+        monkeypatch.setattr(
+            mod,
+            "create_runtime",
+            lambda *a, **kw: {
+                "agent_id": "rt-1",
+                "agent_arn": "arn:x",
+                "_s3_key": "k",
+                "_role_arn": "r",
+            },
+        )
         monkeypatch.setattr(mod, "wait_for_ready", lambda *a, **kw: "READY")
-        monkeypatch.setattr(mod, "validate_agent_files",
-                            lambda *a, **kw: {"valid": True, "errors": [], "warnings": []})
+        monkeypatch.setattr(
+            mod, "validate_agent_files", lambda *a, **kw: {"valid": True, "errors": [], "warnings": []}
+        )
         monkeypatch.setattr(mod, "build_skill_prompt_section", lambda *a, **kw: "")
 
         with patch("boto3.client") as mc, patch("boto3.resource") as mr:
@@ -1413,6 +1577,7 @@ class TestStagingSkillFlow:
 
 # ── 12. Post-create env-var update warning path ───────────────────────────────
 
+
 class TestPostCreateEnvUpdate:
     def test_post_create_env_update_failure_warns(self, monkeypatch, capsys):
         """If update_agent_runtime fails after wait_for_ready, log warning, return success."""
@@ -1423,12 +1588,20 @@ class TestPostCreateEnvUpdate:
         monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn")
         monkeypatch.setattr(mod, "build_deployment_package_v2", lambda *a, **kw: b"z")
         monkeypatch.setattr(mod, "upload_deployment", lambda *a, **kw: "k")
-        monkeypatch.setattr(mod, "create_runtime", lambda *a, **kw: {
-            "agent_id": "rt-1", "agent_arn": "arn:x", "_s3_key": "k", "_role_arn": "r",
-        })
+        monkeypatch.setattr(
+            mod,
+            "create_runtime",
+            lambda *a, **kw: {
+                "agent_id": "rt-1",
+                "agent_arn": "arn:x",
+                "_s3_key": "k",
+                "_role_arn": "r",
+            },
+        )
         monkeypatch.setattr(mod, "wait_for_ready", lambda *a, **kw: "READY")
-        monkeypatch.setattr(mod, "validate_agent_files",
-                            lambda *a, **kw: {"valid": True, "errors": [], "warnings": []})
+        monkeypatch.setattr(
+            mod, "validate_agent_files", lambda *a, **kw: {"valid": True, "errors": [], "warnings": []}
+        )
         monkeypatch.setattr(mod, "build_skill_prompt_section", lambda *a, **kw: "")
 
         with patch("boto3.client") as mc, patch("boto3.resource") as mr:
@@ -1444,6 +1617,7 @@ class TestPostCreateEnvUpdate:
                 if svc == "bedrock-agentcore-control":
                     return ctrl
                 return MagicMock()
+
             mc.side_effect = factory
             mr.return_value.Table.return_value = MagicMock()
 
@@ -1458,6 +1632,7 @@ class TestPostCreateEnvUpdate:
 
 
 # ── 13. KB injection branch (workspace_id + kb_ids) ───────────────────────────
+
 
 class TestKbInjection:
     def test_kb_inject_appends_kb_retrieve(self, monkeypatch):
@@ -1484,9 +1659,16 @@ class TestKbInjection:
         monkeypatch.setattr(mod, "_get_agent_role_arn", lambda ws: "arn")
         monkeypatch.setattr(mod, "build_deployment_package_v2", lambda *a, **kw: b"z")
         monkeypatch.setattr(mod, "upload_deployment", lambda *a, **kw: "k")
-        monkeypatch.setattr(mod, "create_runtime", lambda *a, **kw: {
-            "agent_id": "rt-1", "agent_arn": "arn:x", "_s3_key": "k", "_role_arn": "r",
-        })
+        monkeypatch.setattr(
+            mod,
+            "create_runtime",
+            lambda *a, **kw: {
+                "agent_id": "rt-1",
+                "agent_arn": "arn:x",
+                "_s3_key": "k",
+                "_role_arn": "r",
+            },
+        )
         monkeypatch.setattr(mod, "wait_for_ready", lambda *a, **kw: "READY")
         monkeypatch.setattr(mod, "validate_agent_files", mock_validate)
         monkeypatch.setattr(mod, "build_skill_prompt_section", lambda *a, **kw: "")
@@ -1508,6 +1690,7 @@ class TestKbInjection:
 
 # ── 14. Workspace fallback when no staging ────────────────────────────────────
 
+
 class TestNoStagingPath:
     def test_no_staging_uses_scope_workspace(self, monkeypatch):
         """When called without staging_key, workspace_id falls back to module-level _workspace_id."""
@@ -1526,12 +1709,20 @@ class TestNoStagingPath:
         monkeypatch.setattr(mod, "_get_agent_role_arn", role_arn)
         monkeypatch.setattr(mod, "build_deployment_package_v2", lambda *a, **kw: b"z")
         monkeypatch.setattr(mod, "upload_deployment", lambda *a, **kw: "k")
-        monkeypatch.setattr(mod, "create_runtime", lambda *a, **kw: {
-            "agent_id": "rt-1", "agent_arn": "arn:x", "_s3_key": "k", "_role_arn": "r",
-        })
+        monkeypatch.setattr(
+            mod,
+            "create_runtime",
+            lambda *a, **kw: {
+                "agent_id": "rt-1",
+                "agent_arn": "arn:x",
+                "_s3_key": "k",
+                "_role_arn": "r",
+            },
+        )
         monkeypatch.setattr(mod, "wait_for_ready", lambda *a, **kw: "READY")
-        monkeypatch.setattr(mod, "validate_agent_files",
-                            lambda *a, **kw: {"valid": True, "errors": [], "warnings": []})
+        monkeypatch.setattr(
+            mod, "validate_agent_files", lambda *a, **kw: {"valid": True, "errors": [], "warnings": []}
+        )
         monkeypatch.setattr(mod, "build_skill_prompt_section", lambda *a, **kw: "")
 
         with patch("boto3.client") as mc, patch("boto3.resource") as mr:

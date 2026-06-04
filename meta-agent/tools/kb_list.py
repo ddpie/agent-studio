@@ -43,13 +43,15 @@ def kb_list() -> str:
         except Exception:
             pass
 
-        results.append({
-            "kb_id": kb_id,
-            "name": item.get("name", {}).get("S", ""),
-            "description": item.get("description", {}).get("S", ""),
-            "status": item.get("status", {}).get("S", "UNKNOWN"),
-            "doc_count": doc_count,
-            "updated_at": item.get("updated_at", {}).get("S", ""),
-        })
+        results.append(
+            {
+                "kb_id": kb_id,
+                "name": item.get("name", {}).get("S", ""),
+                "description": item.get("description", {}).get("S", ""),
+                "status": item.get("status", {}).get("S", "UNKNOWN"),
+                "doc_count": doc_count,
+                "updated_at": item.get("updated_at", {}).get("S", ""),
+            }
+        )
 
     return json.dumps(results, indent=2, ensure_ascii=False)

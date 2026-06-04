@@ -148,6 +148,7 @@ def _shared_env_vars(agent_id: str = "") -> dict:
             env["AGENT_STUDIO_SECRET_ARNS"] = ",".join(secret_arns)
     return env
 
+
 # Always inject the latest stream_utils.py into deployment packages
 try:
     from templates.agent_template_v2 import STREAM_UTILS_CODE as _LATEST_STREAM_UTILS
@@ -162,6 +163,7 @@ except ImportError:
 # Load MemoryContext source to append to builtin_tools
 try:
     from pathlib import Path as _Path
+
     _MEMORY_CONTEXT_SRC = (_Path(__file__).parent / "templates" / "_memory_context_src.py").read_text()
 except Exception:
     _MEMORY_CONTEXT_SRC = None
@@ -292,7 +294,10 @@ def build_deployment_package_v2(
             if _LATEST_BUILTIN_TOOLS:
                 bt_code = _LATEST_BUILTIN_TOOLS
                 if _MEMORY_CONTEXT_SRC:
-                    bt_code += "\n\n# --- MemoryContext (inlined from _memory_context_src.py) ---\n" + _MEMORY_CONTEXT_SRC
+                    bt_code += (
+                        "\n\n# --- MemoryContext (inlined from _memory_context_src.py) ---\n"
+                        + _MEMORY_CONTEXT_SRC
+                    )
                 new_zip.writestr("builtin_tools.py", bt_code)
 
     return buf.getvalue()
@@ -373,11 +378,7 @@ def create_runtime(agent_name: str, description: str, s3_key: str, role_arn: str
         },
         networkConfiguration={"networkMode": "PUBLIC"},
         protocolConfiguration={"serverProtocol": "HTTP"},
-        filesystemConfigurations=[{
-            "sessionStorage": {
-                "mountPath": "/mnt/workspace"
-            }
-        }],
+        filesystemConfigurations=[{"sessionStorage": {"mountPath": "/mnt/workspace"}}],
         environmentVariables=_shared_env_vars(),
     )
 
@@ -467,4 +468,3 @@ def delete_runtime(agent_id: str):
     """Delete an agent runtime."""
     control = boto3.client("bedrock-agentcore-control", region_name=REGION)
     control.delete_agent_runtime(agentRuntimeId=agent_id)
-

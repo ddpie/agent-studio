@@ -63,18 +63,22 @@ def kb_check_ingestion(kb_id: str, ingestion_job_id: str = "") -> str:
         else:
             summary = f"{scanned} 个文档中 {successful} 个成功，{failed} 个失败"
 
-        return json.dumps({
-            "ingestion_job_id": job_id,
-            "status": job["status"],
-            "summary": summary,
-            "total_documents_processed": successful,
-            "documents_failed": failed,
-            "documents_new": new_indexed,
-            "documents_updated": modified,
-            "documents_unchanged": scanned - new_indexed - modified - failed,
-            "failure_reasons": job.get("failureReasons", []),
-            "started_at": str(job.get("startedAt", "")),
-            "updated_at": str(job.get("updatedAt", "")),
-        }, ensure_ascii=False, default=str)
+        return json.dumps(
+            {
+                "ingestion_job_id": job_id,
+                "status": job["status"],
+                "summary": summary,
+                "total_documents_processed": successful,
+                "documents_failed": failed,
+                "documents_new": new_indexed,
+                "documents_updated": modified,
+                "documents_unchanged": scanned - new_indexed - modified - failed,
+                "failure_reasons": job.get("failureReasons", []),
+                "started_at": str(job.get("startedAt", "")),
+                "updated_at": str(job.get("updatedAt", "")),
+            },
+            ensure_ascii=False,
+            default=str,
+        )
     except Exception as e:
         return json.dumps({"error": "get_job_failed", "message": str(e)})

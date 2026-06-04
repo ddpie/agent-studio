@@ -1,4 +1,5 @@
 """Tests for set_agent_secrets / list_agent_secrets / delete_agent_secret."""
+
 import json
 import sys
 import types
@@ -33,6 +34,7 @@ sys.modules["config"] = _mock_config
 @pytest.fixture(autouse=True)
 def _scope(monkeypatch):
     from tools import _scope
+
     monkeypatch.setattr(_scope, "_caller_id", "user-1", raising=False)
     monkeypatch.setattr(_scope, "_workspace_id", "ws-1", raising=False)
 
@@ -53,45 +55,54 @@ def _grant_membership(monkeypatch, role="admin", agent_workspace="ws-1"):
 
 # ── Pure helper tests ─────────────────────────────────────────────────────
 
+
 def test_validate_key_rejects_empty():
     from tools.manage_secrets import _validate_key
+
     assert _validate_key("") == "key is required"
 
 
 def test_validate_key_rejects_too_long():
     from tools.manage_secrets import _validate_key
+
     err = _validate_key("A" * 65)
     assert "64 characters" in err
 
 
 def test_validate_key_rejects_lowercase():
     from tools.manage_secrets import _validate_key
+
     err = _validate_key("api_key")
     assert "[A-Z0-9_]" in err
 
 
 def test_validate_key_rejects_dash():
     from tools.manage_secrets import _validate_key
+
     err = _validate_key("MY-KEY")
     assert "[A-Z0-9_]" in err
 
 
 def test_validate_key_accepts_valid():
     from tools.manage_secrets import _validate_key
+
     assert _validate_key("API_KEY_1") == ""
     assert _validate_key("FEISHU_USER_ACCESS_TOKEN") == ""
 
 
 def test_secret_path_layout():
     from tools.manage_secrets import _secret_path
+
     assert _secret_path("ws-1", "a-1") == "agent-studio/ws-1/a-1"
     assert _secret_path("ws-1", "a-1", "FOO") == "agent-studio/ws-1/a-1/FOO"
 
 
 # ── set_agent_secrets ─────────────────────────────────────────────────────
 
+
 def test_set_agent_secrets_denies_non_admin(monkeypatch):
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="editor")  # editor < admin
 
     out = json.loads(mod.set_agent_secrets("a-1", '{"K": "v"}'))
@@ -101,6 +112,7 @@ def test_set_agent_secrets_denies_non_admin(monkeypatch):
 
 def test_set_agent_secrets_invalid_json(monkeypatch):
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="admin")
 
     out = json.loads(mod.set_agent_secrets("a-1", "not-json{"))
@@ -109,6 +121,7 @@ def test_set_agent_secrets_invalid_json(monkeypatch):
 
 def test_set_agent_secrets_rejects_non_dict(monkeypatch):
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="admin")
 
     out = json.loads(mod.set_agent_secrets("a-1", '["a", "b"]'))
@@ -118,6 +131,7 @@ def test_set_agent_secrets_rejects_non_dict(monkeypatch):
 
 def test_set_agent_secrets_rejects_empty_dict(monkeypatch):
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="admin")
 
     out = json.loads(mod.set_agent_secrets("a-1", "{}"))
@@ -126,14 +140,13 @@ def test_set_agent_secrets_rejects_empty_dict(monkeypatch):
 
 def test_set_agent_secrets_happy_path(monkeypatch):
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="admin")
 
     fake_sm = MagicMock()
     # Make exceptions accessible like real boto3 client
     fake_sm.exceptions = MagicMock()
-    fake_sm.exceptions.ResourceNotFoundException = type(
-        "ResourceNotFoundException", (Exception,), {}
-    )
+    fake_sm.exceptions.ResourceNotFoundException = type("ResourceNotFoundException", (Exception,), {})
 
     with patch("boto3.client", return_value=fake_sm):
         out = json.loads(mod.set_agent_secrets("a-1", '{"API_KEY": "xyz"}'))
@@ -150,6 +163,7 @@ def test_set_agent_secrets_happy_path(monkeypatch):
 def test_set_agent_secrets_creates_when_not_found(monkeypatch):
     """If put fails with ResourceNotFoundException, falls through to create."""
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="admin")
 
     fake_sm = MagicMock()
@@ -168,18 +182,20 @@ def test_set_agent_secrets_creates_when_not_found(monkeypatch):
 def test_set_agent_secrets_validates_keys(monkeypatch):
     """Invalid keys end up in errors, not saved."""
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="admin")
 
     fake_sm = MagicMock()
     fake_sm.exceptions = MagicMock()
-    fake_sm.exceptions.ResourceNotFoundException = type(
-        "ResourceNotFoundException", (Exception,), {}
-    )
+    fake_sm.exceptions.ResourceNotFoundException = type("ResourceNotFoundException", (Exception,), {})
 
     with patch("boto3.client", return_value=fake_sm):
-        out = json.loads(mod.set_agent_secrets(
-            "a-1", '{"GOOD_KEY": "v", "bad-key": "v"}',
-        ))
+        out = json.loads(
+            mod.set_agent_secrets(
+                "a-1",
+                '{"GOOD_KEY": "v", "bad-key": "v"}',
+            )
+        )
 
     assert "GOOD_KEY" in out["saved"]
     assert any(e["key"] == "bad-key" for e in out["errors"])
@@ -188,32 +204,33 @@ def test_set_agent_secrets_validates_keys(monkeypatch):
 
 def test_set_agent_secrets_rejects_long_value(monkeypatch):
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="admin")
 
     fake_sm = MagicMock()
     fake_sm.exceptions = MagicMock()
-    fake_sm.exceptions.ResourceNotFoundException = type(
-        "ResourceNotFoundException", (Exception,), {}
-    )
+    fake_sm.exceptions.ResourceNotFoundException = type("ResourceNotFoundException", (Exception,), {})
 
     huge = "x" * 5000
     with patch("boto3.client", return_value=fake_sm):
-        out = json.loads(mod.set_agent_secrets(
-            "a-1", json.dumps({"BIG": huge}),
-        ))
+        out = json.loads(
+            mod.set_agent_secrets(
+                "a-1",
+                json.dumps({"BIG": huge}),
+            )
+        )
     assert out["status"] == "failed"
     assert out["errors"][0]["error"].startswith("value exceeds")
 
 
 def test_set_agent_secrets_rejects_non_string_value(monkeypatch):
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="admin")
 
     fake_sm = MagicMock()
     fake_sm.exceptions = MagicMock()
-    fake_sm.exceptions.ResourceNotFoundException = type(
-        "ResourceNotFoundException", (Exception,), {}
-    )
+    fake_sm.exceptions.ResourceNotFoundException = type("ResourceNotFoundException", (Exception,), {})
 
     with patch("boto3.client", return_value=fake_sm):
         out = json.loads(mod.set_agent_secrets("a-1", '{"K": 123}'))
@@ -224,9 +241,11 @@ def test_set_agent_secrets_rejects_non_string_value(monkeypatch):
 
 # ── list_agent_secrets ────────────────────────────────────────────────────
 
+
 def test_list_agent_secrets_denies_viewer(monkeypatch):
     """list_agent_secrets requires editor or higher."""
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="viewer")
 
     out = json.loads(mod.list_agent_secrets("a-1"))
@@ -236,17 +255,20 @@ def test_list_agent_secrets_denies_viewer(monkeypatch):
 
 def test_list_agent_secrets_happy_path(monkeypatch):
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="editor")
 
     prefix = "agent-studio/ws-1/a-1/"
     paginator = MagicMock()
     paginator.paginate.return_value = [
-        {"SecretList": [
-            {"Name": prefix + "API_KEY"},
-            {"Name": prefix + "DB_PASSWORD"},
-            {"Name": prefix + "nested/skip"},  # has slash → skip
-            {"Name": "agent-studio/other-ws/a-1/SKIP_ME"},  # different prefix
-        ]},
+        {
+            "SecretList": [
+                {"Name": prefix + "API_KEY"},
+                {"Name": prefix + "DB_PASSWORD"},
+                {"Name": prefix + "nested/skip"},  # has slash → skip
+                {"Name": "agent-studio/other-ws/a-1/SKIP_ME"},  # different prefix
+            ]
+        },
     ]
     fake_sm = MagicMock()
     fake_sm.get_paginator.return_value = paginator
@@ -260,6 +282,7 @@ def test_list_agent_secrets_happy_path(monkeypatch):
 
 def test_list_agent_secrets_handles_failure(monkeypatch):
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="editor")
 
     fake_sm = MagicMock()
@@ -274,8 +297,10 @@ def test_list_agent_secrets_handles_failure(monkeypatch):
 
 # ── delete_agent_secret ───────────────────────────────────────────────────
 
+
 def test_delete_agent_secret_denies_editor(monkeypatch):
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="editor")  # need admin
 
     out = json.loads(mod.delete_agent_secret("a-1", "API_KEY"))
@@ -285,6 +310,7 @@ def test_delete_agent_secret_denies_editor(monkeypatch):
 
 def test_delete_agent_secret_validates_key(monkeypatch):
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="admin")
 
     out = json.loads(mod.delete_agent_secret("a-1", "bad key"))
@@ -294,13 +320,12 @@ def test_delete_agent_secret_validates_key(monkeypatch):
 
 def test_delete_agent_secret_happy_path(monkeypatch):
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="admin")
 
     fake_sm = MagicMock()
     fake_sm.exceptions = MagicMock()
-    fake_sm.exceptions.ResourceNotFoundException = type(
-        "ResourceNotFoundException", (Exception,), {}
-    )
+    fake_sm.exceptions.ResourceNotFoundException = type("ResourceNotFoundException", (Exception,), {})
 
     with patch("boto3.client", return_value=fake_sm):
         out = json.loads(mod.delete_agent_secret("a-1", "API_KEY"))
@@ -315,6 +340,7 @@ def test_delete_agent_secret_happy_path(monkeypatch):
 
 def test_delete_agent_secret_not_found(monkeypatch):
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="admin")
 
     rnf = type("ResourceNotFoundException", (Exception,), {})
@@ -332,13 +358,12 @@ def test_delete_agent_secret_not_found(monkeypatch):
 
 def test_delete_agent_secret_other_error(monkeypatch):
     from tools import manage_secrets as mod
+
     _grant_membership(monkeypatch, role="admin")
 
     fake_sm = MagicMock()
     fake_sm.exceptions = MagicMock()
-    fake_sm.exceptions.ResourceNotFoundException = type(
-        "ResourceNotFoundException", (Exception,), {}
-    )
+    fake_sm.exceptions.ResourceNotFoundException = type("ResourceNotFoundException", (Exception,), {})
     fake_sm.delete_secret.side_effect = Exception("AccessDenied")
 
     with patch("boto3.client", return_value=fake_sm):

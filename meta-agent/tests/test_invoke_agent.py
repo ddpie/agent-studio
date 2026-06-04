@@ -1,4 +1,5 @@
 """Tests for invoke_agent tool — small RBAC + delegation wrapper."""
+
 import json
 import sys
 import types
@@ -34,6 +35,7 @@ sys.modules["config"] = _mock_config
 @pytest.fixture(autouse=True)
 def _scope(monkeypatch):
     from tools import _scope
+
     monkeypatch.setattr(_scope, "_caller_id", "user-1", raising=False)
     monkeypatch.setattr(_scope, "_workspace_id", "ws-test", raising=False)
 
@@ -42,7 +44,8 @@ def test_invoke_agent_passes_through_response(monkeypatch):
     from tools import invoke_agent as mod
 
     monkeypatch.setattr(
-        mod, "ensure_agent_in_workspace",
+        mod,
+        "ensure_agent_in_workspace",
         lambda agent_id, min_role: ({"workspace_id": "ws-test"}, None),
     )
     monkeypatch.setattr(mod, "invoke_runtime", lambda agent_id, prompt: "Hello there!")
@@ -56,13 +59,15 @@ def test_invoke_agent_rejects_when_caller_below_editor(monkeypatch):
     from tools import invoke_agent as mod
 
     monkeypatch.setattr(
-        mod, "ensure_agent_in_workspace",
+        mod,
+        "ensure_agent_in_workspace",
         lambda agent_id, min_role: (None, {"error": "Permission denied: editor required"}),
     )
 
     runtime_called = []
     monkeypatch.setattr(
-        mod, "invoke_runtime",
+        mod,
+        "invoke_runtime",
         lambda *a, **kw: runtime_called.append(1) or "should not happen",
     )
 
@@ -78,7 +83,8 @@ def test_invoke_agent_calls_runtime_with_correct_args(monkeypatch):
     from tools import invoke_agent as mod
 
     monkeypatch.setattr(
-        mod, "ensure_agent_in_workspace",
+        mod,
+        "ensure_agent_in_workspace",
         lambda agent_id, min_role: ({"workspace_id": "ws-test"}, None),
     )
 

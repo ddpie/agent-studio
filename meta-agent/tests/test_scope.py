@@ -1,4 +1,5 @@
 """Tests for the Meta-Agent workspace + RBAC scoping helpers."""
+
 import sys
 import types
 from unittest.mock import MagicMock, patch
@@ -21,6 +22,7 @@ def _reset_scope():
         if m.startswith("tools._scope") or m == "tools._scope":
             del sys.modules[m]
     import tools._scope as scope
+
     return scope
 
 
@@ -48,9 +50,7 @@ def test_ensure_agent_refuses_cross_workspace():
     scope._caller_id = "user-1"
 
     table = MagicMock()
-    table.get_item.return_value = {
-        "Item": {"agentId": "a1", "workspace_id": "ws-other"}
-    }
+    table.get_item.return_value = {"Item": {"agentId": "a1", "workspace_id": "ws-other"}}
     with patch.object(scope, "_agents_table", return_value=table):
         record, err = scope.ensure_agent_in_workspace("a1")
     assert record is None
@@ -65,14 +65,14 @@ def test_ensure_agent_denies_insufficient_role():
     scope._caller_id = "user-1"
 
     agents = MagicMock()
-    agents.get_item.return_value = {
-        "Item": {"agentId": "a1", "workspace_id": "ws-mine"}
-    }
+    agents.get_item.return_value = {"Item": {"agentId": "a1", "workspace_id": "ws-mine"}}
     workspaces = MagicMock()
     workspaces.get_item.return_value = {"Item": {"role": scope.ROLE_VIEWER}}
 
-    with patch.object(scope, "_agents_table", return_value=agents), \
-         patch.object(scope, "_workspaces_table", return_value=workspaces):
+    with (
+        patch.object(scope, "_agents_table", return_value=agents),
+        patch.object(scope, "_workspaces_table", return_value=workspaces),
+    ):
         record, err = scope.ensure_agent_in_workspace("a1", min_role=scope.ROLE_ADMIN)
     assert record is None
     assert "admin" in err["error"].lower()
@@ -85,14 +85,14 @@ def test_ensure_agent_passes_with_sufficient_role():
     scope._caller_id = "user-1"
 
     agents = MagicMock()
-    agents.get_item.return_value = {
-        "Item": {"agentId": "a1", "workspace_id": "ws-mine", "name": "my-agent"}
-    }
+    agents.get_item.return_value = {"Item": {"agentId": "a1", "workspace_id": "ws-mine", "name": "my-agent"}}
     workspaces = MagicMock()
     workspaces.get_item.return_value = {"Item": {"role": scope.ROLE_OWNER}}
 
-    with patch.object(scope, "_agents_table", return_value=agents), \
-         patch.object(scope, "_workspaces_table", return_value=workspaces):
+    with (
+        patch.object(scope, "_agents_table", return_value=agents),
+        patch.object(scope, "_workspaces_table", return_value=workspaces),
+    ):
         record, err = scope.ensure_agent_in_workspace("a1", min_role=scope.ROLE_EDITOR)
     assert err is None
     assert record["name"] == "my-agent"
@@ -123,10 +123,13 @@ def test_list_workspace_agents_paginates():
     table = MagicMock()
     # First page returns 2 items + a continuation token; second page returns 1.
     table.query.side_effect = [
-        {"Items": [
-            {"agentId": "a1", "status": "active"},
-            {"agentId": "a2", "status": "archived"},  # filtered by default
-        ], "LastEvaluatedKey": {"agentId": "a2"}},
+        {
+            "Items": [
+                {"agentId": "a1", "status": "active"},
+                {"agentId": "a2", "status": "archived"},  # filtered by default
+            ],
+            "LastEvaluatedKey": {"agentId": "a2"},
+        },
         {"Items": [{"agentId": "a3", "status": "active"}]},
     ]
     with patch.object(scope, "_agents_table", return_value=table):

@@ -143,9 +143,12 @@ user-invocable: true
     except Exception as e:
         return json.dumps({"error": f"Skill metadata update failed: {e}"})
 
-    return json.dumps({
-        "skill_id": skill_id,
-        "name": final_name,
-        "updated_fields": updated_fields,
-        "status": "updated",
-    }, indent=2)
+    return json.dumps(
+        {
+            "skill_id": skill_id,
+            "name": final_name,
+            "updated_fields": updated_fields,
+            "status": "updated",
+        },
+        indent=2,
+    )

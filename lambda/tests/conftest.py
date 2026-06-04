@@ -1,4 +1,5 @@
 """Shared pytest fixtures for CRUD Lambda tests."""
+
 import json
 import os
 import uuid
@@ -31,6 +32,7 @@ def _isolate_origin_verify(monkeypatch):
     """
     try:
         import crud.handler as _h
+
         monkeypatch.setattr(_h, "ORIGIN_VERIFY_VALUE", "")
     except ImportError:
         pass
@@ -66,6 +68,7 @@ def mock_jwt(user_id):
     for mod_name in ("crud.uploads",):
         try:
             import importlib
+
             mod = importlib.import_module(mod_name)
             if hasattr(mod, "verify_jwt"):
                 patches.append(patch(f"{mod_name}.verify_jwt", return_value=claims))

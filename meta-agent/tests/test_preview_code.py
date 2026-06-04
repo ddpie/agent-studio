@@ -1,4 +1,5 @@
 """Tests for preview_assembled_code tool."""
+
 import json
 import sys
 import types
@@ -39,6 +40,7 @@ sys.modules["config"] = _mock_config
 @pytest.fixture(autouse=True)
 def _scope(monkeypatch):
     from tools import _scope
+
     monkeypatch.setattr(_scope, "_caller_id", "user-1", raising=False)
     monkeypatch.setattr(_scope, "_workspace_id", "ws-test", raising=False)
     monkeypatch.setattr(_scope, "_creator_language", "en", raising=False)
@@ -46,11 +48,16 @@ def _scope(monkeypatch):
 
 def _stub_validate(monkeypatch, valid=True, errors=None, warnings=None):
     from tools import preview_code as mod
-    monkeypatch.setattr(mod, "validate_agent_files", lambda *a, **kw: {
-        "valid": valid,
-        "errors": errors or [],
-        "warnings": warnings or [],
-    })
+
+    monkeypatch.setattr(
+        mod,
+        "validate_agent_files",
+        lambda *a, **kw: {
+            "valid": valid,
+            "errors": errors or [],
+            "warnings": warnings or [],
+        },
+    )
 
 
 def _patch_boto3(monkeypatch, mod, s3_mock):
@@ -70,11 +77,13 @@ def test_preview_with_direct_args_returns_file_sizes(monkeypatch):
     s3.put_object.return_value = {}
     _patch_boto3(monkeypatch, mod, s3)
 
-    out = json.loads(mod.preview_assembled_code(
-        system_prompt="You are a helper.",
-        tool_definitions='@tool\ndef noop() -> str:\n    """Nothing."""\n    return ""',
-        tool_names="noop",
-    ))
+    out = json.loads(
+        mod.preview_assembled_code(
+            system_prompt="You are a helper.",
+            tool_definitions='@tool\ndef noop() -> str:\n    """Nothing."""\n    return ""',
+            tool_names="noop",
+        )
+    )
 
     assert out["valid"] is True
     assert "preview_key" in out
@@ -150,9 +159,7 @@ def test_preview_reads_staging_when_provided(monkeypatch):
     }
 
     s3 = MagicMock()
-    s3.get_object.return_value = {
-        "Body": MagicMock(read=lambda: json.dumps(staging).encode("utf-8"))
-    }
+    s3.get_object.return_value = {"Body": MagicMock(read=lambda: json.dumps(staging).encode("utf-8"))}
     s3.put_object.return_value = {}
     _patch_boto3(monkeypatch, mod, s3)
 
@@ -165,9 +172,11 @@ def test_preview_reads_staging_when_provided(monkeypatch):
 
     monkeypatch.setattr(mod, "validate_agent_files", fake_validate)
 
-    out = json.loads(mod.preview_assembled_code(
-        staging_key="staging/abc.json",
-    ))
+    out = json.loads(
+        mod.preview_assembled_code(
+            staging_key="staging/abc.json",
+        )
+    )
 
     # Preview key derives the basename ("abc") from the staging key
     assert out["preview_key"].startswith("agents/_preview/abc-")
@@ -194,9 +203,13 @@ def test_preview_propagates_validation_errors(monkeypatch):
     s3 = MagicMock()
     _patch_boto3(monkeypatch, mod, s3)
 
-    out = json.loads(mod.preview_assembled_code(
-        system_prompt="hi", tool_definitions="def broken(:", tool_names="",
-    ))
+    out = json.loads(
+        mod.preview_assembled_code(
+            system_prompt="hi",
+            tool_definitions="def broken(:",
+            tool_names="",
+        )
+    )
     assert out["valid"] is False
     assert out["errors"] == ["SyntaxError: bad"]
     assert out["warnings"] == ["w1"]

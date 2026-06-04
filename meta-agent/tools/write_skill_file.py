@@ -152,9 +152,11 @@ def write_skill_file(skill_id: str, path: str, content: str) -> str:
         return json.dumps({"error": "content must be a string"})
     body = content.encode("utf-8")
     if len(body) > _MAX_WRITE_BYTES:
-        return json.dumps({
-            "error": f"content exceeds {_MAX_WRITE_BYTES:,} bytes ({len(body):,} given)",
-        })
+        return json.dumps(
+            {
+                "error": f"content exceeds {_MAX_WRITE_BYTES:,} bytes ({len(body):,} given)",
+            }
+        )
 
     key = f"skills/{skill_id}/{path}"
     try:
@@ -169,13 +171,15 @@ def write_skill_file(skill_id: str, path: str, content: str) -> str:
 
     _touch_updated_at(skill_id, ws_id)
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    return json.dumps({
-        "skill_id": skill_id,
-        "path": path,
-        "bytes": len(body),
-        "updated_at": now,
-        "status": "written",
-    })
+    return json.dumps(
+        {
+            "skill_id": skill_id,
+            "path": path,
+            "bytes": len(body),
+            "updated_at": now,
+            "status": "written",
+        }
+    )
 
 
 @tool
@@ -217,8 +221,10 @@ def delete_skill_file(skill_id: str, path: str) -> str:
         return json.dumps({"error": f"S3 delete failed: {e}"})
 
     _touch_updated_at(skill_id, ws_id)
-    return json.dumps({
-        "skill_id": skill_id,
-        "path": path,
-        "status": "deleted",
-    })
+    return json.dumps(
+        {
+            "skill_id": skill_id,
+            "path": path,
+            "status": "deleted",
+        }
+    )

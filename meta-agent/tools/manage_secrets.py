@@ -114,13 +114,15 @@ def set_agent_secrets(agent_id: str, secrets: str) -> str:
         except Exception as e:
             errors.append({"key": key, "error": str(e)})
 
-    return json.dumps({
-        "status": "saved" if saved and not errors else ("partial" if saved else "failed"),
-        "agent_id": agent_id,
-        "workspace_id": workspace_id,
-        "saved": saved,
-        "errors": errors,
-    })
+    return json.dumps(
+        {
+            "status": "saved" if saved and not errors else ("partial" if saved else "failed"),
+            "agent_id": agent_id,
+            "workspace_id": workspace_id,
+            "saved": saved,
+            "errors": errors,
+        }
+    )
 
 
 @tool
@@ -148,7 +150,7 @@ def list_agent_secrets(agent_id: str) -> str:
             for secret in page.get("SecretList", []):
                 name = secret.get("Name", "")
                 if name.startswith(prefix):
-                    k = name[len(prefix):]
+                    k = name[len(prefix) :]
                     if k and "/" not in k:
                         keys.append(k)
     except Exception as e:

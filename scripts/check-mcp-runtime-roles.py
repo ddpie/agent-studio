@@ -13,6 +13,7 @@ Modes:
                      to converge them. Preserves containerUri, protocol,
                      networkMode, and all other attributes.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -101,9 +102,13 @@ def repair(control, runtime_id: str, expected_role: str) -> tuple[bool, str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--region", default=None, help="AWS region (default: AGENT_STUDIO_REGION or boto3 default)")
+    parser.add_argument(
+        "--region", default=None, help="AWS region (default: AGENT_STUDIO_REGION or boto3 default)"
+    )
     parser.add_argument("--fix", action="store_true", help="Repair drifted runtimes (default is report-only)")
-    parser.add_argument("--json", action="store_true", help="Emit JSON summary instead of human-readable output")
+    parser.add_argument(
+        "--json", action="store_true", help="Emit JSON summary instead of human-readable output"
+    )
     parser.add_argument("--registry", default=None, help="Path to mcp-registry.yaml (default: auto-detect)")
     args = parser.parse_args()
 
@@ -146,16 +151,20 @@ def main() -> int:
         if current == expected:
             continue
 
-        summary["drifted"].append({
-            "name": name,
-            "id": rid,
-            "current_role": current,
-            "expected_role": expected,
-        })
+        summary["drifted"].append(
+            {
+                "name": name,
+                "id": rid,
+                "current_role": current,
+                "expected_role": expected,
+            }
+        )
 
         if args.fix:
             ok, detail = repair(control, rid, expected)
-            (summary["repaired"] if ok else summary["errors"]).append({"name": name, "id": rid, "detail": detail})
+            (summary["repaired"] if ok else summary["errors"]).append(
+                {"name": name, "id": rid, "detail": detail}
+            )
 
     if args.json:
         print(json.dumps(summary, indent=2))

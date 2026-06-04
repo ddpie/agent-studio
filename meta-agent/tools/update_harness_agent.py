@@ -3,6 +3,7 @@
 Only applies to agents with runtime_type == "harness". For zip agents, use
 update_agent instead.
 """
+
 import json
 from datetime import datetime
 
@@ -47,9 +48,9 @@ def update_harness_agent(agent_id: str, staging_key: str) -> str:
         if not existing:
             return json.dumps({"error": f"agent not found: {agent_id}"})
         if existing.get("runtime_type") != "harness":
-            return json.dumps({
-                "error": f"agent runtime_type is not 'harness': {existing.get('runtime_type')}"
-            })
+            return json.dumps(
+                {"error": f"agent runtime_type is not 'harness': {existing.get('runtime_type')}"}
+            )
 
         staged = _read_staging(staging_key)
 
@@ -72,9 +73,16 @@ def update_harness_agent(agent_id: str, staging_key: str) -> str:
         now = datetime.utcnow().isoformat() + "Z"
         set_parts = ["updated_at = :updated_at"]
         values = {":updated_at": now}
-        for k in ("display_name", "description", "welcome_message",
-                  "suggestions", "supports_images", "model_id", "system_prompt",
-                  "mcp_targets"):
+        for k in (
+            "display_name",
+            "description",
+            "welcome_message",
+            "suggestions",
+            "supports_images",
+            "model_id",
+            "system_prompt",
+            "mcp_targets",
+        ):
             if k in staged:
                 ph = f":{k}"
                 values[ph] = staged[k]

@@ -1,4 +1,5 @@
 """Tool CRUD endpoints."""
+
 import json
 import uuid
 from datetime import datetime
@@ -64,6 +65,7 @@ def list_tools(wsId: str):
     }
     if cursor:
         import base64
+
         try:
             query_kwargs["ExclusiveStartKey"] = json.loads(base64.b64decode(cursor).decode())
         except Exception:
@@ -102,6 +104,7 @@ def list_tools(wsId: str):
     next_cursor = None
     if last_key:
         import base64
+
         next_cursor = base64.b64encode(json.dumps(last_key).encode()).decode()
 
     return paginated(items, next_cursor)
@@ -239,7 +242,7 @@ def update_tool(wsId: str, toolId: str):
         resp = table.update_item(
             Key={"toolId": toolId},
             UpdateExpression=update_expr,
-            **({'ExpressionAttributeNames': expr_names} if expr_names else {}),
+            **({"ExpressionAttributeNames": expr_names} if expr_names else {}),
             ExpressionAttributeValues=expr_values,
             ConditionExpression=condition,
             ReturnValues="ALL_NEW",

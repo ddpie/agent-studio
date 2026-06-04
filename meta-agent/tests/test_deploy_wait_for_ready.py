@@ -3,6 +3,7 @@
 Status enum from boto3 service model (verified live on us-east-1 2026-04-18):
 CREATING | CREATE_FAILED | UPDATING | UPDATE_FAILED | READY | DELETING.
 """
+
 import sys
 import types
 from unittest.mock import MagicMock, patch
@@ -32,6 +33,7 @@ def test_wait_for_ready_returns_on_ready(mock_client):
     mock_client.return_value = control
 
     from deploy import wait_for_ready
+
     with patch("deploy.time.sleep"):
         result = wait_for_ready("test-runtime-id", timeout=30)
     assert result == "READY"
@@ -45,6 +47,7 @@ def test_wait_for_ready_returns_on_create_failed(mock_client):
     mock_client.return_value = control
 
     from deploy import wait_for_ready
+
     with patch("deploy.time.sleep"):
         assert wait_for_ready("test-runtime-id", timeout=30) == "CREATE_FAILED"
 
@@ -56,5 +59,6 @@ def test_wait_for_ready_returns_on_update_failed(mock_client):
     mock_client.return_value = control
 
     from deploy import wait_for_ready
+
     with patch("deploy.time.sleep"):
         assert wait_for_ready("test-runtime-id", timeout=30) == "UPDATE_FAILED"

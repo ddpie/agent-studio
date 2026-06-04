@@ -1,4 +1,5 @@
 """Tests for crud.skills module."""
+
 import base64
 import json
 from datetime import datetime
@@ -150,6 +151,7 @@ def _apigw(method, path, body=None, query_params=None):
 
 def _invoke(event):
     from crud.handler import lambda_handler
+
     return lambda_handler(event, MagicMock())
 
 
@@ -210,14 +212,16 @@ class TestListSkills:
 
     def test_list_show_deleted(self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table):
         mock_skills_table.query.return_value = {"Items": [], "LastEvaluatedKey": None}
-        _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/skills",
-                       query_params={"deleted": "true"}))
+        _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/skills", query_params={"deleted": "true"}))
         call_kwargs = mock_skills_table.query.call_args.kwargs
         assert call_kwargs["ExpressionAttributeValues"][":t"] is True
 
     def test_list_invalid_cursor(self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table):
-        resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/skills",
-                              query_params={"cursor": "not-base64-or-json"}))
+        resp = _invoke(
+            _apigw(
+                "GET", f"/api/workspaces/{workspace_id}/skills", query_params={"cursor": "not-base64-or-json"}
+            )
+        )
         # Decoder may succeed but JSON parse will fail → bad request
         # OR base64 decode might succeed → catches all in except.
         assert resp["statusCode"] == 400
@@ -231,8 +235,11 @@ class TestListSkills:
             "Items": [_existing_skill(workspace_id, "skill_y")],
             "LastEvaluatedKey": None,
         }
-        resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/skills",
-                              query_params={"cursor": cursor, "limit": "5"}))
+        resp = _invoke(
+            _apigw(
+                "GET", f"/api/workspaces/{workspace_id}/skills", query_params={"cursor": cursor, "limit": "5"}
+            )
+        )
         assert resp["statusCode"] == 200
         # ExclusiveStartKey should have been used
         call_kwargs = mock_skills_table.query.call_args.kwargs
@@ -245,8 +252,10 @@ class TestListSkills:
         it should keep querying. Verify we eventually exit (no hang)."""
         # First response: one item + LastEvaluatedKey, second: empty + None.
         responses = [
-            {"Items": [_existing_skill(workspace_id, "skill_aaa")],
-             "LastEvaluatedKey": {"skillId": "skill_aaa"}},
+            {
+                "Items": [_existing_skill(workspace_id, "skill_aaa")],
+                "LastEvaluatedKey": {"skillId": "skill_aaa"},
+            },
             {"Items": [], "LastEvaluatedKey": None},
         ]
         mock_skills_table.query.side_effect = responses
@@ -351,41 +360,29 @@ class TestCreateSkill:
         assert resp["statusCode"] == 201
         mock_skills_s3.put_object.assert_not_called()
 
-    def test_create_missing_name(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_create_missing_name(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills", body={}))
         assert resp["statusCode"] == 400
         assert "name" in json.loads(resp["body"])["error"]
 
-    def test_create_blank_name(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
-        resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills",
-                              body={"name": "   "}))
+    def test_create_blank_name(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
+        resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills", body={"name": "   "}))
         assert resp["statusCode"] == 400
 
-    def test_create_name_too_long(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
-        resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills",
-                              body={"name": "a" * 201}))
+    def test_create_name_too_long(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
+        resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills", body={"name": "a" * 201}))
         assert resp["statusCode"] == 400
         assert "200" in json.loads(resp["body"])["error"]
 
-    def test_create_invalid_type(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
-        resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills",
-                              body={"name": "X", "type": "weird"}))
+    def test_create_invalid_type(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
+        resp = _invoke(
+            _apigw("POST", f"/api/workspaces/{workspace_id}/skills", body={"name": "X", "type": "weird"})
+        )
         assert resp["statusCode"] == 400
         assert "type" in json.loads(resp["body"])["error"]
 
-    def test_viewer_cannot_create(
-        self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table
-    ):
-        resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills",
-                              body={"name": "X"}))
+    def test_viewer_cannot_create(self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table):
+        resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills", body={"name": "X"}))
         assert resp["statusCode"] == 403
 
 
@@ -395,9 +392,7 @@ class TestCreateSkill:
 
 
 class TestUpdateSkill:
-    def test_update_success(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table, mock_skills_s3
-    ):
+    def test_update_success(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table, mock_skills_s3):
         skill_id = "skill_abc"
         existing = _existing_skill(workspace_id, skill_id)
         mock_skills_table.get_item.return_value = {"Item": existing}
@@ -409,8 +404,7 @@ class TestUpdateSkill:
             "description": "Updated",
             "expected_updated_at": existing["updated_at"],
         }
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}",
-                              body=body))
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}", body=body))
         assert resp["statusCode"] == 200
         data = json.loads(resp["body"])
         assert data["name"] == "NewName"
@@ -429,8 +423,7 @@ class TestUpdateSkill:
             "name": "Same",
             "expected_updated_at": existing["updated_at"],
         }
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}",
-                              body=body))
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}", body=body))
         assert resp["statusCode"] == 200
         mock_skills_s3.put_object.assert_called_once()
 
@@ -446,8 +439,7 @@ class TestUpdateSkill:
             "content": "new code",
             "expected_updated_at": existing["updated_at"],
         }
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}",
-                              body=body))
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}", body=body))
         assert resp["statusCode"] == 200
         # Inspect the update expression — should include approved = :false
         call_kwargs = mock_skills_table.update_item.call_args.kwargs
@@ -455,8 +447,13 @@ class TestUpdateSkill:
         assert call_kwargs["ExpressionAttributeValues"][":false"] is False
 
     def test_update_invalid_id(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/has space",
-                              body={"name": "x", "expected_updated_at": "y"}))
+        resp = _invoke(
+            _apigw(
+                "PUT",
+                f"/api/workspaces/{workspace_id}/skills/has space",
+                body={"name": "x", "expected_updated_at": "y"},
+            )
+        )
         assert resp["statusCode"] == 400
 
     def test_update_missing_expected_updated_at(
@@ -464,20 +461,22 @@ class TestUpdateSkill:
     ):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {"Item": _existing_skill(workspace_id, skill_id)}
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}",
-                              body={"name": "x"}))
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}", body={"name": "x"}))
         assert resp["statusCode"] == 400
         assert "expected_updated_at" in json.loads(resp["body"])["error"]
 
-    def test_update_other_workspace(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_update_other_workspace(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill("other-ws", skill_id),
         }
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}",
-                              body={"name": "x", "expected_updated_at": "y"}))
+        resp = _invoke(
+            _apigw(
+                "PUT",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}",
+                body={"name": "x", "expected_updated_at": "y"},
+            )
+        )
         assert resp["statusCode"] == 403
 
     def test_update_deleted(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
@@ -485,19 +484,27 @@ class TestUpdateSkill:
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id, deleted=True),
         }
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}",
-                              body={"name": "x", "expected_updated_at": "y"}))
+        resp = _invoke(
+            _apigw(
+                "PUT",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}",
+                body={"name": "x", "expected_updated_at": "y"},
+            )
+        )
         assert resp["statusCode"] == 403
 
     def test_update_not_found(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         mock_skills_table.get_item.return_value = {"Item": None}
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/skill_abc",
-                              body={"name": "x", "expected_updated_at": "y"}))
+        resp = _invoke(
+            _apigw(
+                "PUT",
+                f"/api/workspaces/{workspace_id}/skills/skill_abc",
+                body={"name": "x", "expected_updated_at": "y"},
+            )
+        )
         assert resp["statusCode"] == 403
 
-    def test_update_version_conflict(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_update_version_conflict(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         skill_id = "skill_abc"
         existing = _existing_skill(workspace_id, skill_id)
         mock_skills_table.get_item.return_value = {"Item": existing}
@@ -505,15 +512,17 @@ class TestUpdateSkill:
         mock_skills_table.update_item.side_effect = ccf("conflict")
 
         body = {"name": "x", "expected_updated_at": "stale"}
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}",
-                              body=body))
+        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}", body=body))
         assert resp["statusCode"] == 409
 
-    def test_viewer_cannot_update(
-        self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table
-    ):
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/skill_x",
-                              body={"name": "x", "expected_updated_at": "y"}))
+    def test_viewer_cannot_update(self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table):
+        resp = _invoke(
+            _apigw(
+                "PUT",
+                f"/api/workspaces/{workspace_id}/skills/skill_x",
+                body={"name": "x", "expected_updated_at": "y"},
+            )
+        )
         assert resp["statusCode"] == 403
 
 
@@ -523,9 +532,7 @@ class TestUpdateSkill:
 
 
 class TestDeleteSkill:
-    def test_soft_delete_success(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_soft_delete_success(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         skill_id = "skill_abc"
         resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/skills/{skill_id}"))
         assert resp["statusCode"] == 200
@@ -533,9 +540,7 @@ class TestDeleteSkill:
         assert data["deleted"] is True
         mock_skills_table.update_item.assert_called_once()
 
-    def test_soft_delete_invalid_id(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_soft_delete_invalid_id(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/skills/bad id"))
         assert resp["statusCode"] == 400
 
@@ -547,9 +552,7 @@ class TestDeleteSkill:
         resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/skills/skill_abc"))
         assert resp["statusCode"] == 403
 
-    def test_purge_success(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table, mock_skills_s3
-    ):
+    def test_purge_success(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table, mock_skills_s3):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id, deleted=True),
@@ -565,8 +568,11 @@ class TestDeleteSkill:
             },
         ]
 
-        resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/skills/{skill_id}",
-                              query_params={"purge": "true"}))
+        resp = _invoke(
+            _apigw(
+                "DELETE", f"/api/workspaces/{workspace_id}/skills/{skill_id}", query_params={"purge": "true"}
+            )
+        )
         assert resp["statusCode"] == 200
         data = json.loads(resp["body"])
         assert data["purged"] is True
@@ -579,33 +585,38 @@ class TestDeleteSkill:
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill("other-ws", "skill_abc"),
         }
-        resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/skills/skill_abc",
-                              query_params={"purge": "true"}))
+        resp = _invoke(
+            _apigw(
+                "DELETE", f"/api/workspaces/{workspace_id}/skills/skill_abc", query_params={"purge": "true"}
+            )
+        )
         assert resp["statusCode"] == 403
 
-    def test_purge_no_objects(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table, mock_skills_s3
-    ):
+    def test_purge_no_objects(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table, mock_skills_s3):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id),
         }
         mock_skills_s3.list_objects_v2.return_value = {"Contents": [], "IsTruncated": False}
-        resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/skills/{skill_id}",
-                              query_params={"purge": "true"}))
+        resp = _invoke(
+            _apigw(
+                "DELETE", f"/api/workspaces/{workspace_id}/skills/{skill_id}", query_params={"purge": "true"}
+            )
+        )
         assert resp["statusCode"] == 200
         mock_skills_s3.delete_objects.assert_not_called()
 
-    def test_purge_s3_failure(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table, mock_skills_s3
-    ):
+    def test_purge_s3_failure(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table, mock_skills_s3):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id),
         }
         mock_skills_s3.list_objects_v2.side_effect = Exception("S3 boom")
-        resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/skills/{skill_id}",
-                              query_params={"purge": "true"}))
+        resp = _invoke(
+            _apigw(
+                "DELETE", f"/api/workspaces/{workspace_id}/skills/{skill_id}", query_params={"purge": "true"}
+            )
+        )
         assert resp["statusCode"] == 500
 
     def test_purge_ddb_conditional_check_fails(
@@ -617,13 +628,14 @@ class TestDeleteSkill:
         }
         ccf = mock_skills_table.meta.client.exceptions.ConditionalCheckFailedException
         mock_skills_table.delete_item.side_effect = ccf("nope")
-        resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/skills/{skill_id}",
-                              query_params={"purge": "true"}))
+        resp = _invoke(
+            _apigw(
+                "DELETE", f"/api/workspaces/{workspace_id}/skills/{skill_id}", query_params={"purge": "true"}
+            )
+        )
         assert resp["statusCode"] == 403
 
-    def test_viewer_cannot_delete(
-        self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table
-    ):
+    def test_viewer_cannot_delete(self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table):
         resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/skills/skill_x"))
         assert resp["statusCode"] == 403
 
@@ -634,9 +646,7 @@ class TestDeleteSkill:
 
 
 class TestImportSkill:
-    def test_import_basic(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table, mock_skills_s3
-    ):
+    def test_import_basic(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table, mock_skills_s3):
         body = {
             "name": "imported",
             "content": "# Hello",
@@ -660,27 +670,26 @@ class TestImportSkill:
         assert data["name"] == "parsed-name"
         assert data["description"] == "from-fm"
 
-    def test_import_missing_content(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
-        resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/import",
-                              body={"name": "x"}))
+    def test_import_missing_content(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
+        resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/import", body={"name": "x"}))
         assert resp["statusCode"] == 400
         assert "content" in json.loads(resp["body"])["error"]
 
-    def test_import_missing_name_no_fm(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
-        resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/import",
-                              body={"content": "no fm"}))
+    def test_import_missing_name_no_fm(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
+        resp = _invoke(
+            _apigw("POST", f"/api/workspaces/{workspace_id}/skills/import", body={"content": "no fm"})
+        )
         assert resp["statusCode"] == 400
         assert "name" in json.loads(resp["body"])["error"]
 
-    def test_import_invalid_type(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
-        resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/import",
-                              body={"name": "x", "content": "y", "type": "weird"}))
+    def test_import_invalid_type(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
+        resp = _invoke(
+            _apigw(
+                "POST",
+                f"/api/workspaces/{workspace_id}/skills/import",
+                body={"name": "x", "content": "y", "type": "weird"},
+            )
+        )
         assert resp["statusCode"] == 400
 
     def test_import_with_scripts_and_files(
@@ -697,9 +706,7 @@ class TestImportSkill:
         # SKILL.md + script + file = 3 put_objects
         assert mock_skills_s3.put_object.call_count == 3
 
-    def test_import_invalid_script_name(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_import_invalid_script_name(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         body = {
             "name": "imp",
             "content": "# H",
@@ -709,9 +716,7 @@ class TestImportSkill:
         assert resp["statusCode"] == 400
         assert "script name" in json.loads(resp["body"])["error"].lower()
 
-    def test_import_invalid_file_path(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_import_invalid_file_path(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         body = {
             "name": "imp",
             "content": "# H",
@@ -720,9 +725,7 @@ class TestImportSkill:
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/import", body=body))
         assert resp["statusCode"] == 400
 
-    def test_viewer_cannot_import(
-        self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table
-    ):
+    def test_viewer_cannot_import(self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table):
         body = {"name": "x", "content": "y"}
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/import", body=body))
         assert resp["statusCode"] == 403
@@ -734,9 +737,7 @@ class TestImportSkill:
 
 
 class TestPublishSkill:
-    def test_publish_success(
-        self, workspace_id, mock_jwt, _mock_admin, mock_skills_table
-    ):
+    def test_publish_success(self, workspace_id, mock_jwt, _mock_admin, mock_skills_table):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id),
@@ -746,9 +747,7 @@ class TestPublishSkill:
         data = json.loads(resp["body"])
         assert data["visibility"] == "public"
 
-    def test_publish_unapproved_script_rejected(
-        self, workspace_id, mock_jwt, _mock_admin, mock_skills_table
-    ):
+    def test_publish_unapproved_script_rejected(self, workspace_id, mock_jwt, _mock_admin, mock_skills_table):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id, skill_type="script", approved=False),
@@ -757,9 +756,7 @@ class TestPublishSkill:
         assert resp["statusCode"] == 400
         assert "approved" in json.loads(resp["body"])["error"].lower()
 
-    def test_publish_other_workspace(
-        self, workspace_id, mock_jwt, _mock_admin, mock_skills_table
-    ):
+    def test_publish_other_workspace(self, workspace_id, mock_jwt, _mock_admin, mock_skills_table):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill("other-ws", skill_id),
@@ -767,9 +764,7 @@ class TestPublishSkill:
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/{skill_id}/publish"))
         assert resp["statusCode"] == 403
 
-    def test_publish_deleted(
-        self, workspace_id, mock_jwt, _mock_admin, mock_skills_table
-    ):
+    def test_publish_deleted(self, workspace_id, mock_jwt, _mock_admin, mock_skills_table):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id, deleted=True),
@@ -777,15 +772,11 @@ class TestPublishSkill:
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/{skill_id}/publish"))
         assert resp["statusCode"] == 403
 
-    def test_publish_invalid_id(
-        self, workspace_id, mock_jwt, _mock_admin, mock_skills_table
-    ):
+    def test_publish_invalid_id(self, workspace_id, mock_jwt, _mock_admin, mock_skills_table):
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/has space/publish"))
         assert resp["statusCode"] == 400
 
-    def test_publish_conditional_failure(
-        self, workspace_id, mock_jwt, _mock_admin, mock_skills_table
-    ):
+    def test_publish_conditional_failure(self, workspace_id, mock_jwt, _mock_admin, mock_skills_table):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id),
@@ -795,39 +786,29 @@ class TestPublishSkill:
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/{skill_id}/publish"))
         assert resp["statusCode"] == 403
 
-    def test_editor_cannot_publish(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_editor_cannot_publish(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/skill_x/publish"))
         assert resp["statusCode"] == 403
 
 
 class TestUnpublishSkill:
-    def test_unpublish_success(
-        self, workspace_id, mock_jwt, _mock_admin, mock_skills_table
-    ):
+    def test_unpublish_success(self, workspace_id, mock_jwt, _mock_admin, mock_skills_table):
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/skill_x/unpublish"))
         assert resp["statusCode"] == 200
         data = json.loads(resp["body"])
         assert data["visibility"] == "private"
 
-    def test_unpublish_invalid_id(
-        self, workspace_id, mock_jwt, _mock_admin, mock_skills_table
-    ):
+    def test_unpublish_invalid_id(self, workspace_id, mock_jwt, _mock_admin, mock_skills_table):
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/has space/unpublish"))
         assert resp["statusCode"] == 400
 
-    def test_unpublish_conditional_failure(
-        self, workspace_id, mock_jwt, _mock_admin, mock_skills_table
-    ):
+    def test_unpublish_conditional_failure(self, workspace_id, mock_jwt, _mock_admin, mock_skills_table):
         ccf = mock_skills_table.meta.client.exceptions.ConditionalCheckFailedException
         mock_skills_table.update_item.side_effect = ccf("nope")
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/skill_x/unpublish"))
         assert resp["statusCode"] == 403
 
-    def test_editor_cannot_unpublish(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_editor_cannot_unpublish(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/skill_x/unpublish"))
         assert resp["statusCode"] == 403
 
@@ -838,9 +819,7 @@ class TestUnpublishSkill:
 
 
 class TestApproveSkill:
-    def test_approve_success(
-        self, workspace_id, mock_jwt, _mock_admin, mock_skills_table
-    ):
+    def test_approve_success(self, workspace_id, mock_jwt, _mock_admin, mock_skills_table):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id, skill_type="script", approved=False),
@@ -850,9 +829,7 @@ class TestApproveSkill:
         data = json.loads(resp["body"])
         assert data["approved"] is True
 
-    def test_approve_already_approved(
-        self, workspace_id, mock_jwt, _mock_admin, mock_skills_table
-    ):
+    def test_approve_already_approved(self, workspace_id, mock_jwt, _mock_admin, mock_skills_table):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id, skill_type="script", approved=True),
@@ -861,9 +838,7 @@ class TestApproveSkill:
         assert resp["statusCode"] == 400
         assert "already" in json.loads(resp["body"])["error"].lower()
 
-    def test_approve_non_script(
-        self, workspace_id, mock_jwt, _mock_admin, mock_skills_table
-    ):
+    def test_approve_non_script(self, workspace_id, mock_jwt, _mock_admin, mock_skills_table):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id, skill_type="prompt"),
@@ -871,33 +846,25 @@ class TestApproveSkill:
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/{skill_id}/approve"))
         assert resp["statusCode"] == 400
 
-    def test_approve_other_workspace(
-        self, workspace_id, mock_jwt, _mock_admin, mock_skills_table
-    ):
+    def test_approve_other_workspace(self, workspace_id, mock_jwt, _mock_admin, mock_skills_table):
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill("other-ws", "skill_x", skill_type="script", approved=False),
         }
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/skill_x/approve"))
         assert resp["statusCode"] == 403
 
-    def test_approve_deleted(
-        self, workspace_id, mock_jwt, _mock_admin, mock_skills_table
-    ):
+    def test_approve_deleted(self, workspace_id, mock_jwt, _mock_admin, mock_skills_table):
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, "skill_x", skill_type="script", deleted=True),
         }
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/skill_x/approve"))
         assert resp["statusCode"] == 403
 
-    def test_approve_invalid_id(
-        self, workspace_id, mock_jwt, _mock_admin, mock_skills_table
-    ):
+    def test_approve_invalid_id(self, workspace_id, mock_jwt, _mock_admin, mock_skills_table):
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/has space/approve"))
         assert resp["statusCode"] == 400
 
-    def test_editor_cannot_approve(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_editor_cannot_approve(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/skill_x/approve"))
         assert resp["statusCode"] == 403
 
@@ -908,9 +875,7 @@ class TestApproveSkill:
 
 
 class TestSkillFiles:
-    def test_list_files(
-        self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table, mock_skills_s3
-    ):
+    def test_list_files(self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table, mock_skills_s3):
         skill_id = "skill_x"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id),
@@ -966,9 +931,7 @@ class TestSkillFiles:
         resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/skills/{skill_id}/files"))
         assert resp["statusCode"] == 500
 
-    def test_read_file(
-        self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table, mock_skills_s3
-    ):
+    def test_read_file(self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table, mock_skills_s3):
         skill_id = "skill_x"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id),
@@ -976,8 +939,13 @@ class TestSkillFiles:
         body = MagicMock()
         body.read.return_value = b"file contents"
         mock_skills_s3.get_object.return_value = {"Body": body}
-        resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
-                              query_params={"path": "scripts/run.sh"}))
+        resp = _invoke(
+            _apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
+                query_params={"path": "scripts/run.sh"},
+            )
+        )
         assert resp["statusCode"] == 200
         data = json.loads(resp["body"])
         assert data["content"] == "file contents"
@@ -991,8 +959,13 @@ class TestSkillFiles:
             "Item": _existing_skill(workspace_id, skill_id),
         }
         mock_skills_s3.get_object.side_effect = mock_skills_s3.exceptions.NoSuchKey("nope")
-        resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
-                              query_params={"path": "missing.txt"}))
+        resp = _invoke(
+            _apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
+                query_params={"path": "missing.txt"},
+            )
+        )
         assert resp["statusCode"] == 404
 
     def test_read_file_s3_other_error(
@@ -1003,8 +976,13 @@ class TestSkillFiles:
             "Item": _existing_skill(workspace_id, skill_id),
         }
         mock_skills_s3.get_object.side_effect = Exception("network")
-        resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
-                              query_params={"path": "x.txt"}))
+        resp = _invoke(
+            _apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
+                query_params={"path": "x.txt"},
+            )
+        )
         assert resp["statusCode"] == 500
 
     def test_read_file_invalid_path(
@@ -1015,8 +993,13 @@ class TestSkillFiles:
             "Item": _existing_skill(workspace_id, skill_id),
         }
         # ".." segment is rejected by validate_path
-        resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
-                              query_params={"path": "../etc/passwd"}))
+        resp = _invoke(
+            _apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
+                query_params={"path": "../etc/passwd"},
+            )
+        )
         assert resp["statusCode"] == 400
 
     def test_get_file_other_workspace(
@@ -1028,16 +1011,20 @@ class TestSkillFiles:
         resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/skills/skill_x/files"))
         assert resp["statusCode"] == 403
 
-    def test_put_file_success(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table, mock_skills_s3
-    ):
+    def test_put_file_success(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table, mock_skills_s3):
         skill_id = "skill_x"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id),
         }
         body = {"content": "new contents"}
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
-                              body=body, query_params={"path": "scripts/run.sh"}))
+        resp = _invoke(
+            _apigw(
+                "PUT",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
+                body=body,
+                query_params={"path": "scripts/run.sh"},
+            )
+        )
         assert resp["statusCode"] == 200
         mock_skills_s3.put_object.assert_called_once()
         call_kwargs = mock_skills_s3.put_object.call_args.kwargs
@@ -1051,49 +1038,63 @@ class TestSkillFiles:
             "Item": _existing_skill(workspace_id, skill_id),
         }
         content = "---\nname: SyncedName\ndescription: Synced desc\n---\n\nbody"
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
-                              body={"content": content},
-                              query_params={"path": "SKILL.md"}))
+        resp = _invoke(
+            _apigw(
+                "PUT",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
+                body={"content": content},
+                query_params={"path": "SKILL.md"},
+            )
+        )
         assert resp["statusCode"] == 200
         # update_item should have been called with the synced name + description
         update_call = mock_skills_table.update_item.call_args.kwargs
         assert ":fname" in update_call["ExpressionAttributeValues"]
         assert update_call["ExpressionAttributeValues"][":fname"] == "SyncedName"
 
-    def test_put_file_invalid_path(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_put_file_invalid_path(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         skill_id = "skill_x"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id),
         }
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
-                              body={"content": "x"},
-                              query_params={"path": "../bad"}))
+        resp = _invoke(
+            _apigw(
+                "PUT",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
+                body={"content": "x"},
+                query_params={"path": "../bad"},
+            )
+        )
         assert resp["statusCode"] == 400
 
-    def test_put_file_to_deleted_skill(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_put_file_to_deleted_skill(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         skill_id = "skill_x"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id, deleted=True),
         }
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
-                              body={"content": "x"},
-                              query_params={"path": "f.txt"}))
+        resp = _invoke(
+            _apigw(
+                "PUT",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
+                body={"content": "x"},
+                query_params={"path": "f.txt"},
+            )
+        )
         assert resp["statusCode"] == 400
         assert "deleted" in json.loads(resp["body"])["error"].lower()
 
-    def test_put_file_other_workspace(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_put_file_other_workspace(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill("other-ws", "skill_x"),
         }
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/skill_x/files",
-                              body={"content": "x"},
-                              query_params={"path": "f.txt"}))
+        resp = _invoke(
+            _apigw(
+                "PUT",
+                f"/api/workspaces/{workspace_id}/skills/skill_x/files",
+                body={"content": "x"},
+                query_params={"path": "f.txt"},
+            )
+        )
         assert resp["statusCode"] == 403
 
     def test_put_file_s3_failure(
@@ -1104,17 +1105,25 @@ class TestSkillFiles:
             "Item": _existing_skill(workspace_id, skill_id),
         }
         mock_skills_s3.put_object.side_effect = Exception("boom")
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
-                              body={"content": "x"},
-                              query_params={"path": "f.txt"}))
+        resp = _invoke(
+            _apigw(
+                "PUT",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
+                body={"content": "x"},
+                query_params={"path": "f.txt"},
+            )
+        )
         assert resp["statusCode"] == 500
 
-    def test_put_file_viewer_forbidden(
-        self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table
-    ):
-        resp = _invoke(_apigw("PUT", f"/api/workspaces/{workspace_id}/skills/skill_x/files",
-                              body={"content": "x"},
-                              query_params={"path": "f.txt"}))
+    def test_put_file_viewer_forbidden(self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table):
+        resp = _invoke(
+            _apigw(
+                "PUT",
+                f"/api/workspaces/{workspace_id}/skills/skill_x/files",
+                body={"content": "x"},
+                query_params={"path": "f.txt"},
+            )
+        )
         assert resp["statusCode"] == 403
 
     def test_delete_file_success(
@@ -1124,47 +1133,64 @@ class TestSkillFiles:
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id),
         }
-        resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
-                              query_params={"path": "scripts/run.sh"}))
+        resp = _invoke(
+            _apigw(
+                "DELETE",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
+                query_params={"path": "scripts/run.sh"},
+            )
+        )
         assert resp["statusCode"] == 200
         mock_skills_s3.delete_object.assert_called_once()
 
-    def test_delete_file_skill_md_blocked(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_delete_file_skill_md_blocked(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         skill_id = "skill_x"
-        resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
-                              query_params={"path": "SKILL.md"}))
+        resp = _invoke(
+            _apigw(
+                "DELETE",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
+                query_params={"path": "SKILL.md"},
+            )
+        )
         assert resp["statusCode"] == 400
         assert "SKILL.md" in json.loads(resp["body"])["error"]
 
-    def test_delete_file_invalid_path(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_delete_file_invalid_path(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         skill_id = "skill_x"
-        resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
-                              query_params={"path": "../bad"}))
+        resp = _invoke(
+            _apigw(
+                "DELETE",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
+                query_params={"path": "../bad"},
+            )
+        )
         assert resp["statusCode"] == 400
 
-    def test_delete_file_other_workspace(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_delete_file_other_workspace(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill("other-ws", "skill_x"),
         }
-        resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/skills/skill_x/files",
-                              query_params={"path": "f.txt"}))
+        resp = _invoke(
+            _apigw(
+                "DELETE",
+                f"/api/workspaces/{workspace_id}/skills/skill_x/files",
+                query_params={"path": "f.txt"},
+            )
+        )
         assert resp["statusCode"] == 403
 
-    def test_delete_file_deleted_skill(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_delete_file_deleted_skill(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         skill_id = "skill_x"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id, deleted=True),
         }
-        resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
-                              query_params={"path": "f.txt"}))
+        resp = _invoke(
+            _apigw(
+                "DELETE",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
+                query_params={"path": "f.txt"},
+            )
+        )
         assert resp["statusCode"] == 403
 
     def test_delete_file_s3_failure(
@@ -1175,8 +1201,13 @@ class TestSkillFiles:
             "Item": _existing_skill(workspace_id, skill_id),
         }
         mock_skills_s3.delete_object.side_effect = Exception("boom")
-        resp = _invoke(_apigw("DELETE", f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
-                              query_params={"path": "f.txt"}))
+        resp = _invoke(
+            _apigw(
+                "DELETE",
+                f"/api/workspaces/{workspace_id}/skills/{skill_id}/files",
+                query_params={"path": "f.txt"},
+            )
+        )
         assert resp["statusCode"] == 500
 
 
@@ -1186,9 +1217,7 @@ class TestSkillFiles:
 
 
 class TestRestoreSkill:
-    def test_restore_success(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_restore_success(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id, deleted=True),
@@ -1198,9 +1227,7 @@ class TestRestoreSkill:
         data = json.loads(resp["body"])
         assert data["restored"] is True
 
-    def test_restore_not_deleted(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_restore_not_deleted(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id, deleted=False),
@@ -1208,24 +1235,18 @@ class TestRestoreSkill:
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/{skill_id}/restore"))
         assert resp["statusCode"] == 400
 
-    def test_restore_other_workspace(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_restore_other_workspace(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill("other-ws", "skill_abc", deleted=True),
         }
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/skill_abc/restore"))
         assert resp["statusCode"] == 403
 
-    def test_restore_invalid_id(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_restore_invalid_id(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/has space/restore"))
         assert resp["statusCode"] == 400
 
-    def test_restore_conditional_failure(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_restore_conditional_failure(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id, deleted=True),
@@ -1235,9 +1256,7 @@ class TestRestoreSkill:
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/{skill_id}/restore"))
         assert resp["statusCode"] == 403
 
-    def test_restore_other_exception(
-        self, workspace_id, mock_jwt, _mock_editor, mock_skills_table
-    ):
+    def test_restore_other_exception(self, workspace_id, mock_jwt, _mock_editor, mock_skills_table):
         skill_id = "skill_abc"
         mock_skills_table.get_item.return_value = {
             "Item": _existing_skill(workspace_id, skill_id, deleted=True),
@@ -1246,9 +1265,7 @@ class TestRestoreSkill:
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/{skill_id}/restore"))
         assert resp["statusCode"] == 500
 
-    def test_restore_viewer_forbidden(
-        self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table
-    ):
+    def test_restore_viewer_forbidden(self, workspace_id, mock_jwt, _mock_viewer, mock_skills_table):
         resp = _invoke(_apigw("POST", f"/api/workspaces/{workspace_id}/skills/skill_x/restore"))
         assert resp["statusCode"] == 403
 
@@ -1261,6 +1278,7 @@ class TestRestoreSkill:
 class TestSkillResponseHelper:
     def test_skill_response_defaults(self):
         from crud.skills import _skill_response
+
         r = _skill_response({"skillId": "x", "workspace_id": "w"})
         assert r["skillId"] == "x"
         assert r["type"] == "prompt"
@@ -1271,5 +1289,6 @@ class TestSkillResponseHelper:
 
     def test_skill_response_strips_unknown(self):
         from crud.skills import _skill_response
+
         r = _skill_response({"skillId": "x", "secret_field": "leak"})
         assert "secret_field" not in r

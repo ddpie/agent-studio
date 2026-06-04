@@ -5,6 +5,7 @@ be a list of exactly 1. Since `service.name` in spans is the agent
 runtime id, one eval config maps to one agent. We key configs by
 `{ws-prefix}_{agent-id}` and keep them in sync with agent CRUD.
 """
+
 import hashlib
 import re
 import time
@@ -148,16 +149,19 @@ def create_eval_config_for_agent(workspace_id: str, agent_id: str) -> str:
             evaluationExecutionRoleArn=EVALUATOR_ROLE_ARN,
             enableOnCreate=True,
         )
-        logger.info("created online eval config",
-                    extra={"config_name": name, "agent_id": agent_id, "workspace_id": workspace_id})
+        logger.info(
+            "created online eval config",
+            extra={"config_name": name, "agent_id": agent_id, "workspace_id": workspace_id},
+        )
     except ClientError as e:
         code = e.response.get("Error", {}).get("Code")
         if code == "ConflictException":
             logger.info("eval config already exists", extra={"config_name": name})
             _ensure_runtime_log_group(name, agent_id)
         else:
-            logger.exception("create_online_evaluation_config failed",
-                             extra={"config_name": name, "error_code": code})
+            logger.exception(
+                "create_online_evaluation_config failed", extra={"config_name": name, "error_code": code}
+            )
             raise
     return name
 
@@ -179,8 +183,7 @@ def _ensure_runtime_log_group(config_name: str, agent_id: str) -> None:
         full = _get_control().get_online_evaluation_config(onlineEvaluationConfigId=cfg_id)
     except ClientError:
         return
-    lgs = (((full.get("dataSourceConfig") or {}).get("cloudWatchLogs") or {})
-           .get("logGroupNames") or [])
+    lgs = ((full.get("dataSourceConfig") or {}).get("cloudWatchLogs") or {}).get("logGroupNames") or []
     runtime_lg = _runtime_log_group_for_agent(agent_id)
     if runtime_lg in lgs:
         return
@@ -194,12 +197,15 @@ def _ensure_runtime_log_group(config_name: str, agent_id: str) -> None:
                 },
             },
         )
-        logger.info("backfilled runtime log group on eval config",
-                    extra={"config_name": config_name, "agent_id": agent_id})
+        logger.info(
+            "backfilled runtime log group on eval config",
+            extra={"config_name": config_name, "agent_id": agent_id},
+        )
     except ClientError as e:
-        logger.warning("backfill runtime log group failed",
-                       extra={"config_name": config_name,
-                              "error_code": e.response.get("Error", {}).get("Code")})
+        logger.warning(
+            "backfill runtime log group failed",
+            extra={"config_name": config_name, "error_code": e.response.get("Error", {}).get("Code")},
+        )
 
 
 def delete_eval_config_for_agent(workspace_id: str, agent_id: str) -> None:
@@ -215,12 +221,12 @@ def delete_eval_config_for_agent(workspace_id: str, agent_id: str) -> None:
         _get_control().delete_online_evaluation_config(
             onlineEvaluationConfigId=cfg_id,
         )
-        logger.info("deleted online eval config",
-                    extra={"config_name": name, "agent_id": agent_id})
+        logger.info("deleted online eval config", extra={"config_name": name, "agent_id": agent_id})
     except ClientError as e:
-        logger.warning("delete_online_evaluation_config failed",
-                       extra={"config_name": name,
-                              "error_code": e.response.get("Error", {}).get("Code")})
+        logger.warning(
+            "delete_online_evaluation_config failed",
+            extra={"config_name": name, "error_code": e.response.get("Error", {}).get("Code")},
+        )
 
 
 def sync_eval_config_for_agent(workspace_id: str, agent_id: str) -> None:
@@ -243,9 +249,10 @@ def create_eval_config_for_workspace(workspace_id: str) -> str:
             ExpressionAttributeNames={"#s": "status"},
         )
     except ClientError as e:
-        logger.warning("workspace agent scan failed",
-                       extra={"workspace_id": workspace_id,
-                              "error_code": e.response.get("Error", {}).get("Code")})
+        logger.warning(
+            "workspace agent scan failed",
+            extra={"workspace_id": workspace_id, "error_code": e.response.get("Error", {}).get("Code")},
+        )
         return ""
     names: list[str] = []
     for item in resp.get("Items", []):
@@ -281,8 +288,9 @@ def _run_logs_query(
         if status == "Complete":
             return resp.get("results", [])
         if status in ("Failed", "Cancelled"):
-            logger.warning("logs insights query non-complete",
-                           extra={"queryId": query_id, "query_status": status})
+            logger.warning(
+                "logs insights query non-complete", extra={"queryId": query_id, "query_status": status}
+            )
             return []
         time.sleep(0.5)
     try:
@@ -327,8 +335,10 @@ def get_agent_evaluations(wsId: str, agentId: str):
     try:
         _get_logs().describe_log_groups(logGroupNamePrefix=target_lg, limit=1)
     except ClientError as e:
-        logger.warning("describe_log_groups failed for eval output",
-                       extra={"error_code": e.response.get("Error", {}).get("Code")})
+        logger.warning(
+            "describe_log_groups failed for eval output",
+            extra={"error_code": e.response.get("Error", {}).get("Code")},
+        )
 
     now_ms = int(time.time() * 1000)
     start_ms = now_ms - 7 * 24 * 3600 * 1000
@@ -359,9 +369,10 @@ fields @timestamp,
             end_epoch=now_ms // 1000,
         )
     except ClientError as e:
-        logger.exception("evaluations query failed",
-                         extra={"agentId": agentId,
-                                "error_code": e.response.get("Error", {}).get("Code")})
+        logger.exception(
+            "evaluations query failed",
+            extra={"agentId": agentId, "error_code": e.response.get("Error", {}).get("Code")},
+        )
         return internal_error()
 
     out = []
@@ -380,14 +391,16 @@ fields @timestamp,
             sc = None
         if ev is None or sc is None:
             continue
-        out.append({
-            "timestamp": ts,
-            "evaluator": ev,
-            "score": sc,
-            "sessionId": _field(row, "sessionId"),
-            "traceId": _field(row, "traceId"),
-            "reason": _field(row, "reason"),
-        })
+        out.append(
+            {
+                "timestamp": ts,
+                "evaluator": ev,
+                "score": sc,
+                "sessionId": _field(row, "sessionId"),
+                "traceId": _field(row, "traceId"),
+                "reason": _field(row, "reason"),
+            }
+        )
 
     resp_body: dict = {"evaluations": out}
     if errors and not out:
@@ -395,8 +408,8 @@ fields @timestamp,
             "allFailed": True,
             "errorCount": errors,
             "hint": "AgentSpanMappingException — evaluators could not parse "
-                    "user_query from spans. This is a known Strands SDK / "
-                    "AgentCore compatibility issue being tracked upstream.",
+            "user_query from spans. This is a known Strands SDK / "
+            "AgentCore compatibility issue being tracked upstream.",
         }
     return success(resp_body)
 
@@ -410,7 +423,9 @@ fields @timestamp,
 @router.post("/api/workspaces/<wsId>/agents/<agentId>/evaluations/enable")
 def enable_agent_evaluations(wsId: str, agentId: str):
     _user_id, ws_id, _member, err = auth_check(
-        router.current_event, min_role="editor", ws_id=wsId,
+        router.current_event,
+        min_role="editor",
+        ws_id=wsId,
     )
     if err:
         return err
@@ -434,8 +449,11 @@ def enable_agent_evaluations(wsId: str, agentId: str):
     except ClientError as e:
         logger.exception(
             "enable_agent_evaluations failed",
-            extra={"workspaceId": wsId, "agentId": agentId,
-                   "error_code": e.response.get("Error", {}).get("Code")},
+            extra={
+                "workspaceId": wsId,
+                "agentId": agentId,
+                "error_code": e.response.get("Error", {}).get("Code"),
+            },
         )
         return internal_error()
 
@@ -443,7 +461,9 @@ def enable_agent_evaluations(wsId: str, agentId: str):
 @router.get("/api/workspaces/<wsId>/agents/<agentId>/evaluations/status")
 def get_agent_evaluations_status(wsId: str, agentId: str):
     _user_id, ws_id, _member, err = auth_check(
-        router.current_event, min_role="viewer", ws_id=wsId,
+        router.current_event,
+        min_role="viewer",
+        ws_id=wsId,
     )
     if err:
         return err
@@ -460,27 +480,34 @@ def get_agent_evaluations_status(wsId: str, agentId: str):
     except ClientError as e:
         logger.exception(
             "get_agent_evaluations_status failed",
-            extra={"workspaceId": wsId, "agentId": agentId,
-                   "error_code": e.response.get("Error", {}).get("Code")},
+            extra={
+                "workspaceId": wsId,
+                "agentId": agentId,
+                "error_code": e.response.get("Error", {}).get("Code"),
+            },
         )
         return internal_error()
 
     if match is None:
-        return success({
-            "exists": False,
-            "configName": name,
-            "status": None,
-            "executionStatus": None,
-        })
+        return success(
+            {
+                "exists": False,
+                "configName": name,
+                "status": None,
+                "executionStatus": None,
+            }
+        )
 
     status_val = match.get("status") or match.get("configStatus")
     exec_status = match.get("executionStatus") or match.get("evaluationExecutionStatus")
-    return success({
-        "exists": True,
-        "configName": name,
-        "status": status_val,
-        "executionStatus": exec_status,
-    })
+    return success(
+        {
+            "exists": True,
+            "configName": name,
+            "status": status_val,
+            "executionStatus": exec_status,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -492,7 +519,9 @@ def get_agent_evaluations_status(wsId: str, agentId: str):
 @router.post("/api/workspaces/<wsId>/evaluations/enable")
 def enable_workspace_evaluations(wsId: str):
     _user_id, ws_id, _member, err = auth_check(
-        router.current_event, min_role="editor", ws_id=wsId,
+        router.current_event,
+        min_role="editor",
+        ws_id=wsId,
     )
     if err:
         return err
@@ -511,7 +540,9 @@ def get_workspace_evaluations_status(wsId: str):
     workspace has a config.
     """
     _user_id, ws_id, _member, err = auth_check(
-        router.current_event, min_role="viewer", ws_id=wsId,
+        router.current_event,
+        min_role="viewer",
+        ws_id=wsId,
     )
     if err:
         return err
@@ -537,9 +568,11 @@ def get_workspace_evaluations_status(wsId: str):
             any_exists = True
             if (match.get("status") or "") == "ACTIVE":
                 any_active = True
-    return success({
-        "exists": any_exists,
-        "configName": "",
-        "status": "ACTIVE" if any_active else ("CREATING" if any_exists else None),
-        "executionStatus": "ENABLED" if any_active else None,
-    })
+    return success(
+        {
+            "exists": any_exists,
+            "configName": "",
+            "status": "ACTIVE" if any_active else ("CREATING" if any_exists else None),
+            "executionStatus": "ENABLED" if any_active else None,
+        }
+    )

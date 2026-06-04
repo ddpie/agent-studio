@@ -24,6 +24,7 @@ produce CI sessions.
 
 Gated on AGENT_STUDIO_E2E=1 so `pytest tests/` stays fast + offline.
 """
+
 from __future__ import annotations
 
 import json
@@ -55,12 +56,9 @@ def agentcore():
 
 def _find_recent(items: list[dict], age_s: int = 600) -> bool:
     import datetime as _dt
+
     now = _dt.datetime.now(_dt.timezone.utc)
-    return any(
-        (now - it["createdAt"]).total_seconds() < age_s
-        for it in items
-        if it.get("createdAt")
-    )
+    return any((now - it["createdAt"]).total_seconds() < age_s for it in items if it.get("createdAt"))
 
 
 def test_shared_code_interpreter_roundtrips_python(agentcore):
@@ -118,8 +116,9 @@ def test_shared_browser_opens_cdp_stream(agentcore):
     assert session_id
     streams = sess.get("streams", {})
     assert "automationStream" in streams, f"no automationStream in streams={streams!r}"
-    assert streams["automationStream"]["streamEndpoint"].startswith("wss://"), \
+    assert streams["automationStream"]["streamEndpoint"].startswith("wss://"), (
         f"CDP endpoint should be wss://, got {streams['automationStream']['streamEndpoint']!r}"
+    )
 
     try:
         listed = agentcore.list_browser_sessions(browserIdentifier=BR_ID).get("items", [])
@@ -170,6 +169,7 @@ def test_subagent_fetch_webpage_routes_through_browser(agentcore):
     """
     import io
     import zipfile
+
     s3 = boto3.client("s3", region_name=REGION)
     bucket = os.environ["AGENT_STUDIO_S3_BUCKET"]
     zip_bytes = s3.get_object(Bucket=bucket, Key=f"agents/{SUBAGENT_ID}/deployment.zip")["Body"].read()
@@ -191,15 +191,11 @@ def test_subagent_fetch_webpage_routes_through_browser(agentcore):
         "Use fetch_webpage to fetch https://example.com and report the first 100 chars of the page text verbatim.",
     )
     assert "Example Domain" in reply, (
-        f"agent did not successfully fetch example.com; "
-        f"tail of reply: {reply[-400:]}"
+        f"agent did not successfully fetch example.com; tail of reply: {reply[-400:]}"
     )
 
     listed = agentcore.list_browser_sessions(browserIdentifier=BR_ID).get("items", [])
-    new_recent = [
-        s for s in listed
-        if s["sessionId"] not in recent_before and _find_recent([s], age_s=120)
-    ]
+    new_recent = [s for s in listed if s["sessionId"] not in recent_before and _find_recent([s], age_s=120)]
     assert new_recent, (
         f"expected a new Browser session in the last 2 min on {BR_ID}, "
         f"got {len(listed)} total sessions; baseline_recent={len(recent_before)}"
@@ -219,10 +215,7 @@ def test_subagent_run_command_routes_through_code_interpreter(agentcore):
     assert "42" in reply, f"expected 42 in reply tail: {reply[-400:]}"
 
     listed = agentcore.list_code_interpreter_sessions(codeInterpreterIdentifier=CI_ID).get("items", [])
-    new_recent = [
-        s for s in listed
-        if s["sessionId"] not in recent_before and _find_recent([s], age_s=120)
-    ]
+    new_recent = [s for s in listed if s["sessionId"] not in recent_before and _find_recent([s], age_s=120)]
     assert new_recent, (
         f"expected a new Code Interpreter session in the last 2 min on {CI_ID}, "
         f"got {len(listed)} total sessions; baseline_recent={len(recent_before)}"
@@ -243,8 +236,7 @@ def test_shared_resources_are_cfn_managed():
         f"(outputs: {ci_keys}) — likely out-of-band provisioning; re-run cdk deploy"
     )
     assert BR_ID in br_keys, (
-        f"BROWSER_ID {BR_ID} is not a CFN output of AgentStudioStack "
-        f"(outputs: {br_keys})"
+        f"BROWSER_ID {BR_ID} is not a CFN output of AgentStudioStack (outputs: {br_keys})"
     )
 
 
@@ -278,8 +270,11 @@ def test_eval_execution_role_is_assumable_by_agentcore():
     # IAM returns either a dict or URL-encoded JSON depending on client
     if isinstance(doc, str):
         import urllib.parse
+
         doc = json.loads(urllib.parse.unquote(doc))
-    principals = [s["Principal"]["Service"] for s in doc["Statement"] if s.get("Principal", {}).get("Service")]
+    principals = [
+        s["Principal"]["Service"] for s in doc["Statement"] if s.get("Principal", {}).get("Service")
+    ]
     assert "bedrock-agentcore.amazonaws.com" in principals, f"unexpected trust policy: {doc}"
 
 
@@ -296,7 +291,9 @@ def test_meta_agent_runtime_reachable():
     """Meta-Agent must be live (the synthetic AgentCard endpoint reads
     its metadata via GetAgentRuntime). Plan's Task 7 A2A migration was
     downgraded to a fallback — we keep it on HTTP to preserve chat."""
-    meta_id = os.environ.get("AGENT_STUDIO_META_AGENT_ID") or os.environ.get("AGENT_STUDIO_EXISTING_META_AGENT_ID")
+    meta_id = os.environ.get("AGENT_STUDIO_META_AGENT_ID") or os.environ.get(
+        "AGENT_STUDIO_EXISTING_META_AGENT_ID"
+    )
     assert meta_id, "AGENT_STUDIO_META_AGENT_ID env required"
     c = boto3.client("bedrock-agentcore-control", region_name=REGION)
     info = c.get_agent_runtime(agentRuntimeId=meta_id)
@@ -319,6 +316,7 @@ def test_meta_agent_runtime_reachable():
 def test_sprint3_a2a_public_card_reachable():
     """Every healthy agent should serve a spec-compliant public card."""
     import urllib.request
+
     cf = os.environ.get("AGENT_STUDIO_CLOUDFRONT_DOMAIN", "")
     assert cf, "AGENT_STUDIO_CLOUDFRONT_DOMAIN required"
     url = f"https://{cf}/a2a/agents/{SUBAGENT_ID}/.well-known/agent-card.json"
@@ -334,6 +332,7 @@ def test_sprint3_a2a_public_card_reachable():
 def test_sprint3_meta_agent_card_reachable():
     """Meta-Agent serves its card at /a2a/meta-agent/.well-known/..."""
     import urllib.request
+
     cf = os.environ["AGENT_STUDIO_CLOUDFRONT_DOMAIN"]
     with urllib.request.urlopen(
         f"https://{cf}/a2a/meta-agent/.well-known/agent-card.json", timeout=10
@@ -347,6 +346,7 @@ def test_sprint3_extended_card_requires_bearer():
     """Without a Bearer token, extended card returns 401 + WWW-Authenticate."""
     import urllib.error
     import urllib.request
+
     cf = os.environ["AGENT_STUDIO_CLOUDFRONT_DOMAIN"]
     url = f"https://{cf}/a2a/agents/{SUBAGENT_ID}/authenticatedExtendedCard"
     try:

@@ -1,4 +1,5 @@
 """Tests for get_agent_detail — slim metadata view of a deployed agent."""
+
 import json
 import sys
 import types
@@ -34,6 +35,7 @@ sys.modules["config"] = _mock_config
 @pytest.fixture(autouse=True)
 def _scope(monkeypatch):
     from tools import _scope
+
     monkeypatch.setattr(_scope, "_caller_id", "user-1", raising=False)
     monkeypatch.setattr(_scope, "_workspace_id", "ws-1", raising=False)
 
@@ -55,14 +57,17 @@ def _grant_membership(monkeypatch, role="viewer", agent_workspace="ws-1"):
 
 # ── Helper unit tests ─────────────────────────────────────────────────────
 
+
 def test_iso_utc_handles_none_and_empty():
     from tools.get_agent_detail import _iso_utc
+
     assert _iso_utc(None) == ""
     assert _iso_utc("") == ""
 
 
 def test_iso_utc_naive_datetime_treated_as_utc():
     from tools.get_agent_detail import _iso_utc
+
     dt = datetime(2024, 1, 1, 12, 0, 0)  # naive
     out = _iso_utc(dt)
     assert "+00:00" in out
@@ -70,22 +75,25 @@ def test_iso_utc_naive_datetime_treated_as_utc():
 
 def test_iso_utc_passes_through_strings():
     from tools.get_agent_detail import _iso_utc
+
     assert _iso_utc("2024-01-01T00:00:00Z") == "2024-01-01T00:00:00Z"
 
 
 def test_compact_tool_definitions_empty_returns_list():
     from tools.get_agent_detail import _compact_tool_definitions
+
     assert _compact_tool_definitions("") == []
     assert _compact_tool_definitions("  \n") == []
 
 
 def test_compact_tool_definitions_finds_tool_decorated():
     from tools.get_agent_detail import _compact_tool_definitions
+
     src = (
         "from strands import tool\n"
         "@tool\n"
         "def greet(name: str = '') -> str:\n"
-        "    \"\"\"Say hello.\n\n    More stuff.\"\"\"\n"
+        '    """Say hello.\n\n    More stuff."""\n'
         "    return name\n"
     )
     out = _compact_tool_definitions(src)
@@ -99,6 +107,7 @@ def test_compact_tool_definitions_finds_tool_decorated():
 
 def test_compact_tool_definitions_skips_non_tool():
     from tools.get_agent_detail import _compact_tool_definitions
+
     src = "def helper(x):\n    return x\n"
     out = _compact_tool_definitions(src)
     assert out == []
@@ -106,6 +115,7 @@ def test_compact_tool_definitions_skips_non_tool():
 
 def test_compact_tool_definitions_handles_syntax_error():
     from tools.get_agent_detail import _compact_tool_definitions
+
     src = "def broken(:\n    pass"
     out = _compact_tool_definitions(src)
     assert isinstance(out, dict)
@@ -118,13 +128,8 @@ def test_compact_tool_definitions_handles_syntax_error():
 
 def test_compact_tool_definitions_picks_attribute_decorator():
     from tools.get_agent_detail import _compact_tool_definitions
-    src = (
-        "import strands\n"
-        "@strands.tool\n"
-        "def via_attr() -> str:\n"
-        "    \"\"\"Doc.\"\"\"\n"
-        "    return ''\n"
-    )
+
+    src = 'import strands\n@strands.tool\ndef via_attr() -> str:\n    """Doc."""\n    return \'\'\n'
     out = _compact_tool_definitions(src)
     assert len(out) == 1
     assert out[0]["name"] == "via_attr"
@@ -132,12 +137,8 @@ def test_compact_tool_definitions_picks_attribute_decorator():
 
 def test_compact_tool_definitions_async_function():
     from tools.get_agent_detail import _compact_tool_definitions
-    src = (
-        "@tool\n"
-        "async def alfa() -> str:\n"
-        "    \"\"\"async tool.\"\"\"\n"
-        "    return ''\n"
-    )
+
+    src = '@tool\nasync def alfa() -> str:\n    """async tool."""\n    return \'\'\n'
     out = _compact_tool_definitions(src)
     assert len(out) == 1
     assert out[0]["name"] == "alfa"
@@ -145,6 +146,7 @@ def test_compact_tool_definitions_async_function():
 
 def test_slim_skill_collapses_files_to_count():
     from tools.get_agent_detail import _slim_skill
+
     skill = {
         "name": "ppt",
         "files": ["scripts/a.py", "scripts/b.py", "scripts/c.py", "scripts/d.py"],
@@ -157,17 +159,19 @@ def test_slim_skill_collapses_files_to_count():
 
 def test_slim_skill_passes_through_non_dict():
     from tools.get_agent_detail import _slim_skill
+
     assert _slim_skill("just-a-string") == "just-a-string"
 
 
 def test_slim_metadata_collapses_skills_and_tools():
     from tools.get_agent_detail import _slim_metadata
+
     metadata = {
         "system_prompt": "Be helpful.",
         "skills": [
             {"name": "s1", "files": ["a", "b"]},
         ],
-        "tool_definitions": "@tool\ndef foo() -> str:\n    \"\"\"Foo.\"\"\"\n    return ''\n",
+        "tool_definitions": '@tool\ndef foo() -> str:\n    """Foo."""\n    return \'\'\n',
         "extra": "passthrough",
     }
     out = _slim_metadata(metadata)
@@ -180,10 +184,12 @@ def test_slim_metadata_collapses_skills_and_tools():
 
 def test_slim_metadata_passes_through_non_dict():
     from tools.get_agent_detail import _slim_metadata
+
     assert _slim_metadata("not-a-dict") == "not-a-dict"
 
 
 # ── @tool integration tests ───────────────────────────────────────────────
+
 
 def test_get_agent_detail_denies_when_agent_not_in_workspace(monkeypatch):
     """ensure_agent_in_workspace blocks cross-workspace agents."""
@@ -230,7 +236,7 @@ def test_get_agent_detail_happy_path(monkeypatch):
 
     metadata = {
         "system_prompt": "Be helpful.",
-        "tool_definitions": "@tool\ndef foo() -> str:\n    \"\"\"Foo.\"\"\"\n    return ''\n",
+        "tool_definitions": '@tool\ndef foo() -> str:\n    """Foo."""\n    return \'\'\n',
         "skills": [{"name": "s1", "files": ["a.py", "b.py"]}],
     }
 
@@ -263,8 +269,10 @@ def test_get_agent_detail_happy_path(monkeypatch):
             return fake_s3
         return MagicMock()
 
-    with patch("boto3.client", side_effect=client_factory), \
-         patch("boto3.resource", return_value=fake_resource):
+    with (
+        patch("boto3.client", side_effect=client_factory),
+        patch("boto3.resource", return_value=fake_resource),
+    ):
         out = json.loads(mod.get_agent_detail("a-1"))
 
     assert out["agent_id"] == "a-1"
@@ -286,8 +294,11 @@ def test_get_agent_detail_handles_missing_metadata(monkeypatch):
 
     fake_control = MagicMock()
     fake_control.get_agent_runtime.return_value = {
-        "agentRuntimeName": "x", "status": "READY",
-        "agentRuntimeArn": "arn:x", "createdAt": "", "lastUpdatedAt": "",
+        "agentRuntimeName": "x",
+        "status": "READY",
+        "agentRuntimeArn": "arn:x",
+        "createdAt": "",
+        "lastUpdatedAt": "",
     }
 
     fake_s3 = MagicMock()
@@ -305,8 +316,10 @@ def test_get_agent_detail_handles_missing_metadata(monkeypatch):
             return fake_s3
         return MagicMock()
 
-    with patch("boto3.client", side_effect=client_factory), \
-         patch("boto3.resource", return_value=fake_resource):
+    with (
+        patch("boto3.client", side_effect=client_factory),
+        patch("boto3.resource", return_value=fake_resource),
+    ):
         out = json.loads(mod.get_agent_detail("a-1"))
 
     assert out["metadata"] is None
@@ -321,8 +334,11 @@ def test_get_agent_detail_swallows_ddb_errors(monkeypatch):
 
     fake_control = MagicMock()
     fake_control.get_agent_runtime.return_value = {
-        "agentRuntimeName": "x", "status": "READY",
-        "agentRuntimeArn": "arn:x", "createdAt": "", "lastUpdatedAt": "",
+        "agentRuntimeName": "x",
+        "status": "READY",
+        "agentRuntimeArn": "arn:x",
+        "createdAt": "",
+        "lastUpdatedAt": "",
     }
 
     fake_s3 = MagicMock()
@@ -338,8 +354,10 @@ def test_get_agent_detail_swallows_ddb_errors(monkeypatch):
     fake_resource = MagicMock()
     fake_resource.Table.side_effect = Exception("ddb explode")
 
-    with patch("boto3.client", side_effect=client_factory), \
-         patch("boto3.resource", return_value=fake_resource):
+    with (
+        patch("boto3.client", side_effect=client_factory),
+        patch("boto3.resource", return_value=fake_resource),
+    ):
         out = json.loads(mod.get_agent_detail("a-1"))
 
     # No display_name etc. but tool didn't crash

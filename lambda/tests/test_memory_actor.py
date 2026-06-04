@@ -1,4 +1,5 @@
 """Tests for the memory actor-id helper."""
+
 import pytest
 
 from shared.memory_actor import build_actor_id, parse_actor_id

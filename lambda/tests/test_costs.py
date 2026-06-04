@@ -1,4 +1,5 @@
 """Tests for crud.costs — Logs Insights cost aggregation."""
+
 import json
 from unittest.mock import MagicMock, patch
 
@@ -56,6 +57,7 @@ def _mock_no_membership():
 def reset_caches():
     """Reset module-level cost caches between tests so they don't bleed."""
     import crud.costs as costs_mod
+
     costs_mod._GLOBAL_AGENTS_CACHE["data"] = None
     costs_mod._GLOBAL_AGENTS_CACHE["expires"] = 0
     costs_mod._GLOBAL_WORKSPACES_CACHE["data"] = None
@@ -82,6 +84,7 @@ def _apigw(method, path, query_params=None, headers=None):
 
 def _invoke(event):
     from crud.handler import lambda_handler
+
     return lambda_handler(event, MagicMock())
 
 
@@ -97,18 +100,21 @@ def _row(**fields):
 class TestUnitPrice:
     def test_known_models(self):
         from crud.costs import _unit_price
+
         assert _unit_price("anthropic.claude-sonnet-4-6-20260301-v1:0") == (3.00, 15.00)
         assert _unit_price("us.anthropic.claude-haiku-4-5") == (0.80, 4.00)
         assert _unit_price("anthropic.claude-opus-4-7") == (15.00, 75.00)
 
     def test_nova_short_forms(self):
         from crud.costs import _unit_price
+
         assert _unit_price("amazon.nova-pro-v1:0") == (0.80, 3.20)
         assert _unit_price("nova.lite") == (0.06, 0.24)
         assert _unit_price("nova-micro-test") == (0.035, 0.14)
 
     def test_unknown_returns_zero(self):
         from crud.costs import _unit_price
+
         assert _unit_price("gpt-4-turbo") == (0.0, 0.0)
         assert _unit_price("") == (0.0, 0.0)
         assert _unit_price(None) == (0.0, 0.0)
@@ -117,48 +123,56 @@ class TestUnitPrice:
 class TestComputeCost:
     def test_basic_cost(self):
         from crud.costs import _compute_cost
+
         # 1M input * $3 + 1M output * $15 = $3 + $15 = $18 for sonnet
         cost = _compute_cost(1_000_000, 1_000_000, "claude-sonnet-4-6")
         assert cost == pytest.approx(18.0)
 
     def test_cache_read_cheap(self):
         from crud.costs import _compute_cost
+
         # 1M cache_read_input on sonnet: $3 * 0.10 = $0.30
         cost = _compute_cost(0, 0, "claude-sonnet-4-6", cache_read_tokens=1_000_000)
         assert cost == pytest.approx(0.30)
 
     def test_cache_write_expensive(self):
         from crud.costs import _compute_cost
+
         # 1M cache_write on sonnet: $3 * 1.25 = $3.75
         cost = _compute_cost(0, 0, "claude-sonnet-4-6", cache_write_tokens=1_000_000)
         assert cost == pytest.approx(3.75)
 
     def test_unknown_model_zero(self):
         from crud.costs import _compute_cost
+
         assert _compute_cost(1_000_000, 1_000_000, "unknown-model") == 0.0
 
 
 class TestParseRange:
     def test_default_7d(self):
         from crud.costs import _parse_range
+
         s, e, b = _parse_range({})
         assert e - s == 7 * 86400
         assert b == "1d"
 
     def test_24h(self):
         from crud.costs import _parse_range
+
         s, e, b = _parse_range({"range": "24h"})
         assert e - s == 24 * 3600
         assert b == "1h"
 
     def test_30d(self):
         from crud.costs import _parse_range
+
         s, e, b = _parse_range({"range": "30d"})
         assert e - s == 30 * 86400
         assert b == "1d"
 
     def test_none(self):
         from crud.costs import _parse_range
+
         s, e, b = _parse_range(None)
         assert e - s == 7 * 86400
 
@@ -166,16 +180,19 @@ class TestParseRange:
 class TestFieldHelpers:
     def test_field_present(self):
         from crud.costs import _field
+
         row = [{"field": "a", "value": "1"}, {"field": "b", "value": "2"}]
         assert _field(row, "a") == "1"
         assert _field(row, "b") == "2"
 
     def test_field_missing(self):
         from crud.costs import _field
+
         assert _field([], "a") is None
 
     def test_to_int_to_float(self):
         from crud.costs import _to_float, _to_int
+
         assert _to_int("42") == 42
         assert _to_int("3.14") == 3
         assert _to_int(None) == 0
@@ -196,6 +213,7 @@ class TestRunQuery:
             "results": [_row(a="1")],
         }
         from crud.costs import _run_query
+
         rows = _run_query("query", 0, 100)
         assert len(rows) == 1
 
@@ -205,6 +223,7 @@ class TestRunQuery:
             "results": [],
         }
         from crud.costs import _run_query
+
         rows = _run_query("query", 0, 100)
         assert rows == []
 
@@ -214,6 +233,7 @@ class TestRunQuery:
             "StartQuery",
         )
         from crud.costs import _run_query
+
         rows = _run_query("query", 0, 100)
         assert rows == []
 
@@ -237,9 +257,7 @@ class TestWorkspaceCosts:
         assert ws["totalCostUsd"] == 0.0
         assert ws["timeseries"] == []
 
-    def test_with_agents_and_spans(
-        self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_logs
-    ):
+    def test_with_agents_and_spans(self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_logs):
         mock_agents_table.query.return_value = {
             "Items": [
                 {
@@ -282,9 +300,7 @@ class TestWorkspaceCosts:
                 cacheWriteTokens="0",
             )
         ]
-        ts_call_results = [
-            _row(agentRuntimeId="agt-1", bucket="2026-04-19 00:00", calls="42")
-        ]
+        ts_call_results = [_row(agentRuntimeId="agt-1", bucket="2026-04-19 00:00", calls="42")]
         mock_logs.get_query_results.side_effect = [
             {"status": "Complete", "results": token_results},
             {"status": "Complete", "results": call_results},
@@ -292,11 +308,13 @@ class TestWorkspaceCosts:
             {"status": "Complete", "results": ts_call_results},
         ]
 
-        resp = _invoke(_apigw(
-            "GET",
-            f"/api/workspaces/{workspace_id}/costs",
-            query_params={"range": "7d"},
-        ))
+        resp = _invoke(
+            _apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/costs",
+                query_params={"range": "7d"},
+            )
+        )
         assert resp["statusCode"] == 200
         data = json.loads(resp["body"])
         ws = data["workspace"]
@@ -323,11 +341,19 @@ class TestWorkspaceCosts:
         }
         # Logs returns spans for agt-OTHER (not in workspace) — should be skipped
         mock_logs.get_query_results.side_effect = [
-            {"status": "Complete", "results": [
-                _row(agentRuntimeId="agt-OTHER", model="claude-sonnet-4-6",
-                     inputTokens="1000000", outputTokens="0",
-                     cacheReadTokens="0", cacheWriteTokens="0"),
-            ]},
+            {
+                "status": "Complete",
+                "results": [
+                    _row(
+                        agentRuntimeId="agt-OTHER",
+                        model="claude-sonnet-4-6",
+                        inputTokens="1000000",
+                        outputTokens="0",
+                        cacheReadTokens="0",
+                        cacheWriteTokens="0",
+                    ),
+                ],
+            },
             {"status": "Complete", "results": []},
             {"status": "Complete", "results": []},
             {"status": "Complete", "results": []},
@@ -356,9 +382,7 @@ class TestWorkspaceCosts:
         # Scan was called because GSI missing
         mock_agents_table.scan.assert_called()
 
-    def test_no_membership_forbidden(
-        self, workspace_id, mock_jwt, _mock_no_membership, mock_agents_table
-    ):
+    def test_no_membership_forbidden(self, workspace_id, mock_jwt, _mock_no_membership, mock_agents_table):
         resp = _invoke(_apigw("GET", f"/api/workspaces/{workspace_id}/costs"))
         assert resp["statusCode"] == 403
 
@@ -369,9 +393,7 @@ class TestWorkspaceCosts:
 
 
 class TestAgentCosts:
-    def test_success(
-        self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_logs
-    ):
+    def test_success(self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_logs):
         mock_agents_table.get_item.return_value = {
             "Item": {
                 "agentId": "agt-1",
@@ -383,17 +405,26 @@ class TestAgentCosts:
         }
         # 2 queries: tokens, calls
         mock_logs.get_query_results.side_effect = [
-            {"status": "Complete", "results": [
-                _row(model="claude-sonnet-4-6", inputTokens="1000000",
-                     outputTokens="500000", cacheReadTokens="0",
-                     cacheWriteTokens="0"),
-            ]},
+            {
+                "status": "Complete",
+                "results": [
+                    _row(
+                        model="claude-sonnet-4-6",
+                        inputTokens="1000000",
+                        outputTokens="500000",
+                        cacheReadTokens="0",
+                        cacheWriteTokens="0",
+                    ),
+                ],
+            },
             {"status": "Complete", "results": [_row(calls="10")]},
         ]
-        resp = _invoke(_apigw(
-            "GET",
-            f"/api/workspaces/{workspace_id}/agents/agt-1/costs",
-        ))
+        resp = _invoke(
+            _apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/agents/agt-1/costs",
+            )
+        )
         assert resp["statusCode"] == 200
         data = json.loads(resp["body"])
         assert data["agentId"] == "agt-1"
@@ -416,10 +447,12 @@ class TestAgentCosts:
         }
         # Both queries return empty
         mock_logs.get_query_results.return_value = {"status": "Complete", "results": []}
-        resp = _invoke(_apigw(
-            "GET",
-            f"/api/workspaces/{workspace_id}/agents/agt-1/costs",
-        ))
+        resp = _invoke(
+            _apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/agents/agt-1/costs",
+            )
+        )
         data = json.loads(resp["body"])
         # Falls back to default_model_id when no spans
         assert data["modelId"] == "claude-haiku-4-5"
@@ -429,33 +462,33 @@ class TestAgentCosts:
     def test_other_workspace_forbidden(
         self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_logs
     ):
-        mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt-1", "workspace_id": "other-ws"}
-        }
-        resp = _invoke(_apigw(
-            "GET",
-            f"/api/workspaces/{workspace_id}/agents/agt-1/costs",
-        ))
+        mock_agents_table.get_item.return_value = {"Item": {"agentId": "agt-1", "workspace_id": "other-ws"}}
+        resp = _invoke(
+            _apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/agents/agt-1/costs",
+            )
+        )
         assert resp["statusCode"] == 403
 
-    def test_agent_not_found(
-        self, workspace_id, mock_jwt, _mock_editor, mock_agents_table
-    ):
+    def test_agent_not_found(self, workspace_id, mock_jwt, _mock_editor, mock_agents_table):
         mock_agents_table.get_item.return_value = {"Item": None}
-        resp = _invoke(_apigw(
-            "GET",
-            f"/api/workspaces/{workspace_id}/agents/agt-x/costs",
-        ))
+        resp = _invoke(
+            _apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/agents/agt-x/costs",
+            )
+        )
         assert resp["statusCode"] == 403
 
-    def test_invalid_agent_id(
-        self, workspace_id, mock_jwt, _mock_editor, mock_agents_table
-    ):
+    def test_invalid_agent_id(self, workspace_id, mock_jwt, _mock_editor, mock_agents_table):
         # agent id with invalid chars should be rejected
-        resp = _invoke(_apigw(
-            "GET",
-            f"/api/workspaces/{workspace_id}/agents/has spaces!/costs",
-        ))
+        resp = _invoke(
+            _apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/agents/has spaces!/costs",
+            )
+        )
         # Invalid path → may be 400 or 404 depending on router
         assert resp["statusCode"] in (400, 404)
 
@@ -492,19 +525,26 @@ class TestAdminCosts:
             "ws-1": {"workspaceId": "ws-1", "name": "WS One"},
             "ws-2": {"workspaceId": "ws-2", "name": "WS Two"},
         }
-        with patch("crud.costs.check_platform_admin", return_value=("u1", True, None)), \
-             patch("crud.costs._all_agents_by_runtime_id", return_value=agents_data), \
-             patch("crud.costs._all_workspaces_by_id", return_value=ws_data):
-
+        with (
+            patch("crud.costs.check_platform_admin", return_value=("u1", True, None)),
+            patch("crud.costs._all_agents_by_runtime_id", return_value=agents_data),
+            patch("crud.costs._all_workspaces_by_id", return_value=ws_data),
+        ):
             mock_logs.get_query_results.side_effect = [
-                {"status": "Complete", "results": [
-                    _row(agentRuntimeId="agt-1", model="claude-sonnet-4-6",
-                         inputTokens="1000000", outputTokens="0",
-                         cacheReadTokens="0", cacheWriteTokens="0"),
-                ]},
-                {"status": "Complete", "results": [
-                    _row(agentRuntimeId="agt-1", calls="5")
-                ]},
+                {
+                    "status": "Complete",
+                    "results": [
+                        _row(
+                            agentRuntimeId="agt-1",
+                            model="claude-sonnet-4-6",
+                            inputTokens="1000000",
+                            outputTokens="0",
+                            cacheReadTokens="0",
+                            cacheWriteTokens="0",
+                        ),
+                    ],
+                },
+                {"status": "Complete", "results": [_row(agentRuntimeId="agt-1", calls="5")]},
             ]
             resp = _invoke(_apigw("GET", "/api/admin/costs"))
 
@@ -532,19 +572,26 @@ class TestAdminCosts:
             },
         }
         ws_data = {}  # no workspaces
-        with patch("crud.costs.check_platform_admin", return_value=("u1", True, None)), \
-             patch("crud.costs._all_agents_by_runtime_id", return_value=agents_data), \
-             patch("crud.costs._all_workspaces_by_id", return_value=ws_data):
-
+        with (
+            patch("crud.costs.check_platform_admin", return_value=("u1", True, None)),
+            patch("crud.costs._all_agents_by_runtime_id", return_value=agents_data),
+            patch("crud.costs._all_workspaces_by_id", return_value=ws_data),
+        ):
             mock_logs.get_query_results.side_effect = [
-                {"status": "Complete", "results": [
-                    _row(agentRuntimeId="agt-orphan", model="claude-sonnet-4-6",
-                         inputTokens="1000000", outputTokens="0",
-                         cacheReadTokens="0", cacheWriteTokens="0"),
-                ]},
-                {"status": "Complete", "results": [
-                    _row(agentRuntimeId="agt-orphan", calls="1")
-                ]},
+                {
+                    "status": "Complete",
+                    "results": [
+                        _row(
+                            agentRuntimeId="agt-orphan",
+                            model="claude-sonnet-4-6",
+                            inputTokens="1000000",
+                            outputTokens="0",
+                            cacheReadTokens="0",
+                            cacheWriteTokens="0",
+                        ),
+                    ],
+                },
+                {"status": "Complete", "results": [_row(agentRuntimeId="agt-orphan", calls="1")]},
             ]
             resp = _invoke(_apigw("GET", "/api/admin/costs"))
         data = json.loads(resp["body"])
@@ -554,16 +601,25 @@ class TestAdminCosts:
 
     def test_admin_skips_unknown_agent_ids(self, mock_jwt, mock_logs):
         """Spans for agentRuntimeIds we don't have a DDB row for are skipped."""
-        with patch("crud.costs.check_platform_admin", return_value=("u1", True, None)), \
-             patch("crud.costs._all_agents_by_runtime_id", return_value={}), \
-             patch("crud.costs._all_workspaces_by_id", return_value={}):
-
+        with (
+            patch("crud.costs.check_platform_admin", return_value=("u1", True, None)),
+            patch("crud.costs._all_agents_by_runtime_id", return_value={}),
+            patch("crud.costs._all_workspaces_by_id", return_value={}),
+        ):
             mock_logs.get_query_results.side_effect = [
-                {"status": "Complete", "results": [
-                    _row(agentRuntimeId="ghost", model="claude-sonnet-4-6",
-                         inputTokens="999", outputTokens="0",
-                         cacheReadTokens="0", cacheWriteTokens="0"),
-                ]},
+                {
+                    "status": "Complete",
+                    "results": [
+                        _row(
+                            agentRuntimeId="ghost",
+                            model="claude-sonnet-4-6",
+                            inputTokens="999",
+                            outputTokens="0",
+                            cacheReadTokens="0",
+                            cacheWriteTokens="0",
+                        ),
+                    ],
+                },
                 {"status": "Complete", "results": []},
             ]
             resp = _invoke(_apigw("GET", "/api/admin/costs"))
@@ -580,12 +636,14 @@ class TestAdminCosts:
 class TestAgentScanners:
     def test_all_agents_by_runtime_id_paginates(self, mock_agents_table):
         from crud.costs import _all_agents_by_runtime_id
+
         # Two pages
         mock_agents_table.scan.side_effect = [
-            {"Items": [{"agentId": "a1", "name": "A1", "model_id": "m"}],
-             "LastEvaluatedKey": {"agentId": "a1"}},
-            {"Items": [{"agentId": "a2", "name": "A2", "model_id": "m"}],
-             "LastEvaluatedKey": None},
+            {
+                "Items": [{"agentId": "a1", "name": "A1", "model_id": "m"}],
+                "LastEvaluatedKey": {"agentId": "a1"},
+            },
+            {"Items": [{"agentId": "a2", "name": "A2", "model_id": "m"}], "LastEvaluatedKey": None},
         ]
         result = _all_agents_by_runtime_id()
         assert "a1" in result
@@ -593,6 +651,7 @@ class TestAgentScanners:
 
     def test_all_agents_skips_no_id(self, mock_agents_table):
         from crud.costs import _all_agents_by_runtime_id
+
         mock_agents_table.scan.return_value = {
             "Items": [{"name": "no-id"}, {"agentId": "a1", "name": "A1"}],
             "LastEvaluatedKey": None,
@@ -603,9 +662,8 @@ class TestAgentScanners:
 
     def test_all_agents_clienterror_swallowed(self, mock_agents_table):
         from crud.costs import _all_agents_by_runtime_id
-        mock_agents_table.scan.side_effect = ClientError(
-            {"Error": {"Code": "X", "Message": "boom"}}, "Scan"
-        )
+
+        mock_agents_table.scan.side_effect = ClientError({"Error": {"Code": "X", "Message": "boom"}}, "Scan")
         # Returns whatever was accumulated (empty dict), no raise.
         result = _all_agents_by_runtime_id()
         assert result == {}
@@ -613,15 +671,18 @@ class TestAgentScanners:
     def test_all_agents_cache_hit(self, mock_agents_table):
         """Subsequent call within TTL returns cached value without scanning."""
         import crud.costs as cm
+
         cm._GLOBAL_AGENTS_CACHE["data"] = {"a": {"agentId": "a"}}
         cm._GLOBAL_AGENTS_CACHE["expires"] = float("inf")
         from crud.costs import _all_agents_by_runtime_id
+
         result = _all_agents_by_runtime_id()
         assert "a" in result
         mock_agents_table.scan.assert_not_called()
 
     def test_all_workspaces_paginates(self):
         from crud.costs import _all_workspaces_by_id
+
         fake_table = MagicMock()
         fake_table.scan.side_effect = [
             {
@@ -642,9 +703,11 @@ class TestAgentScanners:
 
     def test_all_workspaces_cache_hit(self):
         import crud.costs as cm
+
         cm._GLOBAL_WORKSPACES_CACHE["data"] = {"ws-x": {"workspaceId": "ws-x"}}
         cm._GLOBAL_WORKSPACES_CACHE["expires"] = float("inf")
         from crud.costs import _all_workspaces_by_id
+
         with patch("crud.costs.boto3.resource") as mk:
             r = _all_workspaces_by_id()
             mk.assert_not_called()
@@ -652,6 +715,7 @@ class TestAgentScanners:
 
     def test_all_workspaces_skips_items_without_id(self):
         from crud.costs import _all_workspaces_by_id
+
         fake_table = MagicMock()
         fake_table.scan.return_value = {
             "Items": [{"name": "no-id"}, {"workspaceId": "ws-1", "name": "W"}],
@@ -666,10 +730,9 @@ class TestAgentScanners:
 
     def test_all_workspaces_clienterror_swallowed(self):
         from crud.costs import _all_workspaces_by_id
+
         fake_table = MagicMock()
-        fake_table.scan.side_effect = ClientError(
-            {"Error": {"Code": "X", "Message": "boom"}}, "Scan"
-        )
+        fake_table.scan.side_effect = ClientError({"Error": {"Code": "X", "Message": "boom"}}, "Scan")
         fake_resource = MagicMock()
         fake_resource.Table.return_value = fake_table
         with patch("crud.costs.boto3.resource", return_value=fake_resource):
@@ -685,6 +748,7 @@ class TestAgentScanners:
 class TestLazyInit:
     def test_get_logs_caches(self):
         import crud.costs as c
+
         c._logs = None
         with patch("crud.costs.boto3.client") as mk:
             mk.return_value = MagicMock()
@@ -696,6 +760,7 @@ class TestLazyInit:
 
     def test_get_agents_table_caches(self):
         import crud.costs as c
+
         c._agents_table = None
         with patch("crud.costs.boto3.resource") as mk:
             tbl = MagicMock()
@@ -715,6 +780,7 @@ class TestAgentIdsForWorkspace:
     def test_non_validation_clienterror_raises(self, mock_agents_table):
         """A non-ValidationException ClientError must propagate."""
         from crud.costs import _agent_ids_for_workspace
+
         mock_agents_table.query.side_effect = ClientError(
             {"Error": {"Code": "ResourceNotFoundException", "Message": "x"}}, "Query"
         )
@@ -733,6 +799,7 @@ class TestRunQueryTimeout:
         while loop never iterates, stop_query is called, and the function
         returns the (empty) last_results."""
         from crud.costs import _run_query
+
         mock_logs.get_query_results.return_value = {"status": "Running", "results": []}
         rows = _run_query("query", 0, 100, timeout_s=-1)
         assert rows == []
@@ -740,10 +807,9 @@ class TestRunQueryTimeout:
 
     def test_timeout_stop_query_clienterror_swallowed(self, mock_logs):
         from crud.costs import _run_query
+
         mock_logs.get_query_results.return_value = {"status": "Running", "results": []}
-        mock_logs.stop_query.side_effect = ClientError(
-            {"Error": {"Code": "X", "Message": "x"}}, "StopQuery"
-        )
+        mock_logs.stop_query.side_effect = ClientError({"Error": {"Code": "X", "Message": "x"}}, "StopQuery")
         rows = _run_query("query", 0, 100, timeout_s=-1)
         assert rows == []
 
@@ -841,9 +907,7 @@ class TestWorkspaceCostsTimeseriesErrors:
         token_results = []  # empty
         call_results = [_row(agentRuntimeId="agt-1", calls="42")]
         ts_results = []
-        ts_call_results = [
-            _row(agentRuntimeId="agt-1", bucket="2026-04-19 00:00", calls="42")
-        ]
+        ts_call_results = [_row(agentRuntimeId="agt-1", bucket="2026-04-19 00:00", calls="42")]
         mock_logs.get_query_results.side_effect = [
             {"status": "Complete", "results": token_results},
             {"status": "Complete", "results": call_results},
@@ -866,12 +930,24 @@ class TestWorkspaceCostsTimeseriesErrors:
             "LastEvaluatedKey": None,
         }
         ts_results = [
-            _row(agentRuntimeId="ghost", model="x", bucket="b1",
-                 inputTokens="1", outputTokens="0",
-                 cacheReadTokens="0", cacheWriteTokens="0"),
-            _row(agentRuntimeId="agt-1", model="m", bucket="",  # empty bucket, skipped
-                 inputTokens="1", outputTokens="0",
-                 cacheReadTokens="0", cacheWriteTokens="0"),
+            _row(
+                agentRuntimeId="ghost",
+                model="x",
+                bucket="b1",
+                inputTokens="1",
+                outputTokens="0",
+                cacheReadTokens="0",
+                cacheWriteTokens="0",
+            ),
+            _row(
+                agentRuntimeId="agt-1",
+                model="m",
+                bucket="",  # empty bucket, skipped
+                inputTokens="1",
+                outputTokens="0",
+                cacheReadTokens="0",
+                cacheWriteTokens="0",
+            ),
         ]
         ts_call_results = [
             _row(agentRuntimeId="ghost", bucket="b1", calls="10"),
@@ -898,9 +974,11 @@ class TestWorkspaceCostsTimeseriesErrors:
 class TestAdminCostsExtra:
     def test_admin_token_query_clienterror_swallowed(self, mock_jwt, mock_logs):
         """Even when the token query raises, the endpoint still answers 200."""
-        with patch("crud.costs.check_platform_admin", return_value=("u", True, None)), \
-             patch("crud.costs._all_agents_by_runtime_id", return_value={}), \
-             patch("crud.costs._all_workspaces_by_id", return_value={}):
+        with (
+            patch("crud.costs.check_platform_admin", return_value=("u", True, None)),
+            patch("crud.costs._all_agents_by_runtime_id", return_value={}),
+            patch("crud.costs._all_workspaces_by_id", return_value={}),
+        ):
             call_count = {"n": 0}
 
             def fake_run(*args, **kwargs):
@@ -912,11 +990,20 @@ class TestAdminCostsExtra:
         assert resp["statusCode"] == 200
 
     def test_admin_calls_query_clienterror_swallowed(self, mock_jwt, mock_logs):
-        agents = {"agt-1": {"agentId": "agt-1", "name": "n", "model_id": "m",
-                              "workspace_id": "w", "status": "active"}}
-        with patch("crud.costs.check_platform_admin", return_value=("u", True, None)), \
-             patch("crud.costs._all_agents_by_runtime_id", return_value=agents), \
-             patch("crud.costs._all_workspaces_by_id", return_value={}):
+        agents = {
+            "agt-1": {
+                "agentId": "agt-1",
+                "name": "n",
+                "model_id": "m",
+                "workspace_id": "w",
+                "status": "active",
+            }
+        }
+        with (
+            patch("crud.costs.check_platform_admin", return_value=("u", True, None)),
+            patch("crud.costs._all_agents_by_runtime_id", return_value=agents),
+            patch("crud.costs._all_workspaces_by_id", return_value={}),
+        ):
             call_count = {"n": 0}
 
             def fake_run(*args, **kwargs):
@@ -933,23 +1020,42 @@ class TestAdminCostsExtra:
         """When check_platform_admin returns an error response (e.g. JWT
         invalid), the route returns it directly."""
         from shared.response import forbidden
+
         with patch("crud.costs.check_platform_admin", return_value=(None, False, forbidden())):
             resp = _invoke(_apigw("GET", "/api/admin/costs"))
         assert resp["statusCode"] == 403
 
     def test_admin_skips_token_rows_without_runtime_id(self, mock_jwt, mock_logs):
         """Empty agentRuntimeId in token rows is skipped."""
-        agents = {"agt-1": {"agentId": "agt-1", "name": "n", "model_id": "m",
-                              "workspace_id": "w", "status": "active"}}
+        agents = {
+            "agt-1": {
+                "agentId": "agt-1",
+                "name": "n",
+                "model_id": "m",
+                "workspace_id": "w",
+                "status": "active",
+            }
+        }
         ws_data = {"w": {"workspaceId": "w", "name": "W"}}
-        with patch("crud.costs.check_platform_admin", return_value=("u", True, None)), \
-             patch("crud.costs._all_agents_by_runtime_id", return_value=agents), \
-             patch("crud.costs._all_workspaces_by_id", return_value=ws_data):
+        with (
+            patch("crud.costs.check_platform_admin", return_value=("u", True, None)),
+            patch("crud.costs._all_agents_by_runtime_id", return_value=agents),
+            patch("crud.costs._all_workspaces_by_id", return_value=ws_data),
+        ):
             mock_logs.get_query_results.side_effect = [
-                {"status": "Complete", "results": [
-                    _row(agentRuntimeId="", model="m", inputTokens="1", outputTokens="0",
-                         cacheReadTokens="0", cacheWriteTokens="0"),
-                ]},
+                {
+                    "status": "Complete",
+                    "results": [
+                        _row(
+                            agentRuntimeId="",
+                            model="m",
+                            inputTokens="1",
+                            outputTokens="0",
+                            cacheReadTokens="0",
+                            cacheWriteTokens="0",
+                        ),
+                    ],
+                },
                 {"status": "Complete", "results": []},
             ]
             resp = _invoke(_apigw("GET", "/api/admin/costs"))
@@ -969,8 +1075,7 @@ class TestAgentCostsExtra:
     ):
         """ClientError on _single_agent_query → rows=[]; still 200."""
         mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt-1", "workspace_id": workspace_id,
-                     "model_id": "claude-sonnet-4-6"}
+            "Item": {"agentId": "agt-1", "workspace_id": workspace_id, "model_id": "claude-sonnet-4-6"}
         }
         call_count = {"n": 0}
 
@@ -981,18 +1086,19 @@ class TestAgentCostsExtra:
             return []
 
         with patch("crud.costs._run_query", side_effect=fake_run):
-            resp = _invoke(_apigw(
-                "GET",
-                f"/api/workspaces/{workspace_id}/agents/agt-1/costs",
-            ))
+            resp = _invoke(
+                _apigw(
+                    "GET",
+                    f"/api/workspaces/{workspace_id}/agents/agt-1/costs",
+                )
+            )
         assert resp["statusCode"] == 200
 
     def test_calls_query_clienterror_swallowed(
         self, workspace_id, mock_jwt, _mock_editor, mock_agents_table, mock_logs
     ):
         mock_agents_table.get_item.return_value = {
-            "Item": {"agentId": "agt-1", "workspace_id": workspace_id,
-                     "model_id": "claude-sonnet-4-6"}
+            "Item": {"agentId": "agt-1", "workspace_id": workspace_id, "model_id": "claude-sonnet-4-6"}
         }
         call_count = {"n": 0}
 
@@ -1003,17 +1109,19 @@ class TestAgentCostsExtra:
             return []
 
         with patch("crud.costs._run_query", side_effect=fake_run):
-            resp = _invoke(_apigw(
-                "GET",
-                f"/api/workspaces/{workspace_id}/agents/agt-1/costs",
-            ))
+            resp = _invoke(
+                _apigw(
+                    "GET",
+                    f"/api/workspaces/{workspace_id}/agents/agt-1/costs",
+                )
+            )
         assert resp["statusCode"] == 200
 
-    def test_no_membership(
-        self, workspace_id, mock_jwt, _mock_no_membership, mock_agents_table
-    ):
-        resp = _invoke(_apigw(
-            "GET",
-            f"/api/workspaces/{workspace_id}/agents/agt-1/costs",
-        ))
+    def test_no_membership(self, workspace_id, mock_jwt, _mock_no_membership, mock_agents_table):
+        resp = _invoke(
+            _apigw(
+                "GET",
+                f"/api/workspaces/{workspace_id}/agents/agt-1/costs",
+            )
+        )
         assert resp["statusCode"] == 403

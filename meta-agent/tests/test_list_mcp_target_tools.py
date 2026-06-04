@@ -6,6 +6,7 @@ applicationsignals.json (longer, alphabetically first in some S3 listings),
 leading the agent prompt to reference tools like audit_services that don't
 exist on the mcp_cloudwatch runtime the agent actually binds to.
 """
+
 from __future__ import annotations
 
 import json
@@ -30,10 +31,12 @@ def _make_s3_mock(manifest_names: list[str], tools_by_manifest: dict):
     s3.list_objects_v2.return_value = {
         "Contents": [{"Key": f"mcp/target-tools/{n}.json"} for n in manifest_names]
     }
+
     def _get(Bucket, Key):
         name = Key.split("/")[-1].removesuffix(".json")
         body = json.dumps(tools_by_manifest.get(name, [])).encode()
         return {"Body": MagicMock(read=lambda: body)}
+
     s3.get_object.side_effect = _get
     return s3
 
@@ -43,6 +46,7 @@ def test_cloudwatch_prefers_short_match_not_applicationsignals(monkeypatch):
     import boto3
 
     from tools import list_mcp_target_tools as mod
+
     s3 = _make_s3_mock(
         ["mcp-cloudwatch-applicationsignals", "mcp-cloudwatch", "mcp-cloudtrail"],
         {
@@ -63,6 +67,7 @@ def test_applicationsignals_exact_name_still_works(monkeypatch):
     import boto3
 
     from tools import list_mcp_target_tools as mod
+
     s3 = _make_s3_mock(
         ["mcp-cloudwatch-applicationsignals", "mcp-cloudwatch"],
         {
@@ -81,6 +86,7 @@ def test_hyphen_normalization_still_works(monkeypatch):
     import boto3
 
     from tools import list_mcp_target_tools as mod
+
     s3 = _make_s3_mock(
         ["mcp-cloudtrail"],
         {"mcp-cloudtrail": [{"name": "LookupEvents", "description": "..."}]},
@@ -95,6 +101,7 @@ def test_unknown_target_returns_empty_with_hint(monkeypatch):
     import boto3
 
     from tools import list_mcp_target_tools as mod
+
     s3 = _make_s3_mock(["mcp-iam"], {"mcp-iam": []})
     monkeypatch.setattr(boto3, "client", lambda *a, **kw: s3)
     out = json.loads(mod.list_mcp_target_tools("does-not-exist"))

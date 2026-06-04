@@ -30,4 +30,4 @@ def parse_actor_id(actor_id: str, *, expected_agent_id: str) -> str:
             f"actor_id prefix does not match expected agent: "
             f"actor={actor_id!r} expected_agent={expected_agent_id!r}"
         )
-    return actor_id[len(expected_agent_id) + 1:]
+    return actor_id[len(expected_agent_id) + 1 :]

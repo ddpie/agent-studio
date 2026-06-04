@@ -1,4 +1,5 @@
 """Unified API response helpers."""
+
 import json
 from decimal import Decimal
 

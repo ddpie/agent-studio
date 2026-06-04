@@ -32,7 +32,12 @@ def kb_create(name: str, description: str = "") -> str:
         return json.dumps({"error": "no_workspace", "message": "No workspace context."})
 
     if REGION not in ("us-east-1", "us-west-2"):
-        return json.dumps({"error": "region_unsupported", "message": f"Knowledge Bases with S3 Vectors not available in {REGION}"})
+        return json.dumps(
+            {
+                "error": "region_unsupported",
+                "message": f"Knowledge Bases with S3 Vectors not available in {REGION}",
+            }
+        )
 
     kb_id = f"kb_{uuid.uuid4().hex[:16]}"
     vector_index_name = f"kb{kb_id.replace('_', '').replace('-', '')}"
@@ -53,7 +58,9 @@ def kb_create(name: str, description: str = "") -> str:
             ExpressionAttributeValues={":ws": {"S": ws_id}, ":name": {"S": name}},
         )
         if resp.get("Items"):
-            return json.dumps({"error": "name_exists", "message": f"KB named '{name}' already exists in this workspace."})
+            return json.dumps(
+                {"error": "name_exists", "message": f"KB named '{name}' already exists in this workspace."}
+            )
     except Exception as e:
         return json.dumps({"error": "ddb_check_failed", "message": str(e)})
 
@@ -154,13 +161,18 @@ def kb_create(name: str, description: str = "") -> str:
             },
         )
     except Exception as e:
-        return json.dumps({"error": "ddb_write_failed", "message": str(e), "kb_id": kb_id, "bedrock_kb_id": bedrock_kb_id})
+        return json.dumps(
+            {"error": "ddb_write_failed", "message": str(e), "kb_id": kb_id, "bedrock_kb_id": bedrock_kb_id}
+        )
 
-    return json.dumps({
-        "kb_id": kb_id,
-        "bedrock_kb_id": bedrock_kb_id,
-        "name": name,
-        "status": "ACTIVE",
-        "s3_prefix": s3_prefix,
-        "message": f"Knowledge Base '{name}' created. Upload documents with kb_upload_document.",
-    }, ensure_ascii=False)
+    return json.dumps(
+        {
+            "kb_id": kb_id,
+            "bedrock_kb_id": bedrock_kb_id,
+            "name": name,
+            "status": "ACTIVE",
+            "s3_prefix": s3_prefix,
+            "message": f"Knowledge Base '{name}' created. Upload documents with kb_upload_document.",
+        },
+        ensure_ascii=False,
+    )

@@ -18,6 +18,7 @@ agent runtime doesn't have access to the Meta-Agent's package
 layout. Embedding keeps runtime single-file; we parse the same string
 the deploy step writes.
 """
+
 import ast
 import sys
 import types
@@ -60,6 +61,7 @@ def _extract_fn_sources() -> tuple[str, str]:
     holding steady as the template grows.
     """
     from templates.agent_template_v2 import BUILTIN_TOOLS_CODE
+
     tree = ast.parse(BUILTIN_TOOLS_CODE)
     hydrate_src = prefix_src = None
     for node in tree.body:
@@ -161,14 +163,8 @@ def test_hydrate_injects_secrets_from_arn_list():
 
 
 def test_hydrate_single_failure_is_nonfatal():
-    good = (
-        "arn:aws:secretsmanager:us-east-1:000000000000:secret:"
-        "agent-studio/ws-1/A/GOOD-abcdef"
-    )
-    bad = (
-        "arn:aws:secretsmanager:us-east-1:000000000000:secret:"
-        "agent-studio/ws-1/A/BAD-123456"
-    )
+    good = "arn:aws:secretsmanager:us-east-1:000000000000:secret:agent-studio/ws-1/A/GOOD-abcdef"
+    bad = "arn:aws:secretsmanager:us-east-1:000000000000:secret:agent-studio/ws-1/A/BAD-123456"
     env = {"AGENT_STUDIO_SECRET_ARNS": f"{good},{bad}"}
     boto3_mod = _build_fake_boto3({good: "ok", bad: "ignored"}, raise_on={bad})
     loaded, out_env, _keys, _prefix = _run_hydrate(env, boto3_mod)
@@ -183,10 +179,7 @@ def test_hydrate_does_not_overwrite_existing_env():
     # deployment env-vars), hydrate must NOT stomp it. This guarantees
     # that explicit env config wins over Secrets Manager, which matches
     # standard 12-factor layering (explicit > defaults).
-    arn = (
-        "arn:aws:secretsmanager:us-east-1:000000000000:secret:"
-        "agent-studio/ws-1/A/API_KEY-aaaaaa"
-    )
+    arn = "arn:aws:secretsmanager:us-east-1:000000000000:secret:agent-studio/ws-1/A/API_KEY-aaaaaa"
     env = {
         "AGENT_STUDIO_SECRET_ARNS": arn,
         "API_KEY": "explicit-override",
@@ -210,15 +203,14 @@ def test_hydrate_handles_malformed_arn_list():
 def test_hydrate_boto3_import_failure_is_nonfatal():
     # If boto3 somehow isn't in the deployment (shouldn't happen, but
     # defensive): hydrate must return 0 rather than crash.
-    arn = (
-        "arn:aws:secretsmanager:us-east-1:000000000000:secret:"
-        "agent-studio/ws-1/A/X-aaaaaa"
-    )
+    arn = "arn:aws:secretsmanager:us-east-1:000000000000:secret:agent-studio/ws-1/A/X-aaaaaa"
     env = {"AGENT_STUDIO_SECRET_ARNS": arn}
     # Simulate ImportError by passing a module that raises on attribute access
     broken = types.ModuleType("boto3")
+
     def _broken_client(*a, **kw):
         raise ImportError("boto3 missing")
+
     broken.client = _broken_client
     loaded, out_env, _keys, _prefix = _run_hydrate(env, broken)
     # No keys injected, no exception propagated
@@ -235,10 +227,7 @@ def test_prefix_records_only_hydrated_keys_not_all_env():
     # ATTRIBUTES into user scripts isn't sensitive, but forwarding
     # every env across the boundary would 10x the executeCode payload
     # and could trip AgentCore's size limits.
-    arn = (
-        "arn:aws:secretsmanager:us-east-1:000000000000:secret:"
-        "agent-studio/ws-1/A/TOKEN-abcdef"
-    )
+    arn = "arn:aws:secretsmanager:us-east-1:000000000000:secret:agent-studio/ws-1/A/TOKEN-abcdef"
     env = {
         "AGENT_STUDIO_SECRET_ARNS": arn,
         "PATH": "/usr/bin",
@@ -258,10 +247,7 @@ def test_prefix_uses_repr_for_quote_safety():
     # If a token has an embedded quote / backslash / newline, a naive
     # f-string would break the emitted Python. repr() handles all of
     # these. Test with a value that exercises each case.
-    arn = (
-        "arn:aws:secretsmanager:us-east-1:000000000000:secret:"
-        "agent-studio/ws-1/A/TRICKY-aaaaaa"
-    )
+    arn = "arn:aws:secretsmanager:us-east-1:000000000000:secret:agent-studio/ws-1/A/TRICKY-aaaaaa"
     env = {"AGENT_STUDIO_SECRET_ARNS": arn}
     hostile = "a'b\"c\\d\ne"
     boto3_mod = _build_fake_boto3({arn: hostile})
@@ -281,10 +267,7 @@ def test_prefix_uses_setdefault_not_assignment():
     # skill), don't stomp it. Prevents surprising behavior where a
     # user temporarily overrides a token for debugging and the next
     # skill call silently reverts it.
-    arn = (
-        "arn:aws:secretsmanager:us-east-1:000000000000:secret:"
-        "agent-studio/ws-1/A/TOKEN-zzzzzz"
-    )
+    arn = "arn:aws:secretsmanager:us-east-1:000000000000:secret:agent-studio/ws-1/A/TOKEN-zzzzzz"
     env = {"AGENT_STUDIO_SECRET_ARNS": arn}
     boto3_mod = _build_fake_boto3({arn: "from-hydrate"})
     _, _, _, prefix_fn = _run_hydrate(env, boto3_mod)
@@ -297,10 +280,7 @@ def test_prefix_skips_keys_with_empty_value():
     # If hydrate set the key but then the value was somehow cleared
     # (defensive edge case), the prefix builder skips it rather than
     # emitting setdefault("", "") which is a no-op but adds noise.
-    arn = (
-        "arn:aws:secretsmanager:us-east-1:000000000000:secret:"
-        "agent-studio/ws-1/A/FULL-aaaaaa"
-    )
+    arn = "arn:aws:secretsmanager:us-east-1:000000000000:secret:agent-studio/ws-1/A/FULL-aaaaaa"
     env = {"AGENT_STUDIO_SECRET_ARNS": arn}
     boto3_mod = _build_fake_boto3({arn: "val"})
     _, out_env, keys, prefix_fn = _run_hydrate(env, boto3_mod)
