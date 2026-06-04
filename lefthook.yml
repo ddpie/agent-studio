@@ -1,0 +1,24 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: security-patterns
+      run: ./scripts/pre-commit-security.sh
+
+    - name: check-invariants
+      run: ./scripts/check-invariants.sh
+
+    - name: eslint
+      glob: "frontend/src/**/*.{ts,tsx}"
+      run: cd frontend && npx eslint {staged_files} --max-warnings 0
+
+    - name: bash-syntax
+      glob: "scripts/*.sh"
+      run: bash -n {staged_files}
+
+pre-push:
+  jobs:
+    - name: test
+      run: ./scripts/test.sh
+
+    - name: docs-consistency
+      run: ./scripts/check-docs-agent.sh
