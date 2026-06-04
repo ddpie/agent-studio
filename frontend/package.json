@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:analyze": "tsc -b && vite build --config vite.config.analyze.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
@@ -53,6 +54,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.59.1",
     "@storybook/addon-a11y": "^10.4.2",
@@ -74,6 +76,8 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
     "jsdom": "^29.0.2",
+    "knip": "^6.15.0",
+    "rollup-plugin-visualizer": "^7.0.1",
     "storybook": "^10.4.2",
     "tailwindcss": "^4.2.2",
     "typescript": "~5.9.3",
