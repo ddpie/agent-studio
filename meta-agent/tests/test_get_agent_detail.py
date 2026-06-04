@@ -205,7 +205,7 @@ def test_get_agent_detail_handles_runtime_lookup_failure(monkeypatch):
     fake_control = MagicMock()
     fake_control.get_agent_runtime.side_effect = Exception("boom")
 
-    with patch("boto3.client") as mc, patch("boto3.resource") as mr:
+    with patch("boto3.client") as mc, patch("boto3.resource"):
         mc.return_value = fake_control
         out = json.loads(mod.get_agent_detail("a-1"))
 

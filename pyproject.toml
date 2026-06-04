@@ -72,6 +72,12 @@ ignore = [
     "T20",                     # print() for debug
 ]
 "**/conftest.py" = ["S105", "S106", "S107", "ARG"]
+"meta-agent/deploy.py" = ["SIM117"]  # nested with for zipfile is clearer
+"meta-agent/main.py" = ["S103"]      # chmod +x on downloaded binary is intentional
+"meta-agent/kiro_adapter/acp_client.py" = ["SIM115"]  # tempfile lifetime managed manually
+"meta-agent/tools/link_agent.py" = ["E741"]  # `l` used as loop var for links list
+"meta-agent/tools/validate_agent.py" = ["E721"]  # type() == type() is intentional for strict match
+"meta-agent/tools/update_agent.py" = ["SIM102"]  # nested if is clearer for this logic
 "meta-agent/templates/agent_template_v2.py" = [
     # This file is a Python source TEMPLATE for generated agent code; ruff
     # rules don't apply to template content the way they apply to runtime code.

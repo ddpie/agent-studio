@@ -79,9 +79,7 @@ def _should_skip_path(rel_path: str) -> bool:
     leaf = parts[-1]
     if leaf.endswith((".pyc", ".pyo")):
         return True
-    if leaf == ".DS_Store":
-        return True
-    return False
+    return leaf == ".DS_Store"
 
 
 def _parse_frontmatter(content: str) -> dict | None:
@@ -331,7 +329,7 @@ def import_skill(
         skill_id = str(uuid.uuid4())[:8]
         s3 = boto3.client("s3", region_name=REGION)
 
-        extra_files = _write_skill_files(s3, skill_id, files)
+        _write_skill_files(s3, skill_id, files)
 
         # If the imported package ships any .py files, treat it as a
         # script skill so it starts out unapproved — safer default for

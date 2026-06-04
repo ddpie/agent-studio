@@ -155,12 +155,12 @@ def create_harness_agent(
                 }
 
         cp = _get_control_client()
-        create_kwargs = dict(
-            harnessName=name,
-            executionRoleArn=role_arn,
-            model={"bedrockModelConfig": {"modelId": model_id}},
-            systemPrompt=[{"text": system_prompt}],
-        )
+        create_kwargs = {
+            "harnessName": name,
+            "executionRoleArn": role_arn,
+            "model": {"bedrockModelConfig": {"modelId": model_id}},
+            "systemPrompt": [{"text": system_prompt}],
+        }
         if harness_memory:
             create_kwargs["memory"] = harness_memory
         resp = cp.create_harness(**create_kwargs)

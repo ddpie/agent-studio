@@ -40,9 +40,8 @@ def _extract_tool_blocks(source: str) -> str:
                     break
             else:
                 current.append(line)
-        elif not found_first:
-            if trimmed.startswith(("import ", "from ")):
-                imports.append(line)
+        elif not found_first and trimmed.startswith(("import ", "from ")):
+            imports.append(line)
 
     if in_tool and current:
         blocks.append("\n".join(current))
@@ -641,7 +640,7 @@ def validate_agent(
         except Exception as e:
             warnings.append(f"Prompt quality review skipped: {e}")
         if prompt_review and "scores" in prompt_review:
-            scores = prompt_review["scores"]
+            prompt_review["scores"]
             overall = prompt_review.get("overall", 0)
             issues = prompt_review.get("issues", [])
 

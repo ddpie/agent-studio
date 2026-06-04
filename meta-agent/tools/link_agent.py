@@ -102,7 +102,7 @@ def _public_base_url() -> str:
         return explicit
     cf = os.getenv("AGENT_STUDIO_CLOUDFRONT_DOMAIN", "").strip()
     if cf:
-        if cf.startswith("http://") or cf.startswith("https://"):
+        if cf.startswith(("http://", "https://")):
             return cf.rstrip("/")
         return f"https://{cf}"
     return ""

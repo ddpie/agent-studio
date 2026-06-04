@@ -587,7 +587,6 @@ class TestSkills:
         monkeypatch.setattr(mod, "_get_workspace_mcp_policy", lambda ws: {"mode": "all"})
 
         captured_skills_data = []
-        original_build = mod.build_skill_prompt_section
 
         def fake_build_skill_prompt_section(data):
             captured_skills_data.append(data)
@@ -1029,12 +1028,12 @@ class TestMirrorFiles:
         assert any(k.endswith("system_prompt.txt") for k in keys_written)
         assert any(k.endswith("tool_definitions.py") for k in keys_written)
 
-        sp_call = [c for c in s3.put_object.call_args_list
-                   if c.kwargs.get("Key", "").endswith("system_prompt.txt")][0]
+        sp_call = next(c for c in s3.put_object.call_args_list
+                   if c.kwargs.get("Key", "").endswith("system_prompt.txt"))
         assert b"MY NEW PROMPT" in sp_call.kwargs["Body"]
 
-        tools_call = [c for c in s3.put_object.call_args_list
-                      if c.kwargs.get("Key", "").endswith("tool_definitions.py")][0]
+        tools_call = next(c for c in s3.put_object.call_args_list
+                      if c.kwargs.get("Key", "").endswith("tool_definitions.py"))
         assert b"def thing" in tools_call.kwargs["Body"]
 
 

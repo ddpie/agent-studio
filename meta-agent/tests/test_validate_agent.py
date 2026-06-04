@@ -979,7 +979,7 @@ class TestPromptReviewIntegration:
 
     @patch("tools.validate_agent._review_prompt_quality")
     def test_review_skipped_when_prompt_blank(self, mock_review):
-        r = _parse(validate_agent(
+        _parse(validate_agent(
             agent_name="Bot1",
             system_prompt="",
             description="d",
@@ -1155,13 +1155,13 @@ class TestMCPIAMCheck:
         sys.modules["tools.list_mcp_servers"] = fake_mod
 
         # current_workspace can be empty — branch covers both paths
-        fake_scope = types.ModuleType("tools._scope_test_helper")
+        types.ModuleType("tools._scope_test_helper")
         # We can't easily replace tools._scope.current_workspace mid-import,
         # so monkeypatch it:
         from tools import _scope as scope_mod
         monkeypatch.setattr(scope_mod, "current_workspace", lambda: "ws-1")
 
-        r = _parse(validate_agent(
+        _parse(validate_agent(
             agent_name="Bot1",
             system_prompt="hi",
             description="d",

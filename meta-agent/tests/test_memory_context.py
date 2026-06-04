@@ -8,7 +8,7 @@ import pytest
 
 # If strands not installed, mock the tool decorator
 try:
-    from strands import tool
+    from strands import tool  # noqa: F401
 except ImportError:
     mock_strands = MagicMock()
     mock_strands.tool = lambda f: f
@@ -50,7 +50,7 @@ def test_retrieve_summaries_correct_namespace(mock_client):
         ]
     }
     ctx = MemoryContext("mem-X", "A_U", "s1", ["summary"])
-    result = _run(ctx.retrieve_summaries("what did we discuss"))
+    _run(ctx.retrieve_summaries("what did we discuss"))
     call = mock_client.retrieve_memory_records.call_args
     assert call.kwargs["namespace"] == "/users/A_U/summaries/"
     assert call.kwargs["searchCriteria"]["searchQuery"] == "what did we discuss"

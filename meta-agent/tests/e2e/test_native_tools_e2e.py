@@ -141,7 +141,7 @@ def _invoke_subagent(agent_id: str, prompt: str, max_attempts: int = 3) -> str:
     client = boto3.client("bedrock-agentcore", region_name=REGION)
     acct = boto3.client("sts", region_name=REGION).get_caller_identity()["Account"]
     last_err = None
-    for attempt in range(max_attempts):
+    for _attempt in range(max_attempts):
         try:
             resp = client.invoke_agent_runtime(
                 agentRuntimeArn=f"arn:aws:bedrock-agentcore:{REGION}:{acct}:runtime/{agent_id}",

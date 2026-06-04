@@ -56,7 +56,7 @@ def _clean_tool_definitions(defs: str) -> str:
                 if stripped.startswith(("async def _", "def _", "@app.", "import json as _json",
                                         "import base64 as _b64", "if __name__", "app.run()")):
                     continue
-                if stripped.startswith("import ") or stripped.startswith("from "):
+                if stripped.startswith(("import ", "from ")):
                     result.append(line)
                     continue
             else:
@@ -67,7 +67,7 @@ def _clean_tool_definitions(defs: str) -> str:
                                     "import base64 as _b64", "if __name__", "app.run()",
                                     "yield chunk", "yield event")):
                 continue
-            if stripped.startswith("import ") or stripped.startswith("from ") or not stripped:
+            if stripped.startswith(("import ", "from ")) or not stripped:
                 if not stripped.startswith("import json as _json"):
                     result.append(line)
     return "\n".join(result).strip()

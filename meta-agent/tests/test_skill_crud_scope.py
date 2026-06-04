@@ -758,7 +758,7 @@ def test_write_skill_files_strips_unsafe_paths():
     assert "scripts/run.py" in written
     assert "SKILL.md" not in written
     # No traversal slipped through to S3
-    assert all(".." not in k for k in s3.store.keys())
+    assert all(".." not in k for k in s3.store)
 
 
 # ── Additional update_skill / delete_skill / import_skill branch coverage ──

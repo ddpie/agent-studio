@@ -153,7 +153,7 @@ class TestRBAC:
         staged = _make_staging()
 
         with patch("boto3.client") as mock_boto_client, \
-             patch("boto3.resource") as mock_boto_resource:
+             patch("boto3.resource"):
             mock_s3 = _mock_s3_get_staging(staged)
             mock_boto_client.return_value = mock_s3
 
@@ -211,7 +211,7 @@ class TestStagingWorkspaceOverride:
             mock_ddb.Table.return_value = MagicMock()
             mock_boto_resource.return_value = mock_ddb
 
-            result = json.loads(mod.create_agent(
+            json.loads(mod.create_agent(
                 agent_name="", staging_key="staging/test.json",
             ))
 
