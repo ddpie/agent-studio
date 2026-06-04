@@ -9,7 +9,7 @@ export interface Diagnostic {
   severity: number;
 }
 
-export function lint(filePath: string, content: string): Diagnostic[] {
+function lint(filePath: string, content: string): Diagnostic[] {
   if (filePath.endsWith(".py")) return validatePython(content);
   if (filePath.endsWith(".sh") || filePath.endsWith(".bash")) return validateShell(content);
   return [];

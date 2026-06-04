@@ -13,17 +13,9 @@ import KnowledgeBaseSection from "./KnowledgeBaseSection";
 import LinkedAgentsSection from "./LinkedAgentsSection";
 import MemorySection from "./MemorySection";
 
-export const TEMPLATE_OPTIONS = [
-  { id: "", label: "None" },
-  { id: "general", label: "General Assistant" },
-  { id: "expert", label: "Professional Consultant" },
-  { id: "customer_service", label: "Customer Service" },
-  { id: "data_analyst", label: "Data Analyst" },
-  { id: "creative_writer", label: "Creative Writer" },
-];
 
-export const inputClass = "w-full px-2 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-[13px] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all dark:bg-gray-800 dark:text-gray-100";
-export const disabledClass = "w-full px-2 py-1.5 border border-gray-100 dark:border-gray-700 rounded-lg text-[13px] bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed";
+const inputClass = "w-full px-2 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-[13px] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all dark:bg-gray-800 dark:text-gray-100";
+const disabledClass = "w-full px-2 py-1.5 border border-gray-100 dark:border-gray-700 rounded-lg text-[13px] bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed";
 
 interface AgentFormSectionsProps {
   formData: Partial<AgentMetadata>;

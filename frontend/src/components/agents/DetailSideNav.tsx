@@ -37,15 +37,6 @@ function groupKey(memoryKey: string, groupId: string): string {
   return `${GROUP_PREFIX}${memoryKey}:${groupId}`;
 }
 
-/** Read the section id last saved for this memory key, or null. */
-export function readSavedSection(key: string): string | null {
-  if (typeof window === "undefined" || !key) return null;
-  try {
-    return window.sessionStorage.getItem(sectionKey(key));
-  } catch {
-    return null;
-  }
-}
 
 function saveSection(key: string, id: string): void {
   if (typeof window === "undefined" || !key) return;

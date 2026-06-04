@@ -249,19 +249,6 @@ function advance(spec: ScheduleSpec, d: Date): Date {
   return new Date(d.getTime() + 60_000);
 }
 
-// ─── Formatters ───────────────────────────────────────────────────────
-
-export function formatUtcShort(d: Date, locale = "en"): string {
-  // 2026-04-21 14:05 UTC
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const y = d.getUTCFullYear();
-  const mo = pad(d.getUTCMonth() + 1);
-  const da = pad(d.getUTCDate());
-  const hh = pad(d.getUTCHours());
-  const mm = pad(d.getUTCMinutes());
-  const suffix = locale === "zh" ? "UTC" : "UTC";
-  return `${y}-${mo}-${da} ${hh}:${mm} ${suffix}`;
-}
 
 export function formatLocalShort(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
