@@ -127,8 +127,7 @@ def _scan_workspaces_with_role(ddb, table_name: str):
     kwargs = {"FilterExpression": Attr("sk").eq("META") & Attr("roleArn").exists()}
     while True:
         resp = table.scan(**kwargs)
-        for item in resp.get("Items", []):
-            yield item
+        yield from resp.get("Items", [])
         last = resp.get("LastEvaluatedKey")
         if not last:
             break
