@@ -25,6 +25,7 @@
     "cronstrue": "^3.14.0",
     "fflate": "^0.8.2",
     "i18next": "^26.0.3",
+    "jsonrepair": "^3.14.0",
     "katex": "^0.16.44",
     "lucide-react": "^1.7.0",
     "pyodide": "^0.29.3",

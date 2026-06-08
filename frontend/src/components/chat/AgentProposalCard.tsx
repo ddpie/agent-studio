@@ -2,29 +2,59 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { Loader2 } from "lucide-react";
+import { jsonrepair } from "jsonrepair";
 import { useAgentEditStore } from "../../stores/agent-edit-store";
 import type { SkillIndexEntry } from "../../lib/skill-storage";
 import { fetchSkills } from "../../lib/api-client";
 import { readGlobalSkillFiles } from "../../lib/agent-skill-storage";
 import type { AgentMetadata } from "../../lib/agent-metadata";
 
+const PROPOSAL_FIELDS = [
+  "system_prompt", "tool_definitions", "tool_names",
+  "mcp_targets", "skills", "welcome_message", "suggestions",
+  "supports_images", "permission_tier",
+];
+
+function escapeUnquotedStrings(raw: string): string {
+  let repaired = raw;
+  for (let i = 0; i < PROPOSAL_FIELDS.length - 1; i++) {
+    const startMarker = `"${PROPOSAL_FIELDS[i]}":"`;
+    const endMarker = `","${PROPOSAL_FIELDS[i + 1]}"`;
+    const startIdx = repaired.indexOf(startMarker);
+    if (startIdx < 0) continue;
+    const valueStart = startIdx + startMarker.length;
+    const endIdx = repaired.indexOf(endMarker, valueStart);
+    if (endIdx < 0) continue;
+    const value = repaired.slice(valueStart, endIdx);
+    const escaped = value.replace(/(?<!\\)"/g, '\\"');
+    if (escaped !== value) {
+      repaired = repaired.slice(0, valueStart) + escaped + repaired.slice(endIdx);
+    }
+  }
+  return repaired;
+}
+
+function parseProposalJson(raw: string): { data: Record<string, unknown> | null; error: string } {
+  try { return { data: JSON.parse(raw), error: "" }; } catch {}
+  try { return { data: JSON.parse(jsonrepair(raw)), error: "" }; } catch {}
+  try {
+    const patched = escapeUnquotedStrings(raw);
+    return { data: JSON.parse(patched), error: "" };
+  } catch {}
+  try {
+    const patched = escapeUnquotedStrings(raw);
+    return { data: JSON.parse(jsonrepair(patched)), error: "" };
+  } catch (e) {
+    return { data: null, error: e instanceof Error ? e.message : "Invalid JSON" };
+  }
+}
+
 export default function AgentProposalCard({ json }: { json: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { openNewWithData, addSkill, setPendingSkillFiles, initSkillFiles } = useAgentEditStore();
   const [attaching, setAttaching] = useState(false);
-  let proposal: Record<string, unknown> | null = null;
-  let parseError = "";
-  try {
-    proposal = JSON.parse(json);
-  } catch (e) {
-    try {
-      const repaired = json.replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
-      proposal = JSON.parse(repaired);
-    } catch {
-      parseError = e instanceof Error ? e.message : "Invalid JSON";
-    }
-  }
+  const { data: proposal, error: parseError } = parseProposalJson(json);
 
   if (!proposal) {
     const looksComplete = json.trimEnd().endsWith("}");
