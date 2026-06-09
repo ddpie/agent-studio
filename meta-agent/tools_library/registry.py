@@ -8,9 +8,11 @@ from tools_library import (
     agent_caller,
     chart_generator,
     fetch_webpage,
+    generate_image,
     kb_retrieve,
     s3_read,
     sql_readonly,
+    storyboard,
     translate,
     web_search,
 )
@@ -22,6 +24,8 @@ _ALL_TOOLS = [
     sql_readonly,
     translate,
     chart_generator,
+    generate_image,
+    storyboard,
     agent_caller,
     kb_retrieve,
 ]
