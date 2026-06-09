@@ -63,7 +63,7 @@ game-content-factory/
 | concept-art-generator | 概念图/分镜生成 | ① (美术风格) | — |
 | content-orchestrator | 编排(创作→审核→视觉) | — | → 全部上游 |
 
-## 连接关系（9 条 link）
+## 连接关系（10 条 link）
 
 ```
 dialog-writer         → worldview-reviewer, compliance-reviewer
