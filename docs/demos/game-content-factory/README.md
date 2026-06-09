@@ -41,44 +41,45 @@ game-content-factory/
 
 ```
          ┌─ KB①世界观 ─┐
-创作 Agent ─┼─ KB③本地化 ─┼─→ 世界观审核(KB①+KB②)
-         └─────────────┘  → 语感评审(KB①+KB③)
-                           → 合规审核(KB②)
+创作 Agent ─┼─ KB③本地化 ─┼─→ 世界观+语感审核(KB①+②+③)
+         └─────────────┘  → 合规审核(KB②)
 
 🔴BLOCK → 自动修改 → 重新送审（最多 3 轮）
 🟢PASS  → 输出成品 → 本地化翻译(KB③) → 译文校对(KB③+KB②)
+                    → 概念图生成(KB①美术风格) → 分镜/GIF
 ```
 
 ## 9 个 Agent
 
 | Agent | 角色 | 绑定 KB | Link 目标 |
 |---|---|---|---|
-| worldview-reviewer | 世界观审核 | ①+② | — |
-| emotion-reviewer | 角色语感评审 | ①+③ | — |
+| worldview-reviewer | 世界观+语感审核 | ①+②+③ | — |
 | compliance-reviewer | 合规审核 | ② | — |
-| dialog-writer | 对白创作 | ①+③ | → 三审 |
-| event-copywriter | 活动文案 | ② | → 世界观审核, 合规, 翻译 |
+| dialog-writer | 对白创作 | ①+③ | → 审核, 合规 |
+| content-writer | 活动文案+版本公告 | ①+② | → 审核, 合规, 翻译 |
 | localizer | 本地化翻译 | ③ | → 译审 |
 | translation-reviewer | 译文校对 | ③+② | — |
-| community-responder | 社区回复 | ①+② | → 世界观审核 |
-| patch-notes-writer | 版本更新说明 | ② | → 世界观审核, 合规 |
+| community-responder | 社区回复 | ①+② | → 审核 |
+| concept-art-generator | 概念图/分镜生成 | ① (美术风格) | — |
+| content-orchestrator | 编排(创作→审核→视觉) | — | → 全部上游 |
 
-## 连接关系（10 条 link）
+## 连接关系（9 条 link）
 
 ```
-dialog-writer       → worldview-reviewer, emotion-reviewer, compliance-reviewer
-event-copywriter    → worldview-reviewer, localizer, compliance-reviewer
-localizer           → translation-reviewer
-community-responder → worldview-reviewer
-patch-notes-writer  → worldview-reviewer, compliance-reviewer
+dialog-writer         → worldview-reviewer, compliance-reviewer
+content-writer        → worldview-reviewer, compliance-reviewer, localizer
+localizer             → translation-reviewer
+community-responder   → worldview-reviewer
+content-orchestrator  → dialog-writer, worldview-reviewer, compliance-reviewer
 ```
 
 ## 工厂特质
 
 - **专业分工** — 每个 Agent 精而专，prompt 短而聚焦
-- **独立演进** — 法务/叙事/本地化各自更新知识库，互不干扰
+- **独立演进** — 法务/叙事/本地化/美术各自更新知识库，互不干扰
 - **多源检索** — 单个 Agent 可同时查询多个知识库交叉验证
 - **自动流转** — 创作完成即送审，无需人工中转
+- **文字+视觉** — 同一条流水线产出文案和概念图，美术风格从知识库自动注入
 - **有据可查** — 审核报告引用 KB 原文段落作为依据
 - **可组合** — 新增审核维度 = 新增 Agent + link
 - **可追溯** — 每步独立输出，问题定位到具体环节和规则
@@ -87,8 +88,8 @@ patch-notes-writer  → worldview-reviewer, compliance-reviewer
 
 3-KB 分治的核心收益：
 
-- **各团队自治** — 叙事组更新世界观、法务组更新合规规则、本地化组更新术语表，各自上传文档即可，互不干扰
-- **热更新生效** — 合规规则更新后，所有绑定 KB② 的 Agent 下次检索立即使用新规则，无需重新部署
+- **各团队自治** — 叙事组更新世界观/美术风格、法务组更新合规规则、本地化组更新术语表，各自上传文档即可，互不干扰
+- **热更新生效** — 合规规则更新后审核结果立刻改变，美术风格更新后出图风格立刻改变，无需重新部署
 - **无需 Agent 重建** — 知识库内容变更不影响 Agent 代码，上传文档 → ingestion 完成 → 即时生效
 
 ## 使用
@@ -97,10 +98,11 @@ patch-notes-writer  → worldview-reviewer, compliance-reviewer
 
 ## 录制准备
 
-- 提前 ingest 3 个知识库，确认 ingestion 状态全部 COMPLETE
-- 提前创建 6 个 Agent（剩余 3 个留到录制时 live 创建）
-- 准备"热更新"文档（Part 2 演示 KB 即时生效用）
+- 提前 ingest 3 个知识库（含美术风格设定文档），确认 ingestion 状态全部 COMPLETE
+- 提前创建 7 个 Agent（剩余 2 个留到录制时 live 创建）
+- 准备"热更新"文档（Part 2 演示 KB 即时生效用——含合规规则 + 美术风格色调变更）
 - Pre-warm 所有已创建的 Agent（各调用一次避免冷启动）
+- Dry-run 生图环节，确认 style_context 注入正常、图片内联显示
 - Dry-run Part 2 和 Part 3 prompts，确认输出符合预期
 
 ## 虚构游戏
