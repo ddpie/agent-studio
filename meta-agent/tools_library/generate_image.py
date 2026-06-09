@@ -22,8 +22,8 @@ def generate_image(prompt: str, negative_prompt: str = "", aspect_ratio: str = "
             composition, art style, and mood. English only.
         negative_prompt: Things to exclude from the image (e.g. "text, watermark, blurry, low quality").
             Default empty.
-        aspect_ratio: Image aspect ratio. One of "1:1", "16:9", "9:16", "4:3", "3:4".
-            Default "1:1".
+        aspect_ratio: Image aspect ratio. One of "1:1", "16:9", "9:16", "2:3", "3:2",
+            "4:5", "5:4", "21:9", "9:21". Default "1:1".
         style: Art style hint to prepend. One of "concept-art", "anime", "photorealistic",
             "watercolor", "pixel-art", "none". Default "concept-art".
         style_context: Optional visual context from the project's art style guide (retrieved from
@@ -44,7 +44,7 @@ def generate_image(prompt: str, negative_prompt: str = "", aspect_ratio: str = "
     import boto3
 
     region = "us-west-2"  # Stability AI image models only available in us-west-2
-    model_id = "stability.stable-image-core-v1:1"
+    model_id = "stability.sd3-5-large-v1:0"
 
     style_prefixes = {
         "concept-art": "concept art, digital painting, detailed illustration, ",

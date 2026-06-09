@@ -51,7 +51,7 @@ def create_storyboard(script: str, num_frames: int = 4, style: str = "concept-ar
 
     region = "us-west-2"  # Stability AI image models only available in us-west-2
     s3_bucket = os.getenv("AGENT_STUDIO_S3_BUCKET", "")
-    model_id = "stability.stable-image-core-v1:1"
+    model_id = "stability.sd3-5-large-v1:0"
     num_frames = max(2, min(8, num_frames))
 
     style_prefixes = {
