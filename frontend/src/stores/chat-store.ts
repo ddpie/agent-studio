@@ -722,6 +722,30 @@ export const useChatStore = create<ChatState>()(
                 for (const mt of out.matchAll(/__S3_DOWNLOAD__:([^:\s"}\]]+):([^\s"}\]]+)/g)) {
                   toolDownloads.push({ key: mt[1], filename: mt[2] });
                 }
+                // generate_image / create_storyboard return JSON with
+                // s3_key. Extract so the image renders inline via
+                // S3DownloadList → ImageLightbox.
+                if (m.name === "generate_image" || m.name === "create_storyboard") {
+                  try {
+                    const parsed = JSON.parse(out);
+                    if (parsed.s3_key) {
+                      const fname = parsed.s3_key.split("/").pop() || "image.png";
+                      toolDownloads.push({ key: parsed.s3_key, filename: fname });
+                    }
+                    if (parsed.frames) {
+                      for (const fr of parsed.frames) {
+                        if (fr.s3_key) {
+                          const fname = fr.s3_key.split("/").pop() || "frame.png";
+                          toolDownloads.push({ key: fr.s3_key, filename: fname });
+                        }
+                      }
+                    }
+                    if (parsed.gif?.s3_key) {
+                      const fname = parsed.gif.s3_key.split("/").pop() || "storyboard.gif";
+                      toolDownloads.push({ key: parsed.gif.s3_key, filename: fname });
+                    }
+                  } catch { /* output might not be JSON on error */ }
+                }
                 if (toolDownloads.length > 0) appendDownloads(toolDownloads);
               } else if (m.type === "end") {
                 set((s) => setFlagFor(s, "activeToolByAgent", sendingAgentKey, null));
