@@ -55,7 +55,7 @@ def generate_image(prompt: str, negative_prompt: str = "", aspect_ratio: str = "
         "none": "",
     }
     if style_context.strip():
-        full_prompt = f"{style_context.strip()}, {prompt}"
+        full_prompt = f"{prompt}, {style_context.strip()}"
     else:
         style_prefix = style_prefixes.get(style, style_prefixes["concept-art"])
         full_prompt = f"{style_prefix}{prompt}"

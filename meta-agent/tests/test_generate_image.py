@@ -69,7 +69,8 @@ class TestStyleContextInjection:
         assert "error" not in result
 
     def test_style_context_overrides_style_prefix(self, mock_boto3, monkeypatch):
-        """When style_context is provided, it replaces the style prefix entirely."""
+        """When style_context is provided, it replaces the style prefix entirely.
+        Prompt comes first (subject priority for CLIP), style_context appended after."""
         monkeypatch.setenv("AGENT_STUDIO_S3_BUCKET", "test-bucket")
         ctx = "Japanese dark fantasy, twilight palette, ink-wash texture"
         result = json.loads(
@@ -81,9 +82,9 @@ class TestStyleContextInjection:
         )
 
         call_body = json.loads(mock_boto3["bedrock"].invoke_model.call_args.kwargs["body"])
-        assert call_body["prompt"].startswith(ctx)
+        assert call_body["prompt"].startswith("a warrior standing in twilight")
+        assert call_body["prompt"].endswith(ctx)
         assert "anime style" not in call_body["prompt"]
-        assert "a warrior standing in twilight" in call_body["prompt"]
         assert "error" not in result
 
     def test_style_context_whitespace_only_falls_through(self, mock_boto3, monkeypatch):
@@ -99,13 +100,13 @@ class TestStyleContextInjection:
         assert call_body["prompt"].startswith("watercolor painting, soft edges, artistic, ")
 
     def test_style_context_strips_whitespace(self, mock_boto3, monkeypatch):
-        """Leading/trailing whitespace in style_context is stripped before prepending."""
+        """Leading/trailing whitespace in style_context is stripped before appending."""
         monkeypatch.setenv("AGENT_STUDIO_S3_BUCKET", "test-bucket")
         ctx = "  twilight palette, muted tones  "
         _exec_generate_image(prompt="a tree", style_context=ctx)
 
         call_body = json.loads(mock_boto3["bedrock"].invoke_model.call_args.kwargs["body"])
-        assert call_body["prompt"].startswith("twilight palette, muted tones, a tree")
+        assert call_body["prompt"] == "a tree, twilight palette, muted tones"
 
     def test_negative_prompt_unaffected_by_style_context(self, mock_boto3, monkeypatch):
         """negative_prompt works the same regardless of style_context presence."""

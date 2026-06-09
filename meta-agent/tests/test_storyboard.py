@@ -74,9 +74,9 @@ class TestStoryboardStyleContext:
 
         calls = mock_boto3["bedrock"].invoke_model.call_args_list
         body_0 = json.loads(calls[0].kwargs["body"])
-        assert body_0["prompt"].startswith(ctx)
+        assert body_0["prompt"].startswith("frame 1 of 2")
+        assert body_0["prompt"].endswith(ctx)
         assert "anime style" not in body_0["prompt"]
-        assert "frame 1 of 2" in body_0["prompt"]
 
     def test_whitespace_style_context_falls_through(self, mock_boto3, monkeypatch):
         monkeypatch.setenv("AGENT_STUDIO_S3_BUCKET", "test-bucket")
@@ -129,5 +129,5 @@ class TestStoryboardNegativePrompt:
         )
 
         body_0 = json.loads(mock_boto3["bedrock"].invoke_model.call_args_list[0].kwargs["body"])
-        assert body_0["prompt"].startswith(ctx)
+        assert body_0["prompt"].endswith(ctx)
         assert body_0["negative_prompt"] == neg

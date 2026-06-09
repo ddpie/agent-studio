@@ -92,7 +92,7 @@ def create_storyboard(script: str, num_frames: int = 4, style: str = "concept-ar
 
     for idx, frame_desc in enumerate(frames_text):
         if _style_ctx:
-            full_prompt = f"{_style_ctx}, frame {idx+1} of {num_frames}, storyboard shot, {frame_desc}"
+            full_prompt = f"frame {idx+1} of {num_frames}, storyboard shot, {frame_desc}, {_style_ctx}"
         else:
             full_prompt = f"{style_prefix}frame {idx+1} of {num_frames}, storyboard shot, {frame_desc}"
 
