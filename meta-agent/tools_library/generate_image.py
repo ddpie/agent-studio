@@ -89,7 +89,7 @@ def generate_image(prompt: str, negative_prompt: str = "", aspect_ratio: str = "
             })
 
         timestamp = int(time.time())
-        s3_key = f"generated-images/{timestamp}-{hash(prompt) % 100000:05d}.png"
+        s3_key = f"outputs/generated-images/{timestamp}-{hash(prompt) % 100000:05d}.png"
 
         s3 = boto3.client("s3", region_name=region)
         s3.put_object(

@@ -119,7 +119,7 @@ def create_storyboard(script: str, num_frames: int = 4, style: str = "concept-ar
             frame_result = {"frame": idx + 1, "description": frame_desc}
 
             if s3:
-                s3_key = f"storyboards/{timestamp}/frame-{idx+1:02d}.png"
+                s3_key = f"outputs/storyboards/{timestamp}/frame-{idx+1:02d}.png"
                 s3.put_object(Bucket=s3_bucket, Key=s3_key, Body=img_bytes, ContentType="image/png")
                 url = s3.generate_presigned_url("get_object", Params={"Bucket": s3_bucket, "Key": s3_key}, ExpiresIn=3600)
                 frame_result["s3_key"] = s3_key
@@ -153,7 +153,7 @@ def create_storyboard(script: str, num_frames: int = 4, style: str = "concept-ar
             gif_bytes = gif_buffer.getvalue()
 
             if s3:
-                gif_key = f"storyboards/{timestamp}/storyboard.gif"
+                gif_key = f"outputs/storyboards/{timestamp}/storyboard.gif"
                 s3.put_object(Bucket=s3_bucket, Key=gif_key, Body=gif_bytes, ContentType="image/gif")
                 gif_url = s3.generate_presigned_url("get_object", Params={"Bucket": s3_bucket, "Key": gif_key}, ExpiresIn=3600)
                 gif_result = {"s3_key": gif_key, "url": gif_url}
