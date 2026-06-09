@@ -11,7 +11,7 @@ TOOL_NAMES = "create_storyboard"
 
 TOOL_CODE = '''
 @tool
-def create_storyboard(script: str, num_frames: int = 4, style: str = "concept-art", aspect_ratio: str = "16:9", create_gif: bool = False, style_context: str = "") -> str:
+def create_storyboard(script: str, num_frames: int = 4, style: str = "concept-art", aspect_ratio: str = "16:9", create_gif: bool = False, style_context: str = "", negative_prompt: str = "") -> str:
     """Split a script/description into storyboard frames and generate an image for each.
 
     Takes a narrative description or script and:
@@ -32,7 +32,11 @@ def create_storyboard(script: str, num_frames: int = 4, style: str = "concept-ar
         create_gif: Whether to combine frames into an animated GIF. Default False.
         style_context: Optional visual context from the project's art style guide (retrieved
             from knowledge base). When provided, overrides the style parameter. Should contain
-            art direction keywords: palette, lighting, atmosphere, composition constraints, etc.
+            art direction keywords: palette, lighting, atmosphere, composition constraints,
+            etc. Keep under 60 English words to avoid CLIP token truncation.
+        negative_prompt: Things to exclude from all frames (e.g. "neon colors, modern
+            buildings"). When empty, a sensible default is used. Project-level exclusions
+            from the art style guide should be passed here.
 
     Returns:
         JSON with frame descriptions, S3 keys for each image, and optionally a GIF S3 key.
@@ -58,13 +62,12 @@ def create_storyboard(script: str, num_frames: int = 4, style: str = "concept-ar
         "pixel-art": "pixel art, retro game style, ",
         "none": "",
     }
-    style_prefix = style_prefixes.get(style, style_prefixes["concept-art"])
-    neg_prompt = "text, watermark, signature, blurry, low quality, deformed, ugly"
+    neg = negative_prompt or "text, watermark, signature, blurry, low quality, deformed, ugly"
 
     # Step 1: Use the LLM-generated frame descriptions
     # The agent calling this tool should have already broken the script into frames,
     # but as a fallback we split by sentences/paragraphs
-    lines = [l.strip() for l in script.replace("\\n", "\n").split("\n") if l.strip()]
+    lines = [l.strip() for l in script.replace("\\\\n", "\\n").split("\\n") if l.strip()]
     if len(lines) >= num_frames:
         frames_text = lines[:num_frames]
     else:
@@ -84,16 +87,19 @@ def create_storyboard(script: str, num_frames: int = 4, style: str = "concept-ar
     image_bytes_list = []
     timestamp = int(time.time())
 
+    _style_ctx = style_context.strip()
+    style_prefix = "" if _style_ctx else style_prefixes.get(style, style_prefixes["concept-art"])
+
     for idx, frame_desc in enumerate(frames_text):
-        if style_context.strip():
-            full_prompt = f"{style_context.strip()}, frame {idx+1} of {num_frames}, storyboard shot, {frame_desc}"
+        if _style_ctx:
+            full_prompt = f"{_style_ctx}, frame {idx+1} of {num_frames}, storyboard shot, {frame_desc}"
         else:
             full_prompt = f"{style_prefix}frame {idx+1} of {num_frames}, storyboard shot, {frame_desc}"
 
         try:
             body = json.dumps({
                 "prompt": full_prompt,
-                "negative_prompt": neg_prompt,
+                "negative_prompt": neg,
                 "aspect_ratio": aspect_ratio,
                 "output_format": "png",
                 "seed": (timestamp + idx * 1000) % 4294967295,

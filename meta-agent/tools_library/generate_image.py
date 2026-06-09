@@ -29,6 +29,7 @@ def generate_image(prompt: str, negative_prompt: str = "", aspect_ratio: str = "
         style_context: Optional visual context from the project's art style guide (retrieved from
             knowledge base). When provided, overrides the style parameter. Should contain art
             direction keywords: palette, lighting, atmosphere, composition constraints, etc.
+            Keep under 60 English words to avoid CLIP token truncation.
             Example: "Japanese dark fantasy, twilight palette, muted purples and golds,
             soft volumetric lighting, melancholic atmosphere, ink-wash texture accents"
 
