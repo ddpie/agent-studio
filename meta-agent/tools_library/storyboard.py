@@ -25,7 +25,7 @@ def create_storyboard(script: str, num_frames: int = 4, style: str = "concept-ar
     Args:
         script: The narrative text to split into frames. Can be a story description,
             activity announcement, cutscene script, or marketing copy.
-        num_frames: Number of storyboard frames to generate (2-8). Default 4.
+        num_frames: Number of storyboard frames to generate (2-16). Default 4.
         style: Art style for all frames. One of "concept-art", "anime", "photorealistic",
             "watercolor", "pixel-art", "none". Default "concept-art".
         aspect_ratio: Aspect ratio for frames. "16:9" (widescreen) or "1:1". Default "16:9".
@@ -52,7 +52,7 @@ def create_storyboard(script: str, num_frames: int = 4, style: str = "concept-ar
     region = "us-west-2"  # Stability AI image models only available in us-west-2
     s3_bucket = os.getenv("AGENT_STUDIO_S3_BUCKET", "")
     model_id = "stability.sd3-5-large-v1:0"
-    num_frames = max(2, min(8, num_frames))
+    num_frames = max(2, min(16, num_frames))
 
     style_prefixes = {
         "concept-art": "concept art, digital painting, cinematic composition, ",
