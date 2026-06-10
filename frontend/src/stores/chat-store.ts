@@ -723,28 +723,19 @@ export const useChatStore = create<ChatState>()(
                   toolDownloads.push({ key: mt[1], filename: mt[2] });
                 }
                 // generate_image / create_storyboard return JSON with
-                // s3_key. Extract so the image renders inline via
-                // S3DownloadList → ImageLightbox.
+                // s3_key fields. Storyboard outputs routinely exceed the
+                // 5KB tool-output cap (long frame descriptions + presigned
+                // URLs) and arrive truncated, so JSON.parse is unreliable —
+                // scan for "s3_key" values with a regex instead.
                 if (m.name === "generate_image" || m.name === "create_storyboard") {
-                  try {
-                    const parsed = JSON.parse(out);
-                    if (parsed.s3_key) {
-                      const fname = parsed.s3_key.split("/").pop() || "image.png";
-                      toolDownloads.push({ key: parsed.s3_key, filename: fname });
-                    }
-                    if (parsed.frames) {
-                      for (const fr of parsed.frames) {
-                        if (fr.s3_key) {
-                          const fname = fr.s3_key.split("/").pop() || "frame.png";
-                          toolDownloads.push({ key: fr.s3_key, filename: fname });
-                        }
-                      }
-                    }
-                    if (parsed.gif?.s3_key) {
-                      const fname = parsed.gif.s3_key.split("/").pop() || "storyboard.gif";
-                      toolDownloads.push({ key: parsed.gif.s3_key, filename: fname });
-                    }
-                  } catch { /* output might not be JSON on error */ }
+                  const seen = new Set(toolDownloads.map((d) => d.key));
+                  for (const mt of out.matchAll(/"s3_key"\s*:\s*"([^"]+)"/g)) {
+                    const key = mt[1];
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    const fname = key.split("/").pop() || "image.png";
+                    toolDownloads.push({ key, filename: fname });
+                  }
                 }
                 if (toolDownloads.length > 0) appendDownloads(toolDownloads);
               } else if (m.type === "end") {
