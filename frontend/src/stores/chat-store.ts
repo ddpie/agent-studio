@@ -33,6 +33,8 @@ export interface ToolCallRecord {
 export interface S3Download {
   key: string;
   filename: string;
+  /** Visual review verdict badge for generated images. */
+  badge?: "pass" | "fail";
 }
 
 /**
@@ -737,6 +739,33 @@ export const useChatStore = create<ChatState>()(
                     toolDownloads.push({ key, filename: fname });
                   }
                 }
+                // review_image returns verdict for a previously generated
+                // image. Retroactively badge the matching S3Download entry.
+                if (m.name === "review_image" || m.name === "call_agent") {
+                  const verdictMatch = out.match(/"verdict"\s*:\s*"(pass|fail)"/) ||
+                    out.match(/判定[：:]\s*(FAIL|PASS|fail|pass)/i) ||
+                    out.match(/\b(FAIL|PASS)\b/);
+                  const keyMatch = out.match(/"s3_key"\s*:\s*"([^"]+)"/);
+                  if (verdictMatch) {
+                    const verdict = verdictMatch[1].toLowerCase() as "pass" | "fail";
+                    const targetKey = keyMatch?.[1];
+                    set((s) => setMessagesFor(s, sendingAgentKey, (msgs) =>
+                      msgs.map((msg) => {
+                        if (msg.id !== assistantMsg.id || !msg.s3Downloads) return msg;
+                        const updated = [...msg.s3Downloads];
+                        for (let i = updated.length - 1; i >= 0; i--) {
+                          const dl = updated[i];
+                          if (targetKey && dl.key === targetKey) { updated[i] = { ...dl, badge: verdict }; break; }
+                          if (!targetKey && !dl.badge && /\.(png|jpe?g|gif|webp)$/i.test(dl.filename)) {
+                            updated[i] = { ...dl, badge: verdict };
+                            break;
+                          }
+                        }
+                        return { ...msg, s3Downloads: updated };
+                      }),
+                    ));
+                  }
+                }
                 if (toolDownloads.length > 0) appendDownloads(toolDownloads);
               } else if (m.type === "end") {
                 set((s) => setFlagFor(s, "activeToolByAgent", sendingAgentKey, null));
@@ -807,6 +836,43 @@ export const useChatStore = create<ChatState>()(
 
           if (flushTimer) clearTimeout(flushTimer);
           flushPending();
+
+          // Post-stream badge scan: if the assistant text mentions FAIL/PASS
+          // for a visual review, retroactively badge the relevant image.
+          {
+            const msgs = get().messagesByAgent[sendingAgentKey] || [];
+            const msg = msgs.find((m) => m.id === assistantMsg.id);
+            if (msg?.content && msg.s3Downloads?.length) {
+              const failMatch = msg.content.match(/审核[结判]?[果定][：:]\s*FAIL/i) ||
+                msg.content.match(/\bFAIL\b/);
+              const passMatch = msg.content.match(/审核[结判]?[果定][：:]\s*PASS/i) ||
+                msg.content.match(/审核.*通过/) ||
+                msg.content.match(/全部通过/);
+              if (failMatch || passMatch) {
+                set((s) => setMessagesFor(s, sendingAgentKey, (allMsgs) =>
+                  allMsgs.map((m) => {
+                    if (m.id !== assistantMsg.id || !m.s3Downloads) return m;
+                    const downloads = [...m.s3Downloads];
+                    const imageIdxs = downloads
+                      .map((d, i) => /\.(png|jpe?g|gif|webp)$/i.test(d.filename) ? i : -1)
+                      .filter((i) => i >= 0);
+                    if (imageIdxs.length >= 2 && failMatch) {
+                      // First image = fail, last image = pass (redraw scenario)
+                      downloads[imageIdxs[0]] = { ...downloads[imageIdxs[0]], badge: "fail" };
+                      downloads[imageIdxs[imageIdxs.length - 1]] = {
+                        ...downloads[imageIdxs[imageIdxs.length - 1]],
+                        badge: passMatch ? "pass" : undefined,
+                      };
+                    } else if (imageIdxs.length === 1) {
+                      const verdict = failMatch ? "fail" : "pass";
+                      downloads[imageIdxs[0]] = { ...downloads[imageIdxs[0]], badge: verdict };
+                    }
+                    return { ...m, s3Downloads: downloads };
+                  }),
+                ));
+              }
+            }
+          }
         } catch (err) {
           if (!signal.aborted) {
             // Append an error block instead of overwriting content.
