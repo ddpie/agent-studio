@@ -41,7 +41,7 @@ def review_image(s3_key: str, review_instruction: str, character_description: st
 
     region = os.getenv("AWS_REGION", "us-east-1")
     s3_bucket = os.getenv("AGENT_STUDIO_S3_BUCKET", "")
-    vision_model = "anthropic.claude-sonnet-4-6-20250514-v1:0"
+    vision_model = "anthropic.claude-sonnet-4-6"
 
     if not s3_bucket:
         return json.dumps({"error": "S3 bucket not configured"})
