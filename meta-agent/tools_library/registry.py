@@ -10,6 +10,7 @@ from tools_library import (
     fetch_webpage,
     generate_image,
     kb_retrieve,
+    review_image,
     s3_read,
     sql_readonly,
     storyboard,
@@ -26,6 +27,7 @@ _ALL_TOOLS = [
     chart_generator,
     generate_image,
     storyboard,
+    review_image,
     agent_caller,
     kb_retrieve,
 ]
