@@ -12,9 +12,14 @@
 > 全程用 Meta-Agent 对话操作（不走脚本/API），因为 Act 3 轨道 B 要快闪历史会话。
 > 单个 Agent 部署等待 3-5 分钟，9 个串行约 30-40 分钟。**加上 KB 创建 + 文档上传 + 索引等待，整体约 1-1.5 小时，务必前一天做完。**
 
-### Step 1：创建 3 个知识库 + 上传文档
+### Step 1：创建 3 个知识库 + 上传文档（⚠️ 开始录屏）
 
-用 Meta-Agent 创建 KB，然后去知识库页面上传文档并等索引完成。详见 Take 00 Part A。
+在 Meta-Agent 对话页输入：
+```
+我们的参考文档有点乱——世界观设定散在好几个文件里，法务的合规标准单独一套，翻译组也有自己的规范。帮我分成三个知识库管起来：世界观归一个，法务的合规规则归一个，翻译的本地化规范归一个。
+```
+
+等 Meta-Agent 调 `kb_create` × 3 完成后，切到知识库页面逐个上传文档：
 
 | 知识库 | 文档数 | 来源目录 |
 |---|---|---|
@@ -22,9 +27,17 @@
 | 法务合规规则 | 3 | `kb/compliance/` 全部 |
 | 本地化翻译规范 | 4 | `kb/localization/` 全部 |
 
-上传完后**必须验证索引数量**（详见 T-30min 清单第 3 条），缺了要手动补跑 ingestion。
+上传完后**等索引全部完成**，然后验证索引数量：
+```bash
+aws bedrock-agent list-knowledge-base-documents \
+  --knowledge-base-id <KB-ID> --data-source-id <DS-ID> \
+  --region us-east-1 | python3 -c "import json,sys; print(len(json.load(sys.stdin)['documentDetails']))"
+# 世界观==21, 合规==3, 本地化==4。缺了就 start-ingestion-job 补跑。
+```
 
-### Step 2：创建 9 个 Agent
+> 这段录屏素材 = Take 00 Part A（后期高速变速用于 Act 0.5 开头快闪）。
+
+### Step 2：创建 9 个 Agent（继续录屏）
 
 成片收尾要展示「9 个 Agent 全 READY」列表页。**列表页必须正好 9 个，不多不少**。最终九人名单（对齐 `README.md`）：
 
