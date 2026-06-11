@@ -110,29 +110,32 @@ export default function AgentFormSections({
       {/* Agent Behavior */}
       <Section title={t("agentEditor.agentBehavior")} icon={<Settings2 className="w-3.5 h-3.5" />}>
         <div className="grid grid-cols-2 gap-4">
-          <Field
-            label={(formData.runtime_type === "harness" ? "* " : "") + t("agentEditor.defaultModel")}
-            changed={!!changedFields.default_model_id}
-            hint={formData.runtime_type === "harness" ? t("agentEditor.harnessModelHint") : t("agentEditor.modelHint")}
-          >
-            <select
-              value={formData.default_model_id || ""}
-              onChange={(e) => updateField("default_model_id", e.target.value)}
-              className={inputClass}
-              required={formData.runtime_type === "harness"}
+          {/* Model field — hidden for demo; default value still submitted to backend */}
+          <div className="hidden">
+            <Field
+              label={(formData.runtime_type === "harness" ? "* " : "") + t("agentEditor.defaultModel")}
+              changed={!!changedFields.default_model_id}
+              hint={formData.runtime_type === "harness" ? t("agentEditor.harnessModelHint") : t("agentEditor.modelHint")}
             >
-              {formData.runtime_type === "harness" ? (
-                <option value="">{t("agentFormSections.pickModel")}</option>
-              ) : (
-                <option value="">{t("agentFormSections.autoInherit")}</option>
-              )}
-              {MODEL_GROUPS.map((g) =>
-                g.models.map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))
-              )}
-            </select>
-          </Field>
+              <select
+                value={formData.default_model_id || ""}
+                onChange={(e) => updateField("default_model_id", e.target.value)}
+                className={inputClass}
+                required={formData.runtime_type === "harness"}
+              >
+                {formData.runtime_type === "harness" ? (
+                  <option value="">{t("agentFormSections.pickModel")}</option>
+                ) : (
+                  <option value="">{t("agentFormSections.autoInherit")}</option>
+                )}
+                {MODEL_GROUPS.map((g) =>
+                  g.models.map((m) => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                  ))
+                )}
+              </select>
+            </Field>
+          </div>
           <Field label={t("agentEditor.imageSupport")} changed={!!changedFields.supports_images}>
             <label className={`flex items-center gap-2 h-[34px] px-3 border rounded-lg cursor-pointer transition-colors ${formData.supports_images ? "bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"}`}>
               <input

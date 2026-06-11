@@ -106,8 +106,8 @@ export default function ChatHeader({
             <Code2 className="w-3 h-3" /> A2A
           </button>
         )}
-        {/* Model selector */}
-        <div className="relative" ref={modelPickerRef}>
+        {/* Model selector — hidden for demo but state/logic preserved */}
+        <div className="relative hidden" ref={modelPickerRef}>
           <button
             onClick={() => setShowModelPicker(!showModelPicker)}
             className="text-[10px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1"
