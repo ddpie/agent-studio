@@ -844,10 +844,15 @@ export const useChatStore = create<ChatState>()(
             const msg = msgs.find((m) => m.id === assistantMsg.id);
             if (msg?.content && msg.s3Downloads?.length) {
               const failMatch = msg.content.match(/审核[结判]?[果定][：:]\s*FAIL/i) ||
-                msg.content.match(/\bFAIL\b/);
-              const passMatch = msg.content.match(/审核[结判]?[果定][：:]\s*PASS/i) ||
-                msg.content.match(/审核.*通过/) ||
-                msg.content.match(/全部通过/);
+                msg.content.match(/\bFAIL\b/) ||
+                msg.content.match(/[🔴❌].*不通过/) ||
+                msg.content.match(/判定[：:]\s*不通过/);
+              const passMatch = !failMatch && (
+                msg.content.match(/审核[结判]?[果定][：:]\s*PASS/i) ||
+                msg.content.match(/\bPASS\b/) ||
+                msg.content.match(/[🟢✓✅].*通过/) ||
+                msg.content.match(/判定[：:]\s*通过/)
+              );
               if (failMatch || passMatch) {
                 set((s) => setMessagesFor(s, sendingAgentKey, (allMsgs) =>
                   allMsgs.map((m) => {
