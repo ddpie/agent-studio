@@ -27,6 +27,12 @@
 | 法务合规规则 | 3 | `kb/compliance/` 全部 |
 | 本地化翻译规范 | 4 | `kb/localization/` 全部 |
 
+帮我创建一个世界观知识库，并将这些文档上传到知识库里
+
+帮我创建一个法务合规知识库，并将这些文档上传到知识库里
+
+帮我创建一个翻译规范知识库，并将这些文档上传到知识库里
+
 上传完后**等索引全部完成**，然后验证索引数量：
 ```bash
 aws bedrock-agent list-knowledge-base-documents \
@@ -220,9 +226,9 @@ aws bedrock-agent-runtime retrieve \
    I can see three enemies approaching from the left side, be careful.
    ```
 4. 等 Agent 输出低分（1-2 分）+ 点名三宗罪（用了 I / 超电报体上限 / 社交辞令 be careful）
-5. 紧接输入中文：
+5. 紧接输入精简版英译：
    ```
-   三个。左。
+   Three. Left.
    ```
 6. 等 Agent 输出高分通过
 7. **停止录屏**
