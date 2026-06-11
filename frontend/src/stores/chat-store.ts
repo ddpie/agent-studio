@@ -837,6 +837,35 @@ export const useChatStore = create<ChatState>()(
           if (flushTimer) clearTimeout(flushTimer);
           flushPending();
 
+          // Post-stream s3_key recovery: tool output for create_storyboard
+          // is often truncated at 5KB, losing later frames. Scan the
+          // assistant's text reply for any outputs/ paths mentioned inline
+          // and add them as s3Downloads (deduplicated).
+          {
+            const msgs = get().messagesByAgent[sendingAgentKey] || [];
+            const msg = msgs.find((m) => m.id === assistantMsg.id);
+            if (msg?.content) {
+              const existing = new Set((msg.s3Downloads || []).map((d) => d.key));
+              const inlineKeys: S3Download[] = [];
+              for (const mt of msg.content.matchAll(/\b(outputs\/(?:storyboards|generated-images)\/[^\s"'`)\]]+\.(?:png|gif|jpe?g|webp))/g)) {
+                const key = mt[1];
+                if (!existing.has(key)) {
+                  existing.add(key);
+                  inlineKeys.push({ key, filename: key.split("/").pop() || "image.png" });
+                }
+              }
+              if (inlineKeys.length > 0) {
+                set((s) => setMessagesFor(s, sendingAgentKey, (allMsgs) =>
+                  allMsgs.map((m) =>
+                    m.id === assistantMsg.id
+                      ? { ...m, s3Downloads: [...(m.s3Downloads || []), ...inlineKeys] }
+                      : m
+                  ),
+                ));
+              }
+            }
+          }
+
           // Post-stream badge scan: if the assistant text mentions FAIL/PASS
           // for a visual review, retroactively badge the relevant image.
           {
