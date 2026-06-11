@@ -228,7 +228,7 @@ aws bedrock-agent-runtime retrieve \
 4. 等 Agent 输出低分（1-2 分）+ 点名三宗罪（用了 I / 超电报体上限 / 社交辞令 be careful）
 5. 紧接输入精简版英译：
    ```
-   Three. Left.
+   Hostiles. Three. West.
    ```
 6. 等 Agent 输出高分通过
 7. **停止录屏**
@@ -490,7 +490,7 @@ aws bedrock-agent-runtime retrieve \
 2. **开始录屏**
 3. 输入（先证明不乱拦）：
    ```
-   ……那个人……还没有回来。
+   ……风里好像有谁的气息。……大概是错觉吧。
    ```
 4. 等绿色通过
 5. 输入（杀手一击）：

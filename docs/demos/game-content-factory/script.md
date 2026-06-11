@@ -24,11 +24,11 @@
 
 > I can see three enemies approaching from the left side, be careful.
 
-⚠️ Agent 低分（1-2），点名三宗罪：用了 I、超极简电报体上限、出现社交辞令 be careful。要求改成 "Three. Left."
+⚠️ Agent 低分（1-2），点名三宗罪：用了 I、超极简电报体上限、出现社交辞令 be careful。要求精简为电报体（如 "Hostiles. Three. West."）
 
 紧接输入精简版英译：
 
-> Three. Left.
+> Hostiles. Three. West.
 
 ⚠️ Agent 高分通过。
 
@@ -266,7 +266,7 @@
 
 **操作 1**（先证明不乱拦）: 在「世界观审核 Agent」输入中文原文：
 
-> ……那个人……还没有回来。
+> ……风里好像有谁的气息。……大概是错觉吧。
 
 ⚠️ Agent 判定：合规通过。
 
