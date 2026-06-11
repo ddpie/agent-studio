@@ -46,7 +46,7 @@ game-content-factory/
 
 🔴BLOCK → 自动修改 → 重新送审（最多 3 轮）
 🟢PASS  → 输出成品 → 本地化翻译(KB③) → 译文校对(KB③+KB②)
-                    → 概念图生成(KB①美术风格) → 分镜/GIF
+                    → 概念图生成(KB①美术风格) → 视觉审核(KB①+②) → 分镜/GIF
 ```
 
 ## 9 个 Agent
@@ -60,17 +60,19 @@ game-content-factory/
 | localizer | 本地化翻译 | ③ | → 译审 |
 | translation-reviewer | 译文校对 | ③+② | — |
 | community-responder | 社区回复 | ①+② | → 审核 |
-| concept-art-generator | 概念图/分镜生成 | ① (美术风格) | — |
-| content-orchestrator | 编排(创作→审核→视觉) | — | → 全部上游 |
+| concept-art-generator | 概念图/分镜生成 | ① (美术风格) | → 视觉审核 |
+| visual-reviewer | 视觉审核（图片设定校验） | ①+② | — |
 
-## 连接关系（10 条 link）
+> v5 调整：visual-reviewer（生图→设定校验闭环，Act 2.5 核心）取代了 content-orchestrator（编排器与"人只说一句话给创作 Agent"的叙事重复）。
+
+## 连接关系（8 条 link）
 
 ```
 dialog-writer         → worldview-reviewer, compliance-reviewer
 content-writer        → worldview-reviewer, compliance-reviewer, localizer
 localizer             → translation-reviewer
 community-responder   → worldview-reviewer
-content-orchestrator  → dialog-writer, worldview-reviewer, compliance-reviewer
+concept-art-generator → visual-reviewer
 ```
 
 ## 工厂特质
@@ -98,12 +100,12 @@ content-orchestrator  → dialog-writer, worldview-reviewer, compliance-reviewer
 
 ## 录制准备
 
-- 提前 ingest 3 个知识库（含美术风格设定文档），确认 ingestion 状态全部 COMPLETE
-- 提前创建 7 个 Agent（剩余 2 个留到录制时 live 创建）
-- 准备"热更新"文档（Part 2 演示 KB 即时生效用——含合规规则 + 美术风格色调变更）
-- Pre-warm 所有已创建的 Agent（各调用一次避免冷启动）
+- 提前 ingest 3 个知识库（含美术风格设定文档），确认 ingestion 状态全部 COMPLETE，**并核对 indexed 文档数 == 上传数**（批量上传有部分文档不进索引的坑）
+- **提前用 Meta-Agent 对话创建全部 9 个 Agent**（正片不演示创建；Act 3 用 Meta-Agent 历史会话快闪带过——所以必须对话创建，且至少完整录屏一个 Agent 的创建过程做快闪素材，见 recording-guide.md Take 00）
+- 准备"热更新"文档（合规"专属"新规 + 美术风格暖金色调变更）
+- Pre-warm 所有 Agent（各调用一次避免冷启动）
 - Dry-run 生图环节，确认 style_context 注入正常、图片内联显示
-- Dry-run Part 2 和 Part 3 prompts，确认输出符合预期
+- 完整准备清单和逐步操作见 [recording-guide.md](recording-guide.md)
 
 ## 虚构游戏
 
