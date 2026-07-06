@@ -5,33 +5,33 @@
 # The lockfile is committed as base/deployment.zip.
 
 # Core agent framework
-bedrock-agentcore==1.6.3
-strands-agents==1.36.0
+bedrock-agentcore==1.17.0
+strands-agents==1.45.0
 
 # AWS SDK — 1.42.96+ needed for bedrock-agentcore-control.create_harness /
 # update_harness / delete_harness (added in the Harness public-preview API
 # bump on 2026-04). 1.42.91 raises AttributeError at runtime.
-boto3==1.42.96
-botocore==1.42.96
+boto3==1.43.40
+botocore==1.43.40
 
 # Observability (ADOT auto-instrumentation)
-aws-opentelemetry-distro==0.17.0
+aws-opentelemetry-distro==0.18.0
 
 # MCP
-mcp==1.27.0
+mcp==1.28.1
 
 # NOTE: Playwright / strands-agents-tools live in sub-agent-requirements.txt
 # to keep Meta-Agent cold-start inside AgentCore's 30s init budget.
 
 # Document parsing for read_document builtin tool
-beautifulsoup4==4.14.3
+beautifulsoup4==4.15.0
 openpyxl==3.1.5
-pypdf==6.10.2
-markdownify==1.2.2
+pypdf==6.14.2
+markdownify==1.2.3
 
 # HTTP
 httpx==0.28.1
-requests==2.32.5
+requests==2.34.2
 
 # WebSocket client (used by browser_use SigV4 signing)
 websocket-client==1.9.0
